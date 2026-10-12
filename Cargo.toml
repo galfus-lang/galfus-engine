@@ -3,6 +3,7 @@ members = [
     "engine/*",
     "bindings/*",
 ]
+default-members = ["bindings/galfus-demo"]
 resolver = "3"
 
 [workspace.package]

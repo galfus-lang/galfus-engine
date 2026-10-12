@@ -14,6 +14,13 @@ name = "galfus-core"
 version = "0.1.0"
 
 [[package]]
+name = "galfus-demo"
+version = "0.1.0"
+dependencies = [
+ "galfus-core",
+]
+
+[[package]]
 name = "galfus-gpu-manager"
 version = "0.1.0"
 dependencies = [
