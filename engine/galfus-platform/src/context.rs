@@ -20,6 +20,13 @@ use winit::window::{Window as WinitWindow, WindowId as WinitWindowId};
 use crate::capabilities::PlatformCapabilities;
 use crate::error::{PlatformError, PlatformResult};
 use crate::event::PlatformEvent;
+use crate::pointer::PointerEvent;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::pointer::mapping::{
+    map_button_state, map_mouse_button, map_scroll_delta, map_touch_event,
+};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::pointer::types::PointerType;
 #[cfg(target_arch = "wasm32")]
 use crate::window::BrowserWindow;
 #[cfg(not(target_arch = "wasm32"))]
@@ -27,6 +34,8 @@ use crate::window::NativeWindow;
 use crate::window::Window;
 use crate::window::event::WindowEvent;
 use crate::window::types::WindowConfig;
+#[cfg(not(target_arch = "wasm32"))]
+use glam::Vec2;
 
 /// Central coordinator for platform operations, windows, and input events.
 pub struct PlatformContext {
@@ -35,6 +44,8 @@ pub struct PlatformContext {
     windows: HashMap<u32, Window>,
     #[cfg(not(target_arch = "wasm32"))]
     winit_to_logical: HashMap<WinitWindowId, u32>,
+    #[cfg(not(target_arch = "wasm32"))]
+    pointer_positions: HashMap<(u32, u64), Vec2>,
     #[cfg(not(target_arch = "wasm32"))]
     event_loop: Option<EventLoop<()>>,
 }
@@ -67,6 +78,8 @@ impl PlatformContext {
             #[cfg(not(target_arch = "wasm32"))]
             winit_to_logical: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
+            pointer_positions: HashMap::new(),
+            #[cfg(not(target_arch = "wasm32"))]
             event_loop,
         })
     }
@@ -83,6 +96,8 @@ impl PlatformContext {
             windows: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             winit_to_logical: HashMap::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            pointer_positions: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             event_loop: None,
         }
@@ -188,6 +203,7 @@ impl PlatformContext {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(win) = self.windows.remove(&id) {
             self.winit_to_logical.remove(&win.raw_window().id());
+            self.pointer_positions.retain(|(w, _), _| *w != id);
             Ok(())
         } else {
             Err(PlatformError::WindowNotFound(id))
@@ -213,6 +229,7 @@ impl PlatformContext {
 
         let mut collector = EventCollector {
             winit_to_logical: &self.winit_to_logical,
+            pointer_positions: &mut self.pointer_positions,
             events: Vec::new(),
         };
 
@@ -234,6 +251,7 @@ impl PlatformContext {
 #[cfg(not(target_arch = "wasm32"))]
 struct EventCollector<'a> {
     winit_to_logical: &'a HashMap<WinitWindowId, u32>,
+    pointer_positions: &'a mut HashMap<(u32, u64), Vec2>,
     events: Vec<PlatformEvent>,
 }
 
@@ -297,6 +315,101 @@ impl<'a> ApplicationHandler for EventCollector<'a> {
                         .push(PlatformEvent::Window(WindowEvent::RedrawRequested {
                             window_id: logical_id,
                         }));
+                }
+                WinitWindowEvent::CursorMoved { position, .. } => {
+                    let pos = Vec2::new(position.x as f32, position.y as f32);
+                    let prev_pos = self.pointer_positions.insert((logical_id, 0), pos);
+                    let delta = match prev_pos {
+                        Some(prev) => pos - prev,
+                        None => Vec2::ZERO,
+                    };
+                    self.events.push(PlatformEvent::Pointer(PointerEvent::Move {
+                        window_id: logical_id,
+                        pointer_id: 0,
+                        pointer_type: PointerType::Mouse,
+                        position: pos,
+                        delta,
+                        pressure: 0.0,
+                    }));
+                }
+                WinitWindowEvent::CursorEntered { .. } => {
+                    let pos = self
+                        .pointer_positions
+                        .get(&(logical_id, 0))
+                        .copied()
+                        .unwrap_or(Vec2::ZERO);
+                    self.events
+                        .push(PlatformEvent::Pointer(PointerEvent::Enter {
+                            window_id: logical_id,
+                            pointer_id: 0,
+                            pointer_type: PointerType::Mouse,
+                            position: pos,
+                        }));
+                }
+                WinitWindowEvent::CursorLeft { .. } => {
+                    let pos = self
+                        .pointer_positions
+                        .get(&(logical_id, 0))
+                        .copied()
+                        .unwrap_or(Vec2::ZERO);
+                    self.events
+                        .push(PlatformEvent::Pointer(PointerEvent::Leave {
+                            window_id: logical_id,
+                            pointer_id: 0,
+                            pointer_type: PointerType::Mouse,
+                            position: pos,
+                        }));
+                }
+                WinitWindowEvent::MouseInput { state, button, .. } => {
+                    let (mapped_state, pressure) = map_button_state(state);
+                    let mapped_button = map_mouse_button(button);
+                    let pos = self
+                        .pointer_positions
+                        .get(&(logical_id, 0))
+                        .copied()
+                        .unwrap_or(Vec2::ZERO);
+                    self.events
+                        .push(PlatformEvent::Pointer(PointerEvent::Button {
+                            window_id: logical_id,
+                            pointer_id: 0,
+                            pointer_type: PointerType::Mouse,
+                            position: pos,
+                            button: mapped_button,
+                            state: mapped_state,
+                            pressure,
+                        }));
+                }
+                WinitWindowEvent::MouseWheel { delta, .. } => {
+                    let mapped_delta = map_scroll_delta(delta);
+                    let pos = self
+                        .pointer_positions
+                        .get(&(logical_id, 0))
+                        .copied()
+                        .unwrap_or(Vec2::ZERO);
+                    self.events
+                        .push(PlatformEvent::Pointer(PointerEvent::Scroll {
+                            window_id: logical_id,
+                            pointer_id: 0,
+                            pointer_type: PointerType::Mouse,
+                            position: pos,
+                            delta: mapped_delta,
+                        }));
+                }
+                WinitWindowEvent::Touch(touch) => {
+                    let prev_pos = self.pointer_positions.get(&(logical_id, touch.id)).copied();
+                    let pos = Vec2::new(touch.location.x as f32, touch.location.y as f32);
+                    match touch.phase {
+                        winit::event::TouchPhase::Started | winit::event::TouchPhase::Moved => {
+                            self.pointer_positions.insert((logical_id, touch.id), pos);
+                        }
+                        winit::event::TouchPhase::Ended | winit::event::TouchPhase::Cancelled => {
+                            self.pointer_positions.remove(&(logical_id, touch.id));
+                        }
+                    }
+                    let touch_events = map_touch_event(logical_id, &touch, prev_pos);
+                    for ev in touch_events {
+                        self.events.push(PlatformEvent::Pointer(ev));
+                    }
                 }
                 _ => {}
             }

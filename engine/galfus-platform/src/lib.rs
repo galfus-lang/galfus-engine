@@ -12,12 +12,14 @@ pub mod capabilities;
 pub mod context;
 pub mod error;
 pub mod event;
+pub mod pointer;
 pub mod window;
 
 pub use capabilities::PlatformCapabilities;
 pub use context::PlatformContext;
 pub use error::{PlatformError, PlatformResult};
 pub use event::PlatformEvent;
+pub use pointer::{PointerButton, PointerButtonState, PointerEvent, PointerType, ScrollDelta};
 pub use window::{
     CursorGrabMode, CursorIcon, FullscreenMode, UserAttentionType, Window, WindowConfig,
     WindowEvent, WindowState,

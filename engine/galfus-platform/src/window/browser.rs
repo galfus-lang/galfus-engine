@@ -1,7 +1,9 @@
 use glam::{IVec2, UVec2};
 
 use crate::error::PlatformResult;
-use crate::window::types::{CursorGrabMode, CursorIcon, FullscreenMode, WindowConfig};
+use crate::window::types::{
+    CursorGrabMode, CursorIcon, FullscreenMode, UserAttentionType, WindowConfig,
+};
 
 /// A browser canvas surface representation.
 #[derive(Debug)]
@@ -11,6 +13,8 @@ pub struct BrowserWindow {
     title: String,
     size: UVec2,
     scale_factor: f64,
+    visible: bool,
+    resizable: bool,
 }
 
 impl BrowserWindow {
@@ -27,6 +31,8 @@ impl BrowserWindow {
             title: config.title.clone(),
             size: config.size,
             scale_factor: 1.0,
+            visible: true,
+            resizable: config.resizable,
         })
     }
 
@@ -60,6 +66,12 @@ impl BrowserWindow {
         self.size = UVec2::new(width, height);
     }
 
+    /// Sets the minimum inner dimensions.
+    pub fn set_min_inner_size(&self, _min_size: Option<UVec2>) {}
+
+    /// Sets the maximum inner dimensions.
+    pub fn set_max_inner_size(&self, _max_size: Option<UVec2>) {}
+
     /// Returns outer size (equivalent to inner on canvas).
     pub fn outer_size(&self) -> UVec2 {
         self.size
@@ -78,26 +90,79 @@ impl BrowserWindow {
         self.scale_factor
     }
 
+    /// Shows or hides the canvas.
+    pub fn set_visible(&mut self, visible: bool) {
+        self.visible = visible;
+    }
+
+    /// Returns whether the canvas is visible.
+    pub fn is_visible(&self) -> bool {
+        self.visible
+    }
+
     /// Requests HTML5 Fullscreen for the canvas.
     pub fn set_fullscreen(&self, _mode: Option<FullscreenMode>) {}
+
+    /// Returns whether the canvas is in fullscreen.
+    pub fn is_fullscreen(&self) -> bool {
+        false
+    }
 
     /// Maximized state for web canvas.
     pub fn set_maximized(&self, _maximized: bool) {}
 
+    /// Returns true if maximized.
+    pub fn is_maximized(&self) -> bool {
+        false
+    }
+
     /// Minimized state for web canvas.
     pub fn set_minimized(&self, _minimized: bool) {}
 
+    /// Returns true if minimized.
+    pub fn is_minimized(&self) -> bool {
+        false
+    }
+
     /// Resizable state for web canvas.
-    pub fn set_resizable(&self, _resizable: bool) {}
+    pub fn set_resizable(&mut self, resizable: bool) {
+        self.resizable = resizable;
+    }
+
+    /// Returns whether the canvas can be resized.
+    pub fn is_resizable(&self) -> bool {
+        self.resizable
+    }
 
     /// Decorations for web canvas.
     pub fn set_decorations(&self, _decorations: bool) {}
+
+    /// Returns whether decorations are enabled.
+    pub fn is_decorated(&self) -> bool {
+        false
+    }
+
+    /// Returns whether the canvas currently has focus.
+    pub fn is_focused(&self) -> bool {
+        true
+    }
+
+    /// Focuses the canvas DOM element.
+    pub fn focus(&self) {}
+
+    /// User attention on web.
+    pub fn request_user_attention(&self, _attention: Option<UserAttentionType>) {}
 
     /// Cursor visibility on web.
     pub fn set_cursor_visible(&self, _visible: bool) {}
 
     /// Pointer Lock API support.
     pub fn set_cursor_grab(&self, _mode: CursorGrabMode) -> PlatformResult<()> {
+        Ok(())
+    }
+
+    /// Sets cursor position.
+    pub fn set_cursor_position(&self, _x: i32, _y: i32) -> PlatformResult<()> {
         Ok(())
     }
 

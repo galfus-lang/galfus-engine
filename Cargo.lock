@@ -589,6 +589,7 @@ version = "0.1.0"
 dependencies = [
  "galfus-core",
  "galfus-platform",
+ "glam 0.30.10",
  "softbuffer",
 ]
 

@@ -7,4 +7,6 @@ license.workspace = true
 [dependencies]
 galfus-core.workspace = true
 galfus-platform.workspace = true
+glam.workspace = true
 softbuffer = "0.4"
+
