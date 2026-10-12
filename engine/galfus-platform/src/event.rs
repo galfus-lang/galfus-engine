@@ -1,3 +1,4 @@
+use crate::keyboard::KeyboardEvent;
 use crate::pointer::PointerEvent;
 use crate::window::WindowEvent;
 
@@ -9,6 +10,9 @@ pub enum PlatformEvent {
 
     /// Pointer (mouse, touch, pen, scroll) event.
     Pointer(PointerEvent),
+
+    /// Keyboard (keys, modifiers, text) event.
+    Keyboard(KeyboardEvent),
 }
 
 impl From<WindowEvent> for PlatformEvent {
@@ -22,5 +26,12 @@ impl From<PointerEvent> for PlatformEvent {
     #[inline]
     fn from(event: PointerEvent) -> Self {
         Self::Pointer(event)
+    }
+}
+
+impl From<KeyboardEvent> for PlatformEvent {
+    #[inline]
+    fn from(event: KeyboardEvent) -> Self {
+        Self::Keyboard(event)
     }
 }

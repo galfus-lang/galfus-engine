@@ -20,6 +20,11 @@ use winit::window::{Window as WinitWindow, WindowId as WinitWindowId};
 use crate::capabilities::PlatformCapabilities;
 use crate::error::{PlatformError, PlatformResult};
 use crate::event::PlatformEvent;
+use crate::keyboard::KeyboardEvent;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::keyboard::mapping::{map_key_state, map_logical_key, map_modifiers, map_physical_key};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::keyboard::types::ModifiersState;
 use crate::pointer::PointerEvent;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::pointer::mapping::{
@@ -46,6 +51,8 @@ pub struct PlatformContext {
     winit_to_logical: HashMap<WinitWindowId, u32>,
     #[cfg(not(target_arch = "wasm32"))]
     pointer_positions: HashMap<(u32, u64), Vec2>,
+    #[cfg(not(target_arch = "wasm32"))]
+    modifiers: HashMap<u32, ModifiersState>,
     #[cfg(not(target_arch = "wasm32"))]
     event_loop: Option<EventLoop<()>>,
 }
@@ -80,6 +87,8 @@ impl PlatformContext {
             #[cfg(not(target_arch = "wasm32"))]
             pointer_positions: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
+            modifiers: HashMap::new(),
+            #[cfg(not(target_arch = "wasm32"))]
             event_loop,
         })
     }
@@ -98,6 +107,8 @@ impl PlatformContext {
             winit_to_logical: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             pointer_positions: HashMap::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            modifiers: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             event_loop: None,
         }
@@ -204,6 +215,7 @@ impl PlatformContext {
         if let Some(win) = self.windows.remove(&id) {
             self.winit_to_logical.remove(&win.raw_window().id());
             self.pointer_positions.retain(|(w, _), _| *w != id);
+            self.modifiers.remove(&id);
             Ok(())
         } else {
             Err(PlatformError::WindowNotFound(id))
@@ -230,6 +242,7 @@ impl PlatformContext {
         let mut collector = EventCollector {
             winit_to_logical: &self.winit_to_logical,
             pointer_positions: &mut self.pointer_positions,
+            modifiers: &mut self.modifiers,
             events: Vec::new(),
         };
 
@@ -252,6 +265,7 @@ impl PlatformContext {
 struct EventCollector<'a> {
     winit_to_logical: &'a HashMap<WinitWindowId, u32>,
     pointer_positions: &'a mut HashMap<(u32, u64), Vec2>,
+    modifiers: &'a mut HashMap<u32, ModifiersState>,
     events: Vec<PlatformEvent>,
 }
 
@@ -410,6 +424,38 @@ impl<'a> ApplicationHandler for EventCollector<'a> {
                     for ev in touch_events {
                         self.events.push(PlatformEvent::Pointer(ev));
                     }
+                }
+                WinitWindowEvent::ModifiersChanged(winit_mods) => {
+                    let current_mods = map_modifiers(winit_mods.state());
+                    self.modifiers.insert(logical_id, current_mods);
+                    self.events
+                        .push(PlatformEvent::Keyboard(KeyboardEvent::ModifiersChanged {
+                            window_id: logical_id,
+                            modifiers: current_mods,
+                        }));
+                }
+                WinitWindowEvent::KeyboardInput { event: key_ev, .. } => {
+                    let active_mods = self
+                        .modifiers
+                        .get(&logical_id)
+                        .copied()
+                        .unwrap_or(ModifiersState::EMPTY);
+                    let physical_key = map_physical_key(key_ev.physical_key);
+                    let logical_key = map_logical_key(key_ev.logical_key);
+                    let state = map_key_state(key_ev.state);
+                    let text = key_ev.text.map(|s| s.to_string());
+                    let repeat = key_ev.repeat;
+
+                    self.events
+                        .push(PlatformEvent::Keyboard(KeyboardEvent::Input {
+                            window_id: logical_id,
+                            physical_key,
+                            logical_key,
+                            text,
+                            state,
+                            modifiers: active_mods,
+                            repeat,
+                        }));
                 }
                 _ => {}
             }

@@ -6,4 +6,3 @@ pub(crate) mod mapping;
 
 pub use event::PointerEvent;
 pub use types::{PointerButton, PointerButtonState, PointerType, ScrollDelta};
-

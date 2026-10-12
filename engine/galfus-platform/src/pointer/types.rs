@@ -66,4 +66,3 @@ pub enum ScrollDelta {
     /// Scroll delta expressed in physical display pixels.
     Pixels(Vec2),
 }
-

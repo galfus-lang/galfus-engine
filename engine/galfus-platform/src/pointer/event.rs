@@ -230,4 +230,3 @@ mod tests {
         assert_eq!(platform_ev, PlatformEvent::Pointer(ev));
     }
 }
-
