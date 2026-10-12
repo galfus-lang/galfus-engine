@@ -15,4 +15,3 @@ Run directly from the root workspace:
 ```bash
 cargo run
 ```
-
