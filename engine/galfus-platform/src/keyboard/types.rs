@@ -1,7 +1,10 @@
+use serde::{Deserialize, Serialize};
+
 /// Physical key location on a standard keyboard layout (W3C Key Code).
 ///
 /// Invariant with respect to the user's software keyboard layout (e.g. QWERTY vs AZERTY).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum KeyCode {
     #[default]
     Unknown,
@@ -121,7 +124,8 @@ pub enum KeyCode {
 }
 
 /// Standard named logical key (W3C Named Key).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum NamedKey {
     Enter,
     Tab,
@@ -159,7 +163,8 @@ pub enum NamedKey {
 }
 
 /// Interpreted logical key value after layout resolution and active modifiers.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum LogicalKey {
     /// Printable text character or sequence (e.g. "a", "A", "1", "ñ").
     Character(String),
@@ -183,7 +188,8 @@ impl LogicalKey {
 }
 
 /// State of a keyboard key transition.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum KeyState {
     /// Key was pressed down.
     Pressed,
@@ -201,7 +207,8 @@ impl KeyState {
 }
 
 /// Active keyboard modifier state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModifiersState {
     /// Shift key is active.
     pub shift: bool,
@@ -231,4 +238,3 @@ impl ModifiersState {
         !self.shift && !self.ctrl && !self.alt && !self.super_key
     }
 }
-

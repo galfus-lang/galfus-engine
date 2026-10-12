@@ -1,9 +1,11 @@
 use glam::Vec2;
+use serde::{Deserialize, Serialize};
 
 use crate::pointer::types::{PointerButton, PointerButtonState, PointerType, ScrollDelta};
 
 /// Normalized pointer event representing mouse, touch, or pen interactions.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum PointerEvent {
     /// Pointer changed coordinates within the target surface.
     Move {

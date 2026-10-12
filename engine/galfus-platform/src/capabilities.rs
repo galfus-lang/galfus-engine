@@ -1,5 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 /// Explicit capability report of the current platform environment.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlatformCapabilities {
     /// True if multiple independent OS windows can be spawned.
     pub supports_multiple_windows: bool,

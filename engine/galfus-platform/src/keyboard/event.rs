@@ -1,7 +1,10 @@
+use serde::{Deserialize, Serialize};
+
 use crate::keyboard::types::{KeyCode, KeyState, LogicalKey, ModifiersState};
 
 /// Normalized keyboard input event delivered from the platform.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum KeyboardEvent {
     /// Key transition event with physical keycode, resolved logical key, and modifiers.
     Input {
@@ -125,4 +128,3 @@ mod tests {
         assert_eq!(platform_ev, PlatformEvent::Keyboard(ev));
     }
 }
-

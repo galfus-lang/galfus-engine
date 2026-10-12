@@ -53,7 +53,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - 1..4 Keys       : Direct cursor icon selection");
     println!("  - Escape          : Clean exit application\n");
 
-
     let mut frame = 0u64;
     let mut running = true;
     let mut width = 1024u32;
@@ -213,7 +212,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             }
                             KeyCode::Space => {
                                 palette_idx = (palette_idx + 1) % palette.len();
-                                println!("  -> Background color cycled via Spacebar to palette #{palette_idx}");
+                                println!(
+                                    "  -> Background color cycled via Spacebar to palette #{palette_idx}"
+                                );
                             }
                             KeyCode::Digit1 => {
                                 cursor_icon_idx = 0;
@@ -257,7 +258,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 _ => {}
             }
         }
-
 
         if running {
             frame += 1;
@@ -316,4 +316,3 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("Demo 0 finished cleanly.");
     Ok(())
 }
-

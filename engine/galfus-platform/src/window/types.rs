@@ -1,7 +1,9 @@
 use glam::{IVec2, UVec2};
+use serde::{Deserialize, Serialize};
 
 /// Normalized lifecycle state of an OS window or canvas.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum WindowState {
     #[default]
     Windowed,
@@ -12,14 +14,16 @@ pub enum WindowState {
 }
 
 /// Fullscreen display modes supported by the platform.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum FullscreenMode {
     Exclusive,
     Borderless,
 }
 
 /// Normalized cursor grab behavior.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum CursorGrabMode {
     #[default]
     None,
@@ -28,7 +32,8 @@ pub enum CursorGrabMode {
 }
 
 /// Standard cursor visual appearance icons.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum CursorIcon {
     #[default]
     Default,
@@ -44,14 +49,16 @@ pub enum CursorIcon {
 }
 
 /// User attention request urgency.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum UserAttentionType {
     Informational,
     Critical,
 }
 
 /// Configuration parameters for creating a new window or binding a canvas.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct WindowConfig {
     /// Host-controlled logical ID. Must not be in the reserved ID range.
     pub id: u32,
@@ -81,12 +88,11 @@ pub struct WindowConfig {
     pub canvas_id: Option<String>,
 }
 
-impl WindowConfig {
-    /// Creates a default window configuration with the given logical ID and title.
-    pub fn new(id: u32, title: impl Into<String>) -> Self {
+impl Default for WindowConfig {
+    fn default() -> Self {
         Self {
-            id,
-            title: title.into(),
+            id: 0,
+            title: "Galfus Window".into(),
             size: UVec2::new(1280, 720),
             position: None,
             resizable: true,
@@ -94,6 +100,17 @@ impl WindowConfig {
             transparent: false,
             initial_state: WindowState::Windowed,
             canvas_id: None,
+        }
+    }
+}
+
+impl WindowConfig {
+    /// Creates a default window configuration with the given logical ID and title.
+    pub fn new(id: u32, title: impl Into<String>) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            ..Default::default()
         }
     }
 

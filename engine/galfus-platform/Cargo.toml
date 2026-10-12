@@ -18,7 +18,10 @@ browser = [
 galfus-core.workspace = true
 glam.workspace = true
 log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
+
 
 # Native dependencies (optional via feature = "native")
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

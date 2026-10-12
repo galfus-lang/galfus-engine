@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "format": "bun scripts/format.ts",
-    "check": "bun scripts/check.ts"
+    "check": "bun scripts/check.ts",
+    "codegen": "bun scripts/codegen.ts",
+    "test:ffi": "bun scripts/test-ffi.ts",
+    "test:napi": "cargo build -p galfus-native --features napi && bun scripts/test-napi.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",

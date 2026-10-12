@@ -1,10 +1,12 @@
 use glam::Vec2;
+use serde::{Deserialize, Serialize};
 
 /// Origin and hardware classification of an input pointer.
 ///
 /// Follows the W3C Pointer Events model where mouse, touch contacts,
 /// and pen styluses share a single unified abstraction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum PointerType {
     /// Traditional desktop mouse or trackpad cursor.
     #[default]
@@ -18,7 +20,8 @@ pub enum PointerType {
 }
 
 /// Normalized pointer button classification.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum PointerButton {
     /// Left mouse button, primary touch contact, or pen tip contact.
     Primary,
@@ -40,7 +43,8 @@ pub enum PointerButton {
 }
 
 /// State of a pointer button transition.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum PointerButtonState {
     /// The button transitioned to pressed / active.
     Pressed,
@@ -58,7 +62,8 @@ impl PointerButtonState {
 }
 
 /// Normalized scroll / wheel movement delta.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum ScrollDelta {
     /// Scroll delta expressed in logical text lines / notches.
     Lines(Vec2),

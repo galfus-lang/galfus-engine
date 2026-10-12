@@ -7,6 +7,17 @@ license.workspace = true
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = []
+napi = ["dep:napi", "dep:napi-derive"]
+
 [dependencies]
 galfus-core.workspace = true
+galfus-platform = { workspace = true, features = ["native"] }
+serde.workspace = true
+serde_json.workspace = true
+napi = { version = "2.16", default-features = false, features = ["napi4", "serde-json"], optional = true }
+napi-derive = { version = "2.16", optional = true }
+
+
 

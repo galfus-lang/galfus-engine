@@ -6,4 +6,3 @@ pub(crate) mod mapping;
 
 pub use event::KeyboardEvent;
 pub use types::{KeyCode, KeyState, LogicalKey, ModifiersState, NamedKey};
-

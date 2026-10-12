@@ -14,7 +14,8 @@ license = "MIT"
 [workspace.dependencies]
 # Shared external crates
 thiserror = "2.0"
-glam = "0.30"
+glam = { version = "0.30", features = ["serde"] }
+
 log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -24,7 +25,8 @@ bytemuck = { version = "1.25", features = ["derive"] }
 galfus-core = { path = "engine/galfus-core" }
 galfus-multiverse = { path = "engine/galfus-multiverse" }
 galfus-realm-core = { path = "engine/galfus-realm-core" }
-galfus-platform = { path = "engine/galfus-platform" }
+galfus-platform = { path = "engine/galfus-platform", default-features = false }
+
 galfus-gpu-manager = { path = "engine/galfus-gpu-manager" }
 galfus-realm-2d = { path = "engine/galfus-realm-2d" }
 galfus-realm-3d = { path = "engine/galfus-realm-3d" }

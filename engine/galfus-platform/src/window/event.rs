@@ -1,5 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 /// Normalized window lifecycle and dimension events dispatched to the host.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum WindowEvent {
     /// Window inner dimensions or DPI scale factor changed.
     Resized {
