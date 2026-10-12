@@ -1,0 +1,9 @@
+[package]
+name = "galfus-multiverse"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+galfus-core.workspace = true
+galfus-realm-core.workspace = true

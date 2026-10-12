@@ -1,0 +1,9 @@
+[package]
+name = "galfus-realm-2d-resources"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+galfus-core.workspace = true
+galfus-realm-2d.workspace = true

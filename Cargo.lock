@@ -3,11 +3,79 @@
 version = 4
 
 [[package]]
+name = "galfus-browser"
+version = "0.1.0"
+dependencies = [
+ "galfus-core",
+]
+
+[[package]]
 name = "galfus-core"
 version = "0.1.0"
 
 [[package]]
+name = "galfus-gpu-manager"
+version = "0.1.0"
+dependencies = [
+ "galfus-core",
+]
+
+[[package]]
+name = "galfus-multiverse"
+version = "0.1.0"
+dependencies = [
+ "galfus-core",
+ "galfus-realm-core",
+]
+
+[[package]]
 name = "galfus-native"
+version = "0.1.0"
+dependencies = [
+ "galfus-core",
+]
+
+[[package]]
+name = "galfus-platform"
+version = "0.1.0"
+dependencies = [
+ "galfus-core",
+]
+
+[[package]]
+name = "galfus-realm-2d"
+version = "0.1.0"
+dependencies = [
+ "galfus-core",
+ "galfus-realm-core",
+]
+
+[[package]]
+name = "galfus-realm-2d-resources"
+version = "0.1.0"
+dependencies = [
+ "galfus-core",
+ "galfus-realm-2d",
+]
+
+[[package]]
+name = "galfus-realm-3d"
+version = "0.1.0"
+dependencies = [
+ "galfus-core",
+ "galfus-realm-core",
+]
+
+[[package]]
+name = "galfus-realm-3d-resources"
+version = "0.1.0"
+dependencies = [
+ "galfus-core",
+ "galfus-realm-3d",
+]
+
+[[package]]
+name = "galfus-realm-core"
 version = "0.1.0"
 dependencies = [
  "galfus-core",

@@ -1,0 +1,8 @@
+[package]
+name = "galfus-gpu-manager"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+galfus-core.workspace = true
