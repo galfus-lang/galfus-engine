@@ -1,0 +1,10 @@
+.git/
+node_modules/
+bun.lock
+bun.lockb
+Cargo.lock
+
+build/
+target/
+.old/
+

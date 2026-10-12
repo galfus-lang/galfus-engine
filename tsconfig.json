@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
-    "lib": [
-      "ESNext"
-    ],
-    "types": [
-      "bun"
-    ],
+    "lib": ["ESNext"],
+    "types": ["bun"],
     "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",
@@ -23,8 +19,5 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": [
-    "scripts/**/*.ts"
-  ]
+  "include": ["scripts/**/*.ts"]
 }
-
