@@ -52,4 +52,6 @@
 - Host logical IDs must never use the core-reserved range (last `65535` possible values of the ID type).
 - For `u32`, this reserved range is `4294901761..=4294967295` (`u32::MAX - 65535 + 1 ..= u32::MAX`).
 - The core validates host logical IDs against this policy and rejects commands that use reserved IDs.
+- Dependencies shared by more than one crate must be defined in the root `Cargo.toml` under `[workspace.dependencies]` and referenced in each crate as `<dep>.workspace = true`.
+- Dependencies exclusive to a single crate must be declared only within that specific crate's `Cargo.toml`.
 

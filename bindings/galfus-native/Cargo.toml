@@ -1,0 +1,12 @@
+[package]
+name = "galfus-native"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+galfus-core.workspace = true
+
