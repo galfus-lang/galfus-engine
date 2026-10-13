@@ -6,6 +6,7 @@ use galfus_platform::{CursorGrabMode, CursorIcon, WindowConfig};
 
 use crate::state::{
     init_context, init_context_headless, shutdown_context, with_context, with_context_mut,
+    with_multiverse_mut,
 };
 
 #[napi]
@@ -187,4 +188,76 @@ pub fn audio_set_panning(voice_id: u32, panning: f64) -> Result<()> {
 pub fn audio_unload_sound(sound_id: u32) -> Result<()> {
     with_context_mut(|ctx| ctx.unload_sound(sound_id).map_err(|e| e.to_string()))
         .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_create_target(env: Env, target_id: u32, desc_val: JsUnknown) -> Result<()> {
+    let desc: galfus_multiverse::TargetDesc = env.from_js_value(desc_val)?;
+    with_multiverse_mut(|mv| mv.create_target(target_id, desc).map_err(|e| e.to_string()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_destroy_target(target_id: u32) -> Result<()> {
+    with_multiverse_mut(|mv| mv.destroy_target(target_id).map_err(|e| e.to_string()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_create_invocation(
+    env: Env,
+    invocation_id: u32,
+    desc_val: JsUnknown,
+) -> Result<()> {
+    let desc: galfus_multiverse::InvocationDesc = env.from_js_value(desc_val)?;
+    with_multiverse_mut(|mv| {
+        mv.create_invocation(invocation_id, desc)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_destroy_invocation(invocation_id: u32) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        mv.destroy_invocation(invocation_id)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_set_invocation_enabled(invocation_id: u32, enabled: bool) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        mv.set_invocation_enabled(invocation_id, enabled)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_bind_target_texture(env: Env, binding_val: JsUnknown) -> Result<()> {
+    let binding: galfus_multiverse::TargetTextureBinding = env.from_js_value(binding_val)?;
+    with_multiverse_mut(|mv| mv.bind_target_texture(binding).map_err(|e| e.to_string()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_resolve(env: Env) -> Result<JsUnknown> {
+    let schedule = with_multiverse_mut(|mv| {
+        let schedule = mv.resolve().map_err(|e| e.to_string())?;
+        Ok(schedule.clone())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))?;
+
+    env.to_js_value(&schedule)
+}
+
+#[napi]
+pub fn multiverse_dispatch(frame_id: i64, delta_time: f64) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        mv.dispatch(frame_id as u64, delta_time as f32)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
 }

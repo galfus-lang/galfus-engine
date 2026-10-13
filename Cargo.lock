@@ -639,6 +639,10 @@ version = "0.1.0"
 dependencies = [
  "galfus-core",
  "galfus-realm-core",
+ "glam 0.30.10",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -646,6 +650,7 @@ name = "galfus-native"
 version = "0.1.0"
 dependencies = [
  "galfus-core",
+ "galfus-multiverse",
  "galfus-platform",
  "napi",
  "napi-derive",
@@ -709,6 +714,9 @@ name = "galfus-realm-core"
 version = "0.1.0"
 dependencies = [
  "galfus-core",
+ "glam 0.30.10",
+ "serde",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

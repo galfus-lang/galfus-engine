@@ -36,4 +36,3 @@ pub fn generate_synthetic_beep(frequency: f32, duration_secs: f32, sample_rate: 
 
     wav
 }
-

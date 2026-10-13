@@ -14,6 +14,7 @@ napi = ["dep:napi", "dep:napi-derive"]
 [dependencies]
 galfus-core.workspace = true
 galfus-platform = { workspace = true, features = ["native"] }
+galfus-multiverse.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 napi = { version = "2.16", default-features = false, features = ["napi4", "serde-json"], optional = true }

@@ -4,6 +4,7 @@ use galfus_platform::PlatformContext;
 
 thread_local! {
     static CONTEXT: RefCell<Option<PlatformContext>> = const { RefCell::new(None) };
+    static MULTIVERSE: RefCell<Option<galfus_multiverse::MultiverseContext>> = const { RefCell::new(None) };
 }
 
 /// Initializes the global platform context on the calling thread.
@@ -32,8 +33,11 @@ pub fn init_context_headless() -> Result<(), String> {
     })
 }
 
-/// Shuts down and drops the global platform context.
+/// Shuts down and drops the global platform context and multiverse context.
 pub fn shutdown_context() -> Result<(), String> {
+    MULTIVERSE.with(|cell| {
+        cell.borrow_mut().take();
+    });
     CONTEXT.with(|cell| {
         let mut borrow = cell.borrow_mut();
         if borrow.take().is_some() {
@@ -73,6 +77,32 @@ where
         match borrow.as_mut() {
             Some(ctx) => f(ctx),
             None => Err("PlatformContext is not initialized".into()),
+        }
+    })
+}
+
+/// Initializes or resets the global multiverse context.
+pub fn init_multiverse() -> Result<(), String> {
+    MULTIVERSE.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        *borrow = Some(galfus_multiverse::MultiverseContext::new());
+        Ok(())
+    })
+}
+
+/// Executes a closure with a mutable reference to the active multiverse context.
+pub fn with_multiverse_mut<F, R>(f: F) -> Result<R, String>
+where
+    F: FnOnce(&mut galfus_multiverse::MultiverseContext) -> Result<R, String>,
+{
+    MULTIVERSE.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        if borrow.is_none() {
+            *borrow = Some(galfus_multiverse::MultiverseContext::new());
+        }
+        match borrow.as_mut() {
+            Some(mv) => f(mv),
+            None => Err("MultiverseContext is not initialized".into()),
         }
     })
 }

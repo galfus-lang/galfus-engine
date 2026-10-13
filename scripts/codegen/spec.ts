@@ -296,5 +296,123 @@ export const API_FUNCTIONS: FunctionSpec[] = [
       }
     ],
     returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_create_target',
+    methodName: 'multiverseCreateTarget',
+    doc: 'Registers a new Target in the Multiverse using a JSON description.',
+    params: [
+      {
+        name: 'targetId',
+        type: 'u32',
+        doc: 'Logical ID of the Target'
+      },
+      {
+        name: 'descJson',
+        type: 'string',
+        doc: 'JSON representation of TargetDesc'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_destroy_target',
+    methodName: 'multiverseDestroyTarget',
+    doc: 'Destroys a Target in the Multiverse.',
+    params: [
+      {
+        name: 'targetId',
+        type: 'u32',
+        doc: 'Target ID to destroy'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_create_invocation',
+    methodName: 'multiverseCreateInvocation',
+    doc: 'Creates an Invocation in the Multiverse linking a Realm to a Target.',
+    params: [
+      {
+        name: 'invocationId',
+        type: 'u32',
+        doc: 'Logical ID of the Invocation'
+      },
+      {
+        name: 'descJson',
+        type: 'string',
+        doc: 'JSON representation of InvocationDesc'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_destroy_invocation',
+    methodName: 'multiverseDestroyInvocation',
+    doc: 'Destroys an Invocation in the Multiverse.',
+    params: [
+      {
+        name: 'invocationId',
+        type: 'u32',
+        doc: 'Invocation ID to destroy'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_set_invocation_enabled',
+    methodName: 'multiverseSetInvocationEnabled',
+    doc: 'Enables or disables an Invocation in the Multiverse.',
+    params: [
+      {
+        name: 'invocationId',
+        type: 'u32',
+        doc: 'Invocation ID'
+      },
+      {
+        name: 'enabled',
+        type: 'bool',
+        doc: 'Whether the invocation is active'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_bind_target_texture',
+    methodName: 'multiverseBindTargetTexture',
+    doc: 'Binds a Target output texture to a Realm input slot.',
+    params: [
+      {
+        name: 'bindingJson',
+        type: 'string',
+        doc: 'JSON representation of TargetTextureBinding'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_resolve',
+    methodName: 'multiverseResolve',
+    doc: 'Resolves and returns the Multiverse execution schedule as JSON.',
+    params: [],
+    returnType: 'string'
+  },
+  {
+    cName: 'galfus_multiverse_dispatch',
+    methodName: 'multiverseDispatch',
+    doc: 'Dispatches the Multiverse schedule for a frame.',
+    params: [
+      {
+        name: 'frameId',
+        type: 'u64',
+        doc: 'Monotonically increasing frame counter'
+      },
+      {
+        name: 'deltaTime',
+        type: 'f32',
+        doc: 'Delta time in seconds since previous frame'
+      }
+    ],
+    returnType: 'i32'
   }
 ];

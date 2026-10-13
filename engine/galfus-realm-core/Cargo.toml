@@ -6,3 +6,6 @@ license.workspace = true
 
 [dependencies]
 galfus-core.workspace = true
+glam.workspace = true
+serde.workspace = true
+thiserror.workspace = true
