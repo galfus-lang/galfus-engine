@@ -3,10 +3,15 @@ use std::time::Duration;
 
 use galfus_platform::{
     CursorGrabMode, CursorIcon, GamepadAxis, GamepadButton, GamepadEvent, KeyCode, KeyboardEvent,
-    PlatformContext, PlatformEvent, PointerButton, PointerEvent, ScrollDelta, WindowConfig,
-    WindowEvent,
+    PlatformContext, PlatformEvent, PlaybackConfig, PointerButton, PointerEvent, ScrollDelta,
+    WindowConfig, WindowEvent,
 };
 use glam::Vec2;
+
+use super::audio_gen::generate_synthetic_beep;
+
+const SOUND_CLICK: u32 = 10;
+const SOUND_CHIRP: u32 = 11;
 
 /// Runs Demo 0: Platform, Pointer, and Keyboard event normalization.
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -21,6 +26,17 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!(" - Gamepad          : {}", caps.supports_gamepad);
     println!(" - Audio            : {}", caps.supports_audio);
     println!(" - Headless         : {}", caps.is_headless);
+
+    // Initialize audio resources if supported
+    if caps.supports_audio {
+        let click_wav = generate_synthetic_beep(587.33, 0.08, 44100); // D5 click
+        let chirp_wav = generate_synthetic_beep(880.0, 0.12, 44100); // A5 chirp
+        let dur1 = platform.load_sound_bytes(SOUND_CLICK, &click_wav)?;
+        let dur2 = platform.load_sound_bytes(SOUND_CHIRP, &chirp_wav)?;
+        println!("==> Audio synthesized & loaded:");
+        println!("    Sound #{SOUND_CLICK} (Click) : {dur1:.3}s");
+        println!("    Sound #{SOUND_CHIRP} (Chirp) : {dur2:.3}s");
+    }
 
     let config = WindowConfig::new(1, "Galfus Engine - Demo 0: Platform & Input")
         .with_size(1024, 768)
@@ -45,17 +61,18 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n==> Controls:");
     println!("  - Mouse Move         : Reticle tracks pointer coordinates");
-    println!("  - Left Click         : Cycle base background color");
-    println!("  - Right Click        : Cycle cursor icon");
+    println!("  - Left Click         : Cycle base background color + [Audio Click]");
+    println!("  - Right Click        : Cycle cursor icon + [Audio Chirp]");
     println!("  - Middle Click       : Toggle cursor lock (Locked <-> None)");
     println!("  - Mouse Wheel        : Adjust screen brightness");
     println!("  - WASD / Arrows      : Move reticle via keyboard (Hold Shift for sprint)");
-    println!("  - Spacebar           : Cycle base background color via keyboard");
+    println!("  - Spacebar           : Cycle base background color + [Audio Click]");
+    println!("  - P                  : Test audio playback [Audio Chirp]");
     println!("  - 1..4 Keys          : Direct cursor icon selection");
     println!("  - Escape             : Clean exit application");
     println!("  [Virtual Gamepad Simulation (I/J/K/L, U/O, N/M)]:");
     println!("  - J/L/I/K            : Simulated Left Stick X/Y (moves reticle)");
-    println!("  - U / O              : Simulated Gamepad A (South) / B (East)");
+    println!("  - U / O              : Simulated Gamepad A (South) / B (East) + [Audio]");
     println!("  - N / M              : Simulated Gamepad Left/Right Trigger (brightness)");
     println!("  - F                  : Trigger force-feedback / rumble vibration\n");
 
@@ -140,6 +157,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                             PointerButton::Primary => {
                                 palette_idx = (palette_idx + 1) % palette.len();
                                 println!("  -> Background color cycled to palette #{palette_idx}");
+                                let _ = platform.play_sound(SOUND_CLICK, PlaybackConfig::default());
                             }
                             PointerButton::Secondary => {
                                 cursor_icon_idx = (cursor_icon_idx + 1) % cursor_icons.len();
@@ -148,6 +166,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 if let Ok(win) = platform.get_window_mut(window_id) {
                                     win.set_cursor_icon(next_icon);
                                 }
+                                let _ = platform.play_sound(SOUND_CHIRP, PlaybackConfig::default());
                             }
                             PointerButton::Auxiliary => {
                                 cursor_grabbed = !cursor_grabbed;
@@ -221,6 +240,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 println!(
                                     "  -> Background color cycled via Spacebar to palette #{palette_idx}"
                                 );
+                                let _ = platform.play_sound(SOUND_CLICK, PlaybackConfig::default());
+                            }
+                            KeyCode::KeyP => {
+                                println!("  -> Audio test: Playing chirp sound (880Hz)");
+                                let _ = platform.play_sound(SOUND_CHIRP, PlaybackConfig::default());
                             }
                             KeyCode::Digit1 => {
                                 cursor_icon_idx = 0;
@@ -268,6 +292,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 println!(
                                     "[Virtual Gamepad] Button::South (A) Pressed -> palette #{palette_idx}"
                                 );
+                                let _ = platform.play_sound(SOUND_CLICK, PlaybackConfig::default());
                             }
                             KeyCode::KeyO => {
                                 cursor_icon_idx = (cursor_icon_idx + 1) % cursor_icons.len();
@@ -278,6 +303,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 if let Ok(win) = platform.get_window_mut(window_id) {
                                     win.set_cursor_icon(next_icon);
                                 }
+                                let _ = platform.play_sound(SOUND_CHIRP, PlaybackConfig::default());
                             }
                             KeyCode::KeyN => {
                                 brightness_mod = (brightness_mod - 10).clamp(-50, 50);
@@ -331,6 +357,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 println!(
                                     "  -> Background color cycled via Gamepad A to palette #{palette_idx}"
                                 );
+                                let _ = platform.play_sound(SOUND_CLICK, PlaybackConfig::default());
                             }
                             GamepadButton::East => {
                                 cursor_icon_idx = (cursor_icon_idx + 1) % cursor_icons.len();
@@ -339,6 +366,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 if let Ok(win) = platform.get_window_mut(window_id) {
                                     win.set_cursor_icon(next_icon);
                                 }
+                                let _ = platform.play_sound(SOUND_CHIRP, PlaybackConfig::default());
                             }
                             GamepadButton::Select | GamepadButton::Guide => {
                                 println!("  -> Triggering Gamepad Rumble test...");

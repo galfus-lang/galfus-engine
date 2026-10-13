@@ -1,5 +1,6 @@
 //! Catalog and dispatcher of interactive demonstration modules.
 
+pub mod audio_gen;
 pub mod demo0_platform;
 
 /// Prints the list of available demos with CLI invocation instructions.
