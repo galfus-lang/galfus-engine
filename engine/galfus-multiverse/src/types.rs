@@ -30,31 +30,113 @@ pub struct TargetDesc {
     pub size: Option<UVec2>,
 }
 
-/// Layout specification for a realm invocation's viewport.
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+/// Nature of post-processing filters applied to an invocation output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ViewportRect {
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
+pub enum InvocationFilter {
+    /// Sepia color grading post-processing filter.
+    Sepia,
+    /// Custom post-processing shader module ID.
+    Custom { shader_id: u32 },
+}
+
+/// Layout specification for a realm invocation's viewport.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "unit")]
+pub enum ViewportRect {
+    /// Physical pixel coordinates [x, y, width, height].
+    Pixels {
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    },
+    /// Normalized coordinates in 0.0..=1.0 relative to target dimensions.
+    Normalized {
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    },
 }
 
 impl ViewportRect {
+    /// Creates a viewport in physical pixels.
+    pub const fn pixels(x: u32, y: u32, width: u32, height: u32) -> Self {
+        Self::Pixels {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    /// Creates a viewport in normalized coordinates (0.0..=1.0).
+    pub const fn normalized(x: f32, y: f32, width: f32, height: f32) -> Self {
+        Self::Normalized {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    /// Fullscreen viewport spanning 100% of target dimensions.
+    pub const fn full() -> Self {
+        Self::Normalized {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        }
+    }
+
     /// Resolves the viewport against target dimensions.
-    /// If width or height are zero, fills the entire target dimensions.
     pub fn resolve(&self, target_size: UVec2) -> UVec4 {
-        let w = if self.width == 0 {
-            target_size.x.saturating_sub(self.x).max(1)
-        } else {
-            self.width
-        };
-        let h = if self.height == 0 {
-            target_size.y.saturating_sub(self.y).max(1)
-        } else {
-            self.height
-        };
-        UVec4::new(self.x, self.y, w, h)
+        match *self {
+            Self::Pixels {
+                x,
+                y,
+                width,
+                height,
+            } => {
+                let px = x.min(target_size.x);
+                let py = y.min(target_size.y);
+                let w = if width == 0 {
+                    target_size.x.saturating_sub(px).max(1)
+                } else {
+                    width.min(target_size.x.saturating_sub(px)).max(1)
+                };
+                let h = if height == 0 {
+                    target_size.y.saturating_sub(py).max(1)
+                } else {
+                    height.min(target_size.y.saturating_sub(py)).max(1)
+                };
+                UVec4::new(px, py, w, h)
+            }
+            Self::Normalized {
+                x,
+                y,
+                width,
+                height,
+            } => {
+                let tw = target_size.x as f32;
+                let th = target_size.y as f32;
+                let px = ((x.clamp(0.0, 1.0) * tw).round() as u32).min(target_size.x);
+                let py = ((y.clamp(0.0, 1.0) * th).round() as u32).min(target_size.y);
+                let raw_w = ((width.clamp(0.0, 1.0) * tw).round() as u32).max(1);
+                let raw_h = ((height.clamp(0.0, 1.0) * th).round() as u32).max(1);
+                let pw = raw_w.min(target_size.x.saturating_sub(px)).max(1);
+                let ph = raw_h.min(target_size.y.saturating_sub(py)).max(1);
+                UVec4::new(px, py, pw, ph)
+            }
+        }
+    }
+}
+
+impl Default for ViewportRect {
+    fn default() -> Self {
+        Self::full()
     }
 }
 
@@ -68,9 +150,12 @@ pub struct InvocationDesc {
     pub target_id: u32,
     /// Optional specific camera inside the realm (e.g. portal camera vs player camera).
     pub camera_id: Option<u32>,
-    /// Viewport rectangle. Default (0,0,0,0) spans the whole target.
+    /// Viewport rectangle. Default spans the whole target (`ViewportRect::full()`).
     #[serde(default)]
     pub viewport: ViewportRect,
+    /// Post-processing filters applied to the realm output before target presentation.
+    #[serde(default)]
+    pub filters: Vec<InvocationFilter>,
     /// Overlay stacking order within the same target (lower drawn first).
     #[serde(default)]
     pub z_index: i32,
@@ -79,6 +164,21 @@ pub struct InvocationDesc {
     pub enabled: bool,
     /// Optional clear color `[r, g, b, a]`.
     pub clear_color: Option<[f32; 4]>,
+}
+
+impl Default for InvocationDesc {
+    fn default() -> Self {
+        Self {
+            realm_id: 0,
+            target_id: 0,
+            camera_id: None,
+            viewport: ViewportRect::default(),
+            filters: Vec::new(),
+            z_index: 0,
+            enabled: true,
+            clear_color: None,
+        }
+    }
 }
 
 fn default_enabled() -> bool {
@@ -95,4 +195,123 @@ pub struct TargetTextureBinding {
     pub realm_id: u32,
     /// Name or identifier of the texture slot inside the realm (e.g. "portal_surface").
     pub slot: String,
+}
+
+impl TargetDesc {
+    /// Convenience helper to create a window target.
+    pub fn window(window_id: u32) -> Self {
+        Self {
+            kind: TargetKind::Window { window_id },
+            size: None,
+        }
+    }
+
+    /// Convenience helper to create an offscreen texture target.
+    pub fn texture(width: u32, height: u32) -> Self {
+        Self {
+            kind: TargetKind::Texture {
+                width,
+                height,
+                format: default_texture_format(),
+            },
+            size: Some(UVec2::new(width, height)),
+        }
+    }
+}
+
+/// Nature of the transfer or post-processing effect applied by a connector.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ConnectorEffect {
+    /// Direct 1:1 blit / transfer.
+    #[default]
+    Blit,
+    /// Sepia color grading post-processing filter.
+    Sepia,
+    /// Custom post-processing shader module ID.
+    Custom { shader_id: u32 },
+}
+
+/// Description of a Connector that transfers, composites, or post-processes
+/// graphics output from a source target into a destination target.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectorDesc {
+    /// Source Target producing the input texture.
+    pub source_target_id: u32,
+    /// Destination Target receiving the processed output.
+    pub destination_target_id: u32,
+    /// Effect applied during the transfer.
+    #[serde(default)]
+    pub effect: ConnectorEffect,
+    /// Optional legacy custom shader module ID.
+    #[serde(default)]
+    pub custom_shader_id: Option<u32>,
+    /// Stacking order if multiple connectors or invocations write to the same destination target.
+    #[serde(default)]
+    pub z_index: i32,
+    /// Whether this connector is currently active.
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+}
+
+impl ConnectorDesc {
+    /// Creates a 1:1 blit connector.
+    pub fn blit(source_target_id: u32, destination_target_id: u32) -> Self {
+        Self {
+            source_target_id,
+            destination_target_id,
+            effect: ConnectorEffect::Blit,
+            custom_shader_id: None,
+            z_index: 0,
+            enabled: true,
+        }
+    }
+
+    /// Creates a sepia tone post-processing connector.
+    pub fn sepia(source_target_id: u32, destination_target_id: u32) -> Self {
+        Self {
+            source_target_id,
+            destination_target_id,
+            effect: ConnectorEffect::Sepia,
+            custom_shader_id: None,
+            z_index: 0,
+            enabled: true,
+        }
+    }
+
+    /// Creates a custom shader post-processing connector.
+    pub fn custom(source_target_id: u32, destination_target_id: u32, shader_id: u32) -> Self {
+        Self {
+            source_target_id,
+            destination_target_id,
+            effect: ConnectorEffect::Custom { shader_id },
+            custom_shader_id: Some(shader_id),
+            z_index: 0,
+            enabled: true,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_viewport_rect_odd_dimension_split() {
+        let odd_size = UVec2::new(905, 1020);
+        let left_vp = ViewportRect::normalized(0.0, 0.0, 0.5, 1.0).resolve(odd_size);
+        let right_vp = ViewportRect::normalized(0.5, 0.0, 0.5, 1.0).resolve(odd_size);
+
+        assert!(left_vp.x + left_vp.z <= odd_size.x);
+        assert!(left_vp.y + left_vp.w <= odd_size.y);
+        assert!(right_vp.x + right_vp.z <= odd_size.x);
+        assert!(right_vp.y + right_vp.w <= odd_size.y);
+
+        assert_eq!(left_vp.x, 0);
+        assert_eq!(left_vp.z, 453);
+        assert_eq!(right_vp.x, 453);
+        assert_eq!(right_vp.z, 452);
+        assert_eq!(left_vp.z + right_vp.z, odd_size.x);
+    }
 }

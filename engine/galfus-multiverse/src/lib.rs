@@ -10,11 +10,17 @@
 
 pub mod context;
 pub mod error;
+pub(crate) mod postprocess;
 pub mod resolver;
 pub mod schedule;
 pub mod types;
 
-pub use context::MultiverseContext;
+pub use context::{ConnectorHandler, ConnectorInvocationContext, MultiverseContext};
 pub use error::{MultiverseError, MultiverseResult};
-pub use schedule::{MultiverseSchedule, ResolvedInvocationStep, TargetExecutionBlock};
-pub use types::{InvocationDesc, TargetDesc, TargetKind, TargetTextureBinding, ViewportRect};
+pub use schedule::{
+    MultiverseSchedule, ResolvedConnectorStep, ResolvedInvocationStep, TargetExecutionBlock,
+};
+pub use types::{
+    ConnectorDesc, ConnectorEffect, InvocationDesc, InvocationFilter, TargetDesc, TargetKind,
+    TargetTextureBinding, ViewportRect,
+};

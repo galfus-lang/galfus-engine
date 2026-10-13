@@ -6,7 +6,9 @@ license.workspace = true
 
 [dependencies]
 galfus-core.workspace = true
+galfus-multiverse.workspace = true
 galfus-platform = { workspace = true, features = ["native"] }
+galfus-realm-core.workspace = true
 glam.workspace = true
 
 softbuffer = "0.4"

@@ -12,6 +12,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             demos::demo0_platform::run()?;
         }
+        Some("1") => {
+            demos::demo1_multiverse_postprocess::run()?;
+        }
         Some("--help") | Some("-h") | Some("help") => {
             demos::print_available_demos();
         }

@@ -21,15 +21,19 @@ impl GpuContext {
         Self::new(None)
     }
 
-    /// Asynchronously initializes a new `GpuContext`.
-    pub async fn new_async(compatible_surface: Option<&wgpu::Surface<'_>>) -> GpuResult<Self> {
-        let instance = Arc::new(wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
-            flags: wgpu::InstanceFlags::default(),
-            backend_options: wgpu::BackendOptions::default(),
-            ..Default::default()
-        }));
+    /// Synchronously initializes a new `GpuContext` reusing an existing `wgpu::Instance`.
+    pub fn with_instance(
+        instance: Arc<wgpu::Instance>,
+        compatible_surface: Option<&wgpu::Surface>,
+    ) -> GpuResult<Self> {
+        pollster::block_on(Self::with_instance_async(instance, compatible_surface))
+    }
 
+    /// Asynchronously initializes a new `GpuContext` reusing an existing `wgpu::Instance`.
+    pub async fn with_instance_async(
+        instance: Arc<wgpu::Instance>,
+        compatible_surface: Option<&wgpu::Surface<'_>>,
+    ) -> GpuResult<Self> {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -67,6 +71,17 @@ impl GpuContext {
             queue: Arc::new(queue),
             adapter_info,
         })
+    }
+
+    /// Asynchronously initializes a new `GpuContext`.
+    pub async fn new_async(compatible_surface: Option<&wgpu::Surface<'_>>) -> GpuResult<Self> {
+        let instance = Arc::new(wgpu::Instance::new(&wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            flags: wgpu::InstanceFlags::default(),
+            backend_options: wgpu::BackendOptions::default(),
+            ..Default::default()
+        }));
+        Self::with_instance_async(instance, compatible_surface).await
     }
 
     /// Returns a reference to the `wgpu::Instance`.

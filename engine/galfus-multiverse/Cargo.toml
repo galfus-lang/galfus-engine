@@ -6,8 +6,12 @@ license.workspace = true
 
 [dependencies]
 galfus-core.workspace = true
+galfus-gpu-manager.workspace = true
 galfus-realm-core.workspace = true
 glam.workspace = true
+log.workspace = true
+pollster.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+wgpu.workspace = true

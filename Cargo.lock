@@ -725,7 +725,9 @@ name = "galfus-demo"
 version = "0.1.0"
 dependencies = [
  "galfus-core",
+ "galfus-multiverse",
  "galfus-platform",
+ "galfus-realm-core",
  "glam 0.30.10",
  "softbuffer",
 ]
@@ -749,11 +751,15 @@ name = "galfus-multiverse"
 version = "0.1.0"
 dependencies = [
  "galfus-core",
+ "galfus-gpu-manager",
  "galfus-realm-core",
  "glam 0.30.10",
+ "log",
+ "pollster",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "wgpu",
 ]
 
 [[package]]

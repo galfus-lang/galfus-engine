@@ -33,6 +33,23 @@ impl GpuManager {
         })
     }
 
+    /// Initializes a new `GpuManager` reusing an existing `wgpu::Instance`.
+    pub fn with_instance(
+        instance: std::sync::Arc<wgpu::Instance>,
+        compatible_surface: Option<&wgpu::Surface>,
+    ) -> GpuResult<Self> {
+        let context = GpuContext::with_instance(instance, compatible_surface)?;
+        Ok(Self {
+            context,
+            buffers: BufferManager::new(),
+            textures: TextureManager::new(),
+            samplers: SamplerManager::new(),
+            layouts: LayoutManager::new(),
+            bind_groups: BindGroupManager::new(),
+            pipelines: PipelineManager::new(),
+        })
+    }
+
     /// Initializes a new `GpuManager` compatible with a platform window surface.
     pub fn new(compatible_surface: Option<&wgpu::Surface>) -> GpuResult<Self> {
         let context = GpuContext::new(compatible_surface)?;
