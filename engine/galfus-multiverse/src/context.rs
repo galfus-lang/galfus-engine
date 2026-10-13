@@ -15,8 +15,7 @@ use crate::postprocess::{FilterPassDesc, PostProcessor};
 use crate::resolver::resolve_schedule;
 use crate::schedule::MultiverseSchedule;
 use crate::types::{
-    InvocationDesc, InvocationFilter, TargetDesc, TargetKind, TargetTextureBinding,
-    ViewportRect,
+    InvocationDesc, InvocationFilter, TargetDesc, TargetKind, TargetTextureBinding, ViewportRect,
 };
 
 /// Central Multiverse Context coordinating targets, realms, and invocation scheduling.

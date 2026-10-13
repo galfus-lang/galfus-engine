@@ -343,7 +343,6 @@ pub fn multiverse_update_window_size(window_id: u32, width: u32, height: u32) ->
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
-
 #[napi]
 pub fn multiverse_bind_target_texture(env: Env, binding_val: JsUnknown) -> Result<()> {
     let binding: galfus_multiverse::TargetTextureBinding = env.from_js_value(binding_val)?;

@@ -36,7 +36,9 @@ pub fn validate_snippet(snippet: &str, required_entrypoint: &str) -> EffectResul
     let pattern = format!("fn {required_entrypoint}(");
     let pattern_space = format!("fn {required_entrypoint} (");
     if !trimmed.contains(&pattern) && !trimmed.contains(&pattern_space) {
-        return Err(EffectError::MissingEntrypoint(required_entrypoint.to_string()));
+        return Err(EffectError::MissingEntrypoint(
+            required_entrypoint.to_string(),
+        ));
     }
 
     Ok(())
@@ -48,7 +50,10 @@ mod tests {
 
     #[test]
     fn test_empty_snippet_rejected() {
-        assert_eq!(validate_snippet("   \n\t", "screen_effect"), Err(EffectError::EmptySnippet));
+        assert_eq!(
+            validate_snippet("   \n\t", "screen_effect"),
+            Err(EffectError::EmptySnippet)
+        );
     }
 
     #[test]

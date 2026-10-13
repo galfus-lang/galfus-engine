@@ -378,8 +378,6 @@ pub extern "C" fn galfus_multiverse_unregister_realm(realm_id: u32) -> i32 {
     }
 }
 
-
-
 /// Unbinds a Target texture from a Realm slot. Returns 0 on success, -1 on failure.
 ///
 /// # Safety

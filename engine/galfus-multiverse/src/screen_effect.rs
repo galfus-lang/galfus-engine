@@ -1,6 +1,4 @@
-use galfus_core::shader_effects::{
-    ComposedShader, EffectResult, ShaderEffectTemplate,
-};
+use galfus_core::shader_effects::{ComposedShader, EffectResult, ShaderEffectTemplate};
 
 /// Canonical WGSL template for multiverse screen/post-processing shaders.
 /// Generates a procedural fullscreen triangle and invokes the user's `screen_effect` function.

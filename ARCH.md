@@ -119,13 +119,13 @@ Target: offscreen  -- TargetTextureBinding ------------> Realm C: portal surface
 
 The entities have distinct semantics:
 
-| Concept                    | Meaning                                                                                                                                                              |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Realm**                  | A stateful graphics-producing unit implementing the shared realm contract.                                                                                           |
-| **Target**                 | A destination abstraction such as a window surface or offscreen texture; owns presentation and resolution.                                                          |
-| **Invocation**             | The mapping that renders a Realm into a Target, specifying viewport, stacking order (`z_index`), and post-processing filters (`InvocationFilter`).                   |
-| **TargetTextureBinding**   | A declaration allowing a Realm to consume a rendered Target's texture as input (e.g. mirrors, security cameras, portals).                                            |
-| **Multiverse**             | The owner of graph structure, validity, scheduling, and execution order.                                                                                             |
+| Concept                  | Meaning                                                                                                                                            |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Realm**                | A stateful graphics-producing unit implementing the shared realm contract.                                                                         |
+| **Target**               | A destination abstraction such as a window surface or offscreen texture; owns presentation and resolution.                                         |
+| **Invocation**           | The mapping that renders a Realm into a Target, specifying viewport, stacking order (`z_index`), and post-processing filters (`InvocationFilter`). |
+| **TargetTextureBinding** | A declaration allowing a Realm to consume a rendered Target's texture as input (e.g. mirrors, security cameras, portals).                          |
+| **Multiverse**           | The owner of graph structure, validity, scheduling, and execution order.                                                                           |
 
 A graph may produce multiple outputs and use intermediate textures. Output contracts should not assume every realm produces only one RGBA image. Depth, masks, multiple render attachments, and other compatible GPU outputs may be supported as contracts evolve.
 

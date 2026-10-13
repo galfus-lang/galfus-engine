@@ -148,10 +148,9 @@ impl PostProcessor {
                 let shader_id: u32 = id_str
                     .parse()
                     .map_err(|_| MultiverseError::InvalidConfig("Invalid shader ID".into()))?;
-                let custom_mod = self
-                    .custom_shaders
-                    .get(&shader_id)
-                    .ok_or_else(|| MultiverseError::InvalidConfig(format!("Shader ID {shader_id} not found")))?;
+                let custom_mod = self.custom_shaders.get(&shader_id).ok_or_else(|| {
+                    MultiverseError::InvalidConfig(format!("Shader ID {shader_id} not found"))
+                })?;
                 (custom_mod, "fs_main")
             } else if effect_name == "sepia" {
                 (&self.shader_module, "fs_sepia")
