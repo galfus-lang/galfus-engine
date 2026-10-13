@@ -2,8 +2,9 @@ use std::num::NonZeroU32;
 use std::time::Duration;
 
 use galfus_platform::{
-    CursorGrabMode, CursorIcon, KeyCode, KeyboardEvent, PlatformContext, PlatformEvent,
-    PointerButton, PointerEvent, ScrollDelta, WindowConfig, WindowEvent,
+    CursorGrabMode, CursorIcon, GamepadAxis, GamepadButton, GamepadEvent, KeyCode, KeyboardEvent,
+    PlatformContext, PlatformEvent, PointerButton, PointerEvent, ScrollDelta, WindowConfig,
+    WindowEvent,
 };
 use glam::Vec2;
 
@@ -43,15 +44,20 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut surface = softbuffer::Surface::new(&context, raw_winit_window)?;
 
     println!("\n==> Controls:");
-    println!("  - Mouse Move      : Reticle tracks pointer coordinates");
-    println!("  - Left Click      : Cycle base background color");
-    println!("  - Right Click     : Cycle cursor icon");
-    println!("  - Middle Click    : Toggle cursor lock (Locked <-> None)");
-    println!("  - Mouse Wheel     : Adjust screen brightness");
-    println!("  - WASD / Arrows   : Move reticle via keyboard (Hold Shift for sprint)");
-    println!("  - Spacebar        : Cycle base background color via keyboard");
-    println!("  - 1..4 Keys       : Direct cursor icon selection");
-    println!("  - Escape          : Clean exit application\n");
+    println!("  - Mouse Move         : Reticle tracks pointer coordinates");
+    println!("  - Left Click         : Cycle base background color");
+    println!("  - Right Click        : Cycle cursor icon");
+    println!("  - Middle Click       : Toggle cursor lock (Locked <-> None)");
+    println!("  - Mouse Wheel        : Adjust screen brightness");
+    println!("  - WASD / Arrows      : Move reticle via keyboard (Hold Shift for sprint)");
+    println!("  - Spacebar           : Cycle base background color via keyboard");
+    println!("  - 1..4 Keys          : Direct cursor icon selection");
+    println!("  - Escape             : Clean exit application");
+    println!("  [Virtual Gamepad Simulation (I/J/K/L, U/O, N/M)]:");
+    println!("  - J/L/I/K            : Simulated Left Stick X/Y (moves reticle)");
+    println!("  - U / O              : Simulated Gamepad A (South) / B (East)");
+    println!("  - N / M              : Simulated Gamepad Left/Right Trigger (brightness)");
+    println!("  - F                  : Trigger force-feedback / rumble vibration\n");
 
     let mut frame = 0u64;
     let mut running = true;
@@ -240,6 +246,57 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                     win.set_cursor_icon(CursorIcon::Grab);
                                 }
                             }
+                            // Virtual Gamepad simulation keys
+                            KeyCode::KeyJ => {
+                                println!("[Virtual Gamepad] LeftStickX = -1.0 (Left)");
+                                pointer_pos.x = (pointer_pos.x - 25.0).max(0.0);
+                            }
+                            KeyCode::KeyL => {
+                                println!("[Virtual Gamepad] LeftStickX = +1.0 (Right)");
+                                pointer_pos.x = (pointer_pos.x + 25.0).min(width as f32);
+                            }
+                            KeyCode::KeyI => {
+                                println!("[Virtual Gamepad] LeftStickY = +1.0 (Up)");
+                                pointer_pos.y = (pointer_pos.y - 25.0).max(0.0);
+                            }
+                            KeyCode::KeyK => {
+                                println!("[Virtual Gamepad] LeftStickY = -1.0 (Down)");
+                                pointer_pos.y = (pointer_pos.y + 25.0).min(height as f32);
+                            }
+                            KeyCode::KeyU => {
+                                palette_idx = (palette_idx + 1) % palette.len();
+                                println!(
+                                    "[Virtual Gamepad] Button::South (A) Pressed -> palette #{palette_idx}"
+                                );
+                            }
+                            KeyCode::KeyO => {
+                                cursor_icon_idx = (cursor_icon_idx + 1) % cursor_icons.len();
+                                let next_icon = cursor_icons[cursor_icon_idx];
+                                println!(
+                                    "[Virtual Gamepad] Button::East (B) Pressed -> cursor {next_icon:?}"
+                                );
+                                if let Ok(win) = platform.get_window_mut(window_id) {
+                                    win.set_cursor_icon(next_icon);
+                                }
+                            }
+                            KeyCode::KeyN => {
+                                brightness_mod = (brightness_mod - 10).clamp(-50, 50);
+                                println!(
+                                    "[Virtual Gamepad] LeftTrigger -> brightness {brightness_mod}"
+                                );
+                            }
+                            KeyCode::KeyM => {
+                                brightness_mod = (brightness_mod + 10).clamp(-50, 50);
+                                println!(
+                                    "[Virtual Gamepad] RightTrigger -> brightness {brightness_mod}"
+                                );
+                            }
+                            KeyCode::KeyF => {
+                                println!(
+                                    "[Virtual Gamepad] Triggering Rumble Feedback (strong=0.8, weak=0.4, 200ms)..."
+                                );
+                                let _ = platform.set_gamepad_rumble(0, 0.8, 0.4, 200);
+                            }
                             KeyCode::Escape => {
                                 println!("\n[Key] Escape pressed. Exiting cleanly...");
                                 platform.close_window(window_id)?;
@@ -254,6 +311,72 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         "[Modifiers] shift={} ctrl={} alt={} super={}",
                         modifiers.shift, modifiers.ctrl, modifiers.alt, modifiers.super_key
                     );
+                }
+                PlatformEvent::Gamepad(GamepadEvent::Connected { gamepad_id, name }) => {
+                    println!("[Gamepad Connected] ID={gamepad_id} name='{name}'");
+                }
+                PlatformEvent::Gamepad(GamepadEvent::Disconnected { gamepad_id }) => {
+                    println!("[Gamepad Disconnected] ID={gamepad_id}");
+                }
+                PlatformEvent::Gamepad(GamepadEvent::Button {
+                    gamepad_id,
+                    button,
+                    state,
+                }) => {
+                    println!("[Gamepad Button] ID={gamepad_id} button={button:?} state={state:?}");
+                    if state.is_pressed() {
+                        match button {
+                            GamepadButton::South => {
+                                palette_idx = (palette_idx + 1) % palette.len();
+                                println!(
+                                    "  -> Background color cycled via Gamepad A to palette #{palette_idx}"
+                                );
+                            }
+                            GamepadButton::East => {
+                                cursor_icon_idx = (cursor_icon_idx + 1) % cursor_icons.len();
+                                let next_icon = cursor_icons[cursor_icon_idx];
+                                println!("  -> Cursor icon changed via Gamepad B to {next_icon:?}");
+                                if let Ok(win) = platform.get_window_mut(window_id) {
+                                    win.set_cursor_icon(next_icon);
+                                }
+                            }
+                            GamepadButton::Select | GamepadButton::Guide => {
+                                println!("  -> Triggering Gamepad Rumble test...");
+                                let _ = platform.set_gamepad_rumble(gamepad_id, 0.7, 0.7, 150);
+                            }
+                            GamepadButton::Start => {
+                                println!("\n[Gamepad] Start pressed. Exiting cleanly...");
+                                platform.close_window(window_id)?;
+                                running = false;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                PlatformEvent::Gamepad(GamepadEvent::Axis {
+                    gamepad_id,
+                    axis,
+                    value,
+                }) if value.abs() > 0.15 => {
+                    match axis {
+                        GamepadAxis::LeftStickX => {
+                            pointer_pos.x = (pointer_pos.x + value * 20.0).clamp(0.0, width as f32);
+                        }
+                        GamepadAxis::LeftStickY => {
+                            pointer_pos.y =
+                                (pointer_pos.y - value * 20.0).clamp(0.0, height as f32);
+                        }
+                        GamepadAxis::LeftTrigger => {
+                            brightness_mod = (brightness_mod - (value * 5.0) as i32).clamp(-50, 50);
+                        }
+                        GamepadAxis::RightTrigger => {
+                            brightness_mod = (brightness_mod + (value * 5.0) as i32).clamp(-50, 50);
+                        }
+                        _ => {}
+                    }
+                    if frame.is_multiple_of(30) {
+                        println!("[Gamepad Axis] ID={gamepad_id} axis={axis:?} value={value:.2}");
+                    }
                 }
                 _ => {}
             }

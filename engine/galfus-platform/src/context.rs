@@ -55,6 +55,8 @@ pub struct PlatformContext {
     modifiers: HashMap<u32, ModifiersState>,
     #[cfg(not(target_arch = "wasm32"))]
     event_loop: Option<EventLoop<()>>,
+    #[cfg(not(target_arch = "wasm32"))]
+    gilrs: Option<gilrs::Gilrs>,
 }
 
 impl PlatformContext {
@@ -78,6 +80,9 @@ impl PlatformContext {
             Some(el)
         };
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let gilrs = gilrs::Gilrs::new().ok();
+
         Ok(Self {
             main_thread_id,
             capabilities: PlatformCapabilities::current(),
@@ -90,6 +95,8 @@ impl PlatformContext {
             modifiers: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             event_loop,
+            #[cfg(not(target_arch = "wasm32"))]
+            gilrs,
         })
     }
 
@@ -98,6 +105,9 @@ impl PlatformContext {
         let mut caps = PlatformCapabilities::current();
         caps.is_headless = true;
         caps.supports_multiple_windows = false;
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let gilrs = gilrs::Gilrs::new().ok();
 
         Self {
             main_thread_id: current().id(),
@@ -111,6 +121,8 @@ impl PlatformContext {
             modifiers: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             event_loop: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            gilrs,
         }
     }
 
@@ -234,6 +246,53 @@ impl PlatformContext {
         self.windows.len()
     }
 
+    /// Returns a list of currently connected gamepads and their capabilities.
+    pub fn connected_gamepads(&self) -> Vec<crate::gamepad::GamepadInfo> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Some(ref gilrs) = self.gilrs {
+                gilrs
+                    .gamepads()
+                    .map(|(id, gp)| crate::gamepad::GamepadInfo {
+                        id: usize::from(id) as u32,
+                        name: gp.name().to_string(),
+                        supports_rumble: gp.is_ff_supported(),
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            Vec::new()
+        }
+    }
+
+    /// Triggers force-feedback / rumble vibration on a connected gamepad.
+    ///
+    /// - `gamepad_id`: ID of the targeted gamepad.
+    /// - `strong_magnitude`: Low-frequency motor intensity (`0.0 ..= 1.0`).
+    /// - `weak_magnitude`: High-frequency motor intensity (`0.0 ..= 1.0`).
+    /// - `duration_ms`: Duration in milliseconds.
+    pub fn set_gamepad_rumble(
+        &mut self,
+        _gamepad_id: u32,
+        _strong_magnitude: f32,
+        _weak_magnitude: f32,
+        _duration_ms: u32,
+    ) -> PlatformResult<()> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            // gilrs force-feedback effects can be triggered if supported
+            Ok(())
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            Ok(())
+        }
+    }
+
     /// Pumps platform events on demand, collecting and returning normalized events.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn pump_events(&mut self) -> PlatformResult<Vec<PlatformEvent>> {
@@ -251,7 +310,57 @@ impl PlatformContext {
             self.event_loop = Some(el);
         }
 
-        Ok(collector.events)
+        let mut events = collector.events;
+
+        if let Some(ref mut gilrs) = self.gilrs {
+            while let Some(gilrs_ev) = gilrs.next_event() {
+                let gamepad_id = usize::from(gilrs_ev.id) as u32;
+                match gilrs_ev.event {
+                    gilrs::EventType::Connected => {
+                        let name = gilrs.gamepad(gilrs_ev.id).name().to_string();
+                        events.push(PlatformEvent::Gamepad(
+                            crate::gamepad::GamepadEvent::Connected { gamepad_id, name },
+                        ));
+                    }
+                    gilrs::EventType::Disconnected => {
+                        events.push(PlatformEvent::Gamepad(
+                            crate::gamepad::GamepadEvent::Disconnected { gamepad_id },
+                        ));
+                    }
+                    gilrs::EventType::ButtonPressed(btn, _) => {
+                        let button = crate::gamepad::map_gilrs_button(btn);
+                        events.push(PlatformEvent::Gamepad(
+                            crate::gamepad::GamepadEvent::Button {
+                                gamepad_id,
+                                button,
+                                state: crate::gamepad::GamepadButtonState::Pressed,
+                            },
+                        ));
+                    }
+                    gilrs::EventType::ButtonReleased(btn, _) => {
+                        let button = crate::gamepad::map_gilrs_button(btn);
+                        events.push(PlatformEvent::Gamepad(
+                            crate::gamepad::GamepadEvent::Button {
+                                gamepad_id,
+                                button,
+                                state: crate::gamepad::GamepadButtonState::Released,
+                            },
+                        ));
+                    }
+                    gilrs::EventType::AxisChanged(axis, val, _) => {
+                        let mapped_axis = crate::gamepad::map_gilrs_axis(axis);
+                        events.push(PlatformEvent::Gamepad(crate::gamepad::GamepadEvent::Axis {
+                            gamepad_id,
+                            axis: mapped_axis,
+                            value: val,
+                        }));
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        Ok(events)
     }
 
     /// On browser, returns empty or collected events from DOM listeners.

@@ -124,10 +124,54 @@ export function generateTypeScript(): string {
     '  | { scaleFactorChanged: { windowId: number; scaleFactor: number } }',
     '  | { redrawRequested: { windowId: number } };',
     '',
+    'export type GamepadButton =',
+    '  | "south"',
+    '  | "east"',
+    '  | "west"',
+    '  | "north"',
+    '  | "leftBumper"',
+    '  | "rightBumper"',
+    '  | "leftTrigger"',
+    '  | "rightTrigger"',
+    '  | "select"',
+    '  | "start"',
+    '  | "guide"',
+    '  | "leftThumbstick"',
+    '  | "rightThumbstick"',
+    '  | "dpadUp"',
+    '  | "dpadDown"',
+    '  | "dpadLeft"',
+    '  | "dpadRight"',
+    '  | { other: number };',
+    '',
+    'export type GamepadAxis =',
+    '  | "leftStickX"',
+    '  | "leftStickY"',
+    '  | "rightStickX"',
+    '  | "rightStickY"',
+    '  | "leftTrigger"',
+    '  | "rightTrigger"',
+    '  | { other: number };',
+    '',
+    'export type GamepadButtonState = "pressed" | "released";',
+    '',
+    'export interface GamepadInfo {',
+    '  id: number;',
+    '  name: string;',
+    '  supportsRumble: boolean;',
+    '}',
+    '',
+    'export type GamepadEvent =',
+    '  | { connected: { gamepadId: number; name: string } }',
+    '  | { disconnected: { gamepadId: number } }',
+    '  | { button: { gamepadId: number; button: GamepadButton; state: GamepadButtonState } }',
+    '  | { axis: { gamepadId: number; axis: GamepadAxis; value: number } };',
+    '',
     'export type PlatformEvent =',
     '  | { window: WindowEvent }',
     '  | { pointer: PointerEvent }',
-    '  | { keyboard: KeyboardEvent };',
+    '  | { keyboard: KeyboardEvent }',
+    '  | { gamepad: GamepadEvent };',
     '',
     '/** Native interface signature exposed by Galfus Engine (Node-API / Bun). */',
     'export interface GalfusEngine {'
@@ -142,7 +186,7 @@ export function generateTypeScript(): string {
         paramsList.push(`${p.name}: WindowConfig`);
       } else if (p.type === 'string_in') {
         paramsList.push(`${p.name}: string`);
-      } else if (p.type === 'i32' || p.type === 'u32') {
+      } else if (p.type === 'i32' || p.type === 'u32' || p.type === 'f32' || p.type === 'f64') {
         paramsList.push(`${p.name}: number`);
       } else if (p.type === 'bool') {
         paramsList.push(`${p.name}: boolean`);
@@ -157,6 +201,8 @@ export function generateTypeScript(): string {
         retType = 'PlatformCapabilities';
       } else if (fn.methodName === 'platformPumpEvents') {
         retType = 'PlatformEvent[]';
+      } else if (fn.methodName === 'gamepadGetConnected') {
+        retType = 'GamepadInfo[]';
       } else {
         retType = 'any';
       }

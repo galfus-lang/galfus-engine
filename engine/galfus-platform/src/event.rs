@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::gamepad::GamepadEvent;
 use crate::keyboard::KeyboardEvent;
 use crate::pointer::PointerEvent;
 use crate::window::WindowEvent;
@@ -16,6 +17,9 @@ pub enum PlatformEvent {
 
     /// Keyboard (keys, modifiers, text) event.
     Keyboard(KeyboardEvent),
+
+    /// Gamepad (controller connection, button, axis) event.
+    Gamepad(GamepadEvent),
 }
 
 impl From<WindowEvent> for PlatformEvent {
@@ -36,6 +40,13 @@ impl From<KeyboardEvent> for PlatformEvent {
     #[inline]
     fn from(event: KeyboardEvent) -> Self {
         Self::Keyboard(event)
+    }
+}
+
+impl From<GamepadEvent> for PlatformEvent {
+    #[inline]
+    fn from(event: GamepadEvent) -> Self {
+        Self::Gamepad(event)
     }
 }
 

@@ -6,6 +6,10 @@ function mapLuaCParam(p: ParamSpec): string {
       return `int32_t ${p.name}`;
     case 'u32':
       return `uint32_t ${p.name}`;
+    case 'f32':
+      return `float ${p.name}`;
+    case 'f64':
+      return `double ${p.name}`;
     case 'bool':
       return `bool ${p.name}`;
     case 'string_in':
@@ -25,6 +29,10 @@ function mapLuaCReturn(type: string): string {
       return 'int32_t';
     case 'u32':
       return 'uint32_t';
+    case 'f32':
+      return 'float';
+    case 'f64':
+      return 'double';
     case 'bool':
       return 'bool';
     case 'string_out':

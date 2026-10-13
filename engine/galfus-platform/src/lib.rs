@@ -12,6 +12,7 @@ pub mod capabilities;
 pub mod context;
 pub mod error;
 pub mod event;
+pub mod gamepad;
 pub mod keyboard;
 pub mod pointer;
 pub mod window;
@@ -20,6 +21,10 @@ pub use capabilities::PlatformCapabilities;
 pub use context::PlatformContext;
 pub use error::{PlatformError, PlatformResult};
 pub use event::PlatformEvent;
+pub use gamepad::{
+    GamepadAxis, GamepadButton, GamepadButtonState, GamepadEvent, GamepadInfo, map_w3c_axis_index,
+    map_w3c_button_index,
+};
 pub use keyboard::{KeyCode, KeyState, KeyboardEvent, LogicalKey, ModifiersState, NamedKey};
 pub use pointer::{PointerButton, PointerButtonState, PointerEvent, PointerType, ScrollDelta};
 pub use window::{

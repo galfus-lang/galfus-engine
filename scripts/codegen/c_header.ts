@@ -8,6 +8,10 @@ function mapCType(type: string): string {
       return 'int32_t';
     case 'u32':
       return 'uint32_t';
+    case 'f32':
+      return 'float';
+    case 'f64':
+      return 'double';
     case 'bool':
       return 'bool';
     case 'string_in':

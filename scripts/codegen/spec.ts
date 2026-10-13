@@ -1,4 +1,4 @@
-export type TypeKind = 'void' | 'i32' | 'u32' | 'string_in' | 'string_out' | 'bool';
+export type TypeKind = 'void' | 'i32' | 'u32' | 'f32' | 'f64' | 'string_in' | 'string_out' | 'bool';
 
 export interface ParamSpec {
   name: string;
@@ -139,5 +139,41 @@ export const API_FUNCTIONS: FunctionSpec[] = [
     params: [],
     returnType: 'string_out',
     returnsJson: true
+  },
+  {
+    cName: 'galfus_gamepad_get_connected',
+    methodName: 'gamepadGetConnected',
+    doc: 'Retrieves all currently connected gamepads and their capabilities.',
+    params: [],
+    returnType: 'string_out',
+    returnsJson: true
+  },
+  {
+    cName: 'galfus_gamepad_set_rumble',
+    methodName: 'gamepadSetRumble',
+    doc: 'Triggers rumble vibration on a connected gamepad.',
+    params: [
+      {
+        name: 'gamepadId',
+        type: 'u32',
+        doc: 'Logical ID of the gamepad'
+      },
+      {
+        name: 'strongMagnitude',
+        type: 'f32',
+        doc: 'Low-frequency rumble intensity (0.0 to 1.0)'
+      },
+      {
+        name: 'weakMagnitude',
+        type: 'f32',
+        doc: 'High-frequency rumble intensity (0.0 to 1.0)'
+      },
+      {
+        name: 'durationMs',
+        type: 'u32',
+        doc: 'Duration in milliseconds'
+      }
+    ],
+    returnType: 'i32'
   }
 ];

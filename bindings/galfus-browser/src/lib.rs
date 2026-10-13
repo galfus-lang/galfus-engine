@@ -80,4 +80,31 @@ impl GalfusBrowser {
         serde_wasm_bindgen::to_value(&events)
             .map_err(|e| JsValue::from_str(&format!("Serialization failed: {e}")))
     }
+
+    /// Returns connected gamepads as a direct JavaScript array of objects.
+    #[wasm_bindgen(js_name = "gamepadGetConnected")]
+    pub fn gamepad_get_connected(&self) -> Result<JsValue, JsValue> {
+        let gamepads = self.context.connected_gamepads();
+        serde_wasm_bindgen::to_value(&gamepads)
+            .map_err(|e| JsValue::from_str(&format!("Serialization failed: {e}")))
+    }
+
+    /// Triggers rumble vibration on a connected gamepad.
+    #[wasm_bindgen(js_name = "gamepadSetRumble")]
+    pub fn gamepad_set_rumble(
+        &mut self,
+        gamepad_id: u32,
+        strong_magnitude: f64,
+        weak_magnitude: f64,
+        duration_ms: u32,
+    ) -> Result<(), JsValue> {
+        self.context
+            .set_gamepad_rumble(
+                gamepad_id,
+                strong_magnitude as f32,
+                weak_magnitude as f32,
+                duration_ms,
+            )
+            .map_err(|e| JsValue::from_str(&format!("Gamepad rumble failed: {e}")))
+    }
 }

@@ -6,6 +6,10 @@ function mapPythonCType(type: string): string {
       return 'ctypes.c_int32';
     case 'u32':
       return 'ctypes.c_uint32';
+    case 'f32':
+      return 'ctypes.c_float';
+    case 'f64':
+      return 'ctypes.c_double';
     case 'bool':
       return 'ctypes.c_bool';
     case 'string_in':
@@ -112,6 +116,8 @@ export function generatePython(): string {
         typedParams.push(`${pName}: str`);
       } else if (p.type === 'i32' || p.type === 'u32') {
         typedParams.push(`${pName}: int`);
+      } else if (p.type === 'f32' || p.type === 'f64') {
+        typedParams.push(`${pName}: float`);
       } else if (p.type === 'bool') {
         typedParams.push(`${pName}: bool`);
       } else {

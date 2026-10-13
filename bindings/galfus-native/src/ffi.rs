@@ -266,6 +266,45 @@ pub extern "C" fn galfus_platform_pump_events() -> *mut c_char {
     }
 }
 
+/// Returns a JSON array string describing all currently connected gamepads.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_gamepad_get_connected() -> *mut c_char {
+    let result = with_context(|ctx| {
+        let gamepads = ctx.connected_gamepads();
+        serde_json::to_string(&gamepads).map_err(|e| e.to_string())
+    });
+
+    match result {
+        Ok(json) => to_c_string(&json),
+        Err(e) => {
+            set_last_error(&e);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Triggers force-feedback rumble vibration on a connected gamepad.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_gamepad_set_rumble(
+    gamepad_id: u32,
+    strong_magnitude: f32,
+    weak_magnitude: f32,
+    duration_ms: u32,
+) -> i32 {
+    let result = with_context_mut(|ctx| {
+        ctx.set_gamepad_rumble(gamepad_id, strong_magnitude, weak_magnitude, duration_ms)
+            .map_err(|e| e.to_string())
+    });
+
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

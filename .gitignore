@@ -29,6 +29,7 @@ bun.lockb
 /pkg/
 build/
 dist/
+sdk/
 *.gem
 *.egg
 

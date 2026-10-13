@@ -100,3 +100,30 @@ pub fn platform_pump_events(env: Env) -> Result<JsUnknown> {
 
     env.to_js_value(&events)
 }
+
+#[napi]
+pub fn gamepad_get_connected(env: Env) -> Result<JsUnknown> {
+    let gamepads = with_context(|ctx| Ok(ctx.connected_gamepads()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))?;
+
+    env.to_js_value(&gamepads)
+}
+
+#[napi]
+pub fn gamepad_set_rumble(
+    gamepad_id: u32,
+    strong_magnitude: f64,
+    weak_magnitude: f64,
+    duration_ms: u32,
+) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.set_gamepad_rumble(
+            gamepad_id,
+            strong_magnitude as f32,
+            weak_magnitude as f32,
+            duration_ms,
+        )
+        .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}

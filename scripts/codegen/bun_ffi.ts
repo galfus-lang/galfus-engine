@@ -6,6 +6,10 @@ function mapFFIType(type: string): string {
       return 'FFIType.i32';
     case 'u32':
       return 'FFIType.u32';
+    case 'f32':
+      return 'FFIType.f32';
+    case 'f64':
+      return 'FFIType.f64';
     case 'bool':
       return 'FFIType.bool';
     case 'string_in':
@@ -28,6 +32,7 @@ export function generateBunFFI(): string {
     '  PlatformCapabilities,',
     '  WindowConfig,',
     '  PlatformEvent,',
+    '  GamepadInfo,',
     '  GalfusEngine,',
     '} from "../typescript/galfus.ts";',
     '',
@@ -115,7 +120,7 @@ export function generateBunFFI(): string {
         paramsList.push(`${p.name}: WindowConfig`);
       } else if (p.type === 'string_in') {
         paramsList.push(`${p.name}: string`);
-      } else if (p.type === 'i32' || p.type === 'u32') {
+      } else if (p.type === 'i32' || p.type === 'u32' || p.type === 'f32' || p.type === 'f64') {
         paramsList.push(`${p.name}: number`);
       } else if (p.type === 'bool') {
         paramsList.push(`${p.name}: boolean`);
@@ -131,6 +136,8 @@ export function generateBunFFI(): string {
         retType = 'PlatformCapabilities';
       } else if (fn.methodName === 'platformPumpEvents') {
         retType = 'PlatformEvent[]';
+      } else if (fn.methodName === 'gamepadGetConnected') {
+        retType = 'GamepadInfo[]';
       } else {
         retType = 'any';
       }
