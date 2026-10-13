@@ -24,6 +24,18 @@ pub enum PlatformError {
     #[error("Platform capability not supported: {0}")]
     UnsupportedCapability(&'static str),
 
+    /// Audio system initialization failed.
+    #[error("Failed to initialize audio system: {0}")]
+    AudioInitializationFailed(String),
+
+    /// The specified sound resource was not found.
+    #[error("Sound with ID {0} not found")]
+    SoundNotFound(u32),
+
+    /// An audio playback or control operation failed.
+    #[error("Audio playback error: {0}")]
+    AudioPlaybackFailed(String),
+
     /// An underlying core error occurred (e.g. reserved logical ID).
     #[error(transparent)]
     Core(#[from] CoreError),

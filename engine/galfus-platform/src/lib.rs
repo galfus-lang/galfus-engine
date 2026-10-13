@@ -8,6 +8,7 @@
 //! - **Event Normalization**: Unified event streams ([`event::PlatformEvent`], [`window::WindowEvent`]).
 //! - **Capability Discovery**: Explicit environment feature reporting ([`capabilities::PlatformCapabilities`]).
 
+pub mod audio;
 pub mod capabilities;
 pub mod context;
 pub mod error;
@@ -17,6 +18,7 @@ pub mod keyboard;
 pub mod pointer;
 pub mod window;
 
+pub use audio::{AudioContext, PlaybackConfig, PlaybackState, SoundInfo};
 pub use capabilities::PlatformCapabilities;
 pub use context::PlatformContext;
 pub use error::{PlatformError, PlatformResult};

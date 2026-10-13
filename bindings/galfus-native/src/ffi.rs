@@ -305,6 +305,124 @@ pub extern "C" fn galfus_gamepad_set_rumble(
     }
 }
 
+/// Plays a registered sound with playback parameters. Returns 0 on success, -1 on failure.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_audio_play_sound(
+    sound_id: u32,
+    volume: f32,
+    panning: f32,
+    speed: f32,
+    looping: bool,
+) -> i32 {
+    let config = galfus_platform::PlaybackConfig {
+        volume,
+        panning,
+        speed,
+        looping,
+    };
+
+    let result =
+        with_context_mut(|ctx| ctx.play_sound(sound_id, config).map_err(|e| e.to_string()));
+
+    match result {
+        Ok(_) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Pauses a sound voice. Returns 0 on success, -1 on failure.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_audio_pause_sound(voice_id: u32) -> i32 {
+    let result = with_context_mut(|ctx| ctx.pause_sound(voice_id).map_err(|e| e.to_string()));
+
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Resumes a paused sound voice. Returns 0 on success, -1 on failure.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_audio_resume_sound(voice_id: u32) -> i32 {
+    let result = with_context_mut(|ctx| ctx.resume_sound(voice_id).map_err(|e| e.to_string()));
+
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Stops a sound voice. Returns 0 on success, -1 on failure.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_audio_stop_sound(voice_id: u32) -> i32 {
+    let result = with_context_mut(|ctx| ctx.stop_sound(voice_id).map_err(|e| e.to_string()));
+
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Sets the volume of a sound voice. Returns 0 on success, -1 on failure.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_audio_set_volume(voice_id: u32, volume: f32) -> i32 {
+    let result = with_context_mut(|ctx| {
+        ctx.set_sound_volume(voice_id, volume)
+            .map_err(|e| e.to_string())
+    });
+
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Sets the panning of a sound voice. Returns 0 on success, -1 on failure.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_audio_set_panning(voice_id: u32, panning: f32) -> i32 {
+    let result = with_context_mut(|ctx| {
+        ctx.set_sound_panning(voice_id, panning)
+            .map_err(|e| e.to_string())
+    });
+
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Unloads a sound resource. Returns 0 on success, -1 on failure.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_audio_unload_sound(sound_id: u32) -> i32 {
+    let result = with_context_mut(|ctx| ctx.unload_sound(sound_id).map_err(|e| e.to_string()));
+
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

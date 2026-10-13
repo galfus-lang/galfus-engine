@@ -127,3 +127,64 @@ pub fn gamepad_set_rumble(
     })
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }
+
+#[napi]
+pub fn audio_play_sound(
+    sound_id: u32,
+    volume: f64,
+    panning: f64,
+    speed: f64,
+    looping: bool,
+) -> Result<u32> {
+    let config = galfus_platform::PlaybackConfig {
+        volume: volume as f32,
+        panning: panning as f32,
+        speed: speed as f32,
+        looping,
+    };
+
+    with_context_mut(|ctx| ctx.play_sound(sound_id, config).map_err(|e| e.to_string()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn audio_pause_sound(voice_id: u32) -> Result<()> {
+    with_context_mut(|ctx| ctx.pause_sound(voice_id).map_err(|e| e.to_string()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn audio_resume_sound(voice_id: u32) -> Result<()> {
+    with_context_mut(|ctx| ctx.resume_sound(voice_id).map_err(|e| e.to_string()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn audio_stop_sound(voice_id: u32) -> Result<()> {
+    with_context_mut(|ctx| ctx.stop_sound(voice_id).map_err(|e| e.to_string()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn audio_set_volume(voice_id: u32, volume: f64) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.set_sound_volume(voice_id, volume as f32)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn audio_set_panning(voice_id: u32, panning: f64) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.set_sound_panning(voice_id, panning as f32)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn audio_unload_sound(sound_id: u32) -> Result<()> {
+    with_context_mut(|ctx| ctx.unload_sound(sound_id).map_err(|e| e.to_string()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))
+}

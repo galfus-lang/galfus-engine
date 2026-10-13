@@ -175,5 +175,126 @@ export const API_FUNCTIONS: FunctionSpec[] = [
       }
     ],
     returnType: 'i32'
+  },
+  {
+    cName: 'galfus_audio_play_sound',
+    methodName: 'audioPlaySound',
+    doc: 'Plays a registered sound resource using playback parameters.',
+    params: [
+      {
+        name: 'soundId',
+        type: 'u32',
+        doc: 'Logical ID of the sound'
+      },
+      {
+        name: 'volume',
+        type: 'f32',
+        doc: 'Playback volume multiplier (1.0 = normal)'
+      },
+      {
+        name: 'panning',
+        type: 'f32',
+        doc: 'Stereo panning position (-1.0 to 1.0)'
+      },
+      {
+        name: 'speed',
+        type: 'f32',
+        doc: 'Playback speed rate multiplier'
+      },
+      {
+        name: 'looping',
+        type: 'bool',
+        doc: 'Whether the sound loops indefinitely'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_audio_pause_sound',
+    methodName: 'audioPauseSound',
+    doc: 'Pauses a playing sound voice.',
+    params: [
+      {
+        name: 'voiceId',
+        type: 'u32',
+        doc: 'Voice ID to pause'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_audio_resume_sound',
+    methodName: 'audioResumeSound',
+    doc: 'Resumes a paused sound voice.',
+    params: [
+      {
+        name: 'voiceId',
+        type: 'u32',
+        doc: 'Voice ID to resume'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_audio_stop_sound',
+    methodName: 'audioStopSound',
+    doc: 'Stops a playing or paused sound voice.',
+    params: [
+      {
+        name: 'voiceId',
+        type: 'u32',
+        doc: 'Voice ID to stop'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_audio_set_volume',
+    methodName: 'audioSetVolume',
+    doc: 'Updates the volume of an active sound voice.',
+    params: [
+      {
+        name: 'voiceId',
+        type: 'u32',
+        doc: 'Voice ID to update'
+      },
+      {
+        name: 'volume',
+        type: 'f32',
+        doc: 'New volume multiplier'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_audio_set_panning',
+    methodName: 'audioSetPanning',
+    doc: 'Updates the panning of an active sound voice.',
+    params: [
+      {
+        name: 'voiceId',
+        type: 'u32',
+        doc: 'Voice ID to update'
+      },
+      {
+        name: 'panning',
+        type: 'f32',
+        doc: 'New stereo panning position'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_audio_unload_sound',
+    methodName: 'audioUnloadSound',
+    doc: 'Unloads a registered sound resource from memory.',
+    params: [
+      {
+        name: 'soundId',
+        type: 'u32',
+        doc: 'Sound ID to unload'
+      }
+    ],
+    returnType: 'i32'
   }
 ];

@@ -57,6 +57,7 @@ pub struct PlatformContext {
     event_loop: Option<EventLoop<()>>,
     #[cfg(not(target_arch = "wasm32"))]
     gilrs: Option<gilrs::Gilrs>,
+    audio: crate::audio::AudioContext,
 }
 
 impl PlatformContext {
@@ -97,6 +98,7 @@ impl PlatformContext {
             event_loop,
             #[cfg(not(target_arch = "wasm32"))]
             gilrs,
+            audio: crate::audio::AudioContext::new(),
         })
     }
 
@@ -123,6 +125,7 @@ impl PlatformContext {
             event_loop: None,
             #[cfg(not(target_arch = "wasm32"))]
             gilrs,
+            audio: crate::audio::AudioContext::new(),
         }
     }
 
@@ -291,6 +294,50 @@ impl PlatformContext {
         {
             Ok(())
         }
+    }
+
+    /// Loads raw audio data bytes and registers it under a host logical ID.
+    pub fn load_sound_bytes(&mut self, id: u32, bytes: &[u8]) -> PlatformResult<f32> {
+        self.audio.load_sound_bytes(id, bytes)
+    }
+
+    /// Plays a registered sound resource using the given playback configuration.
+    pub fn play_sound(
+        &mut self,
+        sound_id: u32,
+        config: crate::audio::PlaybackConfig,
+    ) -> PlatformResult<u32> {
+        self.audio.play_sound(sound_id, config)
+    }
+
+    /// Pauses an active sound playback voice.
+    pub fn pause_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
+        self.audio.pause_sound(voice_id)
+    }
+
+    /// Resumes a paused sound playback voice.
+    pub fn resume_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
+        self.audio.resume_sound(voice_id)
+    }
+
+    /// Stops a playing sound voice.
+    pub fn stop_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
+        self.audio.stop_sound(voice_id)
+    }
+
+    /// Updates the volume of a sound voice.
+    pub fn set_sound_volume(&mut self, voice_id: u32, volume: f32) -> PlatformResult<()> {
+        self.audio.set_sound_volume(voice_id, volume)
+    }
+
+    /// Updates the panning position of a sound voice.
+    pub fn set_sound_panning(&mut self, voice_id: u32, panning: f32) -> PlatformResult<()> {
+        self.audio.set_sound_panning(voice_id, panning)
+    }
+
+    /// Unloads a registered sound resource.
+    pub fn unload_sound(&mut self, sound_id: u32) -> PlatformResult<()> {
+        self.audio.unload_sound(sound_id)
     }
 
     /// Pumps platform events on demand, collecting and returning normalized events.

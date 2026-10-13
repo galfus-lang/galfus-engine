@@ -107,4 +107,74 @@ impl GalfusBrowser {
             )
             .map_err(|e| JsValue::from_str(&format!("Gamepad rumble failed: {e}")))
     }
+
+    /// Plays a sound using the provided configuration.
+    #[wasm_bindgen(js_name = "audioPlaySound")]
+    pub fn audio_play_sound(
+        &mut self,
+        sound_id: u32,
+        volume: f64,
+        panning: f64,
+        speed: f64,
+        looping: bool,
+    ) -> Result<u32, JsValue> {
+        let config = galfus_platform::PlaybackConfig {
+            volume: volume as f32,
+            panning: panning as f32,
+            speed: speed as f32,
+            looping,
+        };
+
+        self.context
+            .play_sound(sound_id, config)
+            .map_err(|e| JsValue::from_str(&format!("Audio play failed: {e}")))
+    }
+
+    /// Pauses a playing sound voice.
+    #[wasm_bindgen(js_name = "audioPauseSound")]
+    pub fn audio_pause_sound(&mut self, voice_id: u32) -> Result<(), JsValue> {
+        self.context
+            .pause_sound(voice_id)
+            .map_err(|e| JsValue::from_str(&format!("Audio pause failed: {e}")))
+    }
+
+    /// Resumes a paused sound voice.
+    #[wasm_bindgen(js_name = "audioResumeSound")]
+    pub fn audio_resume_sound(&mut self, voice_id: u32) -> Result<(), JsValue> {
+        self.context
+            .resume_sound(voice_id)
+            .map_err(|e| JsValue::from_str(&format!("Audio resume failed: {e}")))
+    }
+
+    /// Stops a playing sound voice.
+    #[wasm_bindgen(js_name = "audioStopSound")]
+    pub fn audio_stop_sound(&mut self, voice_id: u32) -> Result<(), JsValue> {
+        self.context
+            .stop_sound(voice_id)
+            .map_err(|e| JsValue::from_str(&format!("Audio stop failed: {e}")))
+    }
+
+    /// Sets the volume of a sound voice.
+    #[wasm_bindgen(js_name = "audioSetVolume")]
+    pub fn audio_set_volume(&mut self, voice_id: u32, volume: f64) -> Result<(), JsValue> {
+        self.context
+            .set_sound_volume(voice_id, volume as f32)
+            .map_err(|e| JsValue::from_str(&format!("Audio set volume failed: {e}")))
+    }
+
+    /// Sets the panning of a sound voice.
+    #[wasm_bindgen(js_name = "audioSetPanning")]
+    pub fn audio_set_panning(&mut self, voice_id: u32, panning: f64) -> Result<(), JsValue> {
+        self.context
+            .set_sound_panning(voice_id, panning as f32)
+            .map_err(|e| JsValue::from_str(&format!("Audio set panning failed: {e}")))
+    }
+
+    /// Unloads a registered sound resource.
+    #[wasm_bindgen(js_name = "audioUnloadSound")]
+    pub fn audio_unload_sound(&mut self, sound_id: u32) -> Result<(), JsValue> {
+        self.context
+            .unload_sound(sound_id)
+            .map_err(|e| JsValue::from_str(&format!("Audio unload failed: {e}")))
+    }
 }

@@ -7,7 +7,8 @@
     "check": "bun scripts/check.ts",
     "codegen": "bun scripts/codegen.ts",
     "test:ffi": "bun scripts/test-ffi.ts",
-    "test:napi": "cargo build -p galfus-native --features napi && bun scripts/test-napi.ts"
+    "test:napi": "cargo build -p galfus-native --features napi && bun scripts/test-napi.ts",
+    "typecheck": "bun --check"
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",
