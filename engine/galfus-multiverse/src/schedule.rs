@@ -9,7 +9,7 @@ use crate::types::{ConnectorEffect, InvocationFilter};
 pub struct ResolvedInvocationStep {
     pub invocation_id: u32,
     pub realm_id: u32,
-    pub camera_id: Option<u32>,
+    pub camera_slot: Option<u32>,
     pub resolved_viewport: UVec4,
     pub z_index: i32,
     pub clear_color: Option<[f32; 4]>,

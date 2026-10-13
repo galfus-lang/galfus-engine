@@ -1,8 +1,10 @@
-export type TypeKind = 'void' | 'i32' | 'u32' | 'f32' | 'f64' | 'string_in' | 'string_out' | 'bool';
+export type PrimitiveType = 'void' | 'bool' | 'i32' | 'u32' | 'u64' | 'f32' | 'f64' | 'string';
+
+export type DataType = PrimitiveType | { json: string } | { jsonArray: string };
 
 export interface ParamSpec {
   name: string;
-  type: TypeKind;
+  type: DataType;
   doc: string;
 }
 
@@ -11,8 +13,21 @@ export interface FunctionSpec {
   methodName: string;
   doc: string;
   params: ParamSpec[];
-  returnType: TypeKind;
-  returnsJson?: boolean;
+  returnType: DataType;
+  /** Optional extraction of a return value from an input param on success (e.g. config.id) */
+  returnsParamField?: { paramName: string; fieldName: string };
+}
+
+export function isPrimitive(type: DataType): type is PrimitiveType {
+  return typeof type === 'string';
+}
+
+export function isJson(type: DataType): type is { json: string } {
+  return typeof type === 'object' && 'json' in type;
+}
+
+export function isJsonArray(type: DataType): type is { jsonArray: string } {
+  return typeof type === 'object' && 'jsonArray' in type;
 }
 
 export const API_FUNCTIONS: FunctionSpec[] = [
@@ -42,15 +57,14 @@ export const API_FUNCTIONS: FunctionSpec[] = [
     methodName: 'getLastError',
     doc: 'Retrieves the last recorded error message.',
     params: [],
-    returnType: 'string_out'
+    returnType: 'string'
   },
   {
     cName: 'galfus_platform_get_capabilities',
     methodName: 'platformGetCapabilities',
     doc: 'Retrieves platform environment capabilities as structured data.',
     params: [],
-    returnType: 'string_out',
-    returnsJson: true
+    returnType: { json: 'PlatformCapabilities' }
   },
   {
     cName: 'galfus_window_create',
@@ -58,12 +72,13 @@ export const API_FUNCTIONS: FunctionSpec[] = [
     doc: 'Creates a new window or binds a surface from a configuration.',
     params: [
       {
-        name: 'configJson',
-        type: 'string_in',
-        doc: 'JSON string containing WindowConfig'
+        name: 'config',
+        type: { json: 'WindowConfig' },
+        doc: 'Window configuration descriptor'
       }
     ],
-    returnType: 'i32'
+    returnType: 'i32',
+    returnsParamField: { paramName: 'config', fieldName: 'id' }
   },
   {
     cName: 'galfus_window_close',
@@ -90,7 +105,7 @@ export const API_FUNCTIONS: FunctionSpec[] = [
       },
       {
         name: 'title',
-        type: 'string_in',
+        type: 'string',
         doc: 'New title text'
       }
     ],
@@ -137,16 +152,14 @@ export const API_FUNCTIONS: FunctionSpec[] = [
     methodName: 'platformPumpEvents',
     doc: 'Pumps and collects pending platform input events.',
     params: [],
-    returnType: 'string_out',
-    returnsJson: true
+    returnType: { jsonArray: 'PlatformEvent' }
   },
   {
     cName: 'galfus_gamepad_get_connected',
     methodName: 'gamepadGetConnected',
     doc: 'Retrieves all currently connected gamepads and their capabilities.',
     params: [],
-    returnType: 'string_out',
-    returnsJson: true
+    returnType: { jsonArray: 'GamepadInfo' }
   },
   {
     cName: 'galfus_gamepad_set_rumble',
@@ -298,9 +311,22 @@ export const API_FUNCTIONS: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_multiverse_attach_window',
+    methodName: 'multiverseAttachWindow',
+    doc: 'Attaches a platform window to the Multiverse context for surface rendering.',
+    params: [
+      {
+        name: 'windowId',
+        type: 'u32',
+        doc: 'Logical ID of the window to attach'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_multiverse_create_target',
     methodName: 'multiverseCreateTarget',
-    doc: 'Registers a new Target in the Multiverse using a JSON description.',
+    doc: 'Registers a new Target in the Multiverse using a TargetDesc descriptor.',
     params: [
       {
         name: 'targetId',
@@ -308,9 +334,9 @@ export const API_FUNCTIONS: FunctionSpec[] = [
         doc: 'Logical ID of the Target'
       },
       {
-        name: 'descJson',
-        type: 'string',
-        doc: 'JSON representation of TargetDesc'
+        name: 'desc',
+        type: { json: 'TargetDesc' },
+        doc: 'Target description'
       }
     ],
     returnType: 'i32'
@@ -329,6 +355,70 @@ export const API_FUNCTIONS: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_multiverse_register_color_realm',
+    methodName: 'multiverseRegisterColorRealm',
+    doc: 'Registers a solid color test Realm in the Multiverse.',
+    params: [
+      {
+        name: 'realmId',
+        type: 'u32',
+        doc: 'Logical ID of the Realm'
+      },
+      {
+        name: 'r',
+        type: 'f32',
+        doc: 'Red channel (0.0 to 1.0)'
+      },
+      {
+        name: 'g',
+        type: 'f32',
+        doc: 'Green channel (0.0 to 1.0)'
+      },
+      {
+        name: 'b',
+        type: 'f32',
+        doc: 'Blue channel (0.0 to 1.0)'
+      },
+      {
+        name: 'a',
+        type: 'f32',
+        doc: 'Alpha channel (0.0 to 1.0)'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_unregister_realm',
+    methodName: 'multiverseUnregisterRealm',
+    doc: 'Unregisters a Realm from the Multiverse.',
+    params: [
+      {
+        name: 'realmId',
+        type: 'u32',
+        doc: 'Logical ID of the Realm to unregister'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_register_shader',
+    methodName: 'multiverseRegisterShader',
+    doc: 'Registers a custom WGSL post-processing shader with an ID.',
+    params: [
+      {
+        name: 'shaderId',
+        type: 'u32',
+        doc: 'Custom shader logical ID'
+      },
+      {
+        name: 'source',
+        type: 'string',
+        doc: 'WGSL source code string'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_multiverse_create_invocation',
     methodName: 'multiverseCreateInvocation',
     doc: 'Creates an Invocation in the Multiverse linking a Realm to a Target.',
@@ -339,9 +429,9 @@ export const API_FUNCTIONS: FunctionSpec[] = [
         doc: 'Logical ID of the Invocation'
       },
       {
-        name: 'descJson',
-        type: 'string',
-        doc: 'JSON representation of InvocationDesc'
+        name: 'desc',
+        type: { json: 'InvocationDesc' },
+        doc: 'Invocation description'
       }
     ],
     returnType: 'i32'
@@ -378,14 +468,201 @@ export const API_FUNCTIONS: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_multiverse_set_invocation_viewport',
+    methodName: 'multiverseSetInvocationViewport',
+    doc: 'Updates the viewport rectangle of an existing Invocation.',
+    params: [
+      {
+        name: 'invocationId',
+        type: 'u32',
+        doc: 'Invocation ID'
+      },
+      {
+        name: 'viewport',
+        type: { json: 'ViewportRect' },
+        doc: 'Viewport rectangle'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_set_invocation_filters',
+    methodName: 'multiverseSetInvocationFilters',
+    doc: 'Updates the post-process filter chain for an Invocation.',
+    params: [
+      {
+        name: 'invocationId',
+        type: 'u32',
+        doc: 'Invocation ID'
+      },
+      {
+        name: 'filters',
+        type: { jsonArray: 'InvocationFilter' },
+        doc: 'Array of post-processing filters'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_set_invocation_clear_color',
+    methodName: 'multiverseSetInvocationClearColor',
+    doc: 'Updates the clear color of an Invocation.',
+    params: [
+      {
+        name: 'invocationId',
+        type: 'u32',
+        doc: 'Invocation ID'
+      },
+      {
+        name: 'r',
+        type: 'f32',
+        doc: 'Red channel (0.0 to 1.0)'
+      },
+      {
+        name: 'g',
+        type: 'f32',
+        doc: 'Green channel (0.0 to 1.0)'
+      },
+      {
+        name: 'b',
+        type: 'f32',
+        doc: 'Blue channel (0.0 to 1.0)'
+      },
+      {
+        name: 'a',
+        type: 'f32',
+        doc: 'Alpha channel (0.0 to 1.0)'
+      },
+      {
+        name: 'hasClear',
+        type: 'bool',
+        doc: 'True to set clear color, false to disable clearing'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_set_invocation_camera_slot',
+    methodName: 'multiverseSetInvocationCameraSlot',
+    doc: 'Updates the camera slot bound to an existing Invocation.',
+    params: [
+      {
+        name: 'invocationId',
+        type: 'u32',
+        doc: 'Invocation ID'
+      },
+      {
+        name: 'cameraSlot',
+        type: 'u32',
+        doc: 'Camera slot index within the realm'
+      },
+      {
+        name: 'hasSlot',
+        type: 'bool',
+        doc: 'True to bind camera slot, false to unbind'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_multiverse_bind_target_texture',
     methodName: 'multiverseBindTargetTexture',
     doc: 'Binds a Target output texture to a Realm input slot.',
     params: [
       {
-        name: 'bindingJson',
+        name: 'binding',
+        type: { json: 'TargetTextureBinding' },
+        doc: 'Target texture binding descriptor'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_unbind_target_texture',
+    methodName: 'multiverseUnbindTargetTexture',
+    doc: 'Unbinds a Target texture from a Realm input slot.',
+    params: [
+      {
+        name: 'realmId',
+        type: 'u32',
+        doc: 'Realm ID'
+      },
+      {
+        name: 'slot',
         type: 'string',
-        doc: 'JSON representation of TargetTextureBinding'
+        doc: 'Target texture slot name'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_update_window_size',
+    methodName: 'multiverseUpdateWindowSize',
+    doc: 'Updates the size of a window Target (e.g. on window resize).',
+    params: [
+      {
+        name: 'windowId',
+        type: 'u32',
+        doc: 'Window logical ID'
+      },
+      {
+        name: 'width',
+        type: 'u32',
+        doc: 'Width in physical pixels'
+      },
+      {
+        name: 'height',
+        type: 'u32',
+        doc: 'Height in physical pixels'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_create_connector',
+    methodName: 'multiverseCreateConnector',
+    doc: 'Creates a Connector between two Targets.',
+    params: [
+      {
+        name: 'connectorId',
+        type: 'u32',
+        doc: 'Logical ID of the Connector'
+      },
+      {
+        name: 'desc',
+        type: { json: 'ConnectorDesc' },
+        doc: 'Connector description'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_destroy_connector',
+    methodName: 'multiverseDestroyConnector',
+    doc: 'Destroys a Connector.',
+    params: [
+      {
+        name: 'connectorId',
+        type: 'u32',
+        doc: 'Connector ID to destroy'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_set_connector_enabled',
+    methodName: 'multiverseSetConnectorEnabled',
+    doc: 'Enables or disables a Connector.',
+    params: [
+      {
+        name: 'connectorId',
+        type: 'u32',
+        doc: 'Connector ID'
+      },
+      {
+        name: 'enabled',
+        type: 'bool',
+        doc: 'Whether the connector is active'
       }
     ],
     returnType: 'i32'
@@ -393,9 +670,9 @@ export const API_FUNCTIONS: FunctionSpec[] = [
   {
     cName: 'galfus_multiverse_resolve',
     methodName: 'multiverseResolve',
-    doc: 'Resolves and returns the Multiverse execution schedule as JSON.',
+    doc: 'Resolves and returns the Multiverse execution schedule as structured data.',
     params: [],
-    returnType: 'string'
+    returnType: { json: 'MultiverseSchedule' }
   },
   {
     cName: 'galfus_multiverse_dispatch',

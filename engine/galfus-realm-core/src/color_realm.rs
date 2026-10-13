@@ -92,7 +92,7 @@ mod tests {
             frame_id: 1,
             invocation_id: 10,
             target_id: 100,
-            camera_id: None,
+            camera_slot: None,
             viewport: UVec4::new(0, 0, 800, 600),
         };
         assert!(realm.render(&inv).is_ok());

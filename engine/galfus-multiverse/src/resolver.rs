@@ -117,7 +117,7 @@ pub fn resolve_schedule(
                 block_invocations.push(ResolvedInvocationStep {
                     invocation_id: inv_id,
                     realm_id: inv.realm_id,
-                    camera_id: inv.camera_id,
+                    camera_slot: inv.camera_slot,
                     resolved_viewport,
                     z_index: inv.z_index,
                     clear_color: inv.clear_color,

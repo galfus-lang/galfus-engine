@@ -69,7 +69,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         InvocationDesc {
             realm_id: REALM_COLOR,
             target_id: TARGET_WINDOW,
-            camera_id: Some(1),
+            camera_slot: Some(1),
             viewport: ViewportRect::normalized(0.0, 0.0, 0.5, 1.0),
             filters: Vec::new(),
             z_index: 0,
@@ -84,7 +84,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         InvocationDesc {
             realm_id: REALM_COLOR,
             target_id: TARGET_WINDOW,
-            camera_id: Some(2),
+            camera_slot: Some(2),
             viewport: ViewportRect::normalized(0.5, 0.0, 0.5, 1.0),
             filters: vec![InvocationFilter::Sepia],
             z_index: 0,

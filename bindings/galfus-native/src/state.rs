@@ -35,17 +35,13 @@ pub fn init_context_headless() -> Result<(), String> {
 
 /// Shuts down and drops the global platform context and multiverse context.
 pub fn shutdown_context() -> Result<(), String> {
-    MULTIVERSE.with(|cell| {
-        cell.borrow_mut().take();
-    });
-    CONTEXT.with(|cell| {
-        let mut borrow = cell.borrow_mut();
-        if borrow.take().is_some() {
-            Ok(())
-        } else {
-            Err("PlatformContext is not initialized".into())
-        }
-    })
+    let mv_dropped = MULTIVERSE.with(|cell| cell.borrow_mut().take().is_some());
+    let ctx_dropped = CONTEXT.with(|cell| cell.borrow_mut().take().is_some());
+    if mv_dropped || ctx_dropped {
+        Ok(())
+    } else {
+        Err("PlatformContext is not initialized".into())
+    }
 }
 
 /// Returns `true` if the platform context has been initialized on this thread.
@@ -105,4 +101,26 @@ where
             None => Err("MultiverseContext is not initialized".into()),
         }
     })
+}
+
+/// Attaches a window created in the platform context to the multiverse context.
+pub fn attach_window_to_multiverse(window_id: u32) -> Result<(), String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let (window_raw, width, height) = with_context(|ctx| {
+            let win = ctx.get_window(window_id).map_err(|e| e.to_string())?;
+            let raw = win.raw_window().clone();
+            let size = raw.inner_size();
+            Ok((raw, size.width, size.height))
+        })?;
+
+        with_multiverse_mut(|mv| {
+            mv.attach_window(window_id, window_raw, width, height)
+                .map_err(|e| e.to_string())
+        })
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        Err("Window attachment not supported on wasm32 in this build".into())
+    }
 }

@@ -31,8 +31,8 @@ pub struct RealmInvocationContext {
     pub invocation_id: u32,
     /// Target identifier where this invocation renders.
     pub target_id: u32,
-    /// Active camera ID inside the realm, if any.
-    pub camera_id: Option<u32>,
+    /// Active camera slot bound inside the realm, if any.
+    pub camera_slot: Option<u32>,
     /// Resolved pixel viewport rectangle: `[x, y, width, height]`.
     pub viewport: UVec4,
 }

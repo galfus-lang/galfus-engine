@@ -37,6 +37,7 @@ pub enum InvocationFilter {
     /// Sepia color grading post-processing filter.
     Sepia,
     /// Custom post-processing shader module ID.
+    #[serde(rename_all = "camelCase")]
     Custom { shader_id: u32 },
 }
 
@@ -148,8 +149,8 @@ pub struct InvocationDesc {
     pub realm_id: u32,
     /// ID of the destination Target.
     pub target_id: u32,
-    /// Optional specific camera inside the realm (e.g. portal camera vs player camera).
-    pub camera_id: Option<u32>,
+    /// Optional camera slot inside the realm (e.g. slot 0 for main camera, slot 1 for portal/split).
+    pub camera_slot: Option<u32>,
     /// Viewport rectangle. Default spans the whole target (`ViewportRect::full()`).
     #[serde(default)]
     pub viewport: ViewportRect,
@@ -171,7 +172,7 @@ impl Default for InvocationDesc {
         Self {
             realm_id: 0,
             target_id: 0,
-            camera_id: None,
+            camera_slot: None,
             viewport: ViewportRect::default(),
             filters: Vec::new(),
             z_index: 0,
@@ -229,6 +230,7 @@ pub enum ConnectorEffect {
     /// Sepia color grading post-processing filter.
     Sepia,
     /// Custom post-processing shader module ID.
+    #[serde(rename_all = "camelCase")]
     Custom { shader_id: u32 },
 }
 

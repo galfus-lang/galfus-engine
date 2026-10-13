@@ -226,6 +226,12 @@ impl MultiverseContext {
         Ok(())
     }
 
+    /// Registers a builtin ColorRealm for solid clear/tinting under its logical ID.
+    pub fn register_color_realm(&mut self, realm_id: u32, color: [f32; 4]) -> MultiverseResult<()> {
+        let realm = galfus_realm_core::ColorRealm::new(realm_id, color);
+        self.register_realm(Box::new(realm))
+    }
+
     /// Unregisters a Realm and clears associated invocations.
     pub fn unregister_realm(&mut self, realm_id: u32) -> MultiverseResult<()> {
         if self.realms.remove(&realm_id).is_none() {
@@ -311,6 +317,23 @@ impl MultiverseContext {
             .ok_or(MultiverseError::InvocationNotFound(invocation_id))?;
         inv.viewport = viewport;
         self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the camera slot bound to an existing invocation.
+    pub fn set_invocation_camera_slot(
+        &mut self,
+        invocation_id: u32,
+        camera_slot: Option<u32>,
+    ) -> MultiverseResult<()> {
+        let inv = self
+            .invocations
+            .get_mut(&invocation_id)
+            .ok_or(MultiverseError::InvocationNotFound(invocation_id))?;
+        if inv.camera_slot != camera_slot {
+            inv.camera_slot = camera_slot;
+            self.dirty = true;
+        }
         Ok(())
     }
 
@@ -610,7 +633,7 @@ impl MultiverseContext {
                             frame_id,
                             invocation_id: step.invocation_id,
                             target_id: block.target_id,
-                            camera_id: step.camera_id,
+                            camera_slot: step.camera_slot,
                             viewport: step.resolved_viewport,
                         };
                         realm
@@ -691,7 +714,7 @@ impl MultiverseContext {
                             frame_id,
                             invocation_id: step.invocation_id,
                             target_id: block.target_id,
-                            camera_id: step.camera_id,
+                            camera_slot: step.camera_slot,
                             viewport: step.resolved_viewport,
                         };
                         realm

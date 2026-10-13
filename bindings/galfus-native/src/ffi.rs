@@ -6,21 +6,20 @@ use galfus_platform::{CursorGrabMode, CursorIcon, WindowConfig};
 
 use crate::state::{
     init_context, init_context_headless, shutdown_context, with_context, with_context_mut,
-    with_multiverse_mut,
 };
 
 thread_local! {
     static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
 }
 
-fn set_last_error(err: &str) {
+pub(crate) fn set_last_error(err: &str) {
     LAST_ERROR.with(|cell| {
         *cell.borrow_mut() = CString::new(err).ok();
     });
 }
 
 /// Helper converting a Rust string into a newly allocated C string pointer.
-fn to_c_string(s: &str) -> *mut c_char {
+pub(crate) fn to_c_string(s: &str) -> *mut c_char {
     match CString::new(s) {
         Ok(c_str) => c_str.into_raw(),
         Err(_) => std::ptr::null_mut(),
@@ -28,7 +27,7 @@ fn to_c_string(s: &str) -> *mut c_char {
 }
 
 /// Helper safely reading a C string pointer.
-unsafe fn from_c_str<'a>(ptr: *const c_char) -> Result<&'a str, String> {
+pub(crate) unsafe fn from_c_str<'a>(ptr: *const c_char) -> Result<&'a str, String> {
     if ptr.is_null() {
         return Err("Null pointer passed as string argument".into());
     }
@@ -416,187 +415,6 @@ pub extern "C" fn galfus_audio_unload_sound(sound_id: u32) -> i32 {
     let result = with_context_mut(|ctx| ctx.unload_sound(sound_id).map_err(|e| e.to_string()));
 
     match result {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Multiverse Exported C API Functions
-// ---------------------------------------------------------------------------
-
-/// Creates a Target in the Multiverse. Returns 0 on success, -1 on failure.
-///
-/// # Safety
-/// `desc_json` must be a valid, null-terminated UTF-8 C string pointer.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_multiverse_create_target(
-    target_id: u32,
-    desc_json: *const c_char,
-) -> i32 {
-    let json_str = match unsafe { from_c_str(desc_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    let desc: galfus_multiverse::TargetDesc = match serde_json::from_str(json_str) {
-        Ok(d) => d,
-        Err(e) => {
-            set_last_error(&format!("Invalid TargetDesc JSON: {e}"));
-            return -1;
-        }
-    };
-
-    match with_multiverse_mut(|mv| mv.create_target(target_id, desc).map_err(|e| e.to_string())) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Destroys a Target in the Multiverse. Returns 0 on success, -1 on failure.
-#[unsafe(no_mangle)]
-pub extern "C" fn galfus_multiverse_destroy_target(target_id: u32) -> i32 {
-    match with_multiverse_mut(|mv| mv.destroy_target(target_id).map_err(|e| e.to_string())) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Creates an Invocation in the Multiverse. Returns 0 on success, -1 on failure.
-///
-/// # Safety
-/// `desc_json` must be a valid, null-terminated UTF-8 C string pointer.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_multiverse_create_invocation(
-    invocation_id: u32,
-    desc_json: *const c_char,
-) -> i32 {
-    let json_str = match unsafe { from_c_str(desc_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    let desc: galfus_multiverse::InvocationDesc = match serde_json::from_str(json_str) {
-        Ok(d) => d,
-        Err(e) => {
-            set_last_error(&format!("Invalid InvocationDesc JSON: {e}"));
-            return -1;
-        }
-    };
-
-    match with_multiverse_mut(|mv| {
-        mv.create_invocation(invocation_id, desc)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Destroys an Invocation in the Multiverse. Returns 0 on success, -1 on failure.
-#[unsafe(no_mangle)]
-pub extern "C" fn galfus_multiverse_destroy_invocation(invocation_id: u32) -> i32 {
-    match with_multiverse_mut(|mv| {
-        mv.destroy_invocation(invocation_id)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Enables or disables an Invocation in the Multiverse. Returns 0 on success, -1 on failure.
-#[unsafe(no_mangle)]
-pub extern "C" fn galfus_multiverse_set_invocation_enabled(
-    invocation_id: u32,
-    enabled: bool,
-) -> i32 {
-    match with_multiverse_mut(|mv| {
-        mv.set_invocation_enabled(invocation_id, enabled)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Binds a Target's output texture to a Realm slot. Returns 0 on success, -1 on failure.
-///
-/// # Safety
-/// `binding_json` must be a valid, null-terminated UTF-8 C string pointer.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_multiverse_bind_target_texture(binding_json: *const c_char) -> i32 {
-    let json_str = match unsafe { from_c_str(binding_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    let binding: galfus_multiverse::TargetTextureBinding = match serde_json::from_str(json_str) {
-        Ok(b) => b,
-        Err(e) => {
-            set_last_error(&format!("Invalid TargetTextureBinding JSON: {e}"));
-            return -1;
-        }
-    };
-
-    match with_multiverse_mut(|mv| mv.bind_target_texture(binding).map_err(|e| e.to_string())) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Resolves the Multiverse schedule and returns it as a JSON string pointer.
-/// Caller must free using `galfus_string_free`. Returns null on failure.
-#[unsafe(no_mangle)]
-pub extern "C" fn galfus_multiverse_resolve() -> *mut c_char {
-    let res = with_multiverse_mut(|mv| {
-        let schedule = mv.resolve().map_err(|e| e.to_string())?;
-        serde_json::to_string(schedule).map_err(|e| e.to_string())
-    });
-
-    match res {
-        Ok(json) => to_c_string(&json),
-        Err(e) => {
-            set_last_error(&e);
-            std::ptr::null_mut()
-        }
-    }
-}
-
-/// Dispatches the Multiverse schedule for a frame. Returns 0 on success, -1 on failure.
-#[unsafe(no_mangle)]
-pub extern "C" fn galfus_multiverse_dispatch(frame_id: u64, delta_time: f32) -> i32 {
-    match with_multiverse_mut(|mv| mv.dispatch(frame_id, delta_time).map_err(|e| e.to_string())) {
         Ok(()) => 0,
         Err(e) => {
             set_last_error(&e);

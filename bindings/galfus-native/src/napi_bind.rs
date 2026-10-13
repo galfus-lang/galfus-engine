@@ -5,8 +5,8 @@ use napi_derive::napi;
 use galfus_platform::{CursorGrabMode, CursorIcon, WindowConfig};
 
 use crate::state::{
-    init_context, init_context_headless, shutdown_context, with_context, with_context_mut,
-    with_multiverse_mut,
+    attach_window_to_multiverse, init_context, init_context_headless, shutdown_context,
+    with_context, with_context_mut, with_multiverse_mut,
 };
 
 #[napi]
@@ -191,6 +191,11 @@ pub fn audio_unload_sound(sound_id: u32) -> Result<()> {
 }
 
 #[napi]
+pub fn multiverse_attach_window(window_id: u32) -> Result<()> {
+    attach_window_to_multiverse(window_id).map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
 pub fn multiverse_create_target(env: Env, target_id: u32, desc_val: JsUnknown) -> Result<()> {
     let desc: galfus_multiverse::TargetDesc = env.from_js_value(desc_val)?;
     with_multiverse_mut(|mv| mv.create_target(target_id, desc).map_err(|e| e.to_string()))
@@ -201,6 +206,36 @@ pub fn multiverse_create_target(env: Env, target_id: u32, desc_val: JsUnknown) -
 pub fn multiverse_destroy_target(target_id: u32) -> Result<()> {
     with_multiverse_mut(|mv| mv.destroy_target(target_id).map_err(|e| e.to_string()))
         .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_register_color_realm(
+    realm_id: u32,
+    r: f64,
+    g: f64,
+    b: f64,
+    a: f64,
+) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        mv.register_color_realm(realm_id, [r as f32, g as f32, b as f32, a as f32])
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_unregister_realm(realm_id: u32) -> Result<()> {
+    with_multiverse_mut(|mv| mv.unregister_realm(realm_id).map_err(|e| e.to_string()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_register_shader(shader_id: u32, source: String) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        mv.register_shader(shader_id, &source)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
 #[napi]
@@ -236,10 +271,120 @@ pub fn multiverse_set_invocation_enabled(invocation_id: u32, enabled: bool) -> R
 }
 
 #[napi]
+pub fn multiverse_set_invocation_viewport(
+    env: Env,
+    invocation_id: u32,
+    viewport_val: JsUnknown,
+) -> Result<()> {
+    let viewport: galfus_multiverse::ViewportRect = env.from_js_value(viewport_val)?;
+    with_multiverse_mut(|mv| {
+        mv.set_invocation_viewport(invocation_id, viewport)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_set_invocation_filters(
+    env: Env,
+    invocation_id: u32,
+    filters_val: JsUnknown,
+) -> Result<()> {
+    let filters: Vec<galfus_multiverse::InvocationFilter> = env.from_js_value(filters_val)?;
+    with_multiverse_mut(|mv| {
+        mv.set_invocation_filters(invocation_id, filters)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_set_invocation_clear_color(
+    invocation_id: u32,
+    r: f64,
+    g: f64,
+    b: f64,
+    a: f64,
+    has_clear: bool,
+) -> Result<()> {
+    let clear_color = if has_clear {
+        Some([r as f32, g as f32, b as f32, a as f32])
+    } else {
+        None
+    };
+    with_multiverse_mut(|mv| {
+        mv.set_invocation_clear_color(invocation_id, clear_color)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_set_invocation_camera_slot(
+    invocation_id: u32,
+    camera_slot: u32,
+    has_slot: bool,
+) -> Result<()> {
+    let slot = if has_slot { Some(camera_slot) } else { None };
+    with_multiverse_mut(|mv| {
+        mv.set_invocation_camera_slot(invocation_id, slot)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_update_window_size(window_id: u32, width: u32, height: u32) -> Result<()> {
+    let size = glam::UVec2::new(width, height);
+    with_multiverse_mut(|mv| {
+        mv.update_window_size(window_id, size);
+        Ok(())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_create_connector(env: Env, connector_id: u32, desc_val: JsUnknown) -> Result<()> {
+    let desc: galfus_multiverse::ConnectorDesc = env.from_js_value(desc_val)?;
+    with_multiverse_mut(|mv| {
+        mv.create_connector(connector_id, desc)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_destroy_connector(connector_id: u32) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        mv.destroy_connector(connector_id)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_set_connector_enabled(connector_id: u32, enabled: bool) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        mv.set_connector_enabled(connector_id, enabled)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
 pub fn multiverse_bind_target_texture(env: Env, binding_val: JsUnknown) -> Result<()> {
     let binding: galfus_multiverse::TargetTextureBinding = env.from_js_value(binding_val)?;
     with_multiverse_mut(|mv| mv.bind_target_texture(binding).map_err(|e| e.to_string()))
         .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_unbind_target_texture(realm_id: u32, slot: String) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        mv.unbind_target_texture(realm_id, &slot)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
 #[napi]

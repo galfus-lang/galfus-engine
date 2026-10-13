@@ -76,7 +76,7 @@ fn test_multiverse_lifecycle_and_validation() {
     let inv = InvocationDesc {
         realm_id: 10,
         target_id: 1,
-        camera_id: None,
+        camera_slot: None,
         viewport: ViewportRect::default(),
         filters: Vec::new(),
         z_index: 0,
@@ -140,7 +140,7 @@ fn test_portal_dependency_ordering() {
         InvocationDesc {
             realm_id: 10,
             target_id: target_portal_texture,
-            camera_id: Some(2), // Portal camera
+            camera_slot: Some(2), // Portal camera
             viewport: ViewportRect::default(),
             filters: Vec::new(),
             z_index: 0,
@@ -156,7 +156,7 @@ fn test_portal_dependency_ordering() {
         InvocationDesc {
             realm_id: 10,
             target_id: target_window,
-            camera_id: Some(1), // Main player camera
+            camera_slot: Some(1), // Main player camera
             viewport: ViewportRect::default(),
             filters: Vec::new(),
             z_index: 0,
@@ -172,7 +172,7 @@ fn test_portal_dependency_ordering() {
         InvocationDesc {
             realm_id: 20,
             target_id: target_window,
-            camera_id: None,
+            camera_slot: None,
             viewport: ViewportRect::default(),
             filters: Vec::new(),
             z_index: 10, // Drawn above 3D
@@ -237,7 +237,7 @@ fn test_color_realm_in_multiverse() {
         InvocationDesc {
             realm_id,
             target_id,
-            camera_id: None,
+            camera_slot: None,
             viewport: ViewportRect::pixels(0, 0, 128, 128),
             filters: Vec::new(),
             z_index: 0,
@@ -326,7 +326,7 @@ fn test_connector_lifecycle_and_dependency_ordering() {
         InvocationDesc {
             realm_id: 10,
             target_id: target_offscreen,
-            camera_id: None,
+            camera_slot: None,
             viewport: ViewportRect::default(),
             filters: Vec::new(),
             z_index: 0,
@@ -428,7 +428,7 @@ fn test_connector_dispatch_execution() {
         InvocationDesc {
             realm_id: 10,
             target_id: target_a,
-            camera_id: None,
+            camera_slot: None,
             viewport: ViewportRect::default(),
             filters: Vec::new(),
             z_index: 0,

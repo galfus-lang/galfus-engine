@@ -1,64 +1,40 @@
 import { mkdir, writeFile } from 'fs/promises';
 import { resolve } from 'path';
-import { generateCHeader } from './codegen/c_header.ts';
-import { generatePython } from './codegen/python.ts';
-import { generateLua } from './codegen/lua.ts';
-import { generateTypeScript } from './codegen/typescript.ts';
-import { generateBunFFI } from './codegen/bun_ffi.ts';
+import { API_FUNCTIONS } from './codegen/spec.ts';
+import type { CodegenStrategy } from './codegen/strategies/strategy.ts';
+import { CHeaderStrategy } from './codegen/strategies/c_header.ts';
+import { PythonStrategy } from './codegen/strategies/python.ts';
+import { LuaStrategy } from './codegen/strategies/lua.ts';
+import { TypeScriptStrategy } from './codegen/strategies/typescript.ts';
+import { BunFfiStrategy } from './codegen/strategies/bun_ffi.ts';
 
 const rootDir = resolve(import.meta.dir, '..');
 
-interface OutputTarget {
-  name: string;
-  dir: string;
-  filename: string;
-  content: string;
-}
-
-const targets: OutputTarget[] = [
-  {
-    name: 'C / C++ Header',
-    dir: resolve(rootDir, 'sdk/c'),
-    filename: 'galfus.h',
-    content: generateCHeader()
-  },
-  {
-    name: 'Python Wrapper',
-    dir: resolve(rootDir, 'sdk/python'),
-    filename: 'galfus.py',
-    content: generatePython()
-  },
-  {
-    name: 'LuaJIT Wrapper',
-    dir: resolve(rootDir, 'sdk/lua'),
-    filename: 'galfus.lua',
-    content: generateLua()
-  },
-  {
-    name: 'TypeScript Definitions',
-    dir: resolve(rootDir, 'sdk/typescript'),
-    filename: 'galfus.ts',
-    content: generateTypeScript()
-  },
-  {
-    name: 'Bun FFI Wrapper',
-    dir: resolve(rootDir, 'sdk/bun'),
-    filename: 'galfus.ts',
-    content: generateBunFFI()
-  }
+const STRATEGIES: CodegenStrategy[] = [
+  new CHeaderStrategy(),
+  new PythonStrategy(),
+  new LuaStrategy(),
+  new TypeScriptStrategy(),
+  new BunFfiStrategy()
 ];
 
 async function main() {
-  console.log('=== Galfus Engine - Multi-Language SDK Codegen ===\n');
+  console.log('=== Galfus Engine - Multi-Language SDK Codegen (Strategy Pattern) ===\n');
 
-  for (const target of targets) {
-    await mkdir(target.dir, { recursive: true });
-    const filePath = resolve(target.dir, target.filename);
-    await writeFile(filePath, target.content, 'utf-8');
-    console.log(`✔ Generated ${target.name.padEnd(25)} -> ${filePath}`);
+  const context = { functions: API_FUNCTIONS };
+
+  for (const strategy of STRATEGIES) {
+    const targetDir = resolve(rootDir, strategy.relativeOutputDir);
+    await mkdir(targetDir, { recursive: true });
+    const filePath = resolve(targetDir, strategy.filename);
+    const content = strategy.generate(context);
+    await writeFile(filePath, content, 'utf-8');
+    console.log(
+      `✔ [${strategy.id.padEnd(10)}] Generated ${strategy.name.padEnd(25)} -> ${filePath}`
+    );
   }
 
-  console.log('\n🎉 All SDK glue-code files generated successfully!');
+  console.log('\n🎉 All SDK glue-code files generated successfully via Codegen Strategies!');
 }
 
 main().catch((err) => {

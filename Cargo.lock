@@ -769,6 +769,7 @@ dependencies = [
  "galfus-core",
  "galfus-multiverse",
  "galfus-platform",
+ "glam 0.30.10",
  "napi",
  "napi-derive",
  "serde",
