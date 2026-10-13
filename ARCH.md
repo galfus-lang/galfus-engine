@@ -15,7 +15,7 @@ The redesigned architecture replaces centralized serialized message pools with *
 3. **Local resource ownership:** each subsystem is responsible for creating, validating, and releasing its own resources.
 4. **Shared identity scheme:** common handle primitives permit cross-module references; handles do not imply unrestricted access or ownership.
 5. **No central command mailbox:** synchronous operations use typed methods and return results directly. Event queues and GPU submission queues are distinct, valid mechanisms.
-6. **Graphics graph orchestration:** the multiverse owns registrations, connections, dependency ordering, and execution; realms, connectors, and targets carry out their specialized work.
+6. **Graphics graph orchestration:** the multiverse owns registrations, invocations, dependency ordering, and execution; realms, invocations, and targets carry out their specialized work.
 7. **Platform capability awareness:** normalized APIs disclose platform-specific availability and restrictions instead of silently pretending all environments are equivalent.
 8. **Single binary boundary:** one native library is produced per build; internal crate modularity does not imply individual DLLs.
 
@@ -97,37 +97,35 @@ These crates are not automatically separate shipping artifacts.
 
 ### `galfus-multiverse`
 
-Owns **the graph of realms, connectors, and targets** and performs:
+Owns **the graph of realms, invocations, and targets** and performs:
 
 - Registration and validation of graph entities and their handles.
-- Port compatibility and connection validation.
-- Dependency analysis and cycle handling policy.
-- Execution ordering and invalidation when graph structure changes.
-- Graph traversal, dispatch of realm/connector/target contracts, and render/present coordination.
+- Invocation routing, viewport clipping, and presentation order (`z_index`).
+- Inter-target texture bindings (`TargetTextureBinding`) for realms consuming rendered targets (e.g. portals, mirrors).
+- Execution ordering and post-processing filter pass dispatch (`InvocationFilter`).
+- Graph traversal, dispatch of realm rendering, and target presentation.
 
-**Does not own:** the application loop, OS event loop, scene-specific algorithms, or the concrete implementation of composition operations.
+**Does not own:** the application loop, OS event loop, scene-specific algorithms, or raw shader compiler implementations.
 
-There is **no `galfus-draw` crate** in this design. Multiverse is the executor/coordinator, while connectors and targets execute their domain-specific composition and destination work.
+There is **no `galfus-draw` crate** in this design. Multiverse coordinates graph execution, while invocations dispatch realm output to targets with optional filter chains.
 
 ## 3. Conceptual graph model
 
 ```text
-Realm A: 3D world  -- color/depth --> Connector: composite --+--> Target: window
-Realm B: 2D HUD    -- color/alpha --> Connector: composite --+
-Realm C: offscreen effects -------------------------------> Target: texture
+Realm A: 3D world  -- Invocation (viewport, filters) ----+--> Target: window
+Realm B: 2D HUD    -- Invocation (viewport, blend) ------+
+Target: offscreen  -- TargetTextureBinding ------------> Realm C: portal surface
 ```
 
 The entities have distinct semantics:
 
-| Concept         | Meaning                                                                                                                                                              |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Realm**       | A stateful graphics-producing unit implementing the shared realm contract.                                                                                           |
-| **Port/output** | A declared piece of produced graphics data, with type and compatibility metadata.                                                                                    |
-| **Connector**   | An operation or relationship that consumes outputs and produces/combines outputs, including composition where appropriate.                                           |
-| **Target**      | A destination abstraction such as a window surface, offscreen texture, or another output destination; implements target-specific resolution/presentation operations. |
-| **Multiverse**  | The owner of graph structure, validity, scheduling, and execution order.                                                                                             |
-
-**Dependency is not composition.** A connection may imply that B must run after A without blending any pixels. A composition node explicitly performs a graphical operation. Both cases should be representable without abusing one generic connector behavior.
+| Concept                    | Meaning                                                                                                                                                              |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Realm**                  | A stateful graphics-producing unit implementing the shared realm contract.                                                                                           |
+| **Target**                 | A destination abstraction such as a window surface or offscreen texture; owns presentation and resolution.                                                          |
+| **Invocation**             | The mapping that renders a Realm into a Target, specifying viewport, stacking order (`z_index`), and post-processing filters (`InvocationFilter`).                   |
+| **TargetTextureBinding**   | A declaration allowing a Realm to consume a rendered Target's texture as input (e.g. mirrors, security cameras, portals).                                            |
+| **Multiverse**             | The owner of graph structure, validity, scheduling, and execution order.                                                                                             |
 
 A graph may produce multiple outputs and use intermediate textures. Output contracts should not assume every realm produces only one RGBA image. Depth, masks, multiple render attachments, and other compatible GPU outputs may be supported as contracts evolve.
 
@@ -141,14 +139,14 @@ The host owns setup, the update cadence, frame requests, and shutdown. A concept
 Host starts
   -> create platform capabilities/surfaces
   -> initialize shared GPU context when needed
-  -> instantiate realms, resources, targets, connectors
+  -> instantiate realms, targets, invocations
   -> register graph with multiverse
 
 For each host-selected frame:
   -> poll/receive normalized platform events
   -> update application state and custom resources
   -> validate/rebuild graph plan if invalidated
-  -> multiverse executes realms and connectors in dependency order
+  -> multiverse executes realms and invocation filters in dependency order
   -> targets resolve/present their outputs
 
 Host shuts down
@@ -268,9 +266,9 @@ Some contracts may need shared GPU surface/format types. Place these at the lowe
 This is a redesign plan, not an in-place refactor already completed.
 
 1. **Inventory ownership and dependencies** in the current runtime and binding code.
-2. **Define shared identity and contracts** for platform, GPU, realms, connectors, and targets.
+2. **Define shared identity and contracts** for platform, GPU, realms, invocations, and targets.
 3. **Extract platform and GPU services** while maintaining existing `winit` and `wgpu` behavior.
-4. **Move graph coordination into multiverse** and preserve current realm/target/connector capabilities where compatible with the new contracts.
+4. **Move graph coordination into multiverse** and preserve current realm/target/invocation capabilities where compatible with the new contracts.
 5. **Replace message-pool entry points** with direct typed native operations; develop the C ABI for FFI hosts separately.
 6. **Build one native artifact** with optional 2D/3D compilation features, and a separate WASM/browser packaging path.
 7. **Validate integration** across Windows, macOS, Linux (including window-system differences), browser, and headless modes where supported.
@@ -280,7 +278,7 @@ This is a redesign plan, not an in-place refactor already completed.
 - Public Rust trait signatures and exported C symbols.
 - Exact handle width/layout, namespace assignment, and registry concurrency model.
 - Specific audio backend crate for each native target.
-- Exact connector and target interfaces, including how they report synchronization requirements.
+- Target presentation interfaces and synchronization reporting requirements.
 - Final feature names and repository paths.
 - Fine-grained GPU atlas/paging implementation and resource residency policies.
 - The precise split between direct host API calls and optional batched GPU uploads.

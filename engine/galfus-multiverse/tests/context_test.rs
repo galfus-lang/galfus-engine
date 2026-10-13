@@ -256,37 +256,17 @@ fn test_color_realm_in_multiverse() {
     mv.dispatch(2, 0.016).unwrap();
 }
 
-struct TestConnectorHandler {
-    executed: Vec<(u32, u32, u32, Option<u32>)>,
-}
-
-impl ConnectorHandler for TestConnectorHandler {
-    fn execute(&mut self, ctx: &ConnectorInvocationContext) -> MultiverseResult<()> {
-        self.executed.push((
-            ctx.connector_id,
-            ctx.source_target_id,
-            ctx.destination_target_id,
-            ctx.custom_shader_id,
-        ));
-        Ok(())
-    }
-}
-
 #[test]
-fn test_connector_lifecycle_and_dependency_ordering() {
+fn test_screen_effect_filter_lifecycle() {
     let mut mv = MultiverseContext::new();
 
-    let target_offscreen = 1;
-    let target_post = 2;
-    let target_window = 3;
-
-    // Target 1: Offscreen render target
+    let target_id = 1;
     mv.create_target(
-        target_offscreen,
+        target_id,
         TargetDesc {
             kind: TargetKind::Texture {
-                width: 800,
-                height: 600,
+                width: 64,
+                height: 64,
                 format: "rgba8unorm".into(),
             },
             size: None,
@@ -294,41 +274,35 @@ fn test_connector_lifecycle_and_dependency_ordering() {
     )
     .unwrap();
 
-    // Target 2: Intermediate post-processing target
-    mv.create_target(
-        target_post,
-        TargetDesc {
-            kind: TargetKind::Texture {
-                width: 800,
-                height: 600,
-                format: "rgba8unorm".into(),
-            },
-            size: None,
-        },
-    )
-    .unwrap();
-
-    // Target 3: Window target
-    mv.create_target(
-        target_window,
-        TargetDesc {
-            kind: TargetKind::Window { window_id: 1 },
-            size: Some(UVec2::new(800, 600)),
-        },
-    )
-    .unwrap();
-
-    // Register realm rendering to Target 1
-    mv.register_realm(Box::new(ColorRealm::new(10, [0.2, 0.4, 0.6, 1.0])))
+    mv.register_realm(Box::new(ColorRealm::new(10, [0.5, 0.5, 0.5, 1.0])))
         .unwrap();
+
+    // Register a valid custom screen effect
+    let invert_shader = r#"
+        fn screen_effect(in: ScreenInput) -> vec4<f32> {
+            return vec4<f32>(1.0 - in.color.rgb, in.color.a);
+        }
+    "#;
+    assert!(mv.register_shader(42, invert_shader).is_ok());
+
+    // Registering an invalid snippet with forbidden token should fail
+    let invalid_shader = r#"
+        @group(0) @binding(0) var bad: texture_2d<f32>;
+        fn screen_effect(in: ScreenInput) -> vec4<f32> {
+            return in.color;
+        }
+    "#;
+    assert!(mv.register_shader(43, invalid_shader).is_err());
+
+    // Create invocation with custom filter
     mv.create_invocation(
-        101,
+        100,
         InvocationDesc {
             realm_id: 10,
-            target_id: target_offscreen,
+            target_id,
             camera_slot: None,
             viewport: ViewportRect::default(),
-            filters: Vec::new(),
+            filters: vec![InvocationFilter::Custom { shader_id: 42 }],
             z_index: 0,
             enabled: true,
             clear_color: None,
@@ -336,60 +310,20 @@ fn test_connector_lifecycle_and_dependency_ordering() {
     )
     .unwrap();
 
-    // Connector 1: Target 1 -> Target 2 (e.g. Bloom / Blur pass)
-    let conn_1 = 201;
-    mv.create_connector(
-        conn_1,
-        ConnectorDesc::custom(target_offscreen, target_post, 55),
-    )
-    .unwrap();
-
-    // Connector 2: Target 2 -> Target 3 (Composite blit to window)
-    let conn_2 = 202;
-    mv.create_connector(conn_2, ConnectorDesc::blit(target_post, target_window))
-        .unwrap();
-
-    // Duplicate connector should fail
-    assert!(
-        mv.create_connector(conn_1, ConnectorDesc::blit(target_offscreen, target_post),)
-            .is_err()
-    );
-
-    // Resolve schedule: Order MUST be Target 1 -> Target 2 -> Target 3!
     let schedule = mv.resolve().expect("Failed to resolve schedule");
-    assert_eq!(schedule.target_blocks.len(), 3);
-    assert_eq!(schedule.target_blocks[0].target_id, target_offscreen);
-    assert_eq!(schedule.target_blocks[1].target_id, target_post);
-    assert_eq!(schedule.target_blocks[2].target_id, target_window);
-
-    // Target 1 has invocation 101, 0 connectors
+    assert_eq!(schedule.target_blocks.len(), 1);
+    assert_eq!(schedule.target_blocks[0].target_id, target_id);
     assert_eq!(schedule.target_blocks[0].invocations.len(), 1);
-    assert_eq!(schedule.target_blocks[0].connectors.len(), 0);
-
-    // Target 2 has 0 invocations, connector 201
-    assert_eq!(schedule.target_blocks[1].invocations.len(), 0);
-    assert_eq!(schedule.target_blocks[1].connectors.len(), 1);
-    assert_eq!(schedule.target_blocks[1].connectors[0].connector_id, 201);
     assert_eq!(
-        schedule.target_blocks[1].connectors[0].source_target_id,
-        target_offscreen
+        schedule.target_blocks[0].invocations[0].filters,
+        vec![InvocationFilter::Custom { shader_id: 42 }]
     );
 
-    // Target 3 has 0 invocations, connector 202
-    assert_eq!(schedule.target_blocks[2].invocations.len(), 0);
-    assert_eq!(schedule.target_blocks[2].connectors.len(), 1);
-    assert_eq!(schedule.target_blocks[2].connectors[0].connector_id, 202);
-    assert_eq!(
-        schedule.target_blocks[2].connectors[0].source_target_id,
-        target_post
-    );
-
-    assert_eq!(schedule.total_invocations(), 1);
-    assert_eq!(schedule.total_connectors(), 2);
+    assert!(mv.dispatch(1, 0.016).is_ok());
 }
 
 #[test]
-fn test_connector_dispatch_execution() {
+fn test_target_binding_cycle_soft_cut() {
     let mut mv = MultiverseContext::new();
 
     let target_a = 1;
@@ -399,8 +333,8 @@ fn test_connector_dispatch_execution() {
         target_a,
         TargetDesc {
             kind: TargetKind::Texture {
-                width: 100,
-                height: 100,
+                width: 64,
+                height: 64,
                 format: "rgba8unorm".into(),
             },
             size: None,
@@ -412,8 +346,8 @@ fn test_connector_dispatch_execution() {
         target_b,
         TargetDesc {
             kind: TargetKind::Texture {
-                width: 100,
-                height: 100,
+                width: 64,
+                height: 64,
                 format: "rgba8unorm".into(),
             },
             size: None,
@@ -421,8 +355,12 @@ fn test_connector_dispatch_execution() {
     )
     .unwrap();
 
-    mv.register_realm(Box::new(ColorRealm::new(10, [1.0, 1.0, 1.0, 1.0])))
+    mv.register_realm(Box::new(MockRealm::new(10, RealmKind::ThreeD)))
         .unwrap();
+    mv.register_realm(Box::new(MockRealm::new(20, RealmKind::ThreeD)))
+        .unwrap();
+
+    // Realm 10 renders to Target A, but reads Target B
     mv.create_invocation(
         100,
         InvocationDesc {
@@ -437,56 +375,34 @@ fn test_connector_dispatch_execution() {
         },
     )
     .unwrap();
+    mv.bind_target_texture(TargetTextureBinding {
+        source_target_id: target_b,
+        realm_id: 10,
+        slot: "portal_b".into(),
+    })
+    .unwrap();
 
-    mv.create_connector(200, ConnectorDesc::custom(target_a, target_b, 42))
-        .unwrap();
-
-    mv.set_connector_handler(Box::new(TestConnectorHandler {
-        executed: Vec::new(),
-    }));
-
-    assert!(mv.dispatch(1, 0.016).is_ok());
-}
-
-#[test]
-fn test_connector_cycle_soft_cut() {
-    let mut mv = MultiverseContext::new();
-
-    let target_a = 1;
-    let target_b = 2;
-
-    mv.create_target(
-        target_a,
-        TargetDesc {
-            kind: TargetKind::Texture {
-                width: 64,
-                height: 64,
-                format: "rgba8unorm".into(),
-            },
-            size: None,
+    // Realm 20 renders to Target B, but reads Target A (Mutual cycle!)
+    mv.create_invocation(
+        200,
+        InvocationDesc {
+            realm_id: 20,
+            target_id: target_b,
+            camera_slot: None,
+            viewport: ViewportRect::default(),
+            filters: Vec::new(),
+            z_index: 0,
+            enabled: true,
+            clear_color: None,
         },
     )
     .unwrap();
-
-    mv.create_target(
-        target_b,
-        TargetDesc {
-            kind: TargetKind::Texture {
-                width: 64,
-                height: 64,
-                format: "rgba8unorm".into(),
-            },
-            size: None,
-        },
-    )
+    mv.bind_target_texture(TargetTextureBinding {
+        source_target_id: target_a,
+        realm_id: 20,
+        slot: "portal_a".into(),
+    })
     .unwrap();
-
-    // Cyclic feedback loop: A -> B and B -> A
-    mv.create_connector(10, ConnectorDesc::blit(target_a, target_b))
-        .unwrap();
-
-    mv.create_connector(20, ConnectorDesc::blit(target_b, target_a))
-        .unwrap();
 
     let schedule = mv.resolve().expect("Cycle should be broken via soft cut");
     assert!(!schedule.soft_cut_edges.is_empty());

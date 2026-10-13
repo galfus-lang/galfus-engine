@@ -21,14 +21,11 @@ pub enum MultiverseError {
     #[error("Invocation {0} already exists")]
     InvocationAlreadyExists(u32),
 
-    #[error("Connector {0} not found")]
-    ConnectorNotFound(u32),
-
-    #[error("Connector {0} already exists")]
-    ConnectorAlreadyExists(u32),
-
     #[error("Core error: {0}")]
     Core(#[from] galfus_core::error::CoreError),
+
+    #[error("Shader effect error: {0}")]
+    ShaderEffect(#[from] galfus_core::shader_effects::EffectError),
 
     #[error("Invalid host logical ID: {0}")]
     InvalidId(String),

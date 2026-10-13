@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::error::MultiverseResult;
-use crate::types::{ConnectorEffect, InvocationFilter};
+use crate::error::{MultiverseError, MultiverseResult};
+use crate::screen_effect::compose_screen_effect;
+use crate::types::InvocationFilter;
 use glam::{UVec2, UVec4};
 
 const WGSL_POSTPROCESS: &str = r#"
@@ -40,7 +41,7 @@ fn fs_blit(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 "#;
 
-/// Internal post-processing coordinator for connector blits and shaders.
+/// Internal post-processing coordinator for invocation filter passes.
 pub(crate) struct PostProcessor {
     bind_group_layout: Arc<wgpu::BindGroupLayout>,
     pipeline_layout: Arc<wgpu::PipelineLayout>,
@@ -94,7 +95,7 @@ impl PostProcessor {
         ));
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("PostProcess Shaders"),
+            label: Some("PostProcess Builtin Shaders"),
             source: wgpu::ShaderSource::Wgsl(WGSL_POSTPROCESS.into()),
         });
 
@@ -119,38 +120,56 @@ impl PostProcessor {
         }
     }
 
-    pub fn register_custom_shader(&mut self, device: &wgpu::Device, id: u32, source: &str) {
+    /// Registers a custom shader snippet by composing it against the multiverse screen template.
+    pub fn register_custom_shader(
+        &mut self,
+        device: &wgpu::Device,
+        id: u32,
+        source: &str,
+    ) -> MultiverseResult<()> {
+        let composed = compose_screen_effect(source)?;
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Custom Connector Shader"),
-            source: wgpu::ShaderSource::Wgsl(source.into()),
+            label: Some(&format!("Custom Screen Effect {}", id)),
+            source: wgpu::ShaderSource::Wgsl(composed.source.into()),
         });
         self.custom_shaders.insert(id, module);
+        Ok(())
     }
 
-    fn get_or_create_pipeline(
+    fn ensure_pipeline(
         &mut self,
         device: &wgpu::Device,
         effect_name: &str,
         format: wgpu::TextureFormat,
-    ) -> &wgpu::RenderPipeline {
+    ) -> MultiverseResult<()> {
         let key = (effect_name.to_string(), format);
-        self.pipelines.entry(key).or_insert_with(|| {
-            let entry_point = match effect_name {
-                "sepia" => "fs_sepia",
-                _ => "fs_blit",
+        if !self.pipelines.contains_key(&key) {
+            let (module, entry_point) = if let Some(id_str) = effect_name.strip_prefix("custom:") {
+                let shader_id: u32 = id_str
+                    .parse()
+                    .map_err(|_| MultiverseError::InvalidConfig("Invalid shader ID".into()))?;
+                let custom_mod = self
+                    .custom_shaders
+                    .get(&shader_id)
+                    .ok_or_else(|| MultiverseError::InvalidConfig(format!("Shader ID {shader_id} not found")))?;
+                (custom_mod, "fs_main")
+            } else if effect_name == "sepia" {
+                (&self.shader_module, "fs_sepia")
+            } else {
+                (&self.shader_module, "fs_blit")
             };
 
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("PostProcess Render Pipeline"),
                 layout: Some(&self.pipeline_layout),
                 vertex: wgpu::VertexState {
-                    module: &self.shader_module,
+                    module,
                     entry_point: Some("vs_main"),
                     buffers: &[],
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &self.shader_module,
+                    module,
                     entry_point: Some(entry_point),
                     targets: &[Some(wgpu::ColorTargetState {
                         format,
@@ -172,8 +191,12 @@ impl PostProcessor {
                 multisample: wgpu::MultisampleState::default(),
                 multiview_mask: None,
                 cache: None,
-            })
-        })
+            });
+
+            self.pipelines.insert(key, pipeline);
+        }
+
+        Ok(())
     }
 
     pub fn render_filter(
@@ -183,6 +206,14 @@ impl PostProcessor {
         filter: Option<&InvocationFilter>,
         pass_desc: &FilterPassDesc<'_>,
     ) -> MultiverseResult<()> {
+        let effect_key = match filter {
+            Some(InvocationFilter::Sepia) => "sepia".to_string(),
+            Some(InvocationFilter::Custom { shader_id }) => format!("custom:{shader_id}"),
+            _ => "blit".to_string(),
+        };
+
+        self.ensure_pipeline(device, &effect_key, pass_desc.dst_format)?;
+
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("PostProcess Pass BindGroup"),
             layout: &self.bind_group_layout,
@@ -198,12 +229,10 @@ impl PostProcessor {
             ],
         });
 
-        let effect_key = match filter {
-            Some(InvocationFilter::Sepia) => "sepia",
-            _ => "blit",
-        };
-
-        let pipeline = self.get_or_create_pipeline(device, effect_key, pass_desc.dst_format);
+        let pipeline = self
+            .pipelines
+            .get(&(effect_key, pass_desc.dst_format))
+            .expect("Pipeline must exist");
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("PostProcess Encoder"),
@@ -243,22 +272,5 @@ impl PostProcessor {
 
         queue.submit(Some(encoder.finish()));
         Ok(())
-    }
-
-    pub fn render_effect(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        effect: &ConnectorEffect,
-        pass_desc: &FilterPassDesc<'_>,
-    ) -> MultiverseResult<()> {
-        let filter = match effect {
-            ConnectorEffect::Sepia => Some(InvocationFilter::Sepia),
-            ConnectorEffect::Custom { shader_id } => Some(InvocationFilter::Custom {
-                shader_id: *shader_id,
-            }),
-            ConnectorEffect::Blit => None,
-        };
-        self.render_filter(device, queue, filter.as_ref(), pass_desc)
     }
 }

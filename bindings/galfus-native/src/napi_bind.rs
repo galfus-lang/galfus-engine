@@ -343,33 +343,6 @@ pub fn multiverse_update_window_size(window_id: u32, width: u32, height: u32) ->
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
-#[napi]
-pub fn multiverse_create_connector(env: Env, connector_id: u32, desc_val: JsUnknown) -> Result<()> {
-    let desc: galfus_multiverse::ConnectorDesc = env.from_js_value(desc_val)?;
-    with_multiverse_mut(|mv| {
-        mv.create_connector(connector_id, desc)
-            .map_err(|e| e.to_string())
-    })
-    .map_err(|e| Error::new(Status::GenericFailure, e))
-}
-
-#[napi]
-pub fn multiverse_destroy_connector(connector_id: u32) -> Result<()> {
-    with_multiverse_mut(|mv| {
-        mv.destroy_connector(connector_id)
-            .map_err(|e| e.to_string())
-    })
-    .map_err(|e| Error::new(Status::GenericFailure, e))
-}
-
-#[napi]
-pub fn multiverse_set_connector_enabled(connector_id: u32, enabled: bool) -> Result<()> {
-    with_multiverse_mut(|mv| {
-        mv.set_connector_enabled(connector_id, enabled)
-            .map_err(|e| e.to_string())
-    })
-    .map_err(|e| Error::new(Status::GenericFailure, e))
-}
 
 #[napi]
 pub fn multiverse_bind_target_texture(env: Env, binding_val: JsUnknown) -> Result<()> {

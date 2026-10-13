@@ -96,6 +96,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("    Left  (#100): Camera #1 -> Viewport (0.0..0.5) -> Normal / Raw");
     println!("    Right (#101): Camera #2 -> Viewport (0.5..1.0) -> Sepia Post-Process Filter");
 
+    // 6. Register a Custom ShaderEffect snippet (Invert colors filter)
+    const SHADER_CUSTOM_INVERT: u32 = 500;
+    let custom_invert_wgsl = r#"
+        fn screen_effect(in: ScreenInput) -> vec4<f32> {
+            return vec4<f32>(1.0 - in.color.rgb, in.color.a);
+        }
+    "#;
+    mv.register_shader(SHADER_CUSTOM_INVERT, custom_invert_wgsl)?;
+    println!("==> Custom ShaderEffect (#500: Invert) registered via ScreenInput contract");
+
     // Validate graph resolution
     let schedule = mv.resolve()?;
     println!("==> Multiverse Schedule resolved:");
@@ -104,12 +114,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n==> Controls:");
     println!("  - Space / Click : Cycle input color (White -> Blue -> Green -> Red -> Gold)");
-    println!("  - S             : Toggle Right Filter (Sepia <-> Normal)");
+    println!("  - S             : Set Right Filter to Sepia");
+    println!("  - C             : Set Right Filter to Custom ShaderEffect (Invert)");
+    println!("  - N             : Reset Right Filter to Normal (Raw / No Filter)");
     println!("  - Escape        : Exit demo\n");
 
     let mut running = true;
     let mut palette_idx = 0usize;
-    let mut sepia_active = true;
     let mut frame_id = 0u64;
     let mut last_instant = Instant::now();
 
@@ -163,19 +174,29 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     state,
                     ..
                 }) if state.is_pressed() => {
-                    sepia_active = !sepia_active;
-                    let filters = if sepia_active {
-                        vec![InvocationFilter::Sepia]
-                    } else {
-                        Vec::new()
-                    };
-                    mv.set_invocation_filters(INVOCATION_RIGHT, filters)?;
-                    let mode = if sepia_active {
-                        "SEPIA FILTER"
-                    } else {
-                        "RAW NORMAL (No Filter)"
-                    };
-                    println!("--> Right Viewport Filter: {mode}");
+                    mv.set_invocation_filters(INVOCATION_RIGHT, vec![InvocationFilter::Sepia])?;
+                    println!("--> Right Viewport Filter: SEPIA");
+                }
+                PlatformEvent::Keyboard(KeyboardEvent::Input {
+                    physical_key: KeyCode::KeyC,
+                    state,
+                    ..
+                }) if state.is_pressed() => {
+                    mv.set_invocation_filters(
+                        INVOCATION_RIGHT,
+                        vec![InvocationFilter::Custom {
+                            shader_id: SHADER_CUSTOM_INVERT,
+                        }],
+                    )?;
+                    println!("--> Right Viewport Filter: CUSTOM SHADEREFFECT (Invert Colors)");
+                }
+                PlatformEvent::Keyboard(KeyboardEvent::Input {
+                    physical_key: KeyCode::KeyN,
+                    state,
+                    ..
+                }) if state.is_pressed() => {
+                    mv.set_invocation_filters(INVOCATION_RIGHT, Vec::new())?;
+                    println!("--> Right Viewport Filter: RAW NORMAL (No Filter)");
                 }
                 _ => {}
             }

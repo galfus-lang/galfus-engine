@@ -11,10 +11,15 @@
 pub mod error;
 pub mod handle;
 pub mod id;
+pub mod shader_effects;
 
 pub use error::{CoreError, CoreResult};
 pub use handle::{GenerationalPool, Handle};
 pub use id::{
     ContentId, LogicalId, RESERVED_LOGICAL_ID_COUNT, RESERVED_RANGE_END, RESERVED_RANGE_START,
     is_reserved_logical_id, validate_host_logical_id,
+};
+pub use shader_effects::{
+    ComposedShader, EffectError, EffectResult, FORBIDDEN_SHADER_TOKENS, ShaderEffectTemplate,
+    validate_snippet,
 };

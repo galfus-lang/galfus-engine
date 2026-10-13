@@ -40,6 +40,10 @@ pub enum CoreError {
     /// A deterministic content ID collision was detected.
     #[error("Content ID collision detected for hash {content_id:#018x}")]
     CollisionDetected { content_id: u64 },
+
+    /// A shader effect error occurred during validation or composition.
+    #[error("Shader effect error: {0}")]
+    ShaderEffect(#[from] crate::shader_effects::EffectError),
 }
 
 /// Convenience result alias for core operations.

@@ -378,72 +378,7 @@ pub extern "C" fn galfus_multiverse_unregister_realm(realm_id: u32) -> i32 {
     }
 }
 
-/// Creates a Connector in the Multiverse. Returns 0 on success, -1 on failure.
-///
-/// # Safety
-/// `desc_json` must be a valid, null-terminated UTF-8 C string pointer.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_multiverse_create_connector(
-    connector_id: u32,
-    desc_json: *const c_char,
-) -> i32 {
-    let json_str = match unsafe { from_c_str(desc_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
 
-    let desc: galfus_multiverse::ConnectorDesc = match serde_json::from_str(json_str) {
-        Ok(d) => d,
-        Err(e) => {
-            set_last_error(&format!("Invalid ConnectorDesc JSON: {e}"));
-            return -1;
-        }
-    };
-
-    match with_multiverse_mut(|mv| {
-        mv.create_connector(connector_id, desc)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Destroys a Connector in the Multiverse. Returns 0 on success, -1 on failure.
-#[unsafe(no_mangle)]
-pub extern "C" fn galfus_multiverse_destroy_connector(connector_id: u32) -> i32 {
-    match with_multiverse_mut(|mv| {
-        mv.destroy_connector(connector_id)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Enables or disables a Connector. Returns 0 on success, -1 on failure.
-#[unsafe(no_mangle)]
-pub extern "C" fn galfus_multiverse_set_connector_enabled(connector_id: u32, enabled: bool) -> i32 {
-    match with_multiverse_mut(|mv| {
-        mv.set_connector_enabled(connector_id, enabled)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
 
 /// Unbinds a Target texture from a Realm slot. Returns 0 on success, -1 on failure.
 ///
@@ -542,24 +477,13 @@ mod tests {
         // 7. Test window size update
         assert_eq!(galfus_multiverse_update_window_size(1, 1024, 768), 0);
 
-        // 8. Test Connector creation & toggle
+        // 8. Test Target Texture binding and unbinding
         let target2_json =
             CString::new(r#"{"kind":{"type":"texture","width":800,"height":600}}"#).unwrap();
         assert_eq!(
             unsafe { galfus_multiverse_create_target(2, target2_json.as_ptr()) },
             0
         );
-        let conn_json = CString::new(
-            r#"{"sourceTargetId":1,"destinationTargetId":2,"effect":"blit","zIndex":0,"enabled":true}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            unsafe { galfus_multiverse_create_connector(200, conn_json.as_ptr()) },
-            0
-        );
-        assert_eq!(galfus_multiverse_set_connector_enabled(200, false), 0);
-
-        // 9. Test Target Texture binding and unbinding
         let binding_json =
             CString::new(r#"{"sourceTargetId":1,"realmId":10,"slot":"portalTexture"}"#).unwrap();
         assert_eq!(
@@ -572,7 +496,7 @@ mod tests {
             0
         );
 
-        // 10. Resolve schedule JSON & Dispatch frame
+        // 9. Resolve schedule JSON & Dispatch frame
         let schedule_ptr = galfus_multiverse_resolve();
         assert!(!schedule_ptr.is_null());
         let schedule_str = unsafe { std::ffi::CStr::from_ptr(schedule_ptr).to_str().unwrap() };
@@ -581,8 +505,7 @@ mod tests {
 
         assert_eq!(galfus_multiverse_dispatch(1, 0.016), 0);
 
-        // 11. Cleanup
-        assert_eq!(galfus_multiverse_destroy_connector(200), 0);
+        // 10. Cleanup
         assert_eq!(galfus_multiverse_destroy_invocation(100), 0);
         assert_eq!(galfus_multiverse_unregister_realm(10), 0);
         assert_eq!(galfus_multiverse_destroy_target(1), 0);

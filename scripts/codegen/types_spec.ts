@@ -198,20 +198,6 @@ export interface InvocationDesc {
   clearColor?: [number, number, number, number];
 }
 
-export type ConnectorEffect =
-  | "blit"
-  | "sepia"
-  | { custom: { shaderId: number } };
-
-export interface ConnectorDesc {
-  sourceTargetId: number;
-  destinationTargetId: number;
-  effect?: ConnectorEffect;
-  customShaderId?: number;
-  zIndex?: number;
-  enabled?: boolean;
-}
-
 export interface TargetTextureBinding {
   sourceTargetId: number;
   realmId: number;
@@ -228,19 +214,9 @@ export interface ResolvedInvocationStep {
   filters: InvocationFilter[];
 }
 
-export interface ResolvedConnectorStep {
-  connectorId: number;
-  sourceTargetId: number;
-  destinationTargetId: number;
-  effect: ConnectorEffect;
-  customShaderId?: number;
-  zIndex: number;
-}
-
 export interface TargetExecutionBlock {
   targetId: number;
   invocations: ResolvedInvocationStep[];
-  connectors: ResolvedConnectorStep[];
 }
 
 export interface MultiverseSchedule {

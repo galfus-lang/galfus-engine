@@ -40,17 +40,12 @@ galfus.multiverseRegisterColorRealm(10, 0.2, 0.7, 1.0, 1.0);
 console.log('✔ Registered ColorRealm (#10)');
 
 const dummyWgsl = `
-@vertex
-fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) vec4<f32> {
-    return vec4<f32>(0.0, 0.0, 0.0, 1.0);
-}
-@fragment
-fn fs_main() -> @location(0) vec4<f32> {
-    return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+fn screen_effect(in: ScreenInput) -> vec4<f32> {
+    return vec4<f32>(1.0 - in.color.rgb, in.color.a);
 }
 `;
 galfus.multiverseRegisterShader(1001, dummyWgsl);
-console.log('✔ Registered custom WGSL shader (#1001)');
+console.log('✔ Registered custom ShaderEffect (#1001)');
 
 // 6. Multiverse: Create Invocation with Sepia filter
 console.log('==> Testing Multiverse Invocation creation...');
@@ -76,24 +71,16 @@ galfus.multiverseSetInvocationViewport(100, {
   width: 1.0,
   height: 1.0
 });
+console.log('==> Testing ShaderEffects custom shader registration...');
+galfus.multiverseRegisterShader(
+  1001,
+  'fn screen_effect(in: ScreenInput) -> vec4<f32> { return vec4<f32>(1.0 - in.color.rgb, in.color.a); }'
+);
 galfus.multiverseSetInvocationFilters(100, [{ custom: { shaderId: 1001 } }]);
-galfus.multiverseSetInvocationFilters(100, []);
 galfus.multiverseSetInvocationClearColor(100, 0.0, 0.0, 0.0, 1.0, true);
-console.log('✔ Dynamically mutated cameraSlot, viewport, filters, and clearColor');
+console.log('✔ Registered custom ShaderEffect snippet and applied to invocation filters');
 
-// 8. Multiverse: Create Connector
-console.log('==> Testing Multiverse Connector...');
-galfus.multiverseCreateConnector(200, {
-  sourceTargetId: 1,
-  destinationTargetId: 2,
-  effect: 'blit',
-  zIndex: 0,
-  enabled: true
-});
-galfus.multiverseSetConnectorEnabled(200, false);
-console.log('✔ Created and toggled Connector (#200)');
-
-// 9. Multiverse: Target Texture Binding & Unbinding
+// 8. Multiverse: Target Texture Binding & Unbinding
 console.log('==> Testing Target Texture binding...');
 galfus.multiverseBindTargetTexture({
   sourceTargetId: 1,
@@ -103,7 +90,7 @@ galfus.multiverseBindTargetTexture({
 galfus.multiverseUnbindTargetTexture(10, 'albedo');
 console.log('✔ Bound and unbound Target Texture slot');
 
-// 10. Multiverse: Resolve Schedule & Dispatch Frame
+// 9. Multiverse: Resolve Schedule & Dispatch Frame
 console.log('==> Testing Multiverse Resolve & Dispatch...');
 const schedule = galfus.multiverseResolve();
 console.log('✔ Multiverse Schedule resolved (typed object):', JSON.stringify(schedule));
@@ -114,14 +101,13 @@ if (!schedule.targetBlocks || schedule.targetBlocks.length === 0) {
 galfus.multiverseDispatch(1, 0.016);
 console.log('✔ Dispatched frame 1 with delta 0.016s');
 
-// 11. Multiverse: Cleanup
+// 10. Multiverse: Cleanup
 console.log('==> Testing Multiverse entity destruction & cleanup...');
-galfus.multiverseDestroyConnector(200);
 galfus.multiverseDestroyInvocation(100);
 galfus.multiverseUnregisterRealm(10);
 galfus.multiverseDestroyTarget(1);
 galfus.multiverseDestroyTarget(2);
-console.log('✔ Destroyed connector, invocation, realm, and targets cleanly');
+console.log('✔ Destroyed invocation, realm, and targets cleanly');
 
 // 12. Shutdown Platform
 console.log('==> Testing platformShutdown()...');

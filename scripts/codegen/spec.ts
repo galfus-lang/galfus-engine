@@ -619,55 +619,6 @@ export const API_FUNCTIONS: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
-    cName: 'galfus_multiverse_create_connector',
-    methodName: 'multiverseCreateConnector',
-    doc: 'Creates a Connector between two Targets.',
-    params: [
-      {
-        name: 'connectorId',
-        type: 'u32',
-        doc: 'Logical ID of the Connector'
-      },
-      {
-        name: 'desc',
-        type: { json: 'ConnectorDesc' },
-        doc: 'Connector description'
-      }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_multiverse_destroy_connector',
-    methodName: 'multiverseDestroyConnector',
-    doc: 'Destroys a Connector.',
-    params: [
-      {
-        name: 'connectorId',
-        type: 'u32',
-        doc: 'Connector ID to destroy'
-      }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_multiverse_set_connector_enabled',
-    methodName: 'multiverseSetConnectorEnabled',
-    doc: 'Enables or disables a Connector.',
-    params: [
-      {
-        name: 'connectorId',
-        type: 'u32',
-        doc: 'Connector ID'
-      },
-      {
-        name: 'enabled',
-        type: 'bool',
-        doc: 'Whether the connector is active'
-      }
-    ],
-    returnType: 'i32'
-  },
-  {
     cName: 'galfus_multiverse_resolve',
     methodName: 'multiverseResolve',
     doc: 'Resolves and returns the Multiverse execution schedule as structured data.',

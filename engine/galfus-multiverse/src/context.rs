@@ -15,32 +15,15 @@ use crate::postprocess::{FilterPassDesc, PostProcessor};
 use crate::resolver::resolve_schedule;
 use crate::schedule::MultiverseSchedule;
 use crate::types::{
-    ConnectorDesc, InvocationDesc, InvocationFilter, TargetDesc, TargetKind, TargetTextureBinding,
+    InvocationDesc, InvocationFilter, TargetDesc, TargetKind, TargetTextureBinding,
     ViewportRect,
 };
-
-/// Execution context provided when executing a connector transfer step.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ConnectorInvocationContext {
-    pub frame_id: u64,
-    pub connector_id: u32,
-    pub source_target_id: u32,
-    pub destination_target_id: u32,
-    pub custom_shader_id: Option<u32>,
-}
-
-/// Handler responsible for executing connector blits / post-processing passes.
-pub trait ConnectorHandler {
-    fn execute(&mut self, context: &ConnectorInvocationContext) -> MultiverseResult<()>;
-}
 
 /// Central Multiverse Context coordinating targets, realms, and invocation scheduling.
 pub struct MultiverseContext {
     targets: HashMap<u32, TargetDesc>,
     realms: HashMap<u32, Box<dyn Realm>>,
     invocations: HashMap<u32, InvocationDesc>,
-    connectors: HashMap<u32, ConnectorDesc>,
-    connector_handler: Option<Box<dyn ConnectorHandler>>,
     bindings: Vec<TargetTextureBinding>,
     window_sizes: HashMap<u32, UVec2>,
 
@@ -70,8 +53,6 @@ impl MultiverseContext {
             targets: HashMap::new(),
             realms: HashMap::new(),
             invocations: HashMap::new(),
-            connectors: HashMap::new(),
-            connector_handler: None,
             bindings: Vec::new(),
             window_sizes: HashMap::new(),
             gpu_manager: None,
@@ -146,9 +127,10 @@ impl MultiverseContext {
 
     /// Registers a custom WGSL post-processing shader with an ID.
     pub fn register_shader(&mut self, shader_id: u32, source: &str) -> MultiverseResult<()> {
+        validate_host_logical_id(shader_id)?;
         self.ensure_gpu_manager()?;
         if let (Some(gpu), Some(post)) = (&self.gpu_manager, &mut self.post_processor) {
-            post.register_custom_shader(gpu.device(), shader_id, source);
+            post.register_custom_shader(gpu.device(), shader_id, source)?;
         }
         Ok(())
     }
@@ -206,9 +188,6 @@ impl MultiverseContext {
             let _ = gpu.textures.destroy_texture(tex_handle);
         }
         self.invocations.retain(|_, inv| inv.target_id != target_id);
-        self.connectors.retain(|_, conn| {
-            conn.source_target_id != target_id && conn.destination_target_id != target_id
-        });
         self.bindings.retain(|b| b.source_target_id != target_id);
         self.dirty = true;
         Ok(())
@@ -337,63 +316,6 @@ impl MultiverseContext {
         Ok(())
     }
 
-    /// Creates a Connector transferring/compositing from a source target to a destination target.
-    pub fn create_connector(
-        &mut self,
-        connector_id: u32,
-        desc: ConnectorDesc,
-    ) -> MultiverseResult<()> {
-        validate_host_logical_id(connector_id)?;
-        if self.connectors.contains_key(&connector_id) {
-            return Err(MultiverseError::ConnectorAlreadyExists(connector_id));
-        }
-        if !self.targets.contains_key(&desc.source_target_id) {
-            return Err(MultiverseError::TargetNotFound(desc.source_target_id));
-        }
-        if !self.targets.contains_key(&desc.destination_target_id) {
-            return Err(MultiverseError::TargetNotFound(desc.destination_target_id));
-        }
-        self.connectors.insert(connector_id, desc);
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Destroys a Connector.
-    pub fn destroy_connector(&mut self, connector_id: u32) -> MultiverseResult<()> {
-        if self.connectors.remove(&connector_id).is_none() {
-            return Err(MultiverseError::ConnectorNotFound(connector_id));
-        }
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Enables or disables a Connector without removing it.
-    pub fn set_connector_enabled(
-        &mut self,
-        connector_id: u32,
-        enabled: bool,
-    ) -> MultiverseResult<()> {
-        let conn = self
-            .connectors
-            .get_mut(&connector_id)
-            .ok_or(MultiverseError::ConnectorNotFound(connector_id))?;
-        if conn.enabled != enabled {
-            conn.enabled = enabled;
-            self.dirty = true;
-        }
-        Ok(())
-    }
-
-    /// Returns a reference to a connector description if it exists.
-    pub fn get_connector(&self, connector_id: u32) -> Option<&ConnectorDesc> {
-        self.connectors.get(&connector_id)
-    }
-
-    /// Sets the active connector handler responsible for executing post-processing/composition.
-    pub fn set_connector_handler(&mut self, handler: Box<dyn ConnectorHandler>) {
-        self.connector_handler = Some(handler);
-    }
-
     /// Binds a Target's output texture to a Realm slot (e.g. portal surface material).
     pub fn bind_target_texture(&mut self, binding: TargetTextureBinding) -> MultiverseResult<()> {
         if !self.targets.contains_key(&binding.source_target_id) {
@@ -449,7 +371,6 @@ impl MultiverseContext {
             let schedule = resolve_schedule(
                 &self.targets,
                 &self.invocations,
-                &self.connectors,
                 &self.bindings,
                 &self.window_sizes,
             )?;
@@ -656,47 +577,6 @@ impl MultiverseContext {
                         post_proc.render_filter(gpu.device(), gpu.queue(), filter, &pass_desc)?;
                     }
                 }
-
-                // Execute Connectors
-                for conn_step in &block.connectors {
-                    if let (
-                        Some(dst_view),
-                        Some(dst_format),
-                        Some((_, src_view_handle, _)),
-                        Some(post_proc),
-                    ) = (
-                        &target_view,
-                        target_format,
-                        self.target_textures.get(&conn_step.source_target_id),
-                        &mut self.post_processor,
-                    ) && let Ok(src_view) = gpu.textures.get_view(*src_view_handle)
-                    {
-                        let pass_desc = FilterPassDesc {
-                            src_view: src_view.raw(),
-                            dst_view,
-                            dst_format,
-                            dst_size: target_size,
-                            viewport: None,
-                        };
-                        post_proc.render_effect(
-                            gpu.device(),
-                            gpu.queue(),
-                            &conn_step.effect,
-                            &pass_desc,
-                        )?;
-                    }
-
-                    if let Some(handler) = self.connector_handler.as_mut() {
-                        let conn_ctx = ConnectorInvocationContext {
-                            frame_id,
-                            connector_id: conn_step.connector_id,
-                            source_target_id: conn_step.source_target_id,
-                            destination_target_id: conn_step.destination_target_id,
-                            custom_shader_id: conn_step.custom_shader_id,
-                        };
-                        handler.execute(&conn_ctx)?;
-                    }
-                }
             }
 
             self.scratch_texture = scratch;
@@ -720,19 +600,6 @@ impl MultiverseContext {
                         realm
                             .render(&inv_ctx)
                             .map_err(|e| MultiverseError::RealmError(realm.id(), e.to_string()))?;
-                    }
-                }
-
-                if let Some(handler) = self.connector_handler.as_mut() {
-                    for conn_step in &block.connectors {
-                        let conn_ctx = ConnectorInvocationContext {
-                            frame_id,
-                            connector_id: conn_step.connector_id,
-                            source_target_id: conn_step.source_target_id,
-                            destination_target_id: conn_step.destination_target_id,
-                            custom_shader_id: conn_step.custom_shader_id,
-                        };
-                        handler.execute(&conn_ctx)?;
                     }
                 }
             }

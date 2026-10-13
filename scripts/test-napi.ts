@@ -56,9 +56,6 @@ interface GalfusNativeAddon {
     hasSlot: boolean
   ): void;
   multiverseUpdateWindowSize(windowId: number, width: number, height: number): void;
-  multiverseCreateConnector(connectorId: number, desc: unknown): void;
-  multiverseDestroyConnector(connectorId: number): void;
-  multiverseSetConnectorEnabled(connectorId: number, enabled: boolean): void;
   multiverseBindTargetTexture(binding: unknown): void;
   multiverseUnbindTargetTexture(realmId: number, slot: string): void;
   multiverseResolve(): { targetBlocks: Array<unknown> };
@@ -128,7 +125,7 @@ console.log('==> Testing Node-API Multiverse Realm & Shader registration...');
 galfus.multiverseRegisterColorRealm(10, 0.5, 0.5, 0.5, 1.0);
 galfus.multiverseRegisterShader(
   1001,
-  '@vertex fn vs_main(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> { return vec4<f32>(0.0); } @fragment fn fs_main() -> @location(0) vec4<f32> { return vec4<f32>(1.0); }'
+  'fn screen_effect(in: ScreenInput) -> vec4<f32> { return vec4<f32>(1.0 - in.color.rgb, in.color.a); }'
 );
 console.log('✔ ColorRealm and Shader registered via Node-API');
 
@@ -156,19 +153,11 @@ galfus.multiverseSetInvocationFilters(100, [{ custom: { shaderId: 1001 } }]);
 galfus.multiverseSetInvocationClearColor(100, 0.0, 0.0, 0.0, 1.0, true);
 console.log('✔ Invocation created and dynamically mutated via Node-API');
 
-// 8. Multiverse Connector & Target Texture Binding
-console.log('==> Testing Node-API Multiverse Connector & Bindings...');
-galfus.multiverseCreateConnector(200, {
-  sourceTargetId: 1,
-  destinationTargetId: 2,
-  effect: 'blit',
-  zIndex: 0,
-  enabled: true
-});
-galfus.multiverseSetConnectorEnabled(200, false);
+// 8. Multiverse Target Texture Binding
+console.log('==> Testing Node-API Target Texture Bindings...');
 galfus.multiverseBindTargetTexture({ sourceTargetId: 1, realmId: 10, slot: 'mat0' });
 galfus.multiverseUnbindTargetTexture(10, 'mat0');
-console.log('✔ Connector and Texture Binding verified via Node-API');
+console.log('✔ Texture Binding verified via Node-API');
 
 // 9. Multiverse Resolve & Dispatch
 console.log('==> Testing Node-API Multiverse Resolve & Dispatch...');
@@ -182,7 +171,6 @@ galfus.multiverseDispatch(1, 0.016);
 console.log('✔ Dispatched frame via Node-API');
 
 // 10. Multiverse Cleanup
-galfus.multiverseDestroyConnector(200);
 galfus.multiverseDestroyInvocation(100);
 galfus.multiverseUnregisterRealm(10);
 galfus.multiverseDestroyTarget(1);

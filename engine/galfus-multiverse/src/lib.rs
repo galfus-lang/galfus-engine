@@ -13,14 +13,15 @@ pub mod error;
 pub(crate) mod postprocess;
 pub mod resolver;
 pub mod schedule;
+pub mod screen_effect;
 pub mod types;
 
-pub use context::{ConnectorHandler, ConnectorInvocationContext, MultiverseContext};
+pub use context::MultiverseContext;
 pub use error::{MultiverseError, MultiverseResult};
-pub use schedule::{
-    MultiverseSchedule, ResolvedConnectorStep, ResolvedInvocationStep, TargetExecutionBlock,
+pub use schedule::{MultiverseSchedule, ResolvedInvocationStep, TargetExecutionBlock};
+pub use screen_effect::{
+    BUILTIN_BLIT_SNIPPET, BUILTIN_SEPIA_SNIPPET, SCREEN_EFFECT_TEMPLATE, compose_screen_effect,
 };
 pub use types::{
-    ConnectorDesc, ConnectorEffect, InvocationDesc, InvocationFilter, TargetDesc, TargetKind,
-    TargetTextureBinding, ViewportRect,
+    InvocationDesc, InvocationFilter, TargetDesc, TargetKind, TargetTextureBinding, ViewportRect,
 };

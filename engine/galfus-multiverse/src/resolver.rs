@@ -3,16 +3,13 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use glam::UVec2;
 
 use crate::error::MultiverseResult;
-use crate::schedule::{
-    MultiverseSchedule, ResolvedConnectorStep, ResolvedInvocationStep, TargetExecutionBlock,
-};
-use crate::types::{ConnectorDesc, InvocationDesc, TargetDesc, TargetKind, TargetTextureBinding};
+use crate::schedule::{MultiverseSchedule, ResolvedInvocationStep, TargetExecutionBlock};
+use crate::types::{InvocationDesc, TargetDesc, TargetKind, TargetTextureBinding};
 
 /// Resolves the dependencies between targets and builds a deterministic execution schedule.
 pub fn resolve_schedule(
     targets: &HashMap<u32, TargetDesc>,
     invocations: &HashMap<u32, InvocationDesc>,
-    connectors: &HashMap<u32, ConnectorDesc>,
     bindings: &[TargetTextureBinding],
     window_sizes: &HashMap<u32, UVec2>,
 ) -> MultiverseResult<MultiverseSchedule> {
@@ -32,7 +29,7 @@ pub fn resolve_schedule(
     }
 
     // 2. Build target dependency edges: (source_target -> dependent_target)
-    // If Realm R reads from SourceTarget, and Realm R renders to DestTarget,
+    // If Realm R reads from SourceTarget (via TargetTextureBinding), and Realm R renders to DestTarget,
     // then SourceTarget must be rendered BEFORE DestTarget.
     let mut edges: Vec<(u32, u32)> = Vec::new();
     for binding in bindings {
@@ -45,17 +42,6 @@ pub fn resolve_schedule(
                     edges.push((binding.source_target_id, *dest_target));
                 }
             }
-        }
-    }
-
-    // Connectors directly depend on their source target to render into destination target.
-    for conn in connectors.values() {
-        if conn.enabled
-            && conn.source_target_id != conn.destination_target_id
-            && targets.contains_key(&conn.source_target_id)
-            && targets.contains_key(&conn.destination_target_id)
-        {
-            edges.push((conn.source_target_id, conn.destination_target_id));
         }
     }
 
@@ -74,20 +60,6 @@ pub fn resolve_schedule(
                 .entry(inv.target_id)
                 .or_default()
                 .push((*inv_id, inv));
-        }
-    }
-
-    // Group connectors per destination target
-    let mut connectors_by_target: HashMap<u32, Vec<(u32, &ConnectorDesc)>> = HashMap::new();
-    for (conn_id, conn) in connectors {
-        if conn.enabled
-            && targets.contains_key(&conn.destination_target_id)
-            && targets.contains_key(&conn.source_target_id)
-        {
-            connectors_by_target
-                .entry(conn.destination_target_id)
-                .or_default()
-                .push((*conn_id, conn));
         }
     }
 
@@ -126,28 +98,11 @@ pub fn resolve_schedule(
             }
         }
 
-        let mut block_connectors = Vec::new();
-        if let Some(mut target_conns) = connectors_by_target.remove(&target_id) {
-            target_conns.sort_by_key(|(id, conn)| (conn.z_index, *id));
-
-            for (conn_id, conn) in target_conns {
-                block_connectors.push(ResolvedConnectorStep {
-                    connector_id: conn_id,
-                    source_target_id: conn.source_target_id,
-                    destination_target_id: conn.destination_target_id,
-                    effect: conn.effect,
-                    custom_shader_id: conn.custom_shader_id,
-                    z_index: conn.z_index,
-                });
-            }
-        }
-
-        // Include target if it has active invocations or active connectors
-        if !block_invocations.is_empty() || !block_connectors.is_empty() {
+        // Include target if it has active invocations
+        if !block_invocations.is_empty() {
             target_blocks.push(TargetExecutionBlock {
                 target_id,
                 invocations: block_invocations,
-                connectors: block_connectors,
             });
         }
     }
