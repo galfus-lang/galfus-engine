@@ -129,6 +129,8 @@ struct Material3DDesc {
     reflectance: Option<f32>,
     albedo_texture_id: Option<u32>,
     normal_texture_id: Option<u32>,
+    shader_effect: Option<String>,
+    custom_params: Option<Vec<[f32; 4]>>,
 }
 
 impl From<Material3DDesc> for Material3D {
@@ -138,6 +140,12 @@ impl From<Material3DDesc> for Material3D {
             Some("masked") => SurfaceType3D::Masked,
             _ => SurfaceType3D::Opaque,
         };
+        let mut custom_params = [Vec4::ZERO; 4];
+        if let Some(params) = d.custom_params {
+            for (idx, p) in params.into_iter().take(4).enumerate() {
+                custom_params[idx] = Vec4::new(p[0], p[1], p[2], p[3]);
+            }
+        }
         Material3D {
             surface_type,
             base_color: d
@@ -155,6 +163,8 @@ impl From<Material3DDesc> for Material3D {
             normal_texture_id: d.normal_texture_id,
             metallic_roughness_texture_id: None,
             emissive_texture_id: None,
+            shader_effect: d.shader_effect,
+            custom_params,
             label: None,
         }
     }

@@ -8,13 +8,80 @@ const INVOCATION_MAIN = 100;
 const CAMERA_ID = 1;
 const GEOM_CUBE_ID = 1;
 const GEOM_PLANE_ID = 2;
-const MAT_CUBE_ID = 1;
+
+const MAT_CUBE_FRESNEL_ID = 1;
 const MAT_PLANE_ID = 2;
-const MODEL_CUBE_ID = 1;
+const MAT_CUBE_WAVE_ID = 3;
+const MAT_CUBE_HOLO_ID = 4;
+
+const MODEL_CUBE_FRESNEL_ID = 1;
 const MODEL_PLANE_ID = 2;
+const MODEL_CUBE_WAVE_ID = 3;
+const MODEL_CUBE_HOLO_ID = 4;
+
 const LIGHT_DIR_ID = 1;
 const LIGHT_POINT_ID = 2;
 const LIGHT_SPOT_ID = 3;
+
+/** Surface Effect 1: Fresnel Rim Glow with pulse */
+const FRESNEL_SURFACE_SNIPPET = `
+fn surface_effect(in: SurfaceInput) -> SurfaceOutput {
+    var out: SurfaceOutput;
+    out.albedo = in.albedo;
+    out.roughness = in.roughness;
+    out.metallic = in.metallic;
+    out.normal = in.world_normal;
+
+    let rim_color = in.custom.v0.rgb;
+    let rim_power = in.custom.v1.x;
+    let pulse_speed = in.custom.v1.y;
+
+    let fresnel = pow(1.0 - max(dot(in.world_normal, in.view_dir), 0.0), rim_power);
+    let pulse = 0.5 + 0.5 * sin(in.time * pulse_speed);
+    out.emissive = in.emissive + rim_color * fresnel * pulse;
+    return out;
+}
+`;
+
+/** Surface Effect 2: Dynamic World-Position Wave */
+const WORLD_WAVE_SURFACE_SNIPPET = `
+fn surface_effect(in: SurfaceInput) -> SurfaceOutput {
+    var out: SurfaceOutput;
+    out.roughness = in.roughness;
+    out.metallic = in.metallic;
+    out.normal = in.world_normal;
+
+    let wave_speed = in.custom.v1.x;
+    let wave_freq = in.custom.v1.y;
+    let wave = 0.5 + 0.5 * sin(in.world_pos.y * wave_freq + in.time * wave_speed);
+
+    let color_a = in.custom.v0.rgb;
+    let color_b = in.custom.v2.rgb;
+    out.albedo = vec4<f32>(mix(color_a, color_b, wave), in.albedo.a);
+    out.emissive = mix(vec3<f32>(0.02), color_b * 0.4, wave);
+    return out;
+}
+`;
+
+/** Surface Effect 3: Hologram Scanlines & Alpha */
+const HOLOGRAM_SURFACE_SNIPPET = `
+fn surface_effect(in: SurfaceInput) -> SurfaceOutput {
+    var out: SurfaceOutput;
+    out.roughness = 0.15;
+    out.metallic = 0.85;
+    out.normal = in.world_normal;
+
+    let scanline_freq = in.custom.v1.x;
+    let scanline_speed = in.custom.v1.y;
+    let scan = 0.5 + 0.5 * sin(in.uv.y * scanline_freq + in.time * scanline_speed);
+
+    let holo_color = in.custom.v0.rgb;
+    let alpha = clamp(0.35 + 0.65 * scan, 0.2, 1.0);
+    out.albedo = vec4<f32>(holo_color * 0.7, alpha);
+    out.emissive = holo_color * (0.35 + 0.65 * scan);
+    return out;
+}
+`;
 
 function extractKey(input: { physicalKey: string; logicalKey: any }): string {
   if (typeof input.logicalKey === 'object' && input.logicalKey !== null) {
@@ -152,9 +219,9 @@ export async function runDemo2(): Promise<void> {
   console.log('✔ Realm3D registered');
 
   console.log('==> Setting up 3D Camera (#1) with Reverse-Z projection...');
-  let camDistance = 5.5;
+  let camDistance = 7.0;
   let camAngle = 0.6;
-  const camHeight = 2.8;
+  const camHeight = 3.2;
 
   const camPos: [number, number, number] = [
     Math.sin(camAngle) * camDistance,
@@ -194,16 +261,27 @@ export async function runDemo2(): Promise<void> {
   });
   console.log('✔ Geometries created');
 
-  console.log('==> Creating Materials (PBR Amber Cube #1, Slate Floor #2)...');
-  galfus.realm3dCreateMaterial(REALM_3D, MAT_CUBE_ID, {
+  console.log(
+    '==> Creating Materials with Surface Shader Effects (Fresnel #1, Slate #2, Wave #3, Hologram #4)...'
+  );
+  // Material 1: Fresnel Rim Glow Pulse
+  galfus.realm3dCreateMaterial(REALM_3D, MAT_CUBE_FRESNEL_ID, {
     surfaceType: 'opaque',
-    baseColor: [1.0, 0.55, 0.1, 1.0], // Vibrant Orange/Amber
-    emissiveColor: [0.05, 0.02, 0.0, 1.0],
-    metallic: 0.25,
-    roughness: 0.35,
-    reflectance: 0.6
+    baseColor: [1.0, 0.45, 0.1, 1.0], // Vibrant Amber
+    emissiveColor: [0.04, 0.02, 0.0, 1.0],
+    metallic: 0.3,
+    roughness: 0.25,
+    reflectance: 0.6,
+    shaderEffect: FRESNEL_SURFACE_SNIPPET,
+    customParams: [
+      [0.0, 0.9, 1.0, 1.0], // v0: Electric Cyan Rim Glow
+      [3.0, 4.0, 0.0, 0.0], // v1: x = rim_power (3.0), y = pulse_speed (4.0)
+      [0, 0, 0, 0],
+      [0, 0, 0, 0]
+    ]
   });
 
+  // Material 2: Slate Grey Floor (Standard Passthrough Surface)
   galfus.realm3dCreateMaterial(REALM_3D, MAT_PLANE_ID, {
     surfaceType: 'opaque',
     baseColor: [0.18, 0.22, 0.28, 1.0], // Slate Grey
@@ -212,19 +290,54 @@ export async function runDemo2(): Promise<void> {
     roughness: 0.85,
     reflectance: 0.3
   });
-  console.log('✔ Materials created');
 
-  console.log('==> Instantiating Models (Cube #1, Floor #2)...');
+  // Material 3: World-Position Wave Gradient
+  galfus.realm3dCreateMaterial(REALM_3D, MAT_CUBE_WAVE_ID, {
+    surfaceType: 'opaque',
+    baseColor: [0.1, 0.85, 0.4, 1.0],
+    emissiveColor: [0.0, 0.0, 0.0, 1.0],
+    metallic: 0.2,
+    roughness: 0.3,
+    reflectance: 0.5,
+    shaderEffect: WORLD_WAVE_SURFACE_SNIPPET,
+    customParams: [
+      [0.1, 0.85, 0.4, 1.0], // v0: Emerald Green
+      [3.5, 4.0, 0.0, 0.0], // v1: x = wave_speed (3.5), y = wave_frequency (4.0)
+      [0.9, 0.15, 0.6, 1.0], // v2: Hot Magenta
+      [0, 0, 0, 0]
+    ]
+  });
+
+  // Material 4: Cyber Hologram Scanlines with Alpha Blending
+  galfus.realm3dCreateMaterial(REALM_3D, MAT_CUBE_HOLO_ID, {
+    surfaceType: 'transparent',
+    baseColor: [0.2, 0.6, 1.0, 0.8],
+    emissiveColor: [0.1, 0.3, 0.8, 1.0],
+    metallic: 0.8,
+    roughness: 0.15,
+    reflectance: 0.7,
+    shaderEffect: HOLOGRAM_SURFACE_SNIPPET,
+    customParams: [
+      [0.2, 0.7, 1.0, 1.0], // v0: Neon Cyber Blue
+      [22.0, 7.0, 0.0, 0.0], // v1: x = scanline_freq (22.0), y = scan_speed (7.0)
+      [0, 0, 0, 0],
+      [0, 0, 0, 0]
+    ]
+  });
+  console.log('✔ Materials created (with custom surface effects)');
+
+  console.log('==> Instantiating Models (3 Custom Shader Cubes + Floor)...');
+  // Center Cube: Fresnel Rim Glow
   galfus.realm3dCreateModel(
     REALM_3D,
-    MODEL_CUBE_ID,
+    MODEL_CUBE_FRESNEL_ID,
     {
       geometryId: GEOM_CUBE_ID,
-      materialId: MAT_CUBE_ID,
+      materialId: MAT_CUBE_FRESNEL_ID,
       castShadow: true,
       receiveShadow: true,
       castOutline: true,
-      outlineColor: [0.0, 1.0, 0.85, 1.0],
+      outlineColor: [0.0, 1.0, 0.85, 1.0], // Cyan outline
       active: true
     },
     {
@@ -234,6 +347,47 @@ export async function runDemo2(): Promise<void> {
     }
   );
 
+  // Left Cube: World-Position Gradient Wave
+  galfus.realm3dCreateModel(
+    REALM_3D,
+    MODEL_CUBE_WAVE_ID,
+    {
+      geometryId: GEOM_CUBE_ID,
+      materialId: MAT_CUBE_WAVE_ID,
+      castShadow: true,
+      receiveShadow: true,
+      castOutline: true,
+      outlineColor: [0.2, 1.0, 0.4, 1.0], // Emerald outline
+      active: true
+    },
+    {
+      position: [-2.8, 1.0, 0.0],
+      rotation: [0, 0, 0, 1],
+      scale: [1, 1, 1]
+    }
+  );
+
+  // Right Cube: Cyberpunk Hologram Scanlines
+  galfus.realm3dCreateModel(
+    REALM_3D,
+    MODEL_CUBE_HOLO_ID,
+    {
+      geometryId: GEOM_CUBE_ID,
+      materialId: MAT_CUBE_HOLO_ID,
+      castShadow: true,
+      receiveShadow: true,
+      castOutline: true,
+      outlineColor: [0.3, 0.6, 1.0, 1.0], // Cyber blue outline
+      active: true
+    },
+    {
+      position: [2.8, 1.0, 0.0],
+      rotation: [0, 0, 0, 1],
+      scale: [1, 1, 1]
+    }
+  );
+
+  // Floor Plane
   galfus.realm3dCreateModel(
     REALM_3D,
     MODEL_PLANE_ID,
@@ -250,7 +404,7 @@ export async function runDemo2(): Promise<void> {
       scale: [1, 1, 1]
     }
   );
-  console.log('✔ Models instantiated');
+  console.log('✔ Models instantiated (3 surface effect cubes + floor)');
 
   console.log('==> Setting up Lights (Directional Sun #1, Point Light #2, Spot Light #3)...');
   galfus.realm3dCreateLight(
@@ -278,8 +432,8 @@ export async function runDemo2(): Promise<void> {
       color: [0.3, 0.8, 1.0], // Ice Blue Spotlight
       intensity: 4.5,
       range: 30.0,
-      innerAngle: 0.35, // ~20 degrees
-      outerAngle: 0.65, // ~37 degrees
+      spotInnerAngleRad: 0.35, // ~20 degrees
+      spotOuterAngleRad: 0.65, // ~37 degrees
       castShadow: true
     },
     {
@@ -496,14 +650,32 @@ export async function runDemo2(): Promise<void> {
 
     if (!running) break;
 
-    // 2. Animate Cube Transform
+    // 2. Animate Cube Transforms
     if (rotating) {
       cubeRotY += dt * 1.5;
       cubeRotX += dt * 0.8;
-      const cubeQuat = eulerToQuat(cubeRotX, cubeRotY, 0.0);
-      galfus.realm3dSetModelTransform(REALM_3D, MODEL_CUBE_ID, {
+
+      // Center Cube: Fresnel Rim Glow (Amber / Cyan)
+      const qFresnel = eulerToQuat(cubeRotX, cubeRotY, 0.0);
+      galfus.realm3dSetModelTransform(REALM_3D, MODEL_CUBE_FRESNEL_ID, {
         position: [0.0, 1.1 + Math.sin(totalTime * 2.0) * 0.15, 0.0],
-        rotation: cubeQuat,
+        rotation: qFresnel,
+        scale: [1, 1, 1]
+      });
+
+      // Left Cube: World-Position Wave (Emerald / Magenta)
+      const qWave = eulerToQuat(cubeRotX * 0.7, -cubeRotY * 1.2, dt * 0.5);
+      galfus.realm3dSetModelTransform(REALM_3D, MODEL_CUBE_WAVE_ID, {
+        position: [-2.8, 1.1 + Math.sin(totalTime * 2.0 + 1.2) * 0.15, 0.0],
+        rotation: qWave,
+        scale: [1, 1, 1]
+      });
+
+      // Right Cube: Hologram Scanlines (Cyber Blue Alpha)
+      const qHolo = eulerToQuat(-cubeRotX * 1.1, cubeRotY * 0.9, 0.0);
+      galfus.realm3dSetModelTransform(REALM_3D, MODEL_CUBE_HOLO_ID, {
+        position: [2.8, 1.1 + Math.sin(totalTime * 2.0 + 2.4) * 0.15, 0.0],
+        rotation: qHolo,
         scale: [1, 1, 1]
       });
     }

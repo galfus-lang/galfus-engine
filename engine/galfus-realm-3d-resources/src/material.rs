@@ -41,6 +41,15 @@ pub struct Material3D {
     pub metallic_roughness_texture_id: Option<u32>,
     /// Optional logical texture ID for emissive glow map.
     pub emissive_texture_id: Option<u32>,
+    /// Optional custom WGSL snippet implementing `fn surface_effect(in: SurfaceInput) -> SurfaceOutput`.
+    pub shader_effect: Option<String>,
+    /// Custom parameter vectors `[v0, v1, v2, v3]` passed to `in.custom.v0..v3`.
+    #[serde(default = "default_custom_params")]
+    pub custom_params: [Vec4; 4],
+}
+
+fn default_custom_params() -> [Vec4; 4] {
+    [Vec4::ZERO; 4]
 }
 
 impl Default for Material3D {
@@ -57,6 +66,8 @@ impl Default for Material3D {
             normal_texture_id: None,
             metallic_roughness_texture_id: None,
             emissive_texture_id: None,
+            shader_effect: None,
+            custom_params: [Vec4::ZERO; 4],
         }
     }
 }
@@ -90,17 +101,24 @@ impl Material3D {
         if self.emissive_texture_id.is_some() {
             flags |= 1 << 7;
         }
+        if self.shader_effect.is_some() {
+            flags |= 1 << 8;
+        }
 
         Material3DUniform {
             base_color: self.base_color,
             emissive_color: self.emissive_color,
             pbr_params: Vec4::new(self.roughness, self.metallic, self.reflectance, 0.5),
             flags: UVec4::new(flags, 0, 0, 0),
+            custom_v0: self.custom_params[0],
+            custom_v1: self.custom_params[1],
+            custom_v2: self.custom_params[2],
+            custom_v3: self.custom_params[3],
         }
     }
 }
 
-/// GPU layout of Material3D aligned to 16-byte boundaries.
+/// GPU layout of Material3D aligned to 16-byte boundaries (128 bytes total).
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
 pub struct Material3DUniform {
@@ -112,6 +130,11 @@ pub struct Material3DUniform {
     pub pbr_params: Vec4,
     /// Flags for surface type and active texture slots.
     pub flags: UVec4,
+    /// Custom parameter vectors v0, v1, v2, v3 (64 bytes).
+    pub custom_v0: Vec4,
+    pub custom_v1: Vec4,
+    pub custom_v2: Vec4,
+    pub custom_v3: Vec4,
 }
 
 #[cfg(test)]

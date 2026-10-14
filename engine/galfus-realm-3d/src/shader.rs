@@ -39,6 +39,10 @@ struct MaterialUniform {
     emissive_color: vec4<f32>,
     pbr_params: vec4<f32>,
     flags: vec4<u32>,
+    custom_v0: vec4<f32>,
+    custom_v1: vec4<f32>,
+    custom_v2: vec4<f32>,
+    custom_v3: vec4<f32>,
 };
 
 struct ModelUniform {
@@ -83,16 +87,66 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 
+struct CustomParams {
+    v0: vec4<f32>,
+    v1: vec4<f32>,
+    v2: vec4<f32>,
+    v3: vec4<f32>,
+};
+
+struct SurfaceInput {
+    world_pos: vec3<f32>,
+    world_normal: vec3<f32>,
+    view_dir: vec3<f32>,
+    uv: vec2<f32>,
+    albedo: vec4<f32>,
+    emissive: vec3<f32>,
+    roughness: f32,
+    metallic: f32,
+    reflectance: f32,
+    time: f32,
+    custom: CustomParams,
+};
+
+struct SurfaceOutput {
+    albedo: vec4<f32>,
+    emissive: vec3<f32>,
+    roughness: f32,
+    metallic: f32,
+    normal: vec3<f32>,
+};
+
+// --- Surface Effect Hook Snippet ---
+{{EFFECT_SNIPPET}}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let N = normalize(in.world_normal);
-    let V = normalize(camera.position.xyz - in.world_pos);
+    var s_in: SurfaceInput;
+    s_in.world_pos = in.world_pos;
+    s_in.world_normal = normalize(in.world_normal);
+    s_in.view_dir = normalize(camera.position.xyz - in.world_pos);
+    s_in.uv = in.uv;
+    s_in.albedo = material.base_color;
+    s_in.emissive = material.emissive_color.rgb;
+    s_in.roughness = clamp(material.pbr_params.x, 0.04, 1.0);
+    s_in.metallic = clamp(material.pbr_params.y, 0.0, 1.0);
+    s_in.reflectance = material.pbr_params.z;
+    s_in.time = env.misc_params.z;
+    s_in.custom.v0 = material.custom_v0;
+    s_in.custom.v1 = material.custom_v1;
+    s_in.custom.v2 = material.custom_v2;
+    s_in.custom.v3 = material.custom_v3;
 
-    let albedo = material.base_color;
+    let s_out = surface_effect(s_in);
+
+    let N = normalize(s_out.normal);
+    let V = s_in.view_dir;
+
+    let albedo = s_out.albedo;
     var direct_light = vec3<f32>(0.0);
 
-    let roughness = clamp(material.pbr_params.x, 0.04, 1.0);
-    let metallic = clamp(material.pbr_params.y, 0.0, 1.0);
+    let roughness = clamp(s_out.roughness, 0.04, 1.0);
+    let metallic = clamp(s_out.metallic, 0.0, 1.0);
     let shininess = (2.0 / (roughness * roughness)) - 2.0;
 
     let light_count = lights_header.count;
@@ -164,7 +218,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     let ambient = albedo.rgb * env.ambient_color.rgb * env.ambient_color.a;
-    var final_color = ambient + direct_light + material.emissive_color.rgb;
+    var final_color = ambient + direct_light + s_out.emissive;
 
     // Fog blending
     let fog_mode = u32(round(env.fog_params.w));
@@ -187,3 +241,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(final_color, albedo.a);
 }
 "#;
+
+pub const REALM_3D_SHADER_TEMPLATE: &str = REALM_3D_SHADER;
+
+/// Returns the default compiled WGSL shader with passthrough surface effect.
+pub fn get_default_realm_3d_shader() -> String {
+    REALM_3D_SHADER.replace(
+        galfus_core::shader_effects::EFFECT_SNIPPET_PLACEHOLDER,
+        crate::surface_effect::BUILTIN_SURFACE_PASSTHROUGH,
+    )
+}

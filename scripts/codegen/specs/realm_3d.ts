@@ -60,7 +60,12 @@ export const realm3dDescriptors: DescSpec[] = [
       metallic: { type: 'number', optional: true },
       reflectance: { type: 'number', optional: true },
       albedoTextureId: { type: 'number', optional: true },
-      normalTextureId: { type: 'number', optional: true }
+      normalTextureId: { type: 'number', optional: true },
+      shaderEffect: { type: 'string', optional: true },
+      customParams: {
+        type: { array: { tuple: ['number', 'number', 'number', 'number'] } },
+        optional: true
+      }
     }
   },
   {

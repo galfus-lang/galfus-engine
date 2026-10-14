@@ -36,6 +36,7 @@ export type FieldType =
   | 'number'
   | 'boolean'
   | { ref: string }
+  | { enum: string[] }
   | { array: FieldType }
   | { tuple: FieldType[] }
   | { literal: string | number }

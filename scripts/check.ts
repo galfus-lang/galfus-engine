@@ -5,6 +5,10 @@ type Command = {
 
 const COMMANDS: Command[] = [
   {
+    label: 'bun --check',
+    args: ['bun', '--check']
+  },
+  {
     label: 'cargo check',
     args: ['cargo', 'check', '--workspace', '--all-targets']
   },

@@ -27,7 +27,7 @@ Shader Effects are specialized by domain across the engine's modular crates:
 | Domain              | Crate                         | Hook Function Signature                                | Primary Use Case                                                   |
 | :------------------ | :---------------------------- | :----------------------------------------------------- | :----------------------------------------------------------------- |
 | **Screen Effects**  | `galfus-multiverse`           | `fn screen_effect(in: ScreenInput) -> vec4<f32>`       | Post-processing, color grading, stylized filters, transitions      |
-| **Surface Effects** | `galfus-realm-3d` _(planned)_ | `fn surface_effect(in: SurfaceInput) -> SurfaceOutput` | PBR material customization, roughness, metallic, emissive, normals |
+| **Surface Effects** | `galfus-realm-3d`             | `fn surface_effect(in: SurfaceInput) -> SurfaceOutput` | PBR material customization, roughness, metallic, emissive, normals |
 | **Sprite Effects**  | `galfus-realm-2d` _(planned)_ | `fn sprite_effect(in: SpriteInput) -> vec4<f32>`       | 2D custom shaders, dissolve, glow, distortion                      |
 
 ---
@@ -48,9 +48,9 @@ Host Shader Snippet (WGSL)
   - Calculates deterministic 64-bit ContentId
            │
            ▼
-[galfus-multiverse / Realm PostProcessor]
+[galfus-multiverse / Realm PostProcessor / Realm3D Pipeline Cache]
   - Compiles composed WGSL into wgpu::ShaderModule
-  - Caches wgpu::RenderPipeline indexed by (shader_id / content_id, texture_format)
+  - Caches wgpu::RenderPipeline indexed by ContentId / format
 ```
 
 ---
@@ -58,3 +58,4 @@ Host Shader Snippet (WGSL)
 ## 4. Documentation Index
 
 - [Screen Effects Guide & Tutorial](./screen-effects.md): Complete guide to authoring, registering, and activating screen post-processing filters on Realm Invocations.
+- [Surface Effects Guide & Tutorial](./surface-effects.md): Complete guide to authoring custom PBR surface shaders, dynamic custom uniform vectors, and pipeline caching in 3D materials.

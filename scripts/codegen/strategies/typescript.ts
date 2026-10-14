@@ -8,6 +8,9 @@ function renderTsType(type: FieldType): string {
   if ('ref' in type) {
     return type.ref;
   }
+  if ('enum' in type) {
+    return type.enum.map((v) => JSON.stringify(v)).join(' | ');
+  }
   if ('literal' in type) {
     return JSON.stringify(type.literal);
   }

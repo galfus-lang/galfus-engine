@@ -2,18 +2,98 @@
 
 use galfus_realm_3d_resources::geometry::Vertex3D;
 
+use std::collections::HashMap;
+
 pub struct Pipeline3D {
     pub render_pipeline: wgpu::RenderPipeline,
+    pub pipeline_layout: wgpu::PipelineLayout,
     pub scene_layout: wgpu::BindGroupLayout,
     pub material_layout: wgpu::BindGroupLayout,
     pub model_layout: wgpu::BindGroupLayout,
+    pub target_format: wgpu::TextureFormat,
+    custom_pipelines: HashMap<u64, wgpu::RenderPipeline>,
+}
+
+fn create_3d_render_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    shader: &wgpu::ShaderModule,
+    target_format: wgpu::TextureFormat,
+) -> wgpu::RenderPipeline {
+    let vertex_buffer_layout = wgpu::VertexBufferLayout {
+        array_stride: std::mem::size_of::<Vertex3D>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &[
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x3,
+                offset: 0,
+                shader_location: 0,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x3,
+                offset: 12,
+                shader_location: 1,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x2,
+                offset: 24,
+                shader_location: 2,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x4,
+                offset: 32,
+                shader_location: 3,
+            },
+        ],
+    };
+
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Realm3D Render Pipeline"),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("vs_main"),
+            buffers: &[vertex_buffer_layout],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: target_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: Some(wgpu::Face::Back),
+            polygon_mode: wgpu::PolygonMode::Fill,
+            unclipped_depth: false,
+            conservative: false,
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::GreaterEqual,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
 }
 
 impl Pipeline3D {
     pub fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat) -> Self {
+        let default_source = crate::shader::get_default_realm_3d_shader();
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Realm3D Shader"),
-            source: wgpu::ShaderSource::Wgsl(crate::shader::REALM_3D_SHADER.into()),
+            label: Some("Realm3D Default Shader"),
+            source: wgpu::ShaderSource::Wgsl(default_source.into()),
         });
 
         // Group 0: Scene (Camera, Environment, Lights buffer, Lights header)
@@ -117,83 +197,52 @@ impl Pipeline3D {
             immediate_size: 0,
         });
 
-        let vertex_buffer_layout = wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex3D>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                // location 0: position
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x3,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                // location 1: normal
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x3,
-                    offset: 12,
-                    shader_location: 1,
-                },
-                // location 2: uv
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x2,
-                    offset: 24,
-                    shader_location: 2,
-                },
-                // location 3: color
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 32,
-                    shader_location: 3,
-                },
-            ],
-        };
-
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Realm3D Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                buffers: &[vertex_buffer_layout],
-                compilation_options: Default::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: target_format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                // Reverse-Z: Near is 1.0, Far is 0.0, so closer fragments have Greater or Equal depth.
-                depth_compare: wgpu::CompareFunction::GreaterEqual,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
+        let render_pipeline =
+            create_3d_render_pipeline(device, &pipeline_layout, &shader, target_format);
 
         Self {
             render_pipeline,
+            pipeline_layout,
             scene_layout,
             material_layout,
             model_layout,
+            target_format,
+            custom_pipelines: HashMap::new(),
         }
+    }
+
+    /// Pre-compiles and caches a custom surface shader pipeline.
+    pub fn ensure_pipeline(&mut self, device: &wgpu::Device, snippet: Option<&str>) {
+        let Some(snippet) = snippet else { return };
+        let Ok(composed) = crate::surface_effect::compose_surface_shader(
+            crate::shader::REALM_3D_SHADER_TEMPLATE,
+            Some(snippet),
+        ) else {
+            return;
+        };
+        let hash = composed.content_id.as_u64();
+        self.custom_pipelines.entry(hash).or_insert_with(|| {
+            let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Realm3D Custom Surface Shader"),
+                source: wgpu::ShaderSource::Wgsl(composed.source.into()),
+            });
+            create_3d_render_pipeline(device, &self.pipeline_layout, &shader, self.target_format)
+        });
+    }
+
+    /// Retrieves an existing custom surface pipeline or falls back to the default pipeline.
+    pub fn get_pipeline(&self, snippet: Option<&str>) -> &wgpu::RenderPipeline {
+        let Some(snippet) = snippet else {
+            return &self.render_pipeline;
+        };
+        let Ok(composed) = crate::surface_effect::compose_surface_shader(
+            crate::shader::REALM_3D_SHADER_TEMPLATE,
+            Some(snippet),
+        ) else {
+            return &self.render_pipeline;
+        };
+        self.custom_pipelines
+            .get(&composed.content_id.as_u64())
+            .unwrap_or(&self.render_pipeline)
     }
 }
