@@ -8,6 +8,9 @@
     "codegen": "bun scripts/codegen.ts",
     "test:ffi": "bun scripts/test-ffi.ts",
     "test:napi": "cargo build -p galfus-native --features napi && bun scripts/test-napi.ts",
+    "demo": "bun scripts/demos/main.ts",
+    "demo:0": "bun scripts/demos/main.ts 0",
+    "demo:1": "bun scripts/demos/main.ts 1",
     "typecheck": "bun --check"
   },
   "devDependencies": {

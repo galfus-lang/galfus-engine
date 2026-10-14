@@ -3,7 +3,11 @@ use serde::{Deserialize, Serialize};
 
 /// Type of render destination.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "type"
+)]
 pub enum TargetKind {
     /// Presentation window managed by the platform.
     Window { window_id: u32 },
@@ -32,12 +36,11 @@ pub struct TargetDesc {
 
 /// Nature of post-processing filters applied to an invocation output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum InvocationFilter {
     /// Sepia color grading post-processing filter.
     Sepia,
     /// Custom post-processing shader module ID.
-    #[serde(rename_all = "camelCase")]
     Custom { shader_id: u32 },
 }
 
@@ -240,5 +243,16 @@ mod tests {
         assert_eq!(right_vp.x, 453);
         assert_eq!(right_vp.z, 452);
         assert_eq!(left_vp.z + right_vp.z, odd_size.x);
+    }
+
+    #[test]
+    fn test_target_desc_serde_camel_case() {
+        let json_window = r#"{"kind":{"type":"window","windowId":1}}"#;
+        let desc: TargetDesc = serde_json::from_str(json_window).unwrap();
+        assert_eq!(desc.kind, TargetKind::Window { window_id: 1 });
+
+        let json_filter = r#"{"custom":{"shaderId":500}}"#;
+        let filter: InvocationFilter = serde_json::from_str(json_filter).unwrap();
+        assert_eq!(filter, InvocationFilter::Custom { shader_id: 500 });
     }
 }

@@ -353,7 +353,7 @@ impl PlatformContext {
         };
 
         if let Some(mut el) = self.event_loop.take() {
-            let _status = el.pump_app_events(None, &mut collector);
+            let _status = el.pump_app_events(Some(std::time::Duration::ZERO), &mut collector);
             self.event_loop = Some(el);
         }
 

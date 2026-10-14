@@ -6,12 +6,18 @@ export const multiverseDescriptors: DescSpec[] = [
     name: 'TargetKind',
     doc: 'Target type: window surface swapchain or offscreen GPU texture.',
     variants: [
-      { inline: { type: { type: { literal: 'window' } } } },
+      {
+        inline: {
+          type: { type: { literal: 'window' } },
+          windowId: { type: 'number' }
+        }
+      },
       {
         inline: {
           type: { type: { literal: 'texture' } },
           width: { type: 'number' },
-          height: { type: 'number' }
+          height: { type: 'number' },
+          format: { type: 'string', optional: true }
         }
       }
     ]
@@ -21,7 +27,8 @@ export const multiverseDescriptors: DescSpec[] = [
     name: 'TargetDesc',
     doc: 'Descriptor for creating a Target in the Multiverse.',
     fields: {
-      kind: { type: { ref: 'TargetKind' } }
+      kind: { type: { ref: 'TargetKind' } },
+      size: { type: { tuple: ['number', 'number'] }, optional: true }
     }
   },
   {
