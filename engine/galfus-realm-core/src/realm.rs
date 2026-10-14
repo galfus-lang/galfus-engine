@@ -6,7 +6,7 @@ use crate::types::{RealmInvocationContext, RealmKind, RealmPrepareContext};
 /// A Realm represents a scene or domain-specific graphics producer (e.g. 2D HUD, 3D World).
 /// The Multiverse interacts with Realms strictly through this contract, without knowing
 /// their internal structure or shader details.
-pub trait Realm: Send + Sync {
+pub trait Realm: Send + Sync + 'static {
     /// Returns the logical identifier of the realm.
     fn id(&self) -> u32;
 
@@ -14,8 +14,14 @@ pub trait Realm: Send + Sync {
     fn kind(&self) -> RealmKind;
 
     /// Prepares the realm state once per frame (e.g. animation updates, culling preparation).
-    fn prepare(&mut self, context: &RealmPrepareContext) -> RealmResult<()>;
+    fn prepare(&mut self, context: &RealmPrepareContext<'_>) -> RealmResult<()>;
 
     /// Executes rendering for a specific invocation (e.g. portal camera pass, main camera view).
-    fn render(&mut self, context: &RealmInvocationContext) -> RealmResult<()>;
+    fn render(&mut self, context: &RealmInvocationContext<'_>) -> RealmResult<()>;
+
+    /// Returns a reference for downcasting to a concrete Realm type.
+    fn as_any(&self) -> &dyn std::any::Any;
+
+    /// Returns a mutable reference for downcasting to a concrete Realm type.
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
 }

@@ -14,17 +14,19 @@ pub enum RealmKind {
 }
 
 /// Context provided to a realm during the preparation phase of a frame.
-#[derive(Debug, Clone)]
-pub struct RealmPrepareContext {
+pub struct RealmPrepareContext<'a> {
     /// Monotonically increasing frame counter.
     pub frame_id: u64,
     /// Delta time since the last frame in seconds.
     pub delta_time: f32,
+    /// Active GPU device.
+    pub device: &'a wgpu::Device,
+    /// Active GPU command queue.
+    pub queue: &'a wgpu::Queue,
 }
 
 /// Context passed to a realm when rendering a specific invocation.
-#[derive(Debug, Clone)]
-pub struct RealmInvocationContext {
+pub struct RealmInvocationContext<'a> {
     /// Monotonically increasing frame counter.
     pub frame_id: u64,
     /// Identifier of the invocation.
@@ -35,4 +37,12 @@ pub struct RealmInvocationContext {
     pub camera_slot: Option<u32>,
     /// Resolved pixel viewport rectangle: `[x, y, width, height]`.
     pub viewport: UVec4,
+    /// Active GPU device.
+    pub device: &'a wgpu::Device,
+    /// Active GPU command queue.
+    pub queue: &'a wgpu::Queue,
+    /// Render target texture view to draw into.
+    pub target_view: &'a wgpu::TextureView,
+    /// Texture format of the render target.
+    pub target_format: wgpu::TextureFormat,
 }

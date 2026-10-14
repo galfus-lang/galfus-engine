@@ -2,11 +2,13 @@ import type { DescSpec, FunctionSpec } from './types';
 import { platformFunctions, platformDescriptors } from './platform';
 import { multiverseFunctions, multiverseDescriptors } from './multiverse';
 import { resourceFunctions, resourceDescriptors } from './resources';
+import { realm3dFunctions, realm3dDescriptors } from './realm_3d';
 
 export * from './types';
 export { platformFunctions, platformDescriptors } from './platform';
 export { multiverseFunctions, multiverseDescriptors } from './multiverse';
 export { resourceFunctions, resourceDescriptors } from './resources';
+export { realm3dFunctions, realm3dDescriptors } from './realm_3d';
 
 /**
  * Complete list of all native functions exposed by the Galfus Engine ABI.
@@ -14,7 +16,8 @@ export { resourceFunctions, resourceDescriptors } from './resources';
 export const API_FUNCTIONS: FunctionSpec[] = [
   ...platformFunctions,
   ...multiverseFunctions,
-  ...resourceFunctions
+  ...resourceFunctions,
+  ...realm3dFunctions
 ];
 
 /**
@@ -28,7 +31,8 @@ export const functions: FunctionSpec[] = API_FUNCTIONS;
 export const API_DESCRIPTORS: DescSpec[] = [
   ...platformDescriptors,
   ...multiverseDescriptors,
-  ...resourceDescriptors
+  ...resourceDescriptors,
+  ...realm3dDescriptors
 ];
 
 /**

@@ -55,14 +55,22 @@ impl Realm for ColorRealm {
         RealmKind::Custom
     }
 
-    fn prepare(&mut self, _context: &RealmPrepareContext) -> RealmResult<()> {
+    fn prepare(&mut self, _context: &RealmPrepareContext<'_>) -> RealmResult<()> {
         Ok(())
     }
 
-    fn render(&mut self, context: &RealmInvocationContext) -> RealmResult<()> {
+    fn render(&mut self, context: &RealmInvocationContext<'_>) -> RealmResult<()> {
         self.render_count = self.render_count.saturating_add(1);
         self.last_viewport = Some(context.viewport);
         Ok(())
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 
@@ -82,11 +90,45 @@ mod tests {
         realm.set_color([0.5, 0.6, 0.7, 1.0]);
         assert_eq!(realm.color(), [0.5, 0.6, 0.7, 1.0]);
 
+        let instance = wgpu::Instance::default();
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::LowPower,
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        }));
+
+        let Ok(adapter) = adapter else {
+            return;
+        };
+        let Ok((device, queue)) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+        else {
+            return;
+        };
+
         let prep = RealmPrepareContext {
             frame_id: 1,
             delta_time: 0.016,
+            device: &device,
+            queue: &queue,
         };
         assert!(realm.prepare(&prep).is_ok());
+
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Test Texture"),
+            size: wgpu::Extent3d {
+                width: 100,
+                height: 100,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let target_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let inv = RealmInvocationContext {
             frame_id: 1,
@@ -94,6 +136,10 @@ mod tests {
             target_id: 100,
             camera_slot: None,
             viewport: UVec4::new(0, 0, 800, 600),
+            device: &device,
+            queue: &queue,
+            target_view: &target_view,
+            target_format: wgpu::TextureFormat::Rgba8Unorm,
         };
         assert!(realm.render(&inv).is_ok());
         assert_eq!(realm.render_count(), 1);

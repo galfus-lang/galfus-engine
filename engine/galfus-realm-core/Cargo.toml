@@ -9,3 +9,7 @@ galfus-core.workspace = true
 glam.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+wgpu.workspace = true
+
+[dev-dependencies]
+pollster.workspace = true

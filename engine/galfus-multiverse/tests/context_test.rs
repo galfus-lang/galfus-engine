@@ -29,14 +29,22 @@ impl Realm for MockRealm {
         self.kind
     }
 
-    fn prepare(&mut self, _ctx: &RealmPrepareContext) -> RealmResult<()> {
+    fn prepare(&mut self, _ctx: &RealmPrepareContext<'_>) -> RealmResult<()> {
         self.prepare_count += 1;
         Ok(())
     }
 
-    fn render(&mut self, ctx: &RealmInvocationContext) -> RealmResult<()> {
+    fn render(&mut self, ctx: &RealmInvocationContext<'_>) -> RealmResult<()> {
         self.rendered_invocations.push(ctx.invocation_id);
         Ok(())
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 

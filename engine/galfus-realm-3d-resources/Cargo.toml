@@ -6,4 +6,7 @@ license.workspace = true
 
 [dependencies]
 galfus-core.workspace = true
-galfus-realm-3d.workspace = true
+glam.workspace = true
+bytemuck.workspace = true
+serde.workspace = true
+thiserror.workspace = true

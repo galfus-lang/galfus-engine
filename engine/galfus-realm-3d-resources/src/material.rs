@@ -1,0 +1,128 @@
+use bytemuck::{Pod, Zeroable};
+use glam::{UVec4, Vec4};
+use serde::{Deserialize, Serialize};
+
+/// Rendering classification of a 3D surface material.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SurfaceType3D {
+    /// Fully solid geometry writing to depth.
+    #[default]
+    Opaque,
+    /// Alpha-blended semi-transparent surface.
+    Transparent,
+    /// Alpha-tested punch-through surface (foliage, fences).
+    Masked,
+}
+
+/// 3D material properties for PBR or standard forward shading.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Material3D {
+    /// Optional human-readable debug label.
+    pub label: Option<String>,
+    /// Alpha / depth writing behavior.
+    pub surface_type: SurfaceType3D,
+    /// Base surface RGBA albedo color tint.
+    pub base_color: Vec4,
+    /// RGB emissive glow color.
+    pub emissive_color: Vec4,
+    /// Surface micro-roughness `0.0` (smooth) to `1.0` (rough).
+    pub roughness: f32,
+    /// Metallic factor `0.0` (dielectric) to `1.0` (metal).
+    pub metallic: f32,
+    /// Specular reflectance scalar (typically `0.5` for common dielectrics).
+    pub reflectance: f32,
+    /// Optional logical texture ID for diffuse/albedo map.
+    pub albedo_texture_id: Option<u32>,
+    /// Optional logical texture ID for tangent-space normal map.
+    pub normal_texture_id: Option<u32>,
+    /// Optional logical texture ID for metallic/roughness map.
+    pub metallic_roughness_texture_id: Option<u32>,
+    /// Optional logical texture ID for emissive glow map.
+    pub emissive_texture_id: Option<u32>,
+}
+
+impl Default for Material3D {
+    fn default() -> Self {
+        Self {
+            label: None,
+            surface_type: SurfaceType3D::Opaque,
+            base_color: Vec4::ONE,
+            emissive_color: Vec4::ZERO,
+            roughness: 0.5,
+            metallic: 0.0,
+            reflectance: 0.5,
+            albedo_texture_id: None,
+            normal_texture_id: None,
+            metallic_roughness_texture_id: None,
+            emissive_texture_id: None,
+        }
+    }
+}
+
+impl Material3D {
+    /// Creates a simple solid color material.
+    pub fn solid_color(base_color: Vec4) -> Self {
+        Self {
+            base_color,
+            ..Default::default()
+        }
+    }
+
+    /// Converts material parameters into a GPU-ready uniform buffer struct.
+    pub fn build_uniform(&self) -> Material3DUniform {
+        let mut flags = match self.surface_type {
+            SurfaceType3D::Opaque => 0u32,
+            SurfaceType3D::Transparent => 1u32,
+            SurfaceType3D::Masked => 2u32,
+        };
+
+        if self.albedo_texture_id.is_some() {
+            flags |= 1 << 4;
+        }
+        if self.normal_texture_id.is_some() {
+            flags |= 1 << 5;
+        }
+        if self.metallic_roughness_texture_id.is_some() {
+            flags |= 1 << 6;
+        }
+        if self.emissive_texture_id.is_some() {
+            flags |= 1 << 7;
+        }
+
+        Material3DUniform {
+            base_color: self.base_color,
+            emissive_color: self.emissive_color,
+            pbr_params: Vec4::new(self.roughness, self.metallic, self.reflectance, 0.5),
+            flags: UVec4::new(flags, 0, 0, 0),
+        }
+    }
+}
+
+/// GPU layout of Material3D aligned to 16-byte boundaries.
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+pub struct Material3DUniform {
+    /// Linear base albedo color `[r, g, b, a]`.
+    pub base_color: Vec4,
+    /// Linear emissive emission `[r, g, b, 1.0]`.
+    pub emissive_color: Vec4,
+    /// Surface parameters: `[roughness, metallic, reflectance, alpha_cutoff]`.
+    pub pbr_params: Vec4,
+    /// Flags for surface type and active texture slots.
+    pub flags: UVec4,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_material_uniform_alignment() {
+        assert_eq!(std::mem::size_of::<Material3DUniform>() % 16, 0);
+        let u = Material3DUniform::zeroed();
+        let bytes = bytemuck::bytes_of(&u);
+        assert_eq!(bytes.len(), std::mem::size_of::<Material3DUniform>());
+    }
+}
