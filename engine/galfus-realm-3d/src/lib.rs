@@ -3,6 +3,7 @@
 //! Autonomous 3D Realm implementing the `galfus-realm-core` contract with
 //! Reverse-Z rendering, PBR-like lighting, and declarative entity management.
 
+pub mod collector;
 pub mod context;
 pub mod outline;
 pub mod pipeline;
@@ -12,6 +13,7 @@ pub mod skybox;
 pub mod surface_effect;
 pub mod types;
 
+pub use collector::DrawCollector;
 pub use context::Realm3DContext;
 pub use outline::OutlinePipeline3D;
 pub use pipeline::Pipeline3D;

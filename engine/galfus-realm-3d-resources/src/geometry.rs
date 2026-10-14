@@ -1,7 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 
-/// Standard 3D vertex layout containing position, normal, UV coordinates, and tangent.
+/// Standard 3D vertex layout containing position, normal, UV coordinates, tangent, and skinning weights.
 #[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Serialize, Deserialize)]
 #[repr(C)]
 pub struct Vertex3D {
@@ -13,19 +13,47 @@ pub struct Vertex3D {
     pub uv: [f32; 2],
     /// 4D tangent vector with sign for bitangent calculation `[x, y, z, w]`.
     pub tangent: [f32; 4],
+    /// 4 bone joint indices for skeletal skinning.
+    #[serde(default)]
+    pub joints: [u32; 4],
+    /// 4 bone influence weights summing to 1.0.
+    #[serde(default)]
+    pub weights: [f32; 4],
 }
 
 impl Vertex3D {
-    /// Helper to construct a vertex with default tangent pointing +X.
+    /// Helper to construct a static vertex with default tangent and zero skinning weights.
     pub const fn new(position: [f32; 3], normal: [f32; 3], uv: [f32; 2]) -> Self {
         Self {
             position,
             normal,
             uv,
             tangent: [1.0, 0.0, 0.0, 1.0],
+            joints: [0; 4],
+            weights: [0.0; 4],
+        }
+    }
+
+    /// Constructs a skinned vertex with explicit bone joint indices and weights.
+    pub const fn skinned(
+        position: [f32; 3],
+        normal: [f32; 3],
+        uv: [f32; 2],
+        joints: [u32; 4],
+        weights: [f32; 4],
+    ) -> Self {
+        Self {
+            position,
+            normal,
+            uv,
+            tangent: [1.0, 0.0, 0.0, 1.0],
+            joints,
+            weights,
         }
     }
 }
+
+use crate::aabb::Aabb;
 
 /// 3D Geometry asset holding vertex attributes and indexed triangle topology.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -33,6 +61,9 @@ impl Vertex3D {
 pub struct Geometry3D {
     /// Optional human-readable debug label.
     pub label: Option<String>,
+    /// Axis-aligned bounding box enclosing this geometry in local space.
+    #[serde(default)]
+    pub aabb: Aabb,
     /// Array of interleaved 3D vertices.
     pub vertices: Vec<Vertex3D>,
     /// Indexed triangle list.
@@ -42,8 +73,10 @@ pub struct Geometry3D {
 impl Geometry3D {
     /// Creates a custom geometry from raw vertex and index slices.
     pub fn new(vertices: Vec<Vertex3D>, indices: Vec<u32>, label: Option<String>) -> Self {
+        let aabb = Aabb::from_vertices(&vertices);
         Self {
             label,
+            aabb,
             vertices,
             indices,
         }
@@ -100,8 +133,10 @@ impl Geometry3D {
             ]);
         }
 
+        let aabb = Aabb::from_vertices(&vertices);
         Self {
             label: Some("Cube3D".into()),
+            aabb,
             vertices,
             indices,
         }
@@ -120,9 +155,11 @@ impl Geometry3D {
         ];
 
         let indices = vec![0, 1, 2, 0, 2, 3];
+        let aabb = Aabb::from_vertices(&vertices);
 
         Self {
             label: Some("Plane3D".into()),
+            aabb,
             vertices,
             indices,
         }
@@ -170,8 +207,10 @@ impl Geometry3D {
             }
         }
 
+        let aabb = Aabb::from_vertices(&vertices);
         Self {
             label: Some("Sphere3D".into()),
+            aabb,
             vertices,
             indices,
         }
@@ -187,6 +226,8 @@ mod tests {
         let cube = Geometry3D::cube(2.0);
         assert_eq!(cube.vertices.len(), 24);
         assert_eq!(cube.indices.len(), 36);
+        assert_eq!(cube.aabb.min, glam::Vec3::splat(-1.0));
+        assert_eq!(cube.aabb.max, glam::Vec3::splat(1.0));
     }
 
     #[test]
@@ -194,5 +235,7 @@ mod tests {
         let plane = Geometry3D::plane(10.0, 10.0);
         assert_eq!(plane.vertices.len(), 4);
         assert_eq!(plane.indices.len(), 6);
+        assert_eq!(plane.aabb.min, glam::Vec3::new(-5.0, 0.0, -5.0));
+        assert_eq!(plane.aabb.max, glam::Vec3::new(5.0, 0.0, 5.0));
     }
 }

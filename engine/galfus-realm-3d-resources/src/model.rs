@@ -22,6 +22,12 @@ pub struct Model3D {
     pub outline_color: Vec4,
     /// Whether this model instance is actively drawn.
     pub active: bool,
+    /// Offset into the shared bones storage buffer palette.
+    #[serde(default)]
+    pub bone_offset: u32,
+    /// Number of bones in this model's palette.
+    #[serde(default)]
+    pub bone_count: u32,
 }
 
 impl Default for Model3D {
@@ -34,6 +40,8 @@ impl Default for Model3D {
             cast_outline: false,
             outline_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             active: true,
+            bone_offset: 0,
+            bone_count: 0,
         }
     }
 }
@@ -66,7 +74,7 @@ impl Model3D {
             model: model_matrix,
             normal_matrix,
             outline_color: self.outline_color,
-            flags: UVec4::new(flags, 0, 0, 0),
+            flags: UVec4::new(flags, self.bone_offset, self.bone_count, 0),
         }
     }
 }

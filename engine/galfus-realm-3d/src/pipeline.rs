@@ -6,12 +6,13 @@ use std::collections::HashMap;
 
 pub struct Pipeline3D {
     pub render_pipeline: wgpu::RenderPipeline,
+    pub transparent_pipeline: wgpu::RenderPipeline,
     pub pipeline_layout: wgpu::PipelineLayout,
     pub scene_layout: wgpu::BindGroupLayout,
     pub material_layout: wgpu::BindGroupLayout,
     pub model_layout: wgpu::BindGroupLayout,
     pub target_format: wgpu::TextureFormat,
-    custom_pipelines: HashMap<u64, wgpu::RenderPipeline>,
+    custom_pipelines: HashMap<(u64, bool), wgpu::RenderPipeline>,
 }
 
 fn create_3d_render_pipeline(
@@ -19,6 +20,7 @@ fn create_3d_render_pipeline(
     layout: &wgpu::PipelineLayout,
     shader: &wgpu::ShaderModule,
     target_format: wgpu::TextureFormat,
+    depth_write_enabled: bool,
 ) -> wgpu::RenderPipeline {
     let vertex_buffer_layout = wgpu::VertexBufferLayout {
         array_stride: std::mem::size_of::<Vertex3D>() as wgpu::BufferAddress,
@@ -43,6 +45,16 @@ fn create_3d_render_pipeline(
                 format: wgpu::VertexFormat::Float32x4,
                 offset: 32,
                 shader_location: 3,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Uint32x4,
+                offset: 48,
+                shader_location: 4,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x4,
+                offset: 64,
+                shader_location: 5,
             },
         ],
     };
@@ -77,7 +89,7 @@ fn create_3d_render_pipeline(
         },
         depth_stencil: Some(wgpu::DepthStencilState {
             format: wgpu::TextureFormat::Depth32Float,
-            depth_write_enabled: true,
+            depth_write_enabled,
             depth_compare: wgpu::CompareFunction::GreaterEqual,
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState::default(),
@@ -158,6 +170,17 @@ impl Pipeline3D {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
                     count: None,
                 },
+                // Skeletal bones palette buffer
+                wgpu::BindGroupLayoutEntry {
+                    binding: 6,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
 
@@ -198,10 +221,13 @@ impl Pipeline3D {
         });
 
         let render_pipeline =
-            create_3d_render_pipeline(device, &pipeline_layout, &shader, target_format);
+            create_3d_render_pipeline(device, &pipeline_layout, &shader, target_format, true);
+        let transparent_pipeline =
+            create_3d_render_pipeline(device, &pipeline_layout, &shader, target_format, false);
 
         Self {
             render_pipeline,
+            transparent_pipeline,
             pipeline_layout,
             scene_layout,
             material_layout,
@@ -212,7 +238,12 @@ impl Pipeline3D {
     }
 
     /// Pre-compiles and caches a custom surface shader pipeline.
-    pub fn ensure_pipeline(&mut self, device: &wgpu::Device, snippet: Option<&str>) {
+    pub fn ensure_pipeline(
+        &mut self,
+        device: &wgpu::Device,
+        snippet: Option<&str>,
+        transparent: bool,
+    ) {
         let Some(snippet) = snippet else { return };
         let Ok(composed) = crate::surface_effect::compose_surface_shader(
             crate::shader::REALM_3D_SHADER_TEMPLATE,
@@ -221,28 +252,40 @@ impl Pipeline3D {
             return;
         };
         let hash = composed.content_id.as_u64();
-        self.custom_pipelines.entry(hash).or_insert_with(|| {
+        let key = (hash, transparent);
+        self.custom_pipelines.entry(key).or_insert_with(|| {
             let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("Realm3D Custom Surface Shader"),
                 source: wgpu::ShaderSource::Wgsl(composed.source.into()),
             });
-            create_3d_render_pipeline(device, &self.pipeline_layout, &shader, self.target_format)
+            create_3d_render_pipeline(
+                device,
+                &self.pipeline_layout,
+                &shader,
+                self.target_format,
+                !transparent,
+            )
         });
     }
 
     /// Retrieves an existing custom surface pipeline or falls back to the default pipeline.
-    pub fn get_pipeline(&self, snippet: Option<&str>) -> &wgpu::RenderPipeline {
+    pub fn get_pipeline(&self, snippet: Option<&str>, transparent: bool) -> &wgpu::RenderPipeline {
+        let fallback = if transparent {
+            &self.transparent_pipeline
+        } else {
+            &self.render_pipeline
+        };
         let Some(snippet) = snippet else {
-            return &self.render_pipeline;
+            return fallback;
         };
         let Ok(composed) = crate::surface_effect::compose_surface_shader(
             crate::shader::REALM_3D_SHADER_TEMPLATE,
             Some(snippet),
         ) else {
-            return &self.render_pipeline;
+            return fallback;
         };
         self.custom_pipelines
-            .get(&composed.content_id.as_u64())
-            .unwrap_or(&self.render_pipeline)
+            .get(&(composed.content_id.as_u64(), transparent))
+            .unwrap_or(fallback)
     }
 }

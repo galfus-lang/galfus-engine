@@ -25,10 +25,13 @@ struct ModelUniform {
 };
 
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
+@group(0) @binding(6) var<storage, read> bones: array<mat4x4<f32>>;
 @group(1) @binding(0) var<uniform> object: ModelUniform;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
+    @location(1) joints: vec4<u32>,
+    @location(2) weights: vec4<f32>,
 };
 
 struct VertexOutput {
@@ -36,9 +39,39 @@ struct VertexOutput {
     @location(0) color: vec4<f32>,
 };
 
+fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
+    if (index < bone_count) {
+        return bones[bone_offset + index];
+    }
+    return mat4x4<f32>(
+        vec4<f32>(1.0, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, 1.0, 0.0, 0.0),
+        vec4<f32>(0.0, 0.0, 1.0, 0.0),
+        vec4<f32>(0.0, 0.0, 0.0, 1.0)
+    );
+}
+
+fn skin_position(position: vec3<f32>, joints: vec4<u32>, weights: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
+    let m0 = bone_at(joints.x, bone_offset, bone_count);
+    let m1 = bone_at(joints.y, bone_offset, bone_count);
+    let m2 = bone_at(joints.z, bone_offset, bone_count);
+    let m3 = bone_at(joints.w, bone_offset, bone_count);
+    let skinned = (m0 * vec4<f32>(position, 1.0)) * weights.x
+                + (m1 * vec4<f32>(position, 1.0)) * weights.y
+                + (m2 * vec4<f32>(position, 1.0)) * weights.z
+                + (m3 * vec4<f32>(position, 1.0)) * weights.w;
+    return skinned.xyz;
+}
+
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
-    let world_pos = object.model * vec4<f32>(in.position, 1.0);
+    var local_pos = in.position;
+    let bone_offset = object.flags.y;
+    let bone_count = object.flags.z;
+    if (bone_count > 0u) {
+        local_pos = skin_position(in.position, in.joints, in.weights, bone_offset, bone_count);
+    }
+    let world_pos = object.model * vec4<f32>(local_pos, 1.0);
     var out: VertexOutput;
     out.clip_pos = camera.view_projection * world_pos;
     out.color = object.outline_color;
@@ -150,11 +183,23 @@ impl OutlinePipeline3D {
         let vertex_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex3D>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
-                offset: 0,
-                shader_location: 0,
-            }],
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Uint32x4,
+                    offset: 48,
+                    shader_location: 1,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 64,
+                    shader_location: 2,
+                },
+            ],
         };
 
         let silhouette_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

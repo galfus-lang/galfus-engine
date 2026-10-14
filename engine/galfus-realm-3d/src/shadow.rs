@@ -20,15 +20,48 @@ struct ModelUniform {
 };
 
 @group(0) @binding(0) var<uniform> shadow: ShadowUniform;
+@group(0) @binding(1) var<storage, read> bones: array<mat4x4<f32>>;
 @group(1) @binding(0) var<uniform> object: ModelUniform;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
+    @location(1) joints: vec4<u32>,
+    @location(2) weights: vec4<f32>,
 };
+
+fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
+    if (index < bone_count) {
+        return bones[bone_offset + index];
+    }
+    return mat4x4<f32>(
+        vec4<f32>(1.0, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, 1.0, 0.0, 0.0),
+        vec4<f32>(0.0, 0.0, 1.0, 0.0),
+        vec4<f32>(0.0, 0.0, 0.0, 1.0)
+    );
+}
+
+fn skin_position(position: vec3<f32>, joints: vec4<u32>, weights: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
+    let m0 = bone_at(joints.x, bone_offset, bone_count);
+    let m1 = bone_at(joints.y, bone_offset, bone_count);
+    let m2 = bone_at(joints.z, bone_offset, bone_count);
+    let m3 = bone_at(joints.w, bone_offset, bone_count);
+    let skinned = (m0 * vec4<f32>(position, 1.0)) * weights.x
+                + (m1 * vec4<f32>(position, 1.0)) * weights.y
+                + (m2 * vec4<f32>(position, 1.0)) * weights.z
+                + (m3 * vec4<f32>(position, 1.0)) * weights.w;
+    return skinned.xyz;
+}
 
 @vertex
 fn vs_main(in: VertexInput) -> @builtin(position) vec4<f32> {
-    let world_pos = object.model * vec4<f32>(in.position, 1.0);
+    var local_pos = in.position;
+    let bone_offset = object.flags.y;
+    let bone_count = object.flags.z;
+    if (bone_count > 0u) {
+        local_pos = skin_position(in.position, in.joints, in.weights, bone_offset, bone_count);
+    }
+    let world_pos = object.model * vec4<f32>(local_pos, 1.0);
     return shadow.view_proj * world_pos;
 }
 "#;
@@ -48,16 +81,28 @@ impl ShadowPipeline3D {
 
         let vp_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Realm3D Shadow VP Layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -69,11 +114,23 @@ impl ShadowPipeline3D {
         let vertex_buffer_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex3D>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
-                offset: 0,
-                shader_location: 0,
-            }],
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Uint32x4,
+                    offset: 48,
+                    shader_location: 1,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 64,
+                    shader_location: 2,
+                },
+            ],
         };
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -137,7 +194,11 @@ pub struct ShadowMap3D {
 impl ShadowMap3D {
     pub const DEFAULT_RESOLUTION: u32 = 2048;
 
-    pub fn new(device: &wgpu::Device, shadow_pipeline: &ShadowPipeline3D) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        shadow_pipeline: &ShadowPipeline3D,
+        bones_buf: &wgpu::Buffer,
+    ) -> Self {
         let resolution = Self::DEFAULT_RESOLUTION;
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -199,10 +260,16 @@ impl ShadowMap3D {
             let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some(&format!("Realm3D Shadow VP Bind Group {i}")),
                 layout: &shadow_pipeline.vp_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buf.as_entire_binding(),
-                }],
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: bones_buf.as_entire_binding(),
+                    },
+                ],
             });
             vp_buffers.push(buf);
             vp_bind_groups.push(bg);
@@ -219,10 +286,116 @@ impl ShadowMap3D {
         }
     }
 
+    /// Rebinds the skeletal bone storage buffer to all shadow view-projection bind groups.
+    pub fn update_bones(
+        &mut self,
+        device: &wgpu::Device,
+        shadow_pipeline: &ShadowPipeline3D,
+        bones_buf: &wgpu::Buffer,
+    ) {
+        self.vp_bind_groups = (0..MAX_SHADOW_LIGHTS)
+            .map(|i| {
+                device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some(&format!("Realm3D Shadow VP Bind Group {i}")),
+                    layout: &shadow_pipeline.vp_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: self.vp_buffers[i as usize].as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: bones_buf.as_entire_binding(),
+                        },
+                    ],
+                })
+            })
+            .collect();
+    }
+
     /// Updates the shadow view-projection uniform buffer for a specific layer.
     pub fn update_vp(&self, queue: &wgpu::Queue, layer: u32, shadow_view_proj: &Mat4) {
         if let Some(buf) = self.vp_buffers.get(layer as usize) {
             queue.write_buffer(buf, 0, bytes_of(shadow_view_proj));
         }
+    }
+}
+
+/// Executes depth passes for all shadow-casting lights applying frustum culling per light.
+pub fn render_shadow_depth_pass(
+    encoder: &mut wgpu::CommandEncoder,
+    queue: &wgpu::Queue,
+    shadow_pipe: &ShadowPipeline3D,
+    shadow_map: &ShadowMap3D,
+    lights: &std::collections::BTreeMap<
+        u32,
+        (
+            galfus_realm_3d_resources::light::Light3D,
+            galfus_realm_3d_resources::transform::Transform3D,
+        ),
+    >,
+    models: &std::collections::BTreeMap<u32, crate::types::GpuModelEntry>,
+    geometries: &std::collections::BTreeMap<
+        u32,
+        (
+            galfus_realm_3d_resources::geometry::Geometry3D,
+            Option<crate::types::GpuMeshBuffers>,
+        ),
+    >,
+) {
+    let mut layer_idx = 0u32;
+    for (light, light_trans) in lights.values() {
+        if !light.active || !light.cast_shadow || layer_idx >= MAX_SHADOW_LIGHTS {
+            continue;
+        }
+        let light_uniform = light.build_uniform_with_layer(light_trans, layer_idx);
+        shadow_map.update_vp(queue, layer_idx, &light_uniform.shadow_view_proj);
+
+        let layer_view = &shadow_map.layer_views[layer_idx as usize];
+        let vp_bg = &shadow_map.vp_bind_groups[layer_idx as usize];
+
+        let mut s_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Realm3D Shadow Pass"),
+            color_attachments: &[],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: layer_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(0.0),
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+
+        s_pass.set_pipeline(&shadow_pipe.render_pipeline);
+        s_pass.set_bind_group(0, vp_bg, &[]);
+
+        let shadow_frustum = galfus_realm_3d_resources::frustum::Frustum::from_view_projection(
+            light_uniform.shadow_view_proj,
+        );
+        for (model, model_trans, _, model_bg_opt) in models.values() {
+            if !model.active || !model.cast_shadow {
+                continue;
+            }
+            let Some(model_bg) = model_bg_opt else {
+                continue;
+            };
+            let Some((geom, Some((v, i, count)))) = geometries.get(&model.geometry_id) else {
+                continue;
+            };
+            let world_aabb = geom.aabb.transform(&model_trans.matrix());
+            if !shadow_frustum.intersects_aabb(world_aabb.min, world_aabb.max) {
+                continue;
+            }
+            s_pass.set_bind_group(1, model_bg, &[]);
+            s_pass.set_vertex_buffer(0, v.slice(..));
+            s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);
+            s_pass.draw_indexed(0..*count, 0, 0..1);
+        }
+
+        layer_idx += 1;
     }
 }

@@ -2,11 +2,12 @@
 
 use std::collections::BTreeMap;
 
-use galfus_realm_3d_resources::camera::{Camera3D, Camera3DUniform};
+use galfus_realm_3d_resources::camera::Camera3D;
 use galfus_realm_3d_resources::environment::EnvironmentRealm3D;
+use galfus_realm_3d_resources::frustum::Frustum;
 use galfus_realm_3d_resources::geometry::Geometry3D;
 use galfus_realm_3d_resources::light::{Light3D, Light3DUniform};
-use galfus_realm_3d_resources::material::Material3D;
+use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D};
 use galfus_realm_3d_resources::model::Model3D;
 use galfus_realm_3d_resources::transform::Transform3D;
 use galfus_realm_core::error::{RealmError, RealmResult};
@@ -15,6 +16,7 @@ use galfus_realm_core::types::{RealmInvocationContext, RealmKind, RealmPrepareCo
 use glam::UVec2;
 use wgpu::util::DeviceExt;
 
+use crate::collector::DrawCollector;
 use crate::pipeline::Pipeline3D;
 use crate::shadow::{ShadowMap3D, ShadowPipeline3D};
 use crate::types::{
@@ -43,6 +45,7 @@ pub struct Realm3DContext {
     outline_pipeline: Option<crate::outline::OutlinePipeline3D>,
     scene_buffers: Option<SceneGpuBuffers>,
     depth_texture: Option<(wgpu::Texture, wgpu::TextureView, UVec2)>,
+    bones: Vec<glam::Mat4>,
     total_time: f32,
     dirty: bool,
 }
@@ -65,6 +68,7 @@ impl Realm3DContext {
             outline_pipeline: None,
             scene_buffers: None,
             depth_texture: None,
+            bones: Vec::new(),
             total_time: 0.0,
             dirty: true,
         }
@@ -132,6 +136,28 @@ impl Realm3DContext {
             .get_mut(&id)
             .ok_or_else(|| not_found(realm_id, "Model", id))?;
         entry.1 = transform;
+        entry.2 = None;
+        entry.3 = None;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Sets or updates the skeletal bone matrix palette for a specific model.
+    pub fn update_model_bones(
+        &mut self,
+        model_id: u32,
+        matrices: &[glam::Mat4],
+    ) -> RealmResult<()> {
+        let realm_id = self.id;
+        let entry = self
+            .models
+            .get_mut(&model_id)
+            .ok_or_else(|| not_found(realm_id, "Model", model_id))?;
+        let bone_offset = self.bones.len() as u32;
+        let bone_count = matrices.len() as u32;
+        self.bones.extend_from_slice(matrices);
+        entry.0.bone_offset = bone_offset;
+        entry.0.bone_count = bone_count;
         entry.2 = None;
         entry.3 = None;
         self.dirty = true;
@@ -218,7 +244,11 @@ impl Realm for Realm3DContext {
                 *buf_opt = Some(buf);
                 *bg_opt = Some(bg);
             }
-            pipeline.ensure_pipeline(device, mat.shader_effect.as_deref());
+            pipeline.ensure_pipeline(
+                device,
+                mat.shader_effect.as_deref(),
+                mat.surface_type == SurfaceType3D::Transparent,
+            );
         }
 
         // 3. Sync Models
@@ -239,25 +269,31 @@ impl Realm for Realm3DContext {
         let shadow_pipe = self
             .shadow_pipeline
             .get_or_insert_with(|| ShadowPipeline3D::new(device, &pipeline.model_layout));
-        let shadow_map = self
-            .shadow_map
-            .get_or_insert_with(|| ShadowMap3D::new(device, shadow_pipe));
 
         if self.scene_buffers.is_none() || self.dirty {
-            let camera_buf = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Camera Uniform Buffer"),
-                size: std::mem::size_of::<Camera3DUniform>() as u64,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
+            let bones_data = if self.bones.is_empty() {
+                vec![glam::Mat4::IDENTITY]
+            } else {
+                self.bones.clone()
+            };
+            let bones_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Bones Storage Buffer"),
+                contents: bytemuck::cast_slice(&bones_data),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             });
+
+            let shadow_map = match self.shadow_map.as_mut() {
+                Some(sm) => {
+                    sm.update_bones(device, shadow_pipe, &bones_buf);
+                    sm
+                }
+                None => {
+                    self.shadow_map = Some(ShadowMap3D::new(device, shadow_pipe, &bones_buf));
+                    self.shadow_map.as_mut().unwrap()
+                }
+            };
 
             let env_uniform = self.environment.build_uniform(0.0);
-            let env_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Environment Uniform Buffer"),
-                contents: bytemuck::bytes_of(&env_uniform),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
-
             let mut shadow_counter = 0u32;
             let mut lights_data: Vec<Light3DUniform> = self
                 .lights
@@ -276,43 +312,15 @@ impl Realm for Realm3DContext {
                 lights_data.push(bytemuck::Zeroable::zeroed());
             }
 
-            let lights_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Lights Storage Buffer"),
-                contents: bytemuck::cast_slice(&lights_data),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            });
-
-            let header = [self.lights.len() as u32, 0, 0, 0];
-            let lights_header_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Lights Header Buffer"),
-                contents: bytemuck::cast_slice(&header),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
-
-            let b_entry = |binding, resource| wgpu::BindGroupEntry { binding, resource };
-            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Scene Bind Group"),
-                layout: &pipeline.scene_layout,
-                entries: &[
-                    b_entry(0, camera_buf.as_entire_binding()),
-                    b_entry(1, env_buf.as_entire_binding()),
-                    b_entry(2, lights_buf.as_entire_binding()),
-                    b_entry(3, lights_header_buf.as_entire_binding()),
-                    b_entry(
-                        4,
-                        wgpu::BindingResource::TextureView(&shadow_map.array_view),
-                    ),
-                    b_entry(5, wgpu::BindingResource::Sampler(&shadow_map.sampler)),
-                ],
-            });
-
-            self.scene_buffers = Some(SceneGpuBuffers {
-                camera_buf,
-                env_buf,
-                _lights_buf: lights_buf,
-                _lights_header_buf: lights_header_buf,
-                bind_group,
-            });
+            self.scene_buffers = Some(SceneGpuBuffers::build(
+                device,
+                pipeline,
+                shadow_map,
+                &env_uniform,
+                &lights_data,
+                self.lights.len() as u32,
+                bones_buf,
+            ));
             self.dirty = false;
         } else if let Some(scene) = &self.scene_buffers {
             let env_uniform = self.environment.build_uniform(0.0);
@@ -404,61 +412,26 @@ impl Realm for Realm3DContext {
             label: Some("Realm3D Render Encoder"),
         });
 
+        let cam_frustum = Frustum::from_view_projection(camera_uniform.view_projection);
+        let collector = DrawCollector::collect(
+            &self.models,
+            &self.geometries,
+            &self.materials,
+            Some(&cam_frustum),
+            camera_transform.position,
+        );
+
         // Shadow Depth Pass for each shadow-casting light (Directional & Spot, Reverse-Z)
         if let (Some(shadow_pipe), Some(shadow_map)) = (&self.shadow_pipeline, &self.shadow_map) {
-            let mut layer_idx = 0u32;
-            for (light, light_trans) in self.lights.values() {
-                if !light.active
-                    || !light.cast_shadow
-                    || layer_idx >= crate::shadow::MAX_SHADOW_LIGHTS
-                {
-                    continue;
-                }
-                let light_uniform = light.build_uniform_with_layer(light_trans, layer_idx);
-                shadow_map.update_vp(queue, layer_idx, &light_uniform.shadow_view_proj);
-
-                let layer_view = &shadow_map.layer_views[layer_idx as usize];
-                let vp_bg = &shadow_map.vp_bind_groups[layer_idx as usize];
-
-                let mut s_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Realm3D Shadow Pass"),
-                    color_attachments: &[],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: layer_view,
-                        // Reverse-Z: Clear depth buffer to 0.0 (Far plane)
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(0.0),
-                            store: wgpu::StoreOp::Store,
-                        }),
-                        stencil_ops: None,
-                    }),
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-
-                s_pass.set_pipeline(&shadow_pipe.render_pipeline);
-                s_pass.set_bind_group(0, vp_bg, &[]);
-
-                for (model, _, _, model_bg_opt) in self.models.values() {
-                    if !model.active || !model.cast_shadow {
-                        continue;
-                    }
-                    let Some(model_bg) = model_bg_opt else {
-                        continue;
-                    };
-                    let Some((_, Some((v, i, count)))) = self.geometries.get(&model.geometry_id)
-                    else {
-                        continue;
-                    };
-                    s_pass.set_bind_group(1, model_bg, &[]);
-                    s_pass.set_vertex_buffer(0, v.slice(..));
-                    s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);
-                    s_pass.draw_indexed(0..*count, 0, 0..1);
-                }
-
-                layer_idx += 1;
-            }
+            crate::shadow::render_shadow_depth_pass(
+                &mut encoder,
+                queue,
+                shadow_pipe,
+                shadow_map,
+                &self.lights,
+                &self.models,
+                &self.geometries,
+            );
         }
 
         {
@@ -500,33 +473,34 @@ impl Realm for Realm3DContext {
             // 2. Render forward geometry models
             pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
 
-            // Render all active visible models
-            for (model, _, _, model_bg_opt) in self.models.values() {
-                if !model.active {
-                    continue;
-                }
-                let Some(model_bg) = model_bg_opt else {
-                    continue;
-                };
-                let mat_entry = self.materials.get(&model.material_id);
-                let Some(material_bg) = mat_entry.and_then(|m| m.2.as_ref()) else {
-                    continue;
-                };
-                let Some((v_buf, i_buf, index_count)) = self
-                    .geometries
-                    .get(&model.geometry_id)
-                    .and_then(|g| g.1.as_ref())
-                else {
-                    continue;
-                };
+            let mut curr_pipe_key = None;
+            let mut curr_mat_id = None;
+            let mut curr_geom_id = None;
 
-                let snippet = mat_entry.and_then(|m| m.0.shader_effect.as_deref());
-                pass.set_pipeline(pipeline.get_pipeline(snippet));
-                pass.set_bind_group(1, material_bg, &[]);
-                pass.set_bind_group(2, model_bg, &[]);
-                pass.set_vertex_buffer(0, v_buf.slice(..));
-                pass.set_index_buffer(i_buf.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..*index_count, 0, 0..1);
+            let draws = collector
+                .opaque
+                .iter()
+                .chain(collector.masked.iter())
+                .map(|i| (i, false))
+                .chain(collector.transparent.iter().map(|i| (i, true)));
+
+            for (item, transparent) in draws {
+                let pipe_key = (item.shader_effect, transparent);
+                if curr_pipe_key != Some(pipe_key) {
+                    pass.set_pipeline(pipeline.get_pipeline(item.shader_effect, transparent));
+                    curr_pipe_key = Some(pipe_key);
+                }
+                if curr_mat_id != Some(item.material_id) {
+                    pass.set_bind_group(1, item.material_bg, &[]);
+                    curr_mat_id = Some(item.material_id);
+                }
+                if curr_geom_id != Some(item.geometry_id) {
+                    pass.set_vertex_buffer(0, item.vertex_buffer.slice(..));
+                    pass.set_index_buffer(item.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                    curr_geom_id = Some(item.geometry_id);
+                }
+                pass.set_bind_group(2, item.model_bg, &[]);
+                pass.draw_indexed(0..item.index_count, 0, 0..1);
             }
         }
 
@@ -545,11 +519,16 @@ impl Realm for Realm3DContext {
                     ctx.target_format,
                 )
             });
-            let outline_items = self.models.values().filter_map(|(m, _, _, bg_opt)| {
+            let outline_items = self.models.values().filter_map(|(m, trans, _, bg_opt)| {
                 if !m.active || !m.cast_outline {
                     return None;
                 }
-                let (v, i, count) = self.geometries.get(&m.geometry_id)?.1.as_ref()?;
+                let (geom, gpu_mesh) = self.geometries.get(&m.geometry_id)?;
+                let (v, i, count) = gpu_mesh.as_ref()?;
+                let world_aabb = geom.aabb.transform(&trans.matrix());
+                if !cam_frustum.intersects_aabb(world_aabb.min, world_aabb.max) {
+                    return None;
+                }
                 Some((bg_opt.as_ref()?, v, i, *count))
             });
             outline_pipe.render(

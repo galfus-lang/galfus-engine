@@ -88,13 +88,20 @@ export class BunFfiStrategy implements CodegenStrategy {
   readonly filename = 'galfus.ts';
 
   generate(context: CodegenContext): string {
+    const BUILTIN_TS_TYPES = new Set(['number', 'string', 'boolean', 'any', 'void']);
     const importedTypes = new Set<string>(['GalfusEngine']);
+    const addType = (t: string) => {
+      const clean = t.replace(/\[\]$/, '').trim();
+      if (!BUILTIN_TS_TYPES.has(clean)) {
+        importedTypes.add(clean);
+      }
+    };
     for (const fn of context.functions) {
-      if (isJson(fn.returnType)) importedTypes.add(fn.returnType.json);
-      if (isJsonArray(fn.returnType)) importedTypes.add(fn.returnType.jsonArray);
+      if (isJson(fn.returnType)) addType(fn.returnType.json);
+      if (isJsonArray(fn.returnType)) addType(fn.returnType.jsonArray);
       for (const p of fn.params) {
-        if (isJson(p.type)) importedTypes.add(p.type.json);
-        if (isJsonArray(p.type)) importedTypes.add(p.type.jsonArray);
+        if (isJson(p.type)) addType(p.type.json);
+        if (isJsonArray(p.type)) addType(p.type.jsonArray);
       }
     }
 

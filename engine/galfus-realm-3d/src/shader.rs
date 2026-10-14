@@ -58,6 +58,7 @@ struct ModelUniform {
 @group(0) @binding(3) var<uniform> lights_header: LightsHeader;
 @group(0) @binding(4) var shadow_map: texture_depth_2d_array;
 @group(0) @binding(5) var shadow_sampler: sampler_comparison;
+@group(0) @binding(6) var<storage, read> bones: array<mat4x4<f32>>;
 
 @group(1) @binding(0) var<uniform> material: MaterialUniform;
 @group(2) @binding(0) var<uniform> object: ModelUniform;
@@ -67,6 +68,8 @@ struct VertexInput {
     @location(1) normal: vec3<f32>,
     @location(2) uv: vec2<f32>,
     @location(3) tangent: vec4<f32>,
+    @location(4) joints: vec4<u32>,
+    @location(5) weights: vec4<f32>,
 };
 
 struct VertexOutput {
@@ -76,13 +79,59 @@ struct VertexOutput {
     @location(2) uv: vec2<f32>,
 };
 
+fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
+    if (index < bone_count) {
+        return bones[bone_offset + index];
+    }
+    return mat4x4<f32>(
+        vec4<f32>(1.0, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, 1.0, 0.0, 0.0),
+        vec4<f32>(0.0, 0.0, 1.0, 0.0),
+        vec4<f32>(0.0, 0.0, 0.0, 1.0)
+    );
+}
+
+fn skin_position(position: vec3<f32>, joints: vec4<u32>, weights: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
+    let m0 = bone_at(joints.x, bone_offset, bone_count);
+    let m1 = bone_at(joints.y, bone_offset, bone_count);
+    let m2 = bone_at(joints.z, bone_offset, bone_count);
+    let m3 = bone_at(joints.w, bone_offset, bone_count);
+    let skinned = (m0 * vec4<f32>(position, 1.0)) * weights.x
+                + (m1 * vec4<f32>(position, 1.0)) * weights.y
+                + (m2 * vec4<f32>(position, 1.0)) * weights.z
+                + (m3 * vec4<f32>(position, 1.0)) * weights.w;
+    return skinned.xyz;
+}
+
+fn skin_normal(normal: vec3<f32>, joints: vec4<u32>, weights: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
+    let m0 = bone_at(joints.x, bone_offset, bone_count);
+    let m1 = bone_at(joints.y, bone_offset, bone_count);
+    let m2 = bone_at(joints.z, bone_offset, bone_count);
+    let m3 = bone_at(joints.w, bone_offset, bone_count);
+    let skinned = (m0 * vec4<f32>(normal, 0.0)) * weights.x
+                + (m1 * vec4<f32>(normal, 0.0)) * weights.y
+                + (m2 * vec4<f32>(normal, 0.0)) * weights.z
+                + (m3 * vec4<f32>(normal, 0.0)) * weights.w;
+    return normalize(skinned.xyz);
+}
+
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    let world_pos4 = object.model * vec4<f32>(in.position, 1.0);
+
+    var local_pos = in.position;
+    var local_norm = in.normal;
+    let bone_offset = object.flags.y;
+    let bone_count = object.flags.z;
+    if (bone_count > 0u) {
+        local_pos = skin_position(in.position, in.joints, in.weights, bone_offset, bone_count);
+        local_norm = skin_normal(in.normal, in.joints, in.weights, bone_offset, bone_count);
+    }
+
+    let world_pos4 = object.model * vec4<f32>(local_pos, 1.0);
     out.world_pos = world_pos4.xyz;
     out.clip_position = camera.view_projection * world_pos4;
-    out.world_normal = normalize((object.normal_matrix * vec4<f32>(in.normal, 0.0)).xyz);
+    out.world_normal = normalize((object.normal_matrix * vec4<f32>(local_norm, 0.0)).xyz);
     out.uv = in.uv;
     return out;
 }

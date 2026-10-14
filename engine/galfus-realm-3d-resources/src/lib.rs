@@ -3,16 +3,20 @@
 //! Core 3D data types, GPU Pod/Zeroable uniforms, meshes, and components
 //! designed for use within `Realm3DContext` and forward/deferred shading.
 
+pub mod aabb;
 pub mod camera;
 pub mod environment;
+pub mod frustum;
 pub mod geometry;
 pub mod light;
 pub mod material;
 pub mod model;
 pub mod transform;
 
+pub use aabb::Aabb;
 pub use camera::{Camera3D, Camera3DUniform, CameraKind3D};
 pub use environment::{Environment3DUniform, EnvironmentRealm3D, FogMode3D};
+pub use frustum::Frustum;
 pub use geometry::{Geometry3D, Vertex3D};
 pub use light::{Light3D, Light3DUniform, LightKind3D};
 pub use material::{Material3D, Material3DUniform, SurfaceType3D};

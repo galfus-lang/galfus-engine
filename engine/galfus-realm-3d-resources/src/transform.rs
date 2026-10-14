@@ -46,6 +46,12 @@ impl Transform3D {
         Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
     }
 
+    /// Alias for `to_mat4()`.
+    #[inline]
+    pub fn matrix(&self) -> Mat4 {
+        self.to_mat4()
+    }
+
     /// Extracts the forward direction vector (-Z in right-handed coordinates).
     pub fn forward(&self) -> Vec3 {
         self.rotation * Vec3::NEG_Z

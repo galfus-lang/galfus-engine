@@ -32,7 +32,9 @@ export const realm3dDescriptors: DescSpec[] = [
       position: { type: { tuple: ['number', 'number', 'number'] } },
       normal: { type: { tuple: ['number', 'number', 'number'] } },
       uv: { type: { tuple: ['number', 'number'] } },
-      tangent: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true }
+      tangent: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      joints: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      weights: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true }
     }
   },
   {
@@ -79,6 +81,8 @@ export const realm3dDescriptors: DescSpec[] = [
       receiveShadow: { type: 'boolean', optional: true },
       castOutline: { type: 'boolean', optional: true },
       outlineColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      boneOffset: { type: 'number', optional: true },
+      boneCount: { type: 'number', optional: true },
       active: { type: 'boolean', optional: true }
     }
   },
@@ -257,6 +261,21 @@ export const realm3dFunctions: FunctionSpec[] = [
         name: 'environment',
         type: { json: 'EnvironmentRealm3DDesc' },
         doc: 'Environment description'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_update_bones',
+    methodName: 'realm3dUpdateBones',
+    doc: 'Uploads bone matrices (flattened array of 16-element 4x4 matrices) for a model in the 3D Realm.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'modelId', type: 'u32', doc: 'Logical ID of the Model.' },
+      {
+        name: 'matrices',
+        type: { jsonArray: 'number' },
+        doc: 'Array of bone transform floats (multiples of 16)'
       }
     ],
     returnType: 'i32'

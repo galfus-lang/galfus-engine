@@ -76,6 +76,8 @@ struct Vertex3DDesc {
     normal: [f32; 3],
     uv: [f32; 2],
     tangent: Option<[f32; 4]>,
+    joints: Option<[u32; 4]>,
+    weights: Option<[f32; 4]>,
 }
 
 #[derive(Deserialize)]
@@ -109,6 +111,8 @@ impl From<Geometry3DDesc> for Geometry3D {
                         normal: v.normal,
                         uv: v.uv,
                         tangent: v.tangent.unwrap_or([1.0, 0.0, 0.0, 1.0]),
+                        joints: v.joints.unwrap_or([0, 0, 0, 0]),
+                        weights: v.weights.unwrap_or([1.0, 0.0, 0.0, 0.0]),
                     })
                     .collect();
                 let indices = d.indices.unwrap_or_default();
@@ -179,6 +183,8 @@ struct Model3DDesc {
     receive_shadow: Option<bool>,
     cast_outline: Option<bool>,
     outline_color: Option<[f32; 4]>,
+    bone_offset: Option<u32>,
+    bone_count: Option<u32>,
     active: Option<bool>,
 }
 
@@ -194,6 +200,8 @@ impl From<Model3DDesc> for Model3D {
                 .outline_color
                 .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
                 .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0)),
+            bone_offset: d.bone_offset.unwrap_or(0),
+            bone_count: d.bone_count.unwrap_or(0),
             active: d.active.unwrap_or(true),
         }
     }
@@ -782,6 +790,58 @@ pub unsafe extern "C" fn galfus_realm_3d_set_environment(
             .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
         realm.set_environment(env_desc.into());
         Ok(())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Uploads bone transform matrices (array of 16-element floats) for skeletal skinning.
+///
+/// # Safety
+/// `matrices_json` must be a valid, null-terminated UTF-8 string representing `number[]`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_3d_update_bones(
+    realm_id: u32,
+    model_id: u32,
+    matrices_json: *const c_char,
+) -> i32 {
+    let floats: Vec<f32> = match serde_json::from_str(match unsafe { from_c_str(matrices_json) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    }) {
+        Ok(f) => f,
+        Err(e) => {
+            set_last_error(&format!("Invalid matrices JSON: {e}"));
+            return -1;
+        }
+    };
+
+    if !floats.len().is_multiple_of(16) {
+        set_last_error("Matrices array length must be a multiple of 16");
+        return -1;
+    }
+
+    let matrices: Vec<glam::Mat4> = floats
+        .as_chunks::<16>()
+        .0
+        .iter()
+        .map(glam::Mat4::from_cols_array)
+        .collect();
+
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm
+            .update_model_bones(model_id, &matrices)
+            .map_err(|e| e.to_string())
     }) {
         Ok(()) => 0,
         Err(e) => {
