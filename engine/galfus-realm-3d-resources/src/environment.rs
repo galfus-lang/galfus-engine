@@ -25,6 +25,91 @@ impl FogMode3D {
     }
 }
 
+/// Skybox rendering mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SkyboxMode3D {
+    /// No skybox rendering (clear color background only).
+    #[default]
+    None,
+    /// Procedural hemispherical sky with ground, horizon, sky gradient and sun disc.
+    Procedural,
+    /// Cubemap textured skybox.
+    Cubemap,
+}
+
+impl SkyboxMode3D {
+    pub const fn to_code(self) -> u32 {
+        match self {
+            Self::None => 0,
+            Self::Procedural => 1,
+            Self::Cubemap => 2,
+        }
+    }
+}
+
+/// Atmospheric skybox settings.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkyboxConfig3D {
+    /// Skybox mode.
+    pub mode: SkyboxMode3D,
+    /// Zenith sky tint `[r, g, b, 1.0]`.
+    pub sky_color: Vec4,
+    /// Horizon transition tint `[r, g, b, 1.0]`.
+    pub horizon_color: Vec4,
+    /// Ground hemisphere tint `[r, g, b, 1.0]`.
+    pub ground_color: Vec4,
+    /// Normalized direction towards the main sun `[x, y, z, 0.0]`.
+    pub sun_direction: Vec4,
+    /// Sun disc emissive tint and intensity multiplier `[r, g, b, intensity]`.
+    pub sun_color: Vec4,
+    /// Overall skybox intensity factor.
+    pub intensity: f32,
+    /// Angular radius for procedural sun disc.
+    pub sun_size: f32,
+}
+
+impl Default for SkyboxConfig3D {
+    fn default() -> Self {
+        Self {
+            mode: SkyboxMode3D::None,
+            sky_color: Vec4::new(0.2, 0.45, 0.8, 1.0),
+            horizon_color: Vec4::new(0.65, 0.75, 0.85, 1.0),
+            ground_color: Vec4::new(0.08, 0.08, 0.1, 1.0),
+            sun_direction: Vec4::new(0.5, 0.75, 0.4, 0.0),
+            sun_color: Vec4::new(1.0, 0.95, 0.8, 2.0),
+            intensity: 1.0,
+            sun_size: 0.04,
+        }
+    }
+}
+
+/// Outline post-processing settings for the 3D environment.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutlineConfig3D {
+    /// Whether outline rendering is globally enabled for the realm.
+    pub enabled: bool,
+    /// Edge dilation width in screen pixels (default: 1.5).
+    pub width: f32,
+    /// Alpha threshold for edge step (default: 0.2).
+    pub threshold: f32,
+    /// Blending opacity/strength (default: 1.0).
+    pub strength: f32,
+}
+
+impl Default for OutlineConfig3D {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            width: 1.5,
+            threshold: 0.2,
+            strength: 1.0,
+        }
+    }
+}
+
 /// Global environment lighting, clear, fog, and exposure settings for a `Realm3DContext`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,6 +130,12 @@ pub struct EnvironmentRealm3D {
     pub fog_density: f32,
     /// Camera exposure multiplier.
     pub exposure: f32,
+    /// Skybox configuration.
+    #[serde(default)]
+    pub skybox: SkyboxConfig3D,
+    /// Outline configuration.
+    #[serde(default)]
+    pub outline: OutlineConfig3D,
 }
 
 impl Default for EnvironmentRealm3D {
@@ -58,6 +149,8 @@ impl Default for EnvironmentRealm3D {
             fog_end: 200.0,
             fog_density: 0.01,
             exposure: 1.0,
+            skybox: SkyboxConfig3D::default(),
+            outline: OutlineConfig3D::default(),
         }
     }
 }
@@ -74,7 +167,7 @@ impl EnvironmentRealm3D {
                 self.fog_density,
                 self.fog_mode.to_code() as f32,
             ),
-            misc_params: Vec4::new(self.exposure, 2.2, time, 0.0),
+            misc_params: Vec4::new(self.exposure, 2.2, time, self.skybox.mode.to_code() as f32),
         }
     }
 }

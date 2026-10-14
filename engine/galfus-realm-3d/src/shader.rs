@@ -44,6 +44,7 @@ struct MaterialUniform {
 struct ModelUniform {
     model: mat4x4<f32>,
     normal_matrix: mat4x4<f32>,
+    outline_color: vec4<f32>,
     flags: vec4<u32>,
 };
 
@@ -130,9 +131,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let cast_shadow = (light.flags.x & 1u) != 0u;
         let receive_shadow = (object.flags.x & 1u) != 0u;
         let shadow_layer = light.flags.y;
-        if (cast_shadow && receive_shadow && shadow_layer < 4u && (kind_code == 0u || kind_code == 2u)) {
+        if (cast_shadow && receive_shadow && shadow_layer < 4u && kind_code <= 2u) {
             let shadow_clip = light.shadow_view_proj * vec4<f32>(in.world_pos, 1.0);
-            if (abs(shadow_clip.w) > 1e-5) {
+            if (shadow_clip.w > 1e-5) {
                 let shadow_ndc = shadow_clip.xyz / shadow_clip.w;
                 let shadow_uv = vec2<f32>(shadow_ndc.x * 0.5 + 0.5, -shadow_ndc.y * 0.5 + 0.5);
                 if (shadow_uv.x >= 0.001 && shadow_uv.x <= 0.999 && shadow_uv.y >= 0.001 && shadow_uv.y <= 0.999 && shadow_ndc.z >= 0.0 && shadow_ndc.z <= 1.0) {

@@ -72,6 +72,8 @@ export const realm3dDescriptors: DescSpec[] = [
       materialId: { type: 'number' },
       castShadow: { type: 'boolean', optional: true },
       receiveShadow: { type: 'boolean', optional: true },
+      castOutline: { type: 'boolean', optional: true },
+      outlineColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       active: { type: 'boolean', optional: true }
     }
   },
@@ -91,6 +93,32 @@ export const realm3dDescriptors: DescSpec[] = [
   },
   {
     kind: 'object',
+    name: 'SkyboxConfig3DDesc',
+    doc: 'Atmospheric procedural skybox gradient and sun parameters.',
+    fields: {
+      mode: { type: { enum: ['none', 'procedural', 'cubemap'] }, optional: true },
+      skyColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      horizonColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      groundColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      sunDirection: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      sunColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      intensity: { type: 'number', optional: true },
+      sunSize: { type: 'number', optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'OutlineConfig3DDesc',
+    doc: 'Screen-space silhouette outline dilation settings for Realm 3D.',
+    fields: {
+      enabled: { type: 'boolean', optional: true },
+      width: { type: 'number', optional: true },
+      threshold: { type: 'number', optional: true },
+      strength: { type: 'number', optional: true }
+    }
+  },
+  {
+    kind: 'object',
     name: 'EnvironmentRealm3DDesc',
     doc: 'Global atmospheric, fog, and ambient lighting parameters for Realm 3D.',
     fields: {
@@ -101,7 +129,9 @@ export const realm3dDescriptors: DescSpec[] = [
       fogStart: { type: 'number', optional: true },
       fogEnd: { type: 'number', optional: true },
       fogDensity: { type: 'number', optional: true },
-      exposure: { type: 'number', optional: true }
+      exposure: { type: 'number', optional: true },
+      skybox: { type: { ref: 'SkyboxConfig3DDesc' }, optional: true },
+      outline: { type: { ref: 'OutlineConfig3DDesc' }, optional: true }
     }
   }
 ];

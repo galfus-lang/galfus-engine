@@ -40,6 +40,26 @@ pub struct TargetDesc {
 pub enum InvocationFilter {
     /// Sepia color grading post-processing filter.
     Sepia,
+    /// Perceptual luminance grayscale filter.
+    Grayscale,
+    /// Color inversion filter.
+    Invert,
+    /// Radial vignette shading around borders.
+    Vignette,
+    /// ACES Filmic tonemapping curve for high dynamic range colors.
+    TonemapAces,
+    /// RGB channel split chromatic aberration.
+    ChromaticAberration,
+    /// Dynamic film grain texture.
+    FilmGrain,
+    /// High-contrast silhouette edge detector outline.
+    EdgeOutline,
+    /// Color posterization effect reducing color depth.
+    Posterize,
+    /// Box blur filter smoothing adjacent texels.
+    Blur,
+    /// High-pass unsharp masking filter enhancing edge sharpness.
+    Sharpen,
     /// Custom post-processing shader module ID.
     Custom { shader_id: u32 },
 }

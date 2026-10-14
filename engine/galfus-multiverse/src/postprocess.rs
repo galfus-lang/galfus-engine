@@ -36,6 +36,108 @@ fn fs_sepia(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 
 @fragment
+fn fs_grayscale(in: VertexOutput) -> @location(0) vec4<f32> {
+    let color = textureSample(t_input, s_input, in.uv);
+    let gray = dot(color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+    return vec4<f32>(vec3<f32>(gray), color.a);
+}
+
+@fragment
+fn fs_invert(in: VertexOutput) -> @location(0) vec4<f32> {
+    let color = textureSample(t_input, s_input, in.uv);
+    return vec4<f32>(1.0 - color.rgb, color.a);
+}
+
+@fragment
+fn fs_vignette(in: VertexOutput) -> @location(0) vec4<f32> {
+    let color = textureSample(t_input, s_input, in.uv);
+    let dist = distance(in.uv, vec2<f32>(0.5, 0.5));
+    let vig = clamp(smoothstep(0.75, 0.25, dist), 0.0, 1.0);
+    return vec4<f32>(color.rgb * vig, color.a);
+}
+
+@fragment
+fn fs_tonemap_aces(in: VertexOutput) -> @location(0) vec4<f32> {
+    let color = textureSample(t_input, s_input, in.uv);
+    let a = 2.51;
+    let b = 0.03;
+    let c = 2.43;
+    let d = 0.59;
+    let e = 0.14;
+    let mapped = clamp((color.rgb * (a * color.rgb + b)) / (color.rgb * (c * color.rgb + d) + e), vec3<f32>(0.0), vec3<f32>(1.0));
+    return vec4<f32>(mapped, color.a);
+}
+
+@fragment
+fn fs_chromatic_aberration(in: VertexOutput) -> @location(0) vec4<f32> {
+    let offset = vec2<f32>(0.0035, 0.0);
+    let r = textureSample(t_input, s_input, in.uv + offset).r;
+    let g = textureSample(t_input, s_input, in.uv).g;
+    let b = textureSample(t_input, s_input, in.uv - offset).b;
+    let a = textureSample(t_input, s_input, in.uv).a;
+    return vec4<f32>(r, g, b, a);
+}
+
+@fragment
+fn fs_film_grain(in: VertexOutput) -> @location(0) vec4<f32> {
+    let color = textureSample(t_input, s_input, in.uv);
+    let noise = fract(sin(dot(in.uv, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+    let grain = (noise - 0.5) * 0.08;
+    return vec4<f32>(clamp(color.rgb + grain, vec3<f32>(0.0), vec3<f32>(1.0)), color.a);
+}
+
+@fragment
+fn fs_edge_outline(in: VertexOutput) -> @location(0) vec4<f32> {
+    let tex_dim = vec2<f32>(textureDimensions(t_input));
+    let texel = vec2<f32>(1.0 / max(tex_dim.x, 1.0), 1.0 / max(tex_dim.y, 1.0));
+    let c = textureSample(t_input, s_input, in.uv);
+    let up = textureSample(t_input, s_input, in.uv + vec2<f32>(0.0, -texel.y));
+    let down = textureSample(t_input, s_input, in.uv + vec2<f32>(0.0, texel.y));
+    let left = textureSample(t_input, s_input, in.uv + vec2<f32>(-texel.x, 0.0));
+    let right = textureSample(t_input, s_input, in.uv + vec2<f32>(texel.x, 0.0));
+    let diff = abs(c - up) + abs(c - down) + abs(c - left) + abs(c - right);
+    let edge = length(diff.rgb);
+    if (edge > 0.12) {
+        return vec4<f32>(0.0, 1.0, 0.85, 1.0);
+    }
+    return c;
+}
+
+@fragment
+fn fs_posterize(in: VertexOutput) -> @location(0) vec4<f32> {
+    let color = textureSample(t_input, s_input, in.uv);
+    let steps = 6.0;
+    let posterized = floor(color.rgb * steps) / steps;
+    return vec4<f32>(posterized, color.a);
+}
+
+@fragment
+fn fs_blur(in: VertexOutput) -> @location(0) vec4<f32> {
+    let tex_dim = vec2<f32>(textureDimensions(t_input));
+    let texel = vec2<f32>(1.5 / max(tex_dim.x, 1.0), 1.5 / max(tex_dim.y, 1.0));
+    var sum = textureSample(t_input, s_input, in.uv) * 0.227027;
+    sum += textureSample(t_input, s_input, in.uv + vec2<f32>(texel.x, 0.0)) * 0.1945946;
+    sum += textureSample(t_input, s_input, in.uv - vec2<f32>(texel.x, 0.0)) * 0.1945946;
+    sum += textureSample(t_input, s_input, in.uv + vec2<f32>(0.0, texel.y)) * 0.1945946;
+    sum += textureSample(t_input, s_input, in.uv - vec2<f32>(0.0, texel.y)) * 0.1945946;
+    return sum;
+}
+
+@fragment
+fn fs_sharpen(in: VertexOutput) -> @location(0) vec4<f32> {
+    let tex_dim = vec2<f32>(textureDimensions(t_input));
+    let texel = vec2<f32>(1.0 / max(tex_dim.x, 1.0), 1.0 / max(tex_dim.y, 1.0));
+    let c = textureSample(t_input, s_input, in.uv);
+    let n = textureSample(t_input, s_input, in.uv + vec2<f32>(0.0, -texel.y));
+    let s = textureSample(t_input, s_input, in.uv + vec2<f32>(0.0, texel.y));
+    let w = textureSample(t_input, s_input, in.uv + vec2<f32>(-texel.x, 0.0));
+    let e = textureSample(t_input, s_input, in.uv + vec2<f32>(texel.x, 0.0));
+    let edge = (n + s + w + e) * 0.25;
+    let sharpened = c + (c - edge) * 0.75;
+    return vec4<f32>(clamp(sharpened.rgb, vec3<f32>(0.0), vec3<f32>(1.0)), c.a);
+}
+
+@fragment
 fn fs_blit(in: VertexOutput) -> @location(0) vec4<f32> {
     return textureSample(t_input, s_input, in.uv);
 }
@@ -154,6 +256,26 @@ impl PostProcessor {
                 (custom_mod, "fs_main")
             } else if effect_name == "sepia" {
                 (&self.shader_module, "fs_sepia")
+            } else if effect_name == "grayscale" {
+                (&self.shader_module, "fs_grayscale")
+            } else if effect_name == "invert" {
+                (&self.shader_module, "fs_invert")
+            } else if effect_name == "vignette" {
+                (&self.shader_module, "fs_vignette")
+            } else if effect_name == "tonemap_aces" {
+                (&self.shader_module, "fs_tonemap_aces")
+            } else if effect_name == "chromatic_aberration" {
+                (&self.shader_module, "fs_chromatic_aberration")
+            } else if effect_name == "film_grain" {
+                (&self.shader_module, "fs_film_grain")
+            } else if effect_name == "edge_outline" {
+                (&self.shader_module, "fs_edge_outline")
+            } else if effect_name == "posterize" {
+                (&self.shader_module, "fs_posterize")
+            } else if effect_name == "blur" {
+                (&self.shader_module, "fs_blur")
+            } else if effect_name == "sharpen" {
+                (&self.shader_module, "fs_sharpen")
             } else {
                 (&self.shader_module, "fs_blit")
             };
@@ -207,6 +329,16 @@ impl PostProcessor {
     ) -> MultiverseResult<()> {
         let effect_key = match filter {
             Some(InvocationFilter::Sepia) => "sepia".to_string(),
+            Some(InvocationFilter::Grayscale) => "grayscale".to_string(),
+            Some(InvocationFilter::Invert) => "invert".to_string(),
+            Some(InvocationFilter::Vignette) => "vignette".to_string(),
+            Some(InvocationFilter::TonemapAces) => "tonemap_aces".to_string(),
+            Some(InvocationFilter::ChromaticAberration) => "chromatic_aberration".to_string(),
+            Some(InvocationFilter::FilmGrain) => "film_grain".to_string(),
+            Some(InvocationFilter::EdgeOutline) => "edge_outline".to_string(),
+            Some(InvocationFilter::Posterize) => "posterize".to_string(),
+            Some(InvocationFilter::Blur) => "blur".to_string(),
+            Some(InvocationFilter::Sharpen) => "sharpen".to_string(),
             Some(InvocationFilter::Custom { shader_id }) => format!("custom:{shader_id}"),
             _ => "blit".to_string(),
         };

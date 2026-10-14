@@ -62,6 +62,16 @@ export const multiverseDescriptors: DescSpec[] = [
     doc: 'Filter pass applied after a Realm renders to its Target.',
     variants: [
       { literal: 'sepia' },
+      { literal: 'grayscale' },
+      { literal: 'invert' },
+      { literal: 'vignette' },
+      { literal: 'tonemapAces' },
+      { literal: 'chromaticAberration' },
+      { literal: 'filmGrain' },
+      { literal: 'edgeOutline' },
+      { literal: 'posterize' },
+      { literal: 'blur' },
+      { literal: 'sharpen' },
       {
         inline: {
           custom: {

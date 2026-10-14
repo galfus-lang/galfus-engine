@@ -15,6 +15,7 @@ struct ShadowUniform {
 struct ModelUniform {
     model: mat4x4<f32>,
     normal_matrix: mat4x4<f32>,
+    outline_color: vec4<f32>,
     flags: vec4<u32>,
 };
 

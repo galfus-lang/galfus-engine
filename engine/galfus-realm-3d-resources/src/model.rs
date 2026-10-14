@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, UVec4};
+use glam::{Mat4, UVec4, Vec4};
 use serde::{Deserialize, Serialize};
 
 use crate::transform::Transform3D;
@@ -16,6 +16,10 @@ pub struct Model3D {
     pub cast_shadow: bool,
     /// Whether this model receives shadows from shadow-casting lights.
     pub receive_shadow: bool,
+    /// Whether this model generates outline silhouettes.
+    pub cast_outline: bool,
+    /// RGBA tint for this model's outline silhouette.
+    pub outline_color: Vec4,
     /// Whether this model instance is actively drawn.
     pub active: bool,
 }
@@ -27,6 +31,8 @@ impl Default for Model3D {
             material_id: 0,
             cast_shadow: true,
             receive_shadow: true,
+            cast_outline: false,
+            outline_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
             active: true,
         }
     }
@@ -52,10 +58,14 @@ impl Model3D {
         if self.receive_shadow {
             flags |= 1 << 0;
         }
+        if self.cast_outline {
+            flags |= 1 << 1;
+        }
 
         Model3DUniform {
             model: model_matrix,
             normal_matrix,
+            outline_color: self.outline_color,
             flags: UVec4::new(flags, 0, 0, 0),
         }
     }
@@ -69,7 +79,9 @@ pub struct Model3DUniform {
     pub model: Mat4,
     /// 4x4 Inverse-transpose matrix for normal transformation.
     pub normal_matrix: Mat4,
-    /// Bit flags: `[bit 0: receive_shadow, unused, unused, unused]`.
+    /// Outline silhouette color `[r, g, b, a]`.
+    pub outline_color: Vec4,
+    /// Bit flags: `[bit 0: receive_shadow, bit 1: cast_outline, unused, unused]`.
     pub flags: UVec4,
 }
 

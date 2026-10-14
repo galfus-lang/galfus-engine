@@ -2,7 +2,7 @@ use std::os::raw::c_char;
 
 use galfus_realm_3d::Realm3DContext;
 use galfus_realm_3d_resources::camera::{Camera3D, CameraKind3D};
-use galfus_realm_3d_resources::environment::{EnvironmentRealm3D, FogMode3D};
+use galfus_realm_3d_resources::environment::{EnvironmentRealm3D, FogMode3D, OutlineConfig3D};
 use galfus_realm_3d_resources::geometry::{Geometry3D, Vertex3D};
 use galfus_realm_3d_resources::light::Light3D;
 use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D};
@@ -167,6 +167,8 @@ struct Model3DDesc {
     material_id: u32,
     cast_shadow: Option<bool>,
     receive_shadow: Option<bool>,
+    cast_outline: Option<bool>,
+    outline_color: Option<[f32; 4]>,
     active: Option<bool>,
 }
 
@@ -177,6 +179,11 @@ impl From<Model3DDesc> for Model3D {
             material_id: d.material_id,
             cast_shadow: d.cast_shadow.unwrap_or(true),
             receive_shadow: d.receive_shadow.unwrap_or(true),
+            cast_outline: d.cast_outline.unwrap_or(false),
+            outline_color: d
+                .outline_color
+                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
+                .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0)),
             active: d.active.unwrap_or(true),
         }
     }
@@ -219,6 +226,75 @@ impl From<Light3DDesc> for Light3D {
     }
 }
 
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct SkyboxConfig3DDesc {
+    mode: Option<String>,
+    sky_color: Option<[f32; 4]>,
+    horizon_color: Option<[f32; 4]>,
+    ground_color: Option<[f32; 4]>,
+    sun_direction: Option<[f32; 4]>,
+    sun_color: Option<[f32; 4]>,
+    intensity: Option<f32>,
+    sun_size: Option<f32>,
+}
+
+impl From<SkyboxConfig3DDesc> for galfus_realm_3d_resources::environment::SkyboxConfig3D {
+    fn from(d: SkyboxConfig3DDesc) -> Self {
+        use galfus_realm_3d_resources::environment::SkyboxMode3D;
+        let mode = match d.mode.as_deref() {
+            Some("procedural") => SkyboxMode3D::Procedural,
+            Some("cubemap") => SkyboxMode3D::Cubemap,
+            _ => SkyboxMode3D::None,
+        };
+        Self {
+            mode,
+            sky_color: d
+                .sky_color
+                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
+                .unwrap_or(Vec4::new(0.2, 0.45, 0.8, 1.0)),
+            horizon_color: d
+                .horizon_color
+                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
+                .unwrap_or(Vec4::new(0.65, 0.75, 0.85, 1.0)),
+            ground_color: d
+                .ground_color
+                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
+                .unwrap_or(Vec4::new(0.08, 0.08, 0.1, 1.0)),
+            sun_direction: d
+                .sun_direction
+                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
+                .unwrap_or(Vec4::new(0.5, 0.75, 0.4, 0.0)),
+            sun_color: d
+                .sun_color
+                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
+                .unwrap_or(Vec4::new(1.0, 0.95, 0.8, 2.0)),
+            intensity: d.intensity.unwrap_or(1.0),
+            sun_size: d.sun_size.unwrap_or(0.04),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OutlineConfig3DDesc {
+    enabled: Option<bool>,
+    width: Option<f32>,
+    threshold: Option<f32>,
+    strength: Option<f32>,
+}
+
+impl From<OutlineConfig3DDesc> for OutlineConfig3D {
+    fn from(d: OutlineConfig3DDesc) -> Self {
+        OutlineConfig3D {
+            enabled: d.enabled.unwrap_or(true),
+            width: d.width.unwrap_or(1.5),
+            threshold: d.threshold.unwrap_or(0.2),
+            strength: d.strength.unwrap_or(1.0),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct EnvironmentRealm3DDesc {
@@ -230,6 +306,8 @@ struct EnvironmentRealm3DDesc {
     fog_end: Option<f32>,
     fog_density: Option<f32>,
     exposure: Option<f32>,
+    skybox: Option<SkyboxConfig3DDesc>,
+    outline: Option<OutlineConfig3DDesc>,
 }
 
 impl From<EnvironmentRealm3DDesc> for EnvironmentRealm3D {
@@ -257,6 +335,8 @@ impl From<EnvironmentRealm3DDesc> for EnvironmentRealm3D {
             fog_end: d.fog_end.unwrap_or(100.0),
             fog_density: d.fog_density.unwrap_or(0.02),
             exposure: d.exposure.unwrap_or(1.0),
+            skybox: d.skybox.map(Into::into).unwrap_or_default(),
+            outline: d.outline.map(Into::into).unwrap_or_default(),
         }
     }
 }

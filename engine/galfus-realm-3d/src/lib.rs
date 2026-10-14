@@ -4,14 +4,18 @@
 //! Reverse-Z rendering, PBR-like lighting, and declarative entity management.
 
 pub mod context;
+pub mod outline;
 pub mod pipeline;
 pub mod shader;
 pub mod shadow;
+pub mod skybox;
 
 pub use context::Realm3DContext;
+pub use outline::OutlinePipeline3D;
 pub use pipeline::Pipeline3D;
 pub use shader::REALM_3D_SHADER;
 pub use shadow::{ShadowMap3D, ShadowPipeline3D};
+pub use skybox::SkyboxPipeline3D;
 
 #[cfg(test)]
 mod tests {

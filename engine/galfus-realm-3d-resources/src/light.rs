@@ -147,6 +147,17 @@ impl Light3D {
                 let proj = Mat4::perspective_rh(fov, 1.0, self.range, 0.1);
                 proj * view
             }
+            LightKind3D::Point => {
+                let up = if dir.dot(Vec3::Y).abs() > 0.95 {
+                    Vec3::Z
+                } else {
+                    Vec3::Y
+                };
+                let view = Mat4::look_to_rh(pos, dir, up);
+                let fov = 120.0f32.to_radians();
+                let proj = Mat4::perspective_rh(fov, 1.0, self.range, 0.1);
+                proj * view
+            }
             _ => Mat4::IDENTITY,
         };
 

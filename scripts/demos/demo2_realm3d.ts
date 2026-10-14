@@ -223,6 +223,8 @@ export async function runDemo2(): Promise<void> {
       materialId: MAT_CUBE_ID,
       castShadow: true,
       receiveShadow: true,
+      castOutline: true,
+      outlineColor: [0.0, 1.0, 0.85, 1.0],
       active: true
     },
     {
@@ -295,40 +297,86 @@ export async function runDemo2(): Promise<void> {
       color: [1.0, 0.45, 0.2], // Warm accent
       intensity: 2.0,
       range: 12.0,
-      castShadow: false
+      castShadow: true
     },
     {
       position: [2.5, 2.0, 1.5],
-      rotation: [0, 0, 0, 1],
+      rotation: quatFromLookAt([2.5, 2.0, 1.5], [0, 1.0, 0]),
       scale: [1, 1, 1]
     }
   );
-  console.log('✔ Lights created (Sun & Spot cast shadows)');
+  console.log('✔ Lights created (All 3 lights cast dynamic shadows)');
 
-  console.log('==> Configuring Environment (Atmosphere, Fog, Exposure)...');
+  console.log('==> Configuring Environment (Atmosphere, Fog, Exposure, Skybox)...');
   let fogModeIdx = 1;
   const fogModes: ('none' | 'linear' | 'exponential')[] = ['none', 'linear', 'exponential'];
+  let skyboxModeIdx = 1;
+  const skyboxModes: ('none' | 'procedural')[] = ['none', 'procedural'];
 
-  galfus.realm3dSetEnvironment(REALM_3D, {
-    ambientColor: [0.06, 0.08, 0.12, 1.0],
-    clearColor: [0.02, 0.03, 0.05, 1.0],
-    fogColor: [0.04, 0.06, 0.1, 1.0],
-    fogMode: fogModes[fogModeIdx] ?? 'linear',
-    fogStart: 8.0,
-    fogEnd: 40.0,
-    fogDensity: 0.03,
-    exposure: 1.0
-  });
-  console.log('✔ Environment configured');
+  let filterIdx = 0;
+  const availableFilters: (string | null)[] = [
+    null,
+    'vignette',
+    'chromaticAberration',
+    'filmGrain',
+    'tonemapAces',
+    'grayscale',
+    'sepia',
+    'edgeOutline',
+    'posterize',
+    'blur',
+    'sharpen'
+  ];
+
+  let outlineEnabled = true;
+
+  const applyEnvironment = () => {
+    galfus.realm3dSetEnvironment(REALM_3D, {
+      ambientColor: [0.06, 0.08, 0.12, 1.0],
+      clearColor: [0.02, 0.03, 0.05, 1.0],
+      fogColor: [0.04, 0.06, 0.1, 1.0],
+      fogMode: fogModes[fogModeIdx] ?? 'linear',
+      fogStart: 8.0,
+      fogEnd: 40.0,
+      fogDensity: 0.03,
+      exposure: 1.0,
+      skybox: {
+        mode: skyboxModes[skyboxModeIdx] ?? 'procedural',
+        skyColor: [0.15, 0.35, 0.75, 1.0],
+        horizonColor: [0.65, 0.75, 0.9, 1.0],
+        groundColor: [0.08, 0.08, 0.1, 1.0],
+        sunDirection: [8, 14, 8, 0.0],
+        sunColor: [1.0, 0.95, 0.85, 2.0],
+        intensity: 1.0,
+        sunSize: 0.03
+      },
+      outline: {
+        enabled: outlineEnabled,
+        width: 1.5,
+        threshold: 0.2,
+        strength: 1.0
+      }
+    });
+  };
+
+  applyEnvironment();
+  console.log('✔ Environment configured with Procedural Skybox');
 
   console.log('==> Declaring Multiverse Invocation (#100)...');
-  galfus.multiverseCreateInvocation(INVOCATION_MAIN, {
-    realmId: REALM_3D,
-    targetId: TARGET_WINDOW,
-    cameraSlot: 1,
-    viewport: { unit: 'normalized', x: 0.0, y: 0.0, width: 1.0, height: 1.0 },
-    clearColor: [0.02, 0.03, 0.05, 1.0]
-  });
+  const updateInvocationFilters = () => {
+    const current = availableFilters[filterIdx];
+    const filters = current ? [current as any] : [];
+    galfus.multiverseCreateInvocation(INVOCATION_MAIN, {
+      realmId: REALM_3D,
+      targetId: TARGET_WINDOW,
+      cameraSlot: 1,
+      viewport: { unit: 'normalized', x: 0.0, y: 0.0, width: 1.0, height: 1.0 },
+      clearColor: [0.02, 0.03, 0.05, 1.0],
+      filters
+    });
+  };
+
+  updateInvocationFilters();
   console.log('✔ Invocation created');
 
   console.log('\n================================================================');
@@ -337,6 +385,9 @@ export async function runDemo2(): Promise<void> {
   console.log('   [Up / Down Arrow]     : Adjust Camera Distance (Zoom)');
   console.log('   [O]                   : Toggle Camera Auto-Orbit');
   console.log('   [F]                   : Cycle Distance Fog Mode (None / Linear / Exp)');
+  console.log('   [K]                   : Toggle Procedural Skybox (Procedural / None)');
+  console.log('   [L]                   : Toggle Silhouette Outline (On / Off)');
+  console.log('   [P]                   : Cycle Invocation Post-Processing Filters');
   console.log('   [Space]               : Toggle Cube Rotation Pause');
   console.log('   [R]                   : Reset Camera Position');
   console.log('   [Escape]              : Exit');
@@ -393,18 +444,28 @@ export async function runDemo2(): Promise<void> {
 
           if (key === 'f') {
             fogModeIdx = (fogModeIdx + 1) % fogModes.length;
-            const mode = fogModes[fogModeIdx]!;
-            galfus.realm3dSetEnvironment(REALM_3D, {
-              ambientColor: [0.06, 0.08, 0.12, 1.0],
-              clearColor: [0.02, 0.03, 0.05, 1.0],
-              fogColor: [0.04, 0.06, 0.1, 1.0],
-              fogMode: mode,
-              fogStart: 8.0,
-              fogEnd: 40.0,
-              fogDensity: 0.03,
-              exposure: 1.0
-            });
-            console.log(`[Input] Fog mode set to: ${mode.toUpperCase()}`);
+            applyEnvironment();
+            console.log(`[Input] Fog mode set to: ${fogModes[fogModeIdx]!.toUpperCase()}`);
+          }
+
+          if (key === 'k') {
+            skyboxModeIdx = (skyboxModeIdx + 1) % skyboxModes.length;
+            applyEnvironment();
+            console.log(`[Input] Skybox mode set to: ${skyboxModes[skyboxModeIdx]!.toUpperCase()}`);
+          }
+
+          if (key === 'l') {
+            outlineEnabled = !outlineEnabled;
+            applyEnvironment();
+            console.log(`[Input] Silhouette Outline ${outlineEnabled ? 'ENABLED' : 'DISABLED'}`);
+          }
+
+          if (key === 'p') {
+            filterIdx = (filterIdx + 1) % availableFilters.length;
+            updateInvocationFilters();
+            console.log(
+              `[Input] Invocation Filter: ${(availableFilters[filterIdx] ?? 'NONE').toUpperCase()}`
+            );
           }
 
           if (key === 'arrowleft') {
@@ -468,9 +529,14 @@ export async function runDemo2(): Promise<void> {
     const lightOrbitRadius = 3.0;
     const lightX = Math.cos(totalTime * 1.8) * lightOrbitRadius;
     const lightZ = Math.sin(totalTime * 1.8) * lightOrbitRadius;
+    const pointPos: [number, number, number] = [
+      lightX,
+      2.5 + Math.sin(totalTime * 3.0) * 0.5,
+      lightZ
+    ];
     galfus.realm3dSetLightTransform(REALM_3D, LIGHT_POINT_ID, {
-      position: [lightX, 2.5 + Math.sin(totalTime * 3.0) * 0.5, lightZ],
-      rotation: [0, 0, 0, 1],
+      position: pointPos,
+      rotation: quatFromLookAt(pointPos, [0.0, 1.0, 0.0]),
       scale: [1, 1, 1]
     });
 

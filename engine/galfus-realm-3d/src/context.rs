@@ -19,6 +19,28 @@ use wgpu::util::DeviceExt;
 use crate::pipeline::Pipeline3D;
 use crate::shadow::{ShadowMap3D, ShadowPipeline3D};
 
+fn create_uniform_bg(
+    device: &wgpu::Device,
+    label: &str,
+    layout: &wgpu::BindGroupLayout,
+    contents: &[u8],
+) -> (wgpu::Buffer, wgpu::BindGroup) {
+    let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some(label),
+        contents,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    });
+    let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(label),
+        layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: buf.as_entire_binding(),
+        }],
+    });
+    (buf, bg)
+}
+
 struct SceneGpuBuffers {
     camera_buf: wgpu::Buffer,
     env_buf: wgpu::Buffer,
@@ -29,27 +51,28 @@ struct SceneGpuBuffers {
 
 type GpuMeshBuffers = (wgpu::Buffer, wgpu::Buffer, u32);
 
+type GpuModelEntry = (
+    Model3D,
+    Transform3D,
+    Option<wgpu::Buffer>,
+    Option<wgpu::BindGroup>,
+);
+
 /// Autonomous 3D Realm managing 3D scenes, entities, Reverse-Z rendering, and lighting.
 pub struct Realm3DContext {
     id: u32,
     cameras: BTreeMap<u32, (Camera3D, Transform3D)>,
     materials: BTreeMap<u32, (Material3D, Option<wgpu::Buffer>, Option<wgpu::BindGroup>)>,
     geometries: BTreeMap<u32, (Geometry3D, Option<GpuMeshBuffers>)>,
-    models: BTreeMap<
-        u32,
-        (
-            Model3D,
-            Transform3D,
-            Option<wgpu::Buffer>,
-            Option<wgpu::BindGroup>,
-        ),
-    >,
+    models: BTreeMap<u32, GpuModelEntry>,
     lights: BTreeMap<u32, (Light3D, Transform3D)>,
     environment: EnvironmentRealm3D,
 
     pipeline: Option<Pipeline3D>,
     shadow_pipeline: Option<ShadowPipeline3D>,
     shadow_map: Option<ShadowMap3D>,
+    skybox_pipeline: Option<crate::skybox::SkyboxPipeline3D>,
+    outline_pipeline: Option<crate::outline::OutlinePipeline3D>,
     scene_buffers: Option<SceneGpuBuffers>,
     depth_texture: Option<(wgpu::Texture, wgpu::TextureView, UVec2)>,
     dirty: bool,
@@ -69,6 +92,8 @@ impl Realm3DContext {
             pipeline: None,
             shadow_pipeline: None,
             shadow_map: None,
+            skybox_pipeline: None,
+            outline_pipeline: None,
             scene_buffers: None,
             depth_texture: None,
             dirty: true,
@@ -78,24 +103,20 @@ impl Realm3DContext {
     /// Registers or updates a `Camera3D` with its `Transform3D`.
     pub fn create_camera(
         &mut self,
-        camera_id: u32,
+        id: u32,
         camera: Camera3D,
         transform: Transform3D,
     ) -> RealmResult<()> {
-        validate_host_logical_id(camera_id).map_err(|e| RealmError::Internal(e.to_string()))?;
-        self.cameras.insert(camera_id, (camera, transform));
+        validate_host_logical_id(id).map_err(|e| RealmError::Internal(e.to_string()))?;
+        self.cameras.insert(id, (camera, transform));
         self.dirty = true;
         Ok(())
     }
 
     /// Updates the transform of an existing `Camera3D`.
-    pub fn set_camera_transform(
-        &mut self,
-        camera_id: u32,
-        transform: Transform3D,
-    ) -> RealmResult<()> {
-        let entry = self.cameras.get_mut(&camera_id).ok_or_else(|| {
-            RealmError::ResourceNotFound(self.id, format!("Camera {camera_id} not found"))
+    pub fn set_camera_transform(&mut self, id: u32, transform: Transform3D) -> RealmResult<()> {
+        let entry = self.cameras.get_mut(&id).ok_or_else(|| {
+            RealmError::ResourceNotFound(self.id, format!("Camera {id} not found"))
         })?;
         entry.1 = transform;
         self.dirty = true;
@@ -103,17 +124,17 @@ impl Realm3DContext {
     }
 
     /// Registers or updates a `Material3D`.
-    pub fn create_material(&mut self, material_id: u32, material: Material3D) -> RealmResult<()> {
-        validate_host_logical_id(material_id).map_err(|e| RealmError::Internal(e.to_string()))?;
-        self.materials.insert(material_id, (material, None, None));
+    pub fn create_material(&mut self, id: u32, material: Material3D) -> RealmResult<()> {
+        validate_host_logical_id(id).map_err(|e| RealmError::Internal(e.to_string()))?;
+        self.materials.insert(id, (material, None, None));
         self.dirty = true;
         Ok(())
     }
 
     /// Registers or updates a `Geometry3D`.
-    pub fn create_geometry(&mut self, geometry_id: u32, geometry: Geometry3D) -> RealmResult<()> {
-        validate_host_logical_id(geometry_id).map_err(|e| RealmError::Internal(e.to_string()))?;
-        self.geometries.insert(geometry_id, (geometry, None));
+    pub fn create_geometry(&mut self, id: u32, geometry: Geometry3D) -> RealmResult<()> {
+        validate_host_logical_id(id).map_err(|e| RealmError::Internal(e.to_string()))?;
+        self.geometries.insert(id, (geometry, None));
         self.dirty = true;
         Ok(())
     }
@@ -121,28 +142,24 @@ impl Realm3DContext {
     /// Registers or updates a `Model3D` with its `Transform3D`.
     pub fn create_model(
         &mut self,
-        model_id: u32,
+        id: u32,
         model: Model3D,
         transform: Transform3D,
     ) -> RealmResult<()> {
-        validate_host_logical_id(model_id).map_err(|e| RealmError::Internal(e.to_string()))?;
-        self.models.insert(model_id, (model, transform, None, None));
+        validate_host_logical_id(id).map_err(|e| RealmError::Internal(e.to_string()))?;
+        self.models.insert(id, (model, transform, None, None));
         self.dirty = true;
         Ok(())
     }
 
     /// Updates the transform of an existing `Model3D`.
-    pub fn set_model_transform(
-        &mut self,
-        model_id: u32,
-        transform: Transform3D,
-    ) -> RealmResult<()> {
-        let entry = self.models.get_mut(&model_id).ok_or_else(|| {
-            RealmError::ResourceNotFound(self.id, format!("Model {model_id} not found"))
+    pub fn set_model_transform(&mut self, id: u32, transform: Transform3D) -> RealmResult<()> {
+        let entry = self.models.get_mut(&id).ok_or_else(|| {
+            RealmError::ResourceNotFound(self.id, format!("Model {id} not found"))
         })?;
         entry.1 = transform;
-        entry.2 = None; // Invalidate GPU uniform buffer
-        entry.3 = None; // Invalidate bind group
+        entry.2 = None;
+        entry.3 = None;
         self.dirty = true;
         Ok(())
     }
@@ -150,24 +167,20 @@ impl Realm3DContext {
     /// Registers or updates a `Light3D` with its `Transform3D`.
     pub fn create_light(
         &mut self,
-        light_id: u32,
+        id: u32,
         light: Light3D,
         transform: Transform3D,
     ) -> RealmResult<()> {
-        validate_host_logical_id(light_id).map_err(|e| RealmError::Internal(e.to_string()))?;
-        self.lights.insert(light_id, (light, transform));
+        validate_host_logical_id(id).map_err(|e| RealmError::Internal(e.to_string()))?;
+        self.lights.insert(id, (light, transform));
         self.dirty = true;
         Ok(())
     }
 
     /// Updates the transform of an existing `Light3D`.
-    pub fn set_light_transform(
-        &mut self,
-        light_id: u32,
-        transform: Transform3D,
-    ) -> RealmResult<()> {
-        let entry = self.lights.get_mut(&light_id).ok_or_else(|| {
-            RealmError::ResourceNotFound(self.id, format!("Light {light_id} not found"))
+    pub fn set_light_transform(&mut self, id: u32, transform: Transform3D) -> RealmResult<()> {
+        let entry = self.lights.get_mut(&id).ok_or_else(|| {
+            RealmError::ResourceNotFound(self.id, format!("Light {id} not found"))
         })?;
         entry.1 = transform;
         self.dirty = true;
@@ -219,20 +232,12 @@ impl Realm for Realm3DContext {
         // 2. Sync Materials
         for (mat, buf_opt, bg_opt) in self.materials.values_mut() {
             if buf_opt.is_none() {
-                let uniform = mat.build_uniform();
-                let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Material Uniform Buffer"),
-                    contents: bytemuck::bytes_of(&uniform),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
-                let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Material Bind Group"),
-                    layout: &pipeline.material_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: buf.as_entire_binding(),
-                    }],
-                });
+                let (buf, bg) = create_uniform_bg(
+                    device,
+                    "Material",
+                    &pipeline.material_layout,
+                    bytemuck::bytes_of(&mat.build_uniform()),
+                );
                 *buf_opt = Some(buf);
                 *bg_opt = Some(bg);
             }
@@ -241,20 +246,12 @@ impl Realm for Realm3DContext {
         // 3. Sync Models
         for (model, transform, buf_opt, bg_opt) in self.models.values_mut() {
             if buf_opt.is_none() {
-                let uniform = model.build_uniform(transform);
-                let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Model Uniform Buffer"),
-                    contents: bytemuck::bytes_of(&uniform),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
-                let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Model Bind Group"),
-                    layout: &pipeline.model_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: buf.as_entire_binding(),
-                    }],
-                });
+                let (buf, bg) = create_uniform_bg(
+                    device,
+                    "Model",
+                    &pipeline.model_layout,
+                    bytemuck::bytes_of(&model.build_uniform(transform)),
+                );
                 *buf_opt = Some(buf);
                 *bg_opt = Some(bg);
             }
@@ -314,34 +311,20 @@ impl Realm for Realm3DContext {
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
 
+            let b_entry = |binding, resource| wgpu::BindGroupEntry { binding, resource };
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Scene Bind Group"),
                 layout: &pipeline.scene_layout,
                 entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: camera_buf.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: env_buf.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: lights_buf.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: lights_header_buf.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: wgpu::BindingResource::TextureView(&shadow_map.array_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 5,
-                        resource: wgpu::BindingResource::Sampler(&shadow_map.sampler),
-                    },
+                    b_entry(0, camera_buf.as_entire_binding()),
+                    b_entry(1, env_buf.as_entire_binding()),
+                    b_entry(2, lights_buf.as_entire_binding()),
+                    b_entry(3, lights_header_buf.as_entire_binding()),
+                    b_entry(
+                        4,
+                        wgpu::BindingResource::TextureView(&shadow_map.array_view),
+                    ),
+                    b_entry(5, wgpu::BindingResource::Sampler(&shadow_map.sampler)),
                 ],
             });
 
@@ -420,6 +403,17 @@ impl Realm for Realm3DContext {
             self.depth_texture = Some((tex, view, size));
         }
         let (_, depth_view, _) = self.depth_texture.as_ref().unwrap();
+
+        // Initialize and update Skybox if configured
+        let sky_pipe = self
+            .skybox_pipeline
+            .get_or_insert_with(|| crate::skybox::SkyboxPipeline3D::new(device, ctx.target_format));
+        sky_pipe.update(
+            queue,
+            &camera_uniform.view_projection,
+            camera_uniform.position,
+            &self.environment.skybox,
+        );
 
         let pipeline = match &self.pipeline {
             Some(p) => p,
@@ -514,6 +508,17 @@ impl Realm for Realm3DContext {
                 multiview_mask: None,
             });
 
+            // 1. Draw Skybox at Reverse-Z far plane (0.0) before geometry if enabled
+            if self.environment.skybox.mode
+                != galfus_realm_3d_resources::environment::SkyboxMode3D::None
+                && let Some(sky_pipe) = &self.skybox_pipeline
+            {
+                pass.set_pipeline(&sky_pipe.pipeline);
+                pass.set_bind_group(0, &sky_pipe.bind_group, &[]);
+                pass.draw(0..3, 0..1);
+            }
+
+            // 2. Render forward geometry models
             pass.set_pipeline(&pipeline.render_pipeline);
             pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
 
@@ -522,25 +527,22 @@ impl Realm for Realm3DContext {
                 if !model.active {
                     continue;
                 }
-                let model_bg = match model_bg_opt {
-                    Some(bg) => bg,
-                    None => continue,
+                let Some(model_bg) = model_bg_opt else {
+                    continue;
                 };
-                let material_bg = match self
+                let Some(material_bg) = self
                     .materials
                     .get(&model.material_id)
                     .and_then(|m| m.2.as_ref())
-                {
-                    Some(bg) => bg,
-                    None => continue,
+                else {
+                    continue;
                 };
-                let (v_buf, i_buf, index_count) = match self
+                let Some((v_buf, i_buf, index_count)) = self
                     .geometries
                     .get(&model.geometry_id)
                     .and_then(|g| g.1.as_ref())
-                {
-                    Some(g) => g,
-                    None => continue,
+                else {
+                    continue;
                 };
 
                 pass.set_bind_group(1, material_bg, &[]);
@@ -549,6 +551,48 @@ impl Realm for Realm3DContext {
                 pass.set_index_buffer(i_buf.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..*index_count, 0, 0..1);
             }
+        }
+
+        // 3. Screen-space model outline dilation pass (matching .old post-process)
+        if self.environment.outline.enabled
+            && self
+                .models
+                .values()
+                .any(|(m, _, _, _)| m.active && m.cast_outline)
+        {
+            let outline_pipe = self.outline_pipeline.get_or_insert_with(|| {
+                crate::outline::OutlinePipeline3D::new(
+                    device,
+                    &pipeline.scene_layout,
+                    &pipeline.model_layout,
+                    ctx.target_format,
+                )
+            });
+            let outline_items = self
+                .models
+                .values()
+                .filter_map(|(model, _, _, model_bg_opt)| {
+                    if !model.active || !model.cast_outline {
+                        return None;
+                    }
+                    let model_bg = model_bg_opt.as_ref()?;
+                    let (_, gpu_buffers) = self.geometries.get(&model.geometry_id)?;
+                    let (v_buf, i_buf, idx_count) = gpu_buffers.as_ref()?;
+                    Some((model_bg, v_buf, i_buf, *idx_count))
+                });
+            outline_pipe.render(
+                crate::outline::OutlineRenderDesc {
+                    device,
+                    queue,
+                    encoder: &mut encoder,
+                    size,
+                    scene_bind_group: &scene_buffers.bind_group,
+                    depth_view,
+                    target_view: ctx.target_view,
+                    config: &self.environment.outline,
+                },
+                outline_items,
+            );
         }
 
         queue.submit(Some(encoder.finish()));
