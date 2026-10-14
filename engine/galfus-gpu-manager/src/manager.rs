@@ -9,13 +9,13 @@ use crate::texture::TextureManager;
 
 /// Unified coordinator aggregating GPU context, resource registries, and pipeline managers.
 pub struct GpuManager {
-    pub context: GpuContext,
     pub buffers: BufferManager,
     pub textures: TextureManager,
     pub samplers: SamplerManager,
     pub layouts: LayoutManager,
     pub bind_groups: BindGroupManager,
     pub pipelines: PipelineManager,
+    pub context: GpuContext,
 }
 
 impl GpuManager {
@@ -72,5 +72,62 @@ impl GpuManager {
     /// Direct reference to the inner `wgpu::Queue`.
     pub fn queue(&self) -> &wgpu::Queue {
         self.context.queue()
+    }
+
+    /// Allocates and initializes a texture mapped to a host logical ID.
+    pub fn create_logical_texture(
+        &mut self,
+        logical_id: u32,
+        desc: &crate::types::GpuTextureDesc,
+        data: &[u8],
+    ) -> GpuResult<crate::handle::GpuTextureHandle> {
+        let device = self.context.device_arc();
+        let queue = self.context.queue_arc();
+        self.textures
+            .create_logical_texture_with_data(&device, &queue, logical_id, desc, data)
+    }
+
+    /// Writes pixel data into a logical texture.
+    pub fn write_logical_texture(
+        &self,
+        logical_id: u32,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        data: &[u8],
+    ) -> GpuResult<()> {
+        self.textures
+            .write_logical_texture(self.queue(), logical_id, x, y, width, height, data)
+    }
+
+    /// Disposes a logical texture.
+    pub fn dispose_logical_texture(&mut self, logical_id: u32) -> GpuResult<()> {
+        self.textures.dispose_logical_texture(logical_id)
+    }
+
+    /// Allocates and initializes a buffer mapped to a host logical ID.
+    pub fn create_logical_buffer(
+        &mut self,
+        logical_id: u32,
+        label: Option<&str>,
+        contents: &[u8],
+        usages: crate::types::BufferUsageFlags,
+    ) -> GpuResult<crate::handle::GpuBufferHandle> {
+        let device = self.context.device_arc();
+        let queue = self.context.queue_arc();
+        self.buffers
+            .create_logical_buffer(&device, &queue, logical_id, label, contents, usages)
+    }
+
+    /// Writes data into a logical buffer at byte offset.
+    pub fn write_logical_buffer(&self, logical_id: u32, offset: u64, data: &[u8]) -> GpuResult<()> {
+        self.buffers
+            .write_logical_buffer(self.queue(), logical_id, offset, data)
+    }
+
+    /// Disposes a logical buffer.
+    pub fn dispose_logical_buffer(&mut self, logical_id: u32) -> GpuResult<()> {
+        self.buffers.dispose_logical_buffer(logical_id)
     }
 }

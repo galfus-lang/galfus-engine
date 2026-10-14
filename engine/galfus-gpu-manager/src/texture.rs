@@ -61,10 +61,14 @@ impl GpuTextureView {
     }
 }
 
+use galfus_core::id::validate_host_logical_id;
+use std::collections::HashMap;
+
 /// Registry and allocator for GPU Textures and Texture Views.
 pub struct TextureManager {
     textures: GenerationalPool<GpuTexture>,
     views: GenerationalPool<GpuTextureView>,
+    logical_map: HashMap<u32, GpuTextureHandle>,
 }
 
 impl Default for TextureManager {
@@ -78,6 +82,7 @@ impl TextureManager {
         Self {
             textures: GenerationalPool::new(NAMESPACE_TEXTURE),
             views: GenerationalPool::new(NAMESPACE_TEXTURE_VIEW),
+            logical_map: HashMap::new(),
         }
     }
 
@@ -152,7 +157,7 @@ impl TextureManager {
         let handle = self.create_texture(device, &upload_desc)?;
         let entry = self.get_texture(handle)?;
 
-        let bytes_per_pixel = match desc.format.to_wgpu() {
+        let bytes_per_pixel: u32 = match desc.format.to_wgpu() {
             wgpu::TextureFormat::R8Unorm => 1,
             wgpu::TextureFormat::Rg8Unorm | wgpu::TextureFormat::R16Float => 2,
             wgpu::TextureFormat::Rgba8Unorm
@@ -165,6 +170,17 @@ impl TextureManager {
             wgpu::TextureFormat::Rgba32Float => 16,
             _ => 4,
         };
+
+        let expected_bytes = (desc.width as usize)
+            * (desc.height as usize)
+            * (desc.depth_or_layers.max(1) as usize)
+            * (bytes_per_pixel as usize);
+        if data.len() < expected_bytes {
+            return Err(GpuError::InvalidArgument(format!(
+                "Texture data underflow: expected at least {expected_bytes} bytes, got {}",
+                data.len()
+            )));
+        }
 
         let bytes_per_row = desc.width * bytes_per_pixel;
 
@@ -254,5 +270,109 @@ impl TextureManager {
                 slot: handle.slot(),
                 generation: handle.generation().get(),
             })
+    }
+
+    /// Creates and initializes a texture mapped to a host logical ID.
+    pub fn create_logical_texture_with_data(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        logical_id: u32,
+        desc: &GpuTextureDesc,
+        data: &[u8],
+    ) -> GpuResult<GpuTextureHandle> {
+        validate_host_logical_id(logical_id)
+            .map_err(|e| GpuError::InvalidArgument(e.to_string()))?;
+        if self.logical_map.contains_key(&logical_id) {
+            return Err(GpuError::InvalidArgument(format!(
+                "Texture with logical ID {logical_id} already exists"
+            )));
+        }
+        let handle = self.create_texture_with_data(device, queue, desc, data)?;
+        self.logical_map.insert(logical_id, handle);
+        Ok(handle)
+    }
+
+    /// Retrieves the internal handle for a host logical texture ID.
+    pub fn get_logical_handle(&self, logical_id: u32) -> GpuResult<GpuTextureHandle> {
+        self.logical_map.get(&logical_id).copied().ok_or_else(|| {
+            GpuError::InvalidArgument(format!("Texture with logical ID {logical_id} not found"))
+        })
+    }
+
+    /// Retrieves an active logical GPU texture by host ID.
+    pub fn get_logical_texture(&self, logical_id: u32) -> GpuResult<&GpuTexture> {
+        let handle = self.get_logical_handle(logical_id)?;
+        self.get_texture(handle)
+    }
+
+    /// Retrieves the default texture view of a logical texture.
+    pub fn get_logical_view(&self, logical_id: u32) -> GpuResult<&GpuTextureView> {
+        let tex = self.get_logical_texture(logical_id)?;
+        self.get_view(tex.default_view())
+    }
+
+    /// Writes pixel data to a logical texture sub-rectangle.
+    #[allow(clippy::too_many_arguments)]
+    pub fn write_logical_texture(
+        &self,
+        queue: &wgpu::Queue,
+        logical_id: u32,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        data: &[u8],
+    ) -> GpuResult<()> {
+        let tex = self.get_logical_texture(logical_id)?;
+        let bytes_per_pixel: u32 = match tex.desc.format.to_wgpu() {
+            wgpu::TextureFormat::R8Unorm => 1,
+            wgpu::TextureFormat::Rg8Unorm | wgpu::TextureFormat::R16Float => 2,
+            wgpu::TextureFormat::Rgba8Unorm
+            | wgpu::TextureFormat::Rgba8UnormSrgb
+            | wgpu::TextureFormat::Bgra8Unorm
+            | wgpu::TextureFormat::Bgra8UnormSrgb
+            | wgpu::TextureFormat::Depth32Float
+            | wgpu::TextureFormat::R32Float => 4,
+            wgpu::TextureFormat::Rgba16Float => 8,
+            wgpu::TextureFormat::Rgba32Float => 16,
+            _ => 4,
+        };
+        let expected_bytes = (width as usize) * (height as usize) * (bytes_per_pixel as usize);
+        if data.len() < expected_bytes {
+            return Err(GpuError::InvalidArgument(format!(
+                "Texture sub-region data underflow: expected at least {expected_bytes} bytes, got {}",
+                data.len()
+            )));
+        }
+        let bytes_per_row = width * bytes_per_pixel;
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &tex.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d { x, y, z: 0 },
+                aspect: wgpu::TextureAspect::All,
+            },
+            data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bytes_per_row),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        Ok(())
+    }
+
+    /// Disposes a texture by its host logical ID.
+    pub fn dispose_logical_texture(&mut self, logical_id: u32) -> GpuResult<()> {
+        let handle = self.logical_map.remove(&logical_id).ok_or_else(|| {
+            GpuError::InvalidArgument(format!("Texture with logical ID {logical_id} not found"))
+        })?;
+        self.destroy_texture(handle)
     }
 }

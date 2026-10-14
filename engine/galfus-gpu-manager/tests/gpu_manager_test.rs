@@ -407,3 +407,99 @@ fn test_derived_render_pipeline_caching() {
         .unwrap();
     assert_ne!(p1, p2);
 }
+
+#[test]
+fn test_logical_buffer_lifecycle() {
+    let mut gpu = GpuManager::new_headless().expect("Headless GPU");
+    let contents = [10u8, 20, 30, 40, 50, 60, 70, 80];
+
+    // Reject reserved ID
+    let reserved_id = 4294901761;
+    let err = gpu.create_logical_buffer(
+        reserved_id,
+        Some("Reserved Buffer"),
+        &contents,
+        BufferUsageFlags::VERTEX,
+    );
+    assert!(err.is_err());
+
+    // Valid logical ID
+    let valid_id = 42;
+    let handle = gpu
+        .create_logical_buffer(
+            valid_id,
+            Some("Valid Buffer"),
+            &contents,
+            BufferUsageFlags::VERTEX,
+        )
+        .expect("Creation should succeed");
+
+    assert_eq!(gpu.buffers.get_logical_handle(valid_id).unwrap(), handle);
+    assert_eq!(gpu.buffers.get_logical(valid_id).unwrap().size(), 8);
+
+    // Duplicate ID rejected
+    let dup_err = gpu.create_logical_buffer(
+        valid_id,
+        Some("Duplicate"),
+        &contents,
+        BufferUsageFlags::VERTEX,
+    );
+    assert!(dup_err.is_err());
+
+    // Write update (offset 4, len 4, respecting COPY_BUFFER_ALIGNMENT of 4)
+    let new_data = [99u8, 88, 77, 66];
+    gpu.write_logical_buffer(valid_id, 4, &new_data)
+        .expect("Write should succeed");
+
+    // Dispose
+    gpu.dispose_logical_buffer(valid_id)
+        .expect("Dispose should succeed");
+    assert!(gpu.buffers.get_logical_handle(valid_id).is_err());
+}
+
+#[test]
+fn test_logical_texture_lifecycle() {
+    let mut gpu = GpuManager::new_headless().expect("Headless GPU");
+    let desc = GpuTextureDesc {
+        label: Some("Logical Texture".into()),
+        width: 4,
+        height: 4,
+        depth_or_layers: 1,
+        mip_levels: 1,
+        sample_count: 1,
+        dimension: TextureDimension::D2,
+        format: NormalizedTextureFormat::Rgba8Unorm,
+        usages: TextureUsageFlags {
+            copy_src: false,
+            copy_dst: true,
+            texture_binding: true,
+            storage_binding: false,
+            render_attachment: false,
+        },
+    };
+    let pixels = vec![255u8; 4 * 4 * 4];
+
+    // Reject reserved ID
+    let reserved_id = u32::MAX;
+    let err = gpu.create_logical_texture(reserved_id, &desc, &pixels);
+    assert!(err.is_err());
+
+    // Valid ID
+    let valid_id = 100;
+    let handle = gpu
+        .create_logical_texture(valid_id, &desc, &pixels)
+        .expect("Texture creation should succeed");
+
+    assert_eq!(gpu.textures.get_logical_handle(valid_id).unwrap(), handle);
+    assert!(gpu.textures.get_logical_view(valid_id).is_ok());
+
+    // Partial update (2x2 sub-region)
+    let sub_pixels = vec![128u8; 2 * 2 * 4];
+    gpu.write_logical_texture(valid_id, 1, 1, 2, 2, &sub_pixels)
+        .expect("Write sub-region should succeed");
+
+    // Dispose
+    gpu.dispose_logical_texture(valid_id)
+        .expect("Dispose should succeed");
+    assert!(gpu.textures.get_logical_handle(valid_id).is_err());
+}

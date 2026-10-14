@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'fs/promises';
 import { resolve } from 'path';
-import { API_FUNCTIONS } from './codegen/spec.ts';
+import { API_DESCRIPTORS, API_FUNCTIONS } from './codegen/spec.ts';
 import type { CodegenStrategy } from './codegen/strategies/strategy.ts';
 import { CHeaderStrategy } from './codegen/strategies/c_header.ts';
 import { PythonStrategy } from './codegen/strategies/python.ts';
@@ -21,7 +21,10 @@ const STRATEGIES: CodegenStrategy[] = [
 async function main() {
   console.log('=== Galfus Engine - Multi-Language SDK Codegen (Strategy Pattern) ===\n');
 
-  const context = { functions: API_FUNCTIONS };
+  const context = {
+    functions: API_FUNCTIONS,
+    descriptors: API_DESCRIPTORS
+  };
 
   for (const strategy of STRATEGIES) {
     const targetDir = resolve(rootDir, strategy.relativeOutputDir);

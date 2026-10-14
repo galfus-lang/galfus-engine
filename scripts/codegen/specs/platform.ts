@@ -1,4 +1,5 @@
 import type { FunctionSpec } from './types';
+export { platformDescriptors } from './platform_desc';
 
 export const platformFunctions: FunctionSpec[] = [
   {

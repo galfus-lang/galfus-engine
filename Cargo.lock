@@ -767,6 +767,7 @@ name = "galfus-native"
 version = "0.1.0"
 dependencies = [
  "galfus-core",
+ "galfus-gpu-manager",
  "galfus-multiverse",
  "galfus-platform",
  "glam 0.30.10",

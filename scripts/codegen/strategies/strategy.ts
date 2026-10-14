@@ -1,7 +1,8 @@
-import type { FunctionSpec } from '../spec.ts';
+import type { DescSpec, FunctionSpec } from '../spec.ts';
 
 export interface CodegenContext {
   functions: FunctionSpec[];
+  descriptors: DescSpec[];
 }
 
 export interface CodegenStrategy {

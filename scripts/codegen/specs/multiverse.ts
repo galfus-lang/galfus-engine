@@ -1,4 +1,130 @@
-import type { FunctionSpec } from './types';
+import type { DescSpec, FunctionSpec } from './types';
+
+export const multiverseDescriptors: DescSpec[] = [
+  {
+    kind: 'union',
+    name: 'TargetKind',
+    doc: 'Target type: window surface swapchain or offscreen GPU texture.',
+    variants: [
+      { inline: { type: { type: { literal: 'window' } } } },
+      {
+        inline: {
+          type: { type: { literal: 'texture' } },
+          width: { type: 'number' },
+          height: { type: 'number' }
+        }
+      }
+    ]
+  },
+  {
+    kind: 'object',
+    name: 'TargetDesc',
+    doc: 'Descriptor for creating a Target in the Multiverse.',
+    fields: {
+      kind: { type: { ref: 'TargetKind' } }
+    }
+  },
+  {
+    kind: 'union',
+    name: 'ViewportRect',
+    doc: 'Viewport rectangle defined in pixels or normalized (0.0 to 1.0) coordinates.',
+    variants: [
+      {
+        inline: {
+          unit: { type: { literal: 'pixels' } },
+          x: { type: 'number' },
+          y: { type: 'number' },
+          width: { type: 'number' },
+          height: { type: 'number' }
+        }
+      },
+      {
+        inline: {
+          unit: { type: { literal: 'normalized' } },
+          x: { type: 'number' },
+          y: { type: 'number' },
+          width: { type: 'number' },
+          height: { type: 'number' }
+        }
+      }
+    ]
+  },
+  {
+    kind: 'union',
+    name: 'InvocationFilter',
+    doc: 'Filter pass applied after a Realm renders to its Target.',
+    variants: [
+      { literal: 'sepia' },
+      {
+        inline: {
+          custom: {
+            type: {
+              inline: {
+                shaderId: { type: 'number' }
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    kind: 'object',
+    name: 'InvocationDesc',
+    doc: 'Descriptor linking a Realm to a Target with optional viewport and filters.',
+    fields: {
+      realmId: { type: 'number' },
+      targetId: { type: 'number' },
+      cameraSlot: { type: 'number', optional: true },
+      viewport: { type: { ref: 'ViewportRect' }, optional: true },
+      filters: { type: { array: { ref: 'InvocationFilter' } }, optional: true },
+      zIndex: { type: 'number', optional: true },
+      enabled: { type: 'boolean', optional: true },
+      clearColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'TargetTextureBinding',
+    doc: 'Binds an output Target texture to a Realm input slot.',
+    fields: {
+      sourceTargetId: { type: 'number' },
+      realmId: { type: 'number' },
+      slot: { type: 'string' }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'ResolvedInvocationStep',
+    doc: 'Resolved step in the Multiverse frame schedule.',
+    fields: {
+      invocationId: { type: 'number' },
+      realmId: { type: 'number' },
+      cameraSlot: { type: 'number', optional: true },
+      resolvedViewport: { type: { tuple: ['number', 'number', 'number', 'number'] } },
+      zIndex: { type: 'number' },
+      clearColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      filters: { type: { array: { ref: 'InvocationFilter' } } }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'TargetExecutionBlock',
+    doc: 'Group of ordered invocations targeting a single render target.',
+    fields: {
+      targetId: { type: 'number' },
+      invocations: { type: { array: { ref: 'ResolvedInvocationStep' } } }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'MultiverseSchedule',
+    doc: 'Complete execution graph schedule resolved for a frame.',
+    fields: {
+      targetBlocks: { type: { array: { ref: 'TargetExecutionBlock' } } }
+    }
+  }
+];
 
 export const multiverseFunctions: FunctionSpec[] = [
   {

@@ -27,11 +27,11 @@ pub struct MultiverseContext {
     window_sizes: HashMap<u32, UVec2>,
 
     // Internal GPU state (encapsulated, not exposed to host)
-    gpu_manager: Option<GpuManager>,
     surfaces: HashMap<u32, GpuSurface>,
     target_textures: HashMap<u32, (GpuTextureHandle, GpuTextureViewHandle, wgpu::TextureFormat)>,
     scratch_texture: Option<(GpuTextureHandle, GpuTextureViewHandle, UVec2)>,
     post_processor: Option<PostProcessor>,
+    gpu_manager: Option<GpuManager>,
 
     /// Cached resolved schedule.
     cached_schedule: Option<MultiverseSchedule>,
@@ -131,6 +131,83 @@ impl MultiverseContext {
         if let (Some(gpu), Some(post)) = (&self.gpu_manager, &mut self.post_processor) {
             post.register_custom_shader(gpu.device(), shader_id, source)?;
         }
+        Ok(())
+    }
+
+    /// Returns a reference to the initialized GPU manager, if any.
+    pub fn gpu_manager(&self) -> Option<&GpuManager> {
+        self.gpu_manager.as_ref()
+    }
+
+    /// Returns a mutable reference to the GPU manager, initializing it if needed.
+    pub fn gpu_manager_mut(&mut self) -> MultiverseResult<&mut GpuManager> {
+        self.ensure_gpu_manager()
+    }
+
+    /// Allocates and initializes a shared GPU texture under a host logical ID.
+    pub fn create_texture(
+        &mut self,
+        texture_id: u32,
+        desc: &GpuTextureDesc,
+        data: &[u8],
+    ) -> MultiverseResult<()> {
+        let gpu = self.ensure_gpu_manager()?;
+        gpu.create_logical_texture(texture_id, desc, data)?;
+        Ok(())
+    }
+
+    /// Writes pixel data into a sub-rectangle of an existing logical texture.
+    pub fn write_texture(
+        &self,
+        texture_id: u32,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        data: &[u8],
+    ) -> MultiverseResult<()> {
+        let gpu = self
+            .gpu_manager
+            .as_ref()
+            .ok_or_else(|| MultiverseError::InvalidConfig("GPU manager not initialized".into()))?;
+        gpu.write_logical_texture(texture_id, x, y, width, height, data)?;
+        Ok(())
+    }
+
+    /// Disposes a shared logical texture.
+    pub fn dispose_texture(&mut self, texture_id: u32) -> MultiverseResult<()> {
+        let gpu = self.ensure_gpu_manager()?;
+        gpu.dispose_logical_texture(texture_id)?;
+        Ok(())
+    }
+
+    /// Allocates and initializes a shared GPU buffer under a host logical ID.
+    pub fn create_buffer(
+        &mut self,
+        buffer_id: u32,
+        label: Option<&str>,
+        contents: &[u8],
+        usages: galfus_gpu_manager::BufferUsageFlags,
+    ) -> MultiverseResult<()> {
+        let gpu = self.ensure_gpu_manager()?;
+        gpu.create_logical_buffer(buffer_id, label, contents, usages)?;
+        Ok(())
+    }
+
+    /// Writes data into a logical buffer at byte offset.
+    pub fn write_buffer(&self, buffer_id: u32, offset: u64, data: &[u8]) -> MultiverseResult<()> {
+        let gpu = self
+            .gpu_manager
+            .as_ref()
+            .ok_or_else(|| MultiverseError::InvalidConfig("GPU manager not initialized".into()))?;
+        gpu.write_logical_buffer(buffer_id, offset, data)?;
+        Ok(())
+    }
+
+    /// Disposes a shared logical buffer.
+    pub fn dispose_buffer(&mut self, buffer_id: u32) -> MultiverseResult<()> {
+        let gpu = self.ensure_gpu_manager()?;
+        gpu.dispose_logical_buffer(buffer_id)?;
         Ok(())
     }
 

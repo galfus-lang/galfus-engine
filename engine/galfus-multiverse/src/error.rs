@@ -38,6 +38,9 @@ pub enum MultiverseError {
 
     #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
+
+    #[error("GPU error: {0}")]
+    Gpu(#[from] galfus_gpu_manager::GpuError),
 }
 
 /// Convenience alias for `Result<T, MultiverseError>`.

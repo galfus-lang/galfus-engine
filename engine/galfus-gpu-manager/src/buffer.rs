@@ -29,9 +29,13 @@ impl GpuBuffer {
     }
 }
 
+use galfus_core::id::validate_host_logical_id;
+use std::collections::HashMap;
+
 /// Registry and allocator for GPU Buffers.
 pub struct BufferManager {
     pool: GenerationalPool<GpuBuffer>,
+    logical_map: HashMap<u32, GpuBufferHandle>,
 }
 
 impl Default for BufferManager {
@@ -44,6 +48,7 @@ impl BufferManager {
     pub fn new() -> Self {
         Self {
             pool: GenerationalPool::new(NAMESPACE_BUFFER),
+            logical_map: HashMap::new(),
         }
     }
 
@@ -138,5 +143,60 @@ impl BufferManager {
             })?;
         entry.buffer.destroy();
         Ok(())
+    }
+
+    /// Allocates and initializes a buffer mapped to a host logical ID.
+    pub fn create_logical_buffer(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        logical_id: u32,
+        label: Option<&str>,
+        contents: &[u8],
+        usages: BufferUsageFlags,
+    ) -> GpuResult<GpuBufferHandle> {
+        validate_host_logical_id(logical_id)
+            .map_err(|e| GpuError::InvalidArgument(e.to_string()))?;
+        if self.logical_map.contains_key(&logical_id) {
+            return Err(GpuError::InvalidArgument(format!(
+                "Buffer with logical ID {logical_id} already exists"
+            )));
+        }
+        let handle = self.create_buffer_init(device, queue, label, contents, usages)?;
+        self.logical_map.insert(logical_id, handle);
+        Ok(handle)
+    }
+
+    /// Writes data into a logical buffer at byte offset.
+    pub fn write_logical_buffer(
+        &self,
+        queue: &wgpu::Queue,
+        logical_id: u32,
+        offset: u64,
+        data: &[u8],
+    ) -> GpuResult<()> {
+        let handle = self.get_logical_handle(logical_id)?;
+        self.write_buffer(queue, handle, offset, data)
+    }
+
+    /// Retrieves the internal handle for a host logical buffer ID.
+    pub fn get_logical_handle(&self, logical_id: u32) -> GpuResult<GpuBufferHandle> {
+        self.logical_map.get(&logical_id).copied().ok_or_else(|| {
+            GpuError::InvalidArgument(format!("Buffer with logical ID {logical_id} not found"))
+        })
+    }
+
+    /// Retrieves an active logical GPU buffer by host ID.
+    pub fn get_logical(&self, logical_id: u32) -> GpuResult<&GpuBuffer> {
+        let handle = self.get_logical_handle(logical_id)?;
+        self.get(handle)
+    }
+
+    /// Disposes a buffer by its host logical ID.
+    pub fn dispose_logical_buffer(&mut self, logical_id: u32) -> GpuResult<()> {
+        let handle = self.logical_map.remove(&logical_id).ok_or_else(|| {
+            GpuError::InvalidArgument(format!("Buffer with logical ID {logical_id} not found"))
+        })?;
+        self.destroy(handle)
     }
 }
