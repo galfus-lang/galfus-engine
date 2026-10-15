@@ -97,6 +97,7 @@ impl SceneGpuBuffers {
                 ),
                 b_entry(5, wgpu::BindingResource::Sampler(&shadow_map.sampler)),
                 b_entry(6, bones_buf.as_entire_binding()),
+                b_entry(7, shadow_map.matrices_buffer.as_entire_binding()),
             ],
         });
 
@@ -121,3 +122,75 @@ pub type GpuModelEntry = (
     Option<wgpu::Buffer>,
     Option<wgpu::BindGroup>,
 );
+
+/// Synchronizes dirty CPU mesh geometries, material uniforms, and model matrix uniforms with the GPU.
+pub fn sync_realm_resources(
+    device: &wgpu::Device,
+    pipeline: &mut crate::pipeline::Pipeline3D,
+    geometries: &mut std::collections::BTreeMap<
+        u32,
+        (
+            galfus_realm_3d_resources::geometry::Geometry3D,
+            Option<GpuMeshBuffers>,
+        ),
+    >,
+    materials: &mut std::collections::BTreeMap<
+        u32,
+        (
+            galfus_realm_3d_resources::material::Material3D,
+            Option<wgpu::Buffer>,
+            Option<wgpu::BindGroup>,
+        ),
+    >,
+    models: &mut std::collections::BTreeMap<u32, GpuModelEntry>,
+) {
+    // 1. Sync Geometries
+    for (geom, gpu_buffers) in geometries.values_mut() {
+        if gpu_buffers.is_none() && !geom.vertices.is_empty() {
+            let v = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(&geom.vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+            let i = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&geom.indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+            *gpu_buffers = Some((v, i, geom.indices.len() as u32));
+        }
+    }
+
+    // 2. Sync Materials and pre-compile custom surface pipelines
+    for (mat, buf_opt, bg_opt) in materials.values_mut() {
+        if buf_opt.is_none() {
+            let (buf, bg) = create_uniform_bg(
+                device,
+                "Mat",
+                &pipeline.material_layout,
+                bytemuck::bytes_of(&mat.build_uniform()),
+            );
+            *buf_opt = Some(buf);
+            *bg_opt = Some(bg);
+        }
+        pipeline.ensure_pipeline(
+            device,
+            mat.shader_effect.as_deref(),
+            mat.surface_type == galfus_realm_3d_resources::material::SurfaceType3D::Transparent,
+        );
+    }
+
+    // 3. Sync Models
+    for (model, transform, buf_opt, bg_opt) in models.values_mut() {
+        if buf_opt.is_none() {
+            let (buf, bg) = create_uniform_bg(
+                device,
+                "Model",
+                &pipeline.model_layout,
+                bytemuck::bytes_of(&model.build_uniform(transform)),
+            );
+            *buf_opt = Some(buf);
+            *bg_opt = Some(bg);
+        }
+    }
+}

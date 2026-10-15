@@ -10,6 +10,8 @@ pub mod pipeline;
 pub mod shader;
 pub mod shadow;
 pub mod skybox;
+pub mod ssao;
+pub mod ssao_shader;
 pub mod surface_effect;
 pub mod types;
 
@@ -20,6 +22,7 @@ pub use pipeline::Pipeline3D;
 pub use shader::REALM_3D_SHADER;
 pub use shadow::{ShadowMap3D, ShadowPipeline3D};
 pub use skybox::SkyboxPipeline3D;
+pub use ssao::SsaoPipeline3D;
 pub use surface_effect::{
     BUILTIN_SURFACE_PASSTHROUGH, SURFACE_EFFECT_PRELUDE, compose_surface_shader,
 };

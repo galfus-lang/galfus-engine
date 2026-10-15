@@ -59,6 +59,7 @@ struct ModelUniform {
 @group(0) @binding(4) var shadow_map: texture_depth_2d_array;
 @group(0) @binding(5) var shadow_sampler: sampler_comparison;
 @group(0) @binding(6) var<storage, read> bones: array<mat4x4<f32>>;
+@group(0) @binding(7) var<storage, read> shadow_matrices: array<mat4x4<f32>>;
 
 @group(1) @binding(0) var<uniform> material: MaterialUniform;
 @group(2) @binding(0) var<uniform> object: ModelUniform;
@@ -168,6 +169,74 @@ struct SurfaceOutput {
 // --- Surface Effect Hook Snippet ---
 {{EFFECT_SNIPPET}}
 
+fn resolve_point_face(dir: vec3<f32>) -> u32 {
+    let ad = abs(dir);
+    if (ad.x >= ad.y && ad.x >= ad.z) {
+        return select(1u, 0u, dir.x >= 0.0);
+    } else if (ad.y >= ad.x && ad.y >= ad.z) {
+        return select(3u, 2u, dir.y >= 0.0);
+    } else {
+        return select(5u, 4u, dir.z >= 0.0);
+    }
+}
+
+fn resolve_secondary_point_face(dir: vec3<f32>, primary: u32) -> u32 {
+    let ad = abs(dir);
+    if (primary == 0u || primary == 1u) {
+        if (ad.y >= ad.z) { return select(3u, 2u, dir.y >= 0.0); }
+        return select(5u, 4u, dir.z >= 0.0);
+    } else if (primary == 2u || primary == 3u) {
+        if (ad.x >= ad.z) { return select(1u, 0u, dir.x >= 0.0); }
+        return select(5u, 4u, dir.z >= 0.0);
+    } else {
+        if (ad.x >= ad.y) { return select(1u, 0u, dir.x >= 0.0); }
+        return select(3u, 2u, dir.y >= 0.0);
+    }
+}
+
+fn resolve_tertiary_point_face(dir: vec3<f32>, primary: u32, secondary: u32) -> u32 {
+    let p_axis = primary / 2u;
+    let s_axis = secondary / 2u;
+    let t_axis = 3u - p_axis - s_axis;
+    if (t_axis == 0u) {
+        return select(1u, 0u, dir.x >= 0.0);
+    } else if (t_axis == 1u) {
+        return select(3u, 2u, dir.y >= 0.0);
+    } else {
+        return select(5u, 4u, dir.z >= 0.0);
+    }
+}
+
+fn sample_shadow_layer(
+    layer: u32,
+    world_pos: vec3<f32>,
+    normal: vec3<f32>,
+    light_dir: vec3<f32>
+) -> f32 {
+    let slope = 1.0 - max(dot(normal, light_dir), 0.0);
+    // Normal offset bias moves test point slightly along surface normal,
+    // anchoring shadows cleanly to model contact bases without Peter Panning.
+    let biased_pos = world_pos + normal * (0.008 + 0.012 * slope);
+    let shadow_mat = shadow_matrices[layer];
+    let shadow_clip = shadow_mat * vec4<f32>(biased_pos, 1.0);
+    if (shadow_clip.w <= 1e-5) {
+        return 1.0;
+    }
+    let shadow_ndc = shadow_clip.xyz / shadow_clip.w;
+    if (shadow_ndc.x < -1.0 || shadow_ndc.x > 1.0 || shadow_ndc.y < -1.0 || shadow_ndc.y > 1.0 || shadow_ndc.z < 0.0 || shadow_ndc.z > 1.0) {
+        return 1.0;
+    }
+    let shadow_uv = clamp(vec2<f32>(shadow_ndc.x * 0.5 + 0.5, -shadow_ndc.y * 0.5 + 0.5), vec2<f32>(0.0), vec2<f32>(1.0));
+    let bias = 0.00002 + 0.00004 * slope;
+    let ref_depth = clamp(shadow_ndc.z + bias, 0.0, 1.0);
+    let texel = 1.0 / 2048.0;
+    let s0 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(-texel, -texel), i32(layer), ref_depth);
+    let s1 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(texel, -texel), i32(layer), ref_depth);
+    let s2 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(-texel, texel), i32(layer), ref_depth);
+    let s3 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(texel, texel), i32(layer), ref_depth);
+    return (s0 + s1 + s2 + s3) * 0.25;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var s_in: SurfaceInput;
@@ -233,22 +302,44 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         var shadow_factor: f32 = 1.0;
         let cast_shadow = (light.flags.x & 1u) != 0u;
         let receive_shadow = (object.flags.x & 1u) != 0u;
-        let shadow_layer = light.flags.y;
-        if (cast_shadow && receive_shadow && shadow_layer < 4u && kind_code <= 2u) {
-            let shadow_clip = light.shadow_view_proj * vec4<f32>(in.world_pos, 1.0);
-            if (shadow_clip.w > 1e-5) {
-                let shadow_ndc = shadow_clip.xyz / shadow_clip.w;
-                let shadow_uv = vec2<f32>(shadow_ndc.x * 0.5 + 0.5, -shadow_ndc.y * 0.5 + 0.5);
-                if (shadow_uv.x >= 0.001 && shadow_uv.x <= 0.999 && shadow_uv.y >= 0.001 && shadow_uv.y <= 0.999 && shadow_ndc.z >= 0.0 && shadow_ndc.z <= 1.0) {
-                    let slope = 1.0 - max(dot(N, L), 0.0);
-                    let bias = 0.0001 + 0.0004 * slope;
-                    let ref_depth = clamp(shadow_ndc.z + bias, 0.0, 1.0);
-                    let texel = 1.0 / 2048.0;
-                    let s0 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(-texel, -texel), i32(shadow_layer), ref_depth);
-                    let s1 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(texel, -texel), i32(shadow_layer), ref_depth);
-                    let s2 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(-texel, texel), i32(shadow_layer), ref_depth);
-                    let s3 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(texel, texel), i32(shadow_layer), ref_depth);
-                    shadow_factor = (s0 + s1 + s2 + s3) * 0.25;
+        let base_layer = light.flags.y;
+        if (cast_shadow && receive_shadow && base_layer < 16u && kind_code <= 2u) {
+            if (kind_code == 1u) {
+                let to_frag = in.world_pos - light.position.xyz;
+                let primary_face = resolve_point_face(to_frag);
+                let primary_layer = base_layer + primary_face;
+                var vis = 1.0;
+                if (primary_layer < 16u) {
+                    vis = sample_shadow_layer(primary_layer, in.world_pos, N, L);
+                }
+
+                let ad = abs(to_frag);
+                let major = max(ad.x, max(ad.y, ad.z));
+                let minor = ad.x + ad.y + ad.z - major - min(ad.x, min(ad.y, ad.z));
+                let min_c = min(ad.x, min(ad.y, ad.z));
+
+                if (major > 0.0 && (major - minor) / major < 0.08) {
+                    let secondary_face = resolve_secondary_point_face(to_frag, primary_face);
+                    let secondary_layer = base_layer + secondary_face;
+                    if (secondary_layer < 16u) {
+                        let sec_vis = sample_shadow_layer(secondary_layer, in.world_pos, N, L);
+                        vis = min(vis, sec_vis);
+                    }
+
+                    if ((major - min_c) / major < 0.08) {
+                        let tertiary_face = resolve_tertiary_point_face(to_frag, primary_face, secondary_face);
+                        let tertiary_layer = base_layer + tertiary_face;
+                        if (tertiary_layer < 16u) {
+                            let tert_vis = sample_shadow_layer(tertiary_layer, in.world_pos, N, L);
+                            vis = min(vis, tert_vis);
+                        }
+                    }
+                }
+                shadow_factor = vis;
+            } else {
+                let shadow_layer = base_layer;
+                if (shadow_layer < 16u) {
+                    shadow_factor = sample_shadow_layer(shadow_layer, in.world_pos, N, L);
                 }
             }
         }

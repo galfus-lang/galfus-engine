@@ -177,10 +177,10 @@ impl ShadowPipeline3D {
     }
 }
 
-/// Maximum number of concurrent shadow-casting lights supported by the shadow map array.
-pub const MAX_SHADOW_LIGHTS: u32 = 4;
+/// Maximum number of concurrent shadow-casting layers supported by the shadow map array.
+pub const MAX_SHADOW_LIGHTS: u32 = 16;
 
-/// GPU shadow map texture array, views, comparison sampler, and uniform buffers.
+/// GPU shadow map texture array, views, comparison sampler, uniform and matrices buffers.
 pub struct ShadowMap3D {
     pub texture: wgpu::Texture,
     pub array_view: wgpu::TextureView,
@@ -188,6 +188,7 @@ pub struct ShadowMap3D {
     pub sampler: wgpu::Sampler,
     pub vp_buffers: Vec<wgpu::Buffer>,
     pub vp_bind_groups: Vec<wgpu::BindGroup>,
+    pub matrices_buffer: wgpu::Buffer,
     pub resolution: u32,
 }
 
@@ -275,6 +276,13 @@ impl ShadowMap3D {
             vp_bind_groups.push(bg);
         }
 
+        let initial_matrices = vec![Mat4::IDENTITY; MAX_SHADOW_LIGHTS as usize];
+        let matrices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Realm3D Shadow Matrices Storage Buffer"),
+            contents: bytemuck::cast_slice(&initial_matrices),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
         Self {
             texture,
             array_view,
@@ -282,6 +290,7 @@ impl ShadowMap3D {
             sampler,
             vp_buffers,
             vp_bind_groups,
+            matrices_buffer,
             resolution,
         }
     }
@@ -317,7 +326,75 @@ impl ShadowMap3D {
     pub fn update_vp(&self, queue: &wgpu::Queue, layer: u32, shadow_view_proj: &Mat4) {
         if let Some(buf) = self.vp_buffers.get(layer as usize) {
             queue.write_buffer(buf, 0, bytes_of(shadow_view_proj));
+            queue.write_buffer(
+                &self.matrices_buffer,
+                layer as u64 * std::mem::size_of::<Mat4>() as u64,
+                bytes_of(shadow_view_proj),
+            );
         }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_single_shadow_layer(
+    encoder: &mut wgpu::CommandEncoder,
+    queue: &wgpu::Queue,
+    shadow_pipe: &ShadowPipeline3D,
+    shadow_map: &ShadowMap3D,
+    layer_idx: u32,
+    shadow_view_proj: &Mat4,
+    models: &std::collections::BTreeMap<u32, crate::types::GpuModelEntry>,
+    geometries: &std::collections::BTreeMap<
+        u32,
+        (
+            galfus_realm_3d_resources::geometry::Geometry3D,
+            Option<crate::types::GpuMeshBuffers>,
+        ),
+    >,
+) {
+    shadow_map.update_vp(queue, layer_idx, shadow_view_proj);
+    let layer_view = &shadow_map.layer_views[layer_idx as usize];
+    let vp_bg = &shadow_map.vp_bind_groups[layer_idx as usize];
+
+    let mut s_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Realm3D Shadow Pass"),
+        color_attachments: &[],
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: layer_view,
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Clear(0.0),
+                store: wgpu::StoreOp::Store,
+            }),
+            stencil_ops: None,
+        }),
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    });
+
+    s_pass.set_pipeline(&shadow_pipe.render_pipeline);
+    s_pass.set_bind_group(0, vp_bg, &[]);
+
+    let shadow_frustum =
+        galfus_realm_3d_resources::frustum::Frustum::from_view_projection(*shadow_view_proj);
+    for (model, model_trans, _, model_bg_opt) in models.values() {
+        if !model.active || !model.cast_shadow {
+            continue;
+        }
+        let Some(model_bg) = model_bg_opt else {
+            continue;
+        };
+        let Some((geom, Some((v, i, count)))) = geometries.get(&model.geometry_id) else {
+            continue;
+        };
+        let world_aabb = geom.aabb.transform(&model_trans.matrix());
+        if !shadow_frustum.intersects_aabb(world_aabb.min, world_aabb.max) {
+            continue;
+        }
+        s_pass.set_bind_group(1, model_bg, &[]);
+        s_pass.set_vertex_buffer(0, v.slice(..));
+        s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);
+        s_pass.draw_indexed(0..*count, 0, 0..1);
     }
 }
 
@@ -345,57 +422,56 @@ pub fn render_shadow_depth_pass(
 ) {
     let mut layer_idx = 0u32;
     for (light, light_trans) in lights.values() {
-        if !light.active || !light.cast_shadow || layer_idx >= MAX_SHADOW_LIGHTS {
+        if !light.active || !light.cast_shadow {
             continue;
         }
-        let light_uniform = light.build_uniform_with_layer(light_trans, layer_idx);
-        shadow_map.update_vp(queue, layer_idx, &light_uniform.shadow_view_proj);
-
-        let layer_view = &shadow_map.layer_views[layer_idx as usize];
-        let vp_bg = &shadow_map.vp_bind_groups[layer_idx as usize];
-
-        let mut s_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Realm3D Shadow Pass"),
-            color_attachments: &[],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: layer_view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(0.0),
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-
-        s_pass.set_pipeline(&shadow_pipe.render_pipeline);
-        s_pass.set_bind_group(0, vp_bg, &[]);
-
-        let shadow_frustum = galfus_realm_3d_resources::frustum::Frustum::from_view_projection(
-            light_uniform.shadow_view_proj,
-        );
-        for (model, model_trans, _, model_bg_opt) in models.values() {
-            if !model.active || !model.cast_shadow {
+        if light.kind == galfus_realm_3d_resources::light::LightKind3D::Point {
+            if layer_idx + 6 > MAX_SHADOW_LIGHTS {
                 continue;
             }
-            let Some(model_bg) = model_bg_opt else {
-                continue;
-            };
-            let Some((geom, Some((v, i, count)))) = geometries.get(&model.geometry_id) else {
-                continue;
-            };
-            let world_aabb = geom.aabb.transform(&model_trans.matrix());
-            if !shadow_frustum.intersects_aabb(world_aabb.min, world_aabb.max) {
+            let pos = light_trans.position;
+            let range = light.range.max(0.1);
+            let fov = 90.5f32.to_radians();
+            let proj = Mat4::perspective_rh(fov, 1.0, range, 0.1);
+            let targets = [
+                (pos + glam::Vec3::X, glam::Vec3::NEG_Y),     // +X: 0
+                (pos + glam::Vec3::NEG_X, glam::Vec3::NEG_Y), // -X: 1
+                (pos + glam::Vec3::Y, glam::Vec3::Z),         // +Y: 2
+                (pos + glam::Vec3::NEG_Y, glam::Vec3::NEG_Z), // -Y: 3
+                (pos + glam::Vec3::Z, glam::Vec3::NEG_Y),     // +Z: 4
+                (pos + glam::Vec3::NEG_Z, glam::Vec3::NEG_Y), // -Z: 5
+            ];
+            for (face_i, (target, up)) in targets.iter().enumerate() {
+                let view = Mat4::look_at_rh(pos, *target, *up);
+                let vp = proj * view;
+                render_single_shadow_layer(
+                    encoder,
+                    queue,
+                    shadow_pipe,
+                    shadow_map,
+                    layer_idx + face_i as u32,
+                    &vp,
+                    models,
+                    geometries,
+                );
+            }
+            layer_idx += 6;
+        } else {
+            if layer_idx >= MAX_SHADOW_LIGHTS {
                 continue;
             }
-            s_pass.set_bind_group(1, model_bg, &[]);
-            s_pass.set_vertex_buffer(0, v.slice(..));
-            s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);
-            s_pass.draw_indexed(0..*count, 0, 0..1);
+            let light_uniform = light.build_uniform_with_layer(light_trans, layer_idx);
+            render_single_shadow_layer(
+                encoder,
+                queue,
+                shadow_pipe,
+                shadow_map,
+                layer_idx,
+                &light_uniform.shadow_view_proj,
+                models,
+                geometries,
+            );
+            layer_idx += 1;
         }
-
-        layer_idx += 1;
     }
 }

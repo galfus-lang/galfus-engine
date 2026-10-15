@@ -172,6 +172,17 @@ mod tests {
         // In Reverse-Z, near is 1.0 and far is 0.0
         assert!((near_ndc_z - 1.0).abs() < 1e-4);
         assert!(far_ndc_z.abs() < 1e-4);
+
+        let inv = proj.inverse();
+        let rec = inv * Vec4::new(0.0, 0.0, near_ndc_z, 1.0);
+        assert!(rec.w > 0.0, "rec.w is {}", rec.w);
+        let pos = rec.truncate() / rec.w;
+        assert!((pos.z - (-0.1)).abs() < 1e-4);
+
+        let rec_far = inv * Vec4::new(0.0, 0.0, far_ndc_z, 1.0);
+        assert!(rec_far.w > 0.0, "rec_far.w is {}", rec_far.w);
+        let pos_far = rec_far.truncate() / rec_far.w;
+        assert!((pos_far.z - (-100.0)).abs() < 1e-2);
     }
 
     #[test]

@@ -7,7 +7,7 @@ use galfus_realm_3d_resources::environment::EnvironmentRealm3D;
 use galfus_realm_3d_resources::frustum::Frustum;
 use galfus_realm_3d_resources::geometry::Geometry3D;
 use galfus_realm_3d_resources::light::{Light3D, Light3DUniform};
-use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D};
+use galfus_realm_3d_resources::material::Material3D;
 use galfus_realm_3d_resources::model::Model3D;
 use galfus_realm_3d_resources::transform::Transform3D;
 use galfus_realm_core::error::{RealmError, RealmResult};
@@ -19,9 +19,7 @@ use wgpu::util::DeviceExt;
 use crate::collector::DrawCollector;
 use crate::pipeline::Pipeline3D;
 use crate::shadow::{ShadowMap3D, ShadowPipeline3D};
-use crate::types::{
-    GpuMeshBuffers, GpuModelEntry, SceneGpuBuffers, create_uniform_bg, validate_id,
-};
+use crate::types::{GpuMeshBuffers, GpuModelEntry, SceneGpuBuffers, validate_id};
 
 #[inline]
 fn not_found(realm_id: u32, kind: &str, id: u32) -> RealmError {
@@ -43,6 +41,7 @@ pub struct Realm3DContext {
     shadow_map: Option<ShadowMap3D>,
     skybox_pipeline: Option<crate::skybox::SkyboxPipeline3D>,
     outline_pipeline: Option<crate::outline::OutlinePipeline3D>,
+    ssao_pipeline: Option<crate::ssao::SsaoPipeline3D>,
     scene_buffers: Option<SceneGpuBuffers>,
     depth_texture: Option<(wgpu::Texture, wgpu::TextureView, UVec2)>,
     bones: Vec<glam::Mat4>,
@@ -66,6 +65,7 @@ impl Realm3DContext {
             shadow_map: None,
             skybox_pipeline: None,
             outline_pipeline: None,
+            ssao_pipeline: None,
             scene_buffers: None,
             depth_texture: None,
             bones: Vec::new(),
@@ -215,55 +215,14 @@ impl Realm for Realm3DContext {
         }
         let pipeline = self.pipeline.as_mut().unwrap();
 
-        // 1. Sync Geometries
-        for (geom, gpu_buffers) in self.geometries.values_mut() {
-            if gpu_buffers.is_none() && !geom.vertices.is_empty() {
-                let v = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Vertex Buffer"),
-                    contents: bytemuck::cast_slice(&geom.vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-                let i = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Index Buffer"),
-                    contents: bytemuck::cast_slice(&geom.indices),
-                    usage: wgpu::BufferUsages::INDEX,
-                });
-                *gpu_buffers = Some((v, i, geom.indices.len() as u32));
-            }
-        }
-
-        // 2. Sync Materials and pre-compile any custom surface effect pipelines
-        for (mat, buf_opt, bg_opt) in self.materials.values_mut() {
-            if buf_opt.is_none() {
-                let (buf, bg) = create_uniform_bg(
-                    device,
-                    "Mat",
-                    &pipeline.material_layout,
-                    bytemuck::bytes_of(&mat.build_uniform()),
-                );
-                *buf_opt = Some(buf);
-                *bg_opt = Some(bg);
-            }
-            pipeline.ensure_pipeline(
-                device,
-                mat.shader_effect.as_deref(),
-                mat.surface_type == SurfaceType3D::Transparent,
-            );
-        }
-
-        // 3. Sync Models
-        for (model, transform, buf_opt, bg_opt) in self.models.values_mut() {
-            if buf_opt.is_none() {
-                let (buf, bg) = create_uniform_bg(
-                    device,
-                    "Model",
-                    &pipeline.model_layout,
-                    bytemuck::bytes_of(&model.build_uniform(transform)),
-                );
-                *buf_opt = Some(buf);
-                *bg_opt = Some(bg);
-            }
-        }
+        // 1-3. Sync Geometries, Materials, and Models
+        crate::types::sync_realm_resources(
+            device,
+            pipeline,
+            &mut self.geometries,
+            &mut self.materials,
+            &mut self.models,
+        );
 
         // 4. Sync Scene Buffers (Environment, Lights, Shadows)
         let shadow_pipe = self
@@ -299,10 +258,20 @@ impl Realm for Realm3DContext {
                 .lights
                 .values()
                 .map(|(l, t)| {
-                    if l.cast_shadow && shadow_counter < crate::shadow::MAX_SHADOW_LIGHTS {
-                        let layer = shadow_counter;
-                        shadow_counter += 1;
-                        l.build_uniform_with_layer(t, layer)
+                    if l.cast_shadow && l.active {
+                        let layers_needed =
+                            if l.kind == galfus_realm_3d_resources::light::LightKind3D::Point {
+                                6
+                            } else {
+                                1
+                            };
+                        if shadow_counter + layers_needed <= crate::shadow::MAX_SHADOW_LIGHTS {
+                            let base_layer = shadow_counter;
+                            shadow_counter += layers_needed;
+                            l.build_uniform_with_layer(t, base_layer)
+                        } else {
+                            l.build_uniform(t)
+                        }
                     } else {
                         l.build_uniform(t)
                     }
@@ -384,7 +353,8 @@ impl Realm for Realm3DContext {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Depth32Float,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
             let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
@@ -543,6 +513,24 @@ impl Realm for Realm3DContext {
                     config: &self.environment.outline,
                 },
                 outline_items,
+            );
+        }
+
+        // 4. Screen-Space Ambient Occlusion (SSAO) pass
+        if self.environment.ssao.enabled {
+            let ssao_pipe = self.ssao_pipeline.get_or_insert_with(|| {
+                crate::ssao::SsaoPipeline3D::new(device, ctx.target_format, size.x, size.y)
+            });
+            ssao_pipe.resize(device, size.x, size.y);
+            ssao_pipe.render(
+                device,
+                queue,
+                &mut encoder,
+                depth_view,
+                ctx.target_view,
+                &camera_uniform.projection,
+                &camera_uniform.projection.inverse(),
+                &self.environment.ssao,
             );
         }
 

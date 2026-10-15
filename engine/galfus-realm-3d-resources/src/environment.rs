@@ -64,6 +64,10 @@ pub struct SkyboxConfig3D {
     pub sun_direction: Vec4,
     /// Sun disc emissive tint and intensity multiplier `[r, g, b, intensity]`.
     pub sun_color: Vec4,
+    /// Rotation around the vertical Y-axis in radians.
+    pub rotation: f32,
+    /// Optional logical texture ID for an equirectangular 360° panoramic HDR/LDR skybox texture.
+    pub texture_id: Option<u32>,
     /// Overall skybox intensity factor.
     pub intensity: f32,
     /// Angular radius for procedural sun disc.
@@ -79,6 +83,8 @@ impl Default for SkyboxConfig3D {
             ground_color: Vec4::new(0.08, 0.08, 0.1, 1.0),
             sun_direction: Vec4::new(0.5, 0.75, 0.4, 0.0),
             sun_color: Vec4::new(1.0, 0.95, 0.8, 2.0),
+            rotation: 0.0,
+            texture_id: None,
             intensity: 1.0,
             sun_size: 0.04,
         }
@@ -110,6 +116,37 @@ impl Default for OutlineConfig3D {
     }
 }
 
+/// Screen-Space Ambient Occlusion (SSAO) settings.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SsaoConfig3D {
+    /// Whether SSAO is enabled.
+    pub enabled: bool,
+    /// Sampling hemisphere world-space radius (default: 0.5).
+    pub radius: f32,
+    /// Depth bias to prevent self-occlusion artifacts (default: 0.025).
+    pub bias: f32,
+    /// Occlusion exponent power (default: 1.5).
+    pub power: f32,
+    /// Occlusion darkening multiplier (default: 1.0).
+    pub intensity: f32,
+    /// Bilateral blur kernel radius in pixels (default: 2).
+    pub blur_radius: u32,
+}
+
+impl Default for SsaoConfig3D {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            radius: 0.45,
+            bias: 0.025,
+            power: 1.0,
+            intensity: 0.65,
+            blur_radius: 2,
+        }
+    }
+}
+
 /// Global environment lighting, clear, fog, and exposure settings for a `Realm3DContext`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -136,6 +173,9 @@ pub struct EnvironmentRealm3D {
     /// Outline configuration.
     #[serde(default)]
     pub outline: OutlineConfig3D,
+    /// SSAO configuration.
+    #[serde(default)]
+    pub ssao: SsaoConfig3D,
 }
 
 impl Default for EnvironmentRealm3D {
@@ -151,6 +191,7 @@ impl Default for EnvironmentRealm3D {
             exposure: 1.0,
             skybox: SkyboxConfig3D::default(),
             outline: OutlineConfig3D::default(),
+            ssao: SsaoConfig3D::default(),
         }
     }
 }

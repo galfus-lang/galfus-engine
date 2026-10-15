@@ -15,10 +15,12 @@ struct SkyboxUniform {
     ground_color: vec4<f32>,
     sun_direction: vec4<f32>,
     sun_color: vec4<f32>,
-    params: vec4<f32>, // x: intensity, y: sun_size, z: mode (0=none, 1=procedural, 2=cubemap), w: time
+    params: vec4<f32>, // x: intensity, y: sun_size, z: mode (0=none, 1=procedural, 2=cubemap/panoramic), w: rotation
 };
 
 @group(0) @binding(0) var<uniform> sky: SkyboxUniform;
+@group(0) @binding(1) var t_sky: texture_2d<f32>;
+@group(0) @binding(2) var s_sky: sampler;
 
 struct VertexOutput {
     @builtin(position) clip_pos: vec4<f32>,
@@ -40,6 +42,19 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VertexOutput {
     return out;
 }
 
+fn rotate_y(dir: vec3<f32>, angle: f32) -> vec3<f32> {
+    let s = sin(angle);
+    let c = cos(angle);
+    return vec3<f32>(c * dir.x + s * dir.z, dir.y, -s * dir.x + c * dir.z);
+}
+
+fn equirect_uv(dir: vec3<f32>) -> vec2<f32> {
+    let n = normalize(dir);
+    let u = atan2(n.z, n.x) * 0.15915494 + 0.5; // 1 / (2 * PI)
+    let v = 1.0 - (asin(clamp(n.y, -1.0, 1.0)) * 0.318309886 + 0.5); // 1 / PI
+    return vec2<f32>(fract(u), clamp(v, 0.0, 1.0));
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let mode = u32(round(sky.params.z));
@@ -50,7 +65,18 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Reconstruct world-space ray direction
     let ndc = vec4<f32>(in.uv * 2.0 - vec2<f32>(1.0), 0.0, 1.0);
     let world_target = sky.inv_view_proj * ndc;
-    let ray_dir = normalize((world_target.xyz / world_target.w) - sky.camera_pos.xyz);
+    var ray_dir = normalize((world_target.xyz / world_target.w) - sky.camera_pos.xyz);
+    let rotation = sky.params.w;
+    if (abs(rotation) > 1e-4) {
+        ray_dir = rotate_y(ray_dir, rotation);
+    }
+
+    // Panoramic 360° Equirectangular texture mode
+    if (mode == 2u) {
+        let uv = equirect_uv(ray_dir);
+        let tex = textureSample(t_sky, s_sky, uv);
+        return vec4<f32>(tex.rgb * sky.params.x, 1.0);
+    }
 
     let y = ray_dir.y;
     var sky_base: vec3<f32>;
@@ -96,6 +122,9 @@ pub struct SkyboxPipeline3D {
     pub layout: wgpu::BindGroupLayout,
     pub buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
+    pub fallback_texture: wgpu::Texture,
+    pub fallback_view: wgpu::TextureView,
+    pub sampler: wgpu::Sampler,
 }
 
 impl SkyboxPipeline3D {
@@ -107,16 +136,34 @@ impl SkyboxPipeline3D {
 
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Realm3D Skybox Layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
         });
 
         let dummy_uniform = SkyboxUniform {
@@ -136,13 +183,49 @@ impl SkyboxPipeline3D {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
+        let fallback_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Realm3D Skybox Fallback Texture"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let fallback_view = fallback_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Realm3D Skybox Sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Realm3D Skybox Bind Group"),
             layout: &layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&fallback_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -197,6 +280,9 @@ impl SkyboxPipeline3D {
             layout,
             buffer,
             bind_group,
+            fallback_texture,
+            fallback_view,
+            sampler,
         }
     }
 
@@ -220,7 +306,7 @@ impl SkyboxPipeline3D {
                 config.intensity,
                 config.sun_size,
                 config.mode.to_code() as f32,
-                0.0,
+                config.rotation,
             ),
         };
         queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(&uniform));

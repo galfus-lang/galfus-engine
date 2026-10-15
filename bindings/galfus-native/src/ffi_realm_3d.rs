@@ -255,6 +255,8 @@ struct SkyboxConfig3DDesc {
     sun_color: Option<[f32; 4]>,
     intensity: Option<f32>,
     sun_size: Option<f32>,
+    rotation: Option<f32>,
+    texture_id: Option<u32>,
 }
 
 impl From<SkyboxConfig3DDesc> for galfus_realm_3d_resources::environment::SkyboxConfig3D {
@@ -262,7 +264,7 @@ impl From<SkyboxConfig3DDesc> for galfus_realm_3d_resources::environment::Skybox
         use galfus_realm_3d_resources::environment::SkyboxMode3D;
         let mode = match d.mode.as_deref() {
             Some("procedural") => SkyboxMode3D::Procedural,
-            Some("cubemap") => SkyboxMode3D::Cubemap,
+            Some("cubemap") | Some("panoramic") => SkyboxMode3D::Cubemap,
             _ => SkyboxMode3D::None,
         };
         Self {
@@ -287,6 +289,8 @@ impl From<SkyboxConfig3DDesc> for galfus_realm_3d_resources::environment::Skybox
                 .sun_color
                 .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
                 .unwrap_or(Vec4::new(1.0, 0.95, 0.8, 2.0)),
+            rotation: d.rotation.unwrap_or(0.0),
+            texture_id: d.texture_id,
             intensity: d.intensity.unwrap_or(1.0),
             sun_size: d.sun_size.unwrap_or(0.04),
         }
@@ -315,6 +319,30 @@ impl From<OutlineConfig3DDesc> for OutlineConfig3D {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct SsaoConfig3DDesc {
+    enabled: Option<bool>,
+    radius: Option<f32>,
+    bias: Option<f32>,
+    power: Option<f32>,
+    intensity: Option<f32>,
+    blur_radius: Option<u32>,
+}
+
+impl From<SsaoConfig3DDesc> for galfus_realm_3d_resources::environment::SsaoConfig3D {
+    fn from(d: SsaoConfig3DDesc) -> Self {
+        Self {
+            enabled: d.enabled.unwrap_or(false),
+            radius: d.radius.unwrap_or(0.5),
+            bias: d.bias.unwrap_or(0.025),
+            power: d.power.unwrap_or(1.5),
+            intensity: d.intensity.unwrap_or(1.0),
+            blur_radius: d.blur_radius.unwrap_or(2),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct EnvironmentRealm3DDesc {
     ambient_color: Option<[f32; 4]>,
     clear_color: Option<[f32; 4]>,
@@ -326,6 +354,7 @@ struct EnvironmentRealm3DDesc {
     exposure: Option<f32>,
     skybox: Option<SkyboxConfig3DDesc>,
     outline: Option<OutlineConfig3DDesc>,
+    ssao: Option<SsaoConfig3DDesc>,
 }
 
 impl From<EnvironmentRealm3DDesc> for EnvironmentRealm3D {
@@ -355,6 +384,7 @@ impl From<EnvironmentRealm3DDesc> for EnvironmentRealm3D {
             exposure: d.exposure.unwrap_or(1.0),
             skybox: d.skybox.map(Into::into).unwrap_or_default(),
             outline: d.outline.map(Into::into).unwrap_or_default(),
+            ssao: d.ssao.map(Into::into).unwrap_or_default(),
         }
     }
 }

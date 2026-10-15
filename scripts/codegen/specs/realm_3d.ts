@@ -112,7 +112,9 @@ export const realm3dDescriptors: DescSpec[] = [
       sunDirection: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       sunColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       intensity: { type: 'number', optional: true },
-      sunSize: { type: 'number', optional: true }
+      sunSize: { type: 'number', optional: true },
+      rotation: { type: 'number', optional: true },
+      textureId: { type: 'number', optional: true }
     }
   },
   {
@@ -124,6 +126,19 @@ export const realm3dDescriptors: DescSpec[] = [
       width: { type: 'number', optional: true },
       threshold: { type: 'number', optional: true },
       strength: { type: 'number', optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'SsaoConfig3DDesc',
+    doc: 'Screen-space ambient occlusion (SSAO) configuration parameters.',
+    fields: {
+      enabled: { type: 'boolean', optional: true },
+      radius: { type: 'number', optional: true },
+      bias: { type: 'number', optional: true },
+      power: { type: 'number', optional: true },
+      intensity: { type: 'number', optional: true },
+      blurRadius: { type: 'number', optional: true }
     }
   },
   {
@@ -140,7 +155,8 @@ export const realm3dDescriptors: DescSpec[] = [
       fogDensity: { type: 'number', optional: true },
       exposure: { type: 'number', optional: true },
       skybox: { type: { ref: 'SkyboxConfig3DDesc' }, optional: true },
-      outline: { type: { ref: 'OutlineConfig3DDesc' }, optional: true }
+      outline: { type: { ref: 'OutlineConfig3DDesc' }, optional: true },
+      ssao: { type: { ref: 'SsaoConfig3DDesc' }, optional: true }
     }
   }
 ];

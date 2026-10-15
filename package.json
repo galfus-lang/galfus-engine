@@ -13,6 +13,7 @@
     "demo:1": "cargo build -p galfus-native && bun scripts/demos/main.ts 1",
     "demo:2": "cargo build -p galfus-native && bun scripts/demos/main.ts 2",
     "demo:3": "cargo build -p galfus-native && bun scripts/demos/main.ts 3",
+    "demo:4": "cargo build -p galfus-native && bun scripts/demos/main.ts 4",
     "typecheck": "bun --check"
   },
   "devDependencies": {
