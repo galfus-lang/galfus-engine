@@ -697,6 +697,8 @@ dependencies = [
  "galfus-gpu-manager",
  "galfus-multiverse",
  "galfus-platform",
+ "galfus-realm-2d",
+ "galfus-realm-2d-resources",
  "galfus-realm-3d",
  "galfus-realm-3d-resources",
  "galfus-realm-core",
@@ -730,16 +732,28 @@ dependencies = [
 name = "galfus-realm-2d"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "galfus-core",
+ "galfus-gpu-manager",
+ "galfus-realm-2d-resources",
  "galfus-realm-core",
+ "glam 0.30.10",
+ "pollster",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "wgpu",
 ]
 
 [[package]]
 name = "galfus-realm-2d-resources"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "galfus-core",
- "galfus-realm-2d",
+ "glam 0.30.10",
+ "serde",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

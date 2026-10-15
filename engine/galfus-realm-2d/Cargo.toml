@@ -7,3 +7,14 @@ license.workspace = true
 [dependencies]
 galfus-core.workspace = true
 galfus-realm-core.workspace = true
+galfus-realm-2d-resources.workspace = true
+galfus-gpu-manager.workspace = true
+glam.workspace = true
+bytemuck.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+wgpu.workspace = true
+
+[dev-dependencies]
+pollster.workspace = true
