@@ -1,13 +1,10 @@
 use crate::batch::{BatchBuilder2D, PreparedItem2D};
+use crate::gpu::GpuResources2D;
 use crate::pipeline::{PipelineKey2D, PipelineManager2D};
-use crate::shader::compile_2d_shader;
-use crate::shadow::{
-    SHADOW_SAMPLES_PER_DIRECTION, ShadowManager2D, rasterize_shadow_samples_for_light,
-};
+use crate::shadow::{ShadowManager2D, rasterize_shadow_samples_for_light};
 use crate::types::{
-    BatchKey2D, Camera2D, Camera2DUniform, Item2DInstanceRaw, Light2D, Light2DUniform, Material2D,
-    Material2DUniform, Occluder2D, OccluderSilhouette2D, Shadow2DConfig, ShadowSample2DRaw,
-    Shape2D, Sprite2D, Transform2D,
+    BatchKey2D, Camera2D, Item2DInstanceRaw, Light2D, Material2D, Material2DUniform, Occluder2D,
+    OccluderSilhouette2D, Shadow2DConfig, Shape2D, Sprite2D, Transform2D,
 };
 use bytemuck::cast_slice;
 use galfus_realm_core::{
@@ -29,22 +26,9 @@ pub struct Realm2DContext {
     pub pipeline_manager: Option<PipelineManager2D>,
     pub batch_builder: BatchBuilder2D,
     pub shadow_manager: ShadowManager2D,
+    pub gpu_res: Option<GpuResources2D>,
 
-    quad_vertex_buffer: Option<wgpu::Buffer>,
-    quad_index_buffer: Option<wgpu::Buffer>,
-    camera_buffer: Option<wgpu::Buffer>,
-    instance_buffer: Option<wgpu::Buffer>,
-    light_buffer: Option<wgpu::Buffer>,
-    shadow_sample_buffer: Option<wgpu::Buffer>,
-
-    _point_sampler: Option<wgpu::Sampler>,
-    linear_sampler: Option<wgpu::Sampler>,
-    fallback_texture_view: Option<wgpu::TextureView>,
-    fallback_material_buffer: Option<wgpu::Buffer>,
-    fallback_material_bind_group: Option<wgpu::BindGroup>,
-    global_bind_group: Option<wgpu::BindGroup>,
-
-    shader_module: Option<wgpu::ShaderModule>,
+    total_time: f32,
     material_bind_groups: HashMap<u32, wgpu::BindGroup>,
     material_uniform_buffers: HashMap<u32, wgpu::Buffer>,
 }
@@ -62,19 +46,8 @@ impl Realm2DContext {
             pipeline_manager: None,
             batch_builder: BatchBuilder2D::new(),
             shadow_manager: ShadowManager2D::default(),
-            quad_vertex_buffer: None,
-            quad_index_buffer: None,
-            camera_buffer: None,
-            instance_buffer: None,
-            light_buffer: None,
-            shadow_sample_buffer: None,
-            _point_sampler: None,
-            linear_sampler: None,
-            fallback_texture_view: None,
-            fallback_material_buffer: None,
-            fallback_material_bind_group: None,
-            global_bind_group: None,
-            shader_module: None,
+            gpu_res: None,
+            total_time: 0.0,
             material_bind_groups: HashMap::new(),
             material_uniform_buffers: HashMap::new(),
         }
@@ -94,6 +67,7 @@ impl Realm2DContext {
     pub fn set_material(&mut self, material_id: u32, material: Material2D) {
         self.materials.insert(material_id, material);
         self.material_bind_groups.remove(&material_id);
+        self.material_uniform_buffers.remove(&material_id);
         self.dirty = true;
     }
     pub fn set_sprite(&mut self, sprite_id: u32, sprite: Sprite2D, transform: Transform2D) {
@@ -140,175 +114,15 @@ impl Realm2DContext {
         }
 
         let pipeline_manager = PipelineManager2D::new(device);
-
-        #[rustfmt::skip]
-        let quad_vertices: [f32; 36] = [
-            -0.5, -0.5, 0.0,   0.0, 1.0,   1.0, 1.0, 1.0, 1.0,
-             0.5, -0.5, 0.0,   1.0, 1.0,   1.0, 1.0, 1.0, 1.0,
-             0.5,  0.5, 0.0,   1.0, 0.0,   1.0, 1.0, 1.0, 1.0,
-            -0.5,  0.5, 0.0,   0.0, 0.0,   1.0, 1.0, 1.0, 1.0,
-        ];
-        let quad_indices: [u16; 6] = [0, 1, 2, 2, 3, 0];
-
-        let quad_vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("galfus_2d_quad_vbo"),
-            size: std::mem::size_of_val(&quad_vertices) as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        queue.write_buffer(&quad_vertex_buffer, 0, cast_slice(&quad_vertices));
-
-        let quad_index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("galfus_2d_quad_ibo"),
-            size: std::mem::size_of_val(&quad_indices) as u64,
-            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        queue.write_buffer(&quad_index_buffer, 0, cast_slice(&quad_indices));
-
-        let camera_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("galfus_2d_camera_buffer"),
-            size: std::mem::size_of::<Camera2DUniform>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let initial_instance_capacity = 1024;
-        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("galfus_2d_instance_buffer"),
-            size: (std::mem::size_of::<Item2DInstanceRaw>() * initial_instance_capacity) as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let initial_light_capacity = 64;
-        let light_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("galfus_2d_light_buffer"),
-            size: (std::mem::size_of::<Light2DUniform>() * initial_light_capacity) as u64,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let angular_res = self.shadow_manager.config.angular_resolution as usize;
-        let shadow_sample_capacity =
-            angular_res * initial_light_capacity * SHADOW_SAMPLES_PER_DIRECTION;
-        let shadow_sample_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("galfus_2d_shadow_sample_buffer"),
-            size: (std::mem::size_of::<ShadowSample2DRaw>() * shadow_sample_capacity) as u64,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let point_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("galfus_2d_point_sampler"),
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-
-        let linear_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("galfus_2d_linear_sampler"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
-
-        let fallback_tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("galfus_2d_white_fallback_tex"),
-            size: wgpu::Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let fallback_texture_view =
-            fallback_tex.create_view(&wgpu::TextureViewDescriptor::default());
-
-        let fallback_material_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("galfus_2d_fallback_material_buf"),
-            size: std::mem::size_of::<Material2DUniform>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let default_mat = Material2D::default().build_uniform();
-        queue.write_buffer(
-            &fallback_material_buffer,
-            0,
-            bytemuck::bytes_of(&default_mat),
+        let gpu_res = GpuResources2D::new(
+            device,
+            queue,
+            &pipeline_manager,
+            self.shadow_manager.config.angular_resolution,
         );
 
-        let fallback_material_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("galfus_2d_fallback_mat_bg"),
-            layout: &pipeline_manager.material_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: fallback_material_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&fallback_texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&linear_sampler),
-                },
-            ],
-        });
-
-        let global_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("galfus_2d_global_bg"),
-            layout: &pipeline_manager.global_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&point_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&linear_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: light_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: shadow_sample_buffer.as_entire_binding(),
-                },
-            ],
-        });
-
-        let default_shader_source = compile_2d_shader(None);
-        let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("galfus_2d_standard_shader"),
-            source: wgpu::ShaderSource::Wgsl(default_shader_source.into()),
-        });
-
         self.pipeline_manager = Some(pipeline_manager);
-        self.quad_vertex_buffer = Some(quad_vertex_buffer);
-        self.quad_index_buffer = Some(quad_index_buffer);
-        self.camera_buffer = Some(camera_buffer);
-        self.instance_buffer = Some(instance_buffer);
-        self.light_buffer = Some(light_buffer);
-        self.shadow_sample_buffer = Some(shadow_sample_buffer);
-        self._point_sampler = Some(point_sampler);
-        self.linear_sampler = Some(linear_sampler);
-        self.fallback_texture_view = Some(fallback_texture_view);
-        self.fallback_material_buffer = Some(fallback_material_buffer);
-        self.fallback_material_bind_group = Some(fallback_material_bind_group);
-        self.global_bind_group = Some(global_bind_group);
-        self.shader_module = Some(shader_module);
+        self.gpu_res = Some(gpu_res);
     }
 }
 
@@ -322,24 +136,26 @@ impl Realm for Realm2DContext {
     }
 
     fn prepare(&mut self, ctx: &RealmPrepareContext<'_>) -> RealmResult<()> {
+        self.total_time += ctx.delta_time;
         let device = ctx.device;
         let queue = ctx.queue;
         self.ensure_gpu_resources(device, queue);
 
         // Sync materials
         let pipeline_manager = self.pipeline_manager.as_ref().unwrap();
-        let linear_sampler = self.linear_sampler.as_ref().unwrap();
-        let fallback_view = self.fallback_texture_view.as_ref().unwrap();
+        let gpu_res = self.gpu_res.as_ref().unwrap();
+        let linear_sampler = &gpu_res.linear_sampler;
+        let fallback_view = &gpu_res.fallback_texture_view;
 
         for (&mat_id, mat) in &self.materials {
             if !self.material_bind_groups.contains_key(&mat_id) {
                 let uniform = mat.build_uniform();
-                let buf = device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some(&format!("galfus_2d_mat_buf_{mat_id}")),
-                    size: std::mem::size_of::<Material2DUniform>() as u64,
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
+                let buf = crate::gpu::create_gpu_buffer(
+                    device,
+                    &format!("galfus_2d_mat_buf_{mat_id}"),
+                    std::mem::size_of::<Material2DUniform>() as u64,
+                    wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                );
                 queue.write_buffer(&buf, 0, bytemuck::bytes_of(&uniform));
 
                 let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -383,12 +199,10 @@ impl Realm for Realm2DContext {
 
         for (&id, (shape, transform)) in &self.shapes {
             if shape.cast_shadow {
-                let boundary = shape.compute_world_boundary(transform);
-                if boundary.len() >= 4 {
-                    let quad = [boundary[0], boundary[1], boundary[2], boundary[3]];
+                for silhouette in shape.compute_world_silhouettes(transform) {
                     occluders.push(Occluder2D {
                         entity_id: id,
-                        silhouette: OccluderSilhouette2D::from_quad(quad),
+                        silhouette,
                         shadow_layer_mask: shape.shadow_layer_mask,
                         shadow_height: shape.shadow_height,
                         height_range: shape.height_range,
@@ -406,9 +220,8 @@ impl Realm for Realm2DContext {
         let mut shadow_idx = 0_u32;
         for light in self.lights.values() {
             let current_shadow_idx = if light.cast_shadow {
-                let s = shadow_idx;
                 shadow_idx += 1;
-                s
+                shadow_idx - 1
             } else {
                 0
             };
@@ -420,14 +233,16 @@ impl Realm for Realm2DContext {
             }
         }
 
+        let gpu = self.gpu_res.as_ref().unwrap();
         if !light_uniforms.is_empty() {
-            let buf = self.light_buffer.as_ref().unwrap();
-            queue.write_buffer(buf, 0, cast_slice(&light_uniforms));
+            queue.write_buffer(&gpu.light_buffer, 0, cast_slice(&light_uniforms));
         }
-
         if !all_shadow_samples.is_empty() {
-            let buf = self.shadow_sample_buffer.as_ref().unwrap();
-            queue.write_buffer(buf, 0, cast_slice(&all_shadow_samples));
+            queue.write_buffer(
+                &gpu.shadow_sample_buffer,
+                0,
+                cast_slice(&all_shadow_samples),
+            );
         }
 
         // Build item batches
@@ -511,10 +326,8 @@ impl Realm for Realm2DContext {
             self.shadow_manager.config.ambient,
             self.shadow_manager.config.angular_resolution as f32,
             self.shadow_manager.config.shadow_contact_offset,
+            self.total_time,
         );
-        if let Some(buf) = &self.camera_buffer {
-            queue.write_buffer(buf, 0, bytemuck::bytes_of(&camera_uniform));
-        }
 
         let instances = self.batch_builder.instances();
         let ranges = self.batch_builder.ranges();
@@ -522,26 +335,26 @@ impl Realm for Realm2DContext {
             return Ok(());
         }
 
+        let gpu = self.gpu_res.as_mut().unwrap();
+        queue.write_buffer(&gpu.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
+
         // Upload instance buffer
         let required_bytes = std::mem::size_of_val(instances) as u64;
-        if let Some(buf) = &self.instance_buffer
-            && buf.size() < required_bytes
-        {
-            self.instance_buffer = Some(device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("galfus_2d_instance_buf_resized"),
-                size: required_bytes.max(1024),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }));
+        if gpu.instance_buffer.size() < required_bytes {
+            gpu.instance_buffer = crate::gpu::create_gpu_buffer(
+                device,
+                "galfus_2d_instance_buf_resized",
+                required_bytes.max(1024),
+                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            );
         }
-        let instance_buf = self.instance_buffer.as_ref().unwrap();
-        queue.write_buffer(instance_buf, 0, cast_slice(instances));
+        queue.write_buffer(&gpu.instance_buffer, 0, cast_slice(instances));
 
-        let quad_vbo = self.quad_vertex_buffer.as_ref().unwrap();
-        let quad_ibo = self.quad_index_buffer.as_ref().unwrap();
-        let global_bg = self.global_bind_group.as_ref().unwrap();
-        let shader_module = self.shader_module.as_ref().unwrap();
-        let fallback_mat_bg = self.fallback_material_bind_group.as_ref().unwrap();
+        let quad_vbo = &gpu.quad_vertex_buffer;
+        let quad_ibo = &gpu.quad_index_buffer;
+        let instance_buf = &gpu.instance_buffer;
+        let global_bg = &gpu.global_bind_group;
+        let fallback_mat_bg = &gpu.fallback_material_bind_group;
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("galfus_2d_invocation_encoder"),
@@ -580,12 +393,16 @@ impl Realm for Realm2DContext {
 
             let pipeline_mgr = self.pipeline_manager.as_mut().unwrap();
             for range in ranges {
+                let mat = self.materials.get(&range.key.material_id);
+                let snippet = mat.and_then(|m| m.shader_effect.as_deref());
+                let effect_id = crate::pipeline::PipelineManager2D::compute_effect_id(snippet);
                 let key = PipelineKey2D {
+                    effect_id,
                     surface_type: range.key.surface_type,
                     target_format: ctx.target_format,
                     sample_count: 1,
                 };
-                let pipe = pipeline_mgr.get_or_create_pipeline(device, shader_module, key);
+                let pipe = pipeline_mgr.get_or_create_pipeline(device, key, snippet);
                 rpass.set_pipeline(pipe);
                 let mat_bg = self
                     .material_bind_groups

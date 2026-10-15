@@ -121,12 +121,86 @@ impl Shape2D {
             .collect()
     }
 
+    /// Computes world-space occluder silhouettes for 2D polar shadow projection.
+    /// Polygons with >4 vertices are automatically decomposed into convex triangles.
+    pub fn compute_world_silhouettes(
+        &self,
+        transform: &Transform2D,
+    ) -> Vec<crate::shadow::OccluderSilhouette2D> {
+        match &self.kind {
+            ShapeKind2D::Rectangle { size } => {
+                let half = *size * 0.5;
+                let quad = [
+                    transform.transform_point(Vec2::new(-half.x, -half.y)),
+                    transform.transform_point(Vec2::new(half.x, -half.y)),
+                    transform.transform_point(Vec2::new(half.x, half.y)),
+                    transform.transform_point(Vec2::new(-half.x, half.y)),
+                ];
+                vec![crate::shadow::OccluderSilhouette2D::from_quad(quad)]
+            }
+            ShapeKind2D::Circle { radius, .. } => {
+                let r = *radius;
+                let quad = [
+                    transform.transform_point(Vec2::new(-r, -r)),
+                    transform.transform_point(Vec2::new(r, -r)),
+                    transform.transform_point(Vec2::new(r, r)),
+                    transform.transform_point(Vec2::new(-r, r)),
+                ];
+                vec![crate::shadow::OccluderSilhouette2D::from_quad(quad)]
+            }
+            ShapeKind2D::Polygon { vertices } => {
+                let count = vertices.len();
+                if count == 3 {
+                    let v0 = transform.transform_point(vertices[0]);
+                    let v1 = transform.transform_point(vertices[1]);
+                    let v2 = transform.transform_point(vertices[2]);
+                    vec![crate::shadow::OccluderSilhouette2D::from_quad([
+                        v0, v1, v2, v0,
+                    ])]
+                } else if count == 4 {
+                    let quad = [
+                        transform.transform_point(vertices[0]),
+                        transform.transform_point(vertices[1]),
+                        transform.transform_point(vertices[2]),
+                        transform.transform_point(vertices[3]),
+                    ];
+                    vec![crate::shadow::OccluderSilhouette2D::from_quad(quad)]
+                } else if count > 4 {
+                    let v0 = transform.transform_point(vertices[0]);
+                    let mut silhouettes = Vec::with_capacity(count - 2);
+                    for i in 1..(count - 1) {
+                        let vi = transform.transform_point(vertices[i]);
+                        let vnext = transform.transform_point(vertices[i + 1]);
+                        silhouettes.push(crate::shadow::OccluderSilhouette2D::from_quad([
+                            v0, vi, vnext, v0,
+                        ]));
+                    }
+                    silhouettes
+                } else {
+                    Vec::new()
+                }
+            }
+        }
+    }
+
     /// Computes the GPU model matrix transforming the [-0.5, 0.5] unit quad to the shape's dimensions and world transform.
     pub fn compute_model_matrix(&self, transform: &Transform2D) -> glam::Mat4 {
         let size = match &self.kind {
             ShapeKind2D::Rectangle { size } => *size,
             ShapeKind2D::Circle { radius, .. } => Vec2::splat(radius * 2.0),
-            ShapeKind2D::Polygon { .. } => Vec2::ONE,
+            ShapeKind2D::Polygon { vertices } => {
+                let mut min = Vec2::splat(f32::MAX);
+                let mut max = Vec2::splat(f32::MIN);
+                for v in vertices {
+                    min = min.min(*v);
+                    max = max.max(*v);
+                }
+                if min.x <= max.x && min.y <= max.y {
+                    (max - min).max(Vec2::splat(0.001))
+                } else {
+                    Vec2::ONE
+                }
+            }
         } * transform.scale;
 
         glam::Mat4::from_scale_rotation_translation(

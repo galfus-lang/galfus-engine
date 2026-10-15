@@ -182,6 +182,7 @@ pub struct Shape2DDesc {
     pub size: Option<[f32; 2]>,
     pub radius: Option<f32>,
     pub segments: Option<u32>,
+    pub vertices: Option<Vec<[f32; 2]>>,
     pub material_id: Option<u32>,
     #[serde(default = "default_true")]
     pub cast_shadow: bool,
@@ -200,6 +201,14 @@ impl From<Shape2DDesc> for Shape2D {
             "circle" => ShapeKind2D::Circle {
                 radius: d.radius.unwrap_or(1.0),
                 segments: d.segments.unwrap_or(24),
+            },
+            "polygon" => ShapeKind2D::Polygon {
+                vertices: d
+                    .vertices
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|v| Vec2::new(v[0], v[1]))
+                    .collect(),
             },
             _ => ShapeKind2D::Rectangle {
                 size: d.size.map(|s| Vec2::new(s[0], s[1])).unwrap_or(Vec2::ONE),

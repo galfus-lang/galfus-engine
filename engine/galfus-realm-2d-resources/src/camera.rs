@@ -81,6 +81,7 @@ impl Camera2D {
         ambient_light: f32,
         angular_resolution: f32,
         contact_offset: f32,
+        time: f32,
     ) -> Camera2DUniform {
         let aspect = (viewport_size.x / viewport_size.y.max(1.0)).max(0.0001);
         let view = self.view_matrix(transform);
@@ -92,7 +93,7 @@ impl Camera2D {
             projection,
             view_projection,
             position: Vec4::new(transform.position.x, transform.position.y, 0.0, 1.0),
-            params: Vec4::new(self.ortho_scale, aspect, self.near, self.far),
+            params: Vec4::new(time, self.ortho_scale, aspect, self.near),
             viewport: Vec4::new(
                 viewport_size.x,
                 viewport_size.y,

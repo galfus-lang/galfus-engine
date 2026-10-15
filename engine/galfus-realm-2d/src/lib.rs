@@ -5,6 +5,7 @@
 
 pub mod batch;
 pub mod context;
+pub mod gpu;
 pub mod pipeline;
 pub mod shader;
 pub mod shadow;

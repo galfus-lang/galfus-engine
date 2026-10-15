@@ -3,6 +3,7 @@ use std::collections::HashMap;
 /// Cache identifier for 2D render pipelines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PipelineKey2D {
+    pub effect_id: u64,
     pub surface_type: u32,
     pub target_format: wgpu::TextureFormat,
     pub sample_count: u32,
@@ -13,6 +14,8 @@ pub struct PipelineManager2D {
     pub global_bind_group_layout: wgpu::BindGroupLayout,
     pub material_bind_group_layout: wgpu::BindGroupLayout,
     pub pipeline_layout: wgpu::PipelineLayout,
+    pub default_shader_module: wgpu::ShaderModule,
+    custom_shader_modules: HashMap<u64, wgpu::ShaderModule>,
     pipelines: HashMap<PipelineKey2D, wgpu::RenderPipeline>,
 }
 
@@ -114,11 +117,35 @@ impl PipelineManager2D {
             immediate_size: 0,
         });
 
+        let default_source = crate::shader::compile_2d_shader(None);
+        let default_shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("galfus_2d_standard_shader"),
+            source: wgpu::ShaderSource::Wgsl(default_source.into()),
+        });
+
         Self {
             global_bind_group_layout,
             material_bind_group_layout,
             pipeline_layout,
+            default_shader_module,
+            custom_shader_modules: HashMap::new(),
             pipelines: HashMap::new(),
+        }
+    }
+
+    /// Computes the deterministic 64-bit content hash of a custom 2D surface effect snippet.
+    pub fn compute_effect_id(snippet: Option<&str>) -> u64 {
+        let Some(snippet) = snippet else { return 0 };
+        let with_prelude = crate::shader::SHADER_2D_TEMPLATE.replace(
+            "{{EFFECT_PRELUDE}}",
+            crate::surface_effect::SURFACE_EFFECT_PRELUDE_2D,
+        );
+        match crate::surface_effect::compose_surface_shader_2d(&with_prelude, Some(snippet)) {
+            Ok(composed) => composed.content_id.as_u64(),
+            Err(e) => {
+                eprintln!("[galfus-realm-2d] Failed to compose 2D surface effect: {e}");
+                0
+            }
         }
     }
 
@@ -126,10 +153,33 @@ impl PipelineManager2D {
     pub fn get_or_create_pipeline(
         &mut self,
         device: &wgpu::Device,
-        shader_module: &wgpu::ShaderModule,
         key: PipelineKey2D,
+        snippet: Option<&str>,
     ) -> &wgpu::RenderPipeline {
-        self.pipelines.entry(key).or_insert_with(|| {
+        if !self.pipelines.contains_key(&key) {
+            if key.effect_id != 0 && !self.custom_shader_modules.contains_key(&key.effect_id) {
+                let with_prelude = crate::shader::SHADER_2D_TEMPLATE.replace(
+                    "{{EFFECT_PRELUDE}}",
+                    crate::surface_effect::SURFACE_EFFECT_PRELUDE_2D,
+                );
+                let source =
+                    crate::surface_effect::compose_surface_shader_2d(&with_prelude, snippet)
+                        .map(|c| c.source)
+                        .unwrap_or_else(|_| crate::shader::compile_2d_shader(None));
+
+                let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("galfus_2d_custom_shader"),
+                    source: wgpu::ShaderSource::Wgsl(source.into()),
+                });
+                self.custom_shader_modules.insert(key.effect_id, module);
+            }
+
+            let shader_module = if key.effect_id == 0 {
+                &self.default_shader_module
+            } else {
+                &self.custom_shader_modules[&key.effect_id]
+            };
+
             let blend = match key.surface_type {
                 0 => None,                                   // Opaque
                 1 => Some(wgpu::BlendState::ALPHA_BLENDING), // Transparent
@@ -207,7 +257,7 @@ impl PipelineManager2D {
                 ],
             };
 
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            let pipe = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("galfus_2d_render_pipeline"),
                 layout: Some(&self.pipeline_layout),
                 vertex: wgpu::VertexState {
@@ -243,7 +293,11 @@ impl PipelineManager2D {
                 },
                 multiview_mask: None,
                 cache: None,
-            })
-        })
+            });
+
+            self.pipelines.insert(key, pipe);
+        }
+
+        &self.pipelines[&key]
     }
 }
