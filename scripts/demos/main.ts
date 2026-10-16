@@ -34,7 +34,6 @@ async function main(): Promise<void> {
 
   switch (arg) {
     case 'mv1':
-    case '1':
     case undefined:
       if (!arg) {
         console.log('No demo specified. Defaulting to Demo MV1 (Multiverse).');
@@ -44,17 +43,14 @@ async function main(): Promise<void> {
       break;
 
     case '3d1':
-    case '2':
       await runDemo3d1();
       break;
 
     case '3d2':
-    case '3':
       await runDemo3d2();
       break;
 
     case '3d3':
-    case '4':
       await runDemo3d3();
       break;
 
@@ -63,22 +59,18 @@ async function main(): Promise<void> {
       break;
 
     case '3d5':
-    case '5':
       await runDemo3d5();
       break;
 
     case '3d6':
-    case '6':
       await runDemo3d6();
       break;
 
     case '2d1':
-    case '7':
       await runDemo2d1();
       break;
 
     case '2d2':
-    case '8':
       await runDemo2d2();
       break;
 
