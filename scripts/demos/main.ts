@@ -3,6 +3,8 @@ import { runDemo3d1 } from './demo_3d1_orbit.ts';
 import { runDemo3d2 } from './demo_3d2_bones.ts';
 import { runDemo3d3 } from './demo_3d3_ssao_shadows.ts';
 import { runDemo3d4 } from './demo_3d4_features.ts';
+import { runDemo3d5 } from './demo_3d5_particles.ts';
+import { runDemo3d6 } from './demo_3d6_refraction.ts';
 import { runDemo2d1 } from './demo_2d1_shadows.ts';
 import { runDemo2d2 } from './demo_2d2_effects_particles.ts';
 
@@ -19,6 +21,8 @@ function printHelp(): void {
   console.log('    3d2   - Procedural Skeletal Bones (12-Joint Skinning & Shadows)');
   console.log('    3d3   - Point Light Omnidirectional Shadows (6 Cube Faces) & SSAO');
   console.log('    3d4   - Advanced: Primitives, Bloom HDR, Gizmos & Compute Light Culling');
+  console.log('    3d5   - GPU Particles (Sparks Fountain, Mystic Vortex, Bursts & Reverse-Z)');
+  console.log("    3d6   - Screen-Space Optical Refraction (Glass, Crystals, Gems & Snell's Law)");
   console.log('\n  [Realm 2D]');
   console.log('    2d1   - Orthographic Reverse-Z, Point Lights, and Polar Soft Shadows');
   console.log('    2d2   - Material Custom Shader Effects & 2D Particle Emitters\n');
@@ -55,17 +59,26 @@ async function main(): Promise<void> {
       break;
 
     case '3d4':
-    case '5':
       await runDemo3d4();
       break;
 
-    case '2d1':
+    case '3d5':
+    case '5':
+      await runDemo3d5();
+      break;
+
+    case '3d6':
     case '6':
+      await runDemo3d6();
+      break;
+
+    case '2d1':
+    case '7':
       await runDemo2d1();
       break;
 
     case '2d2':
-    case '7':
+    case '8':
       await runDemo2d2();
       break;
 

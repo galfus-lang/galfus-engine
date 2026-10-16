@@ -39,6 +39,7 @@ struct MaterialUniform {
     emissive_color: vec4<f32>,
     pbr_params: vec4<f32>,
     flags: vec4<u32>,
+    refraction_params: vec4<f32>,
     custom_v0: vec4<f32>,
     custom_v1: vec4<f32>,
     custom_v2: vec4<f32>,
@@ -63,6 +64,8 @@ struct ModelUniform {
 
 @group(1) @binding(0) var<uniform> material: MaterialUniform;
 @group(2) @binding(0) var<uniform> object: ModelUniform;
+@group(3) @binding(0) var opaque_screen_texture: texture_2d<f32>;
+@group(3) @binding(1) var opaque_screen_sampler: sampler;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -360,6 +363,22 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let ambient = albedo.rgb * env.ambient_color.rgb * env.ambient_color.a;
     var final_color = ambient + direct_light + s_out.emissive;
 
+    // Refraction transmission for glass, water, crystals
+    let is_refractive = (material.flags.x & 7u) == 4u;
+    if (is_refractive) {
+        let screen_dims = vec2<f32>(textureDimensions(opaque_screen_texture));
+        let screen_uv = in.clip_position.xy / max(screen_dims, vec2<f32>(1.0));
+        let view_normal = (camera.view * vec4<f32>(N, 0.0)).xy;
+        let distortion = material.refraction_params.y;
+        let refr_uv = clamp(screen_uv - view_normal * distortion, vec2<f32>(0.001), vec2<f32>(0.999));
+        let bg_color = textureSample(opaque_screen_texture, opaque_screen_sampler, refr_uv).rgb;
+
+        let fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+        let transmitted = mix(bg_color, bg_color * albedo.rgb, albedo.a);
+        let spec_reflection = direct_light + vec3<f32>(fresnel * material.pbr_params.z);
+        final_color = transmitted + spec_reflection + s_out.emissive;
+    }
+
     // Fog blending
     let fog_mode = u32(round(env.fog_params.w));
     if (fog_mode > 0u) {
@@ -378,7 +397,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         final_color = mix(final_color, env.fog_color.rgb, fog_factor);
     }
 
-    return vec4<f32>(final_color, albedo.a);
+    var out_alpha = albedo.a;
+    if (is_refractive) {
+        out_alpha = 1.0;
+    }
+    return vec4<f32>(final_color, out_alpha);
 }
 "#;
 

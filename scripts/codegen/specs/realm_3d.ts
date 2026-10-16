@@ -60,12 +60,17 @@ export const realm3dDescriptors: DescSpec[] = [
     name: 'Material3DDesc',
     doc: 'PBR 3D material properties and surface configuration.',
     fields: {
-      surfaceType: { type: { enum: ['opaque', 'transparent', 'masked'] }, optional: true },
+      surfaceType: {
+        type: { enum: ['opaque', 'transparent', 'masked', 'additive', 'refractive'] },
+        optional: true
+      },
       baseColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       emissiveColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       roughness: { type: 'number', optional: true },
       metallic: { type: 'number', optional: true },
       reflectance: { type: 'number', optional: true },
+      refractionIndex: { type: 'number', optional: true },
+      refractionDistortion: { type: 'number', optional: true },
       albedoTextureId: { type: 'number', optional: true },
       normalTextureId: { type: 'number', optional: true },
       shaderEffect: { type: 'string', optional: true },
@@ -175,6 +180,43 @@ export const realm3dDescriptors: DescSpec[] = [
       knee: { type: 'number', optional: true },
       intensity: { type: 'number', optional: true },
       scatter: { type: 'number', optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'EmissionShape3DDesc',
+    doc: '3D particle emission shape (point, sphere, box, cone, cylinder).',
+    fields: {
+      type: { type: { enum: ['point', 'sphere', 'box', 'cone', 'cylinder'] } },
+      radius: { type: 'number', optional: true },
+      extents: { type: { tuple: ['number', 'number', 'number'] }, optional: true },
+      angleRad: { type: 'number', optional: true },
+      height: { type: 'number', optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'ParticleEmitter3DDesc',
+    doc: '3D particle emitter configuration (rates, lifetime, speed, colors, sizes, gravity, drag).',
+    fields: {
+      label: { type: 'string', optional: true },
+      materialId: { type: 'number', optional: true },
+      maxParticles: { type: 'number', optional: true },
+      spawnRate: { type: 'number', optional: true },
+      lifetimeRange: { type: { tuple: ['number', 'number'] }, optional: true },
+      speedRange: { type: { tuple: ['number', 'number'] }, optional: true },
+      direction: { type: { tuple: ['number', 'number', 'number'] }, optional: true },
+      spreadAngleRad: { type: 'number', optional: true },
+      gravity: { type: { tuple: ['number', 'number', 'number'] }, optional: true },
+      drag: { type: 'number', optional: true },
+      startSizeRange: { type: { tuple: ['number', 'number'] }, optional: true },
+      endSizeRange: { type: { tuple: ['number', 'number'] }, optional: true },
+      startColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      endColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      rotationSpeedRange: { type: { tuple: ['number', 'number'] }, optional: true },
+      uvRect: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      emissionShape: { type: { ref: 'EmissionShape3DDesc' }, optional: true },
+      active: { type: 'boolean', optional: true }
     }
   }
 ];
@@ -357,6 +399,50 @@ export const realm3dFunctions: FunctionSpec[] = [
     methodName: 'realm3dClearGizmos',
     doc: 'Clears any queued debug gizmos in the 3D Realm.',
     params: [{ name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' }],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_particle_emitter',
+    methodName: 'realm3dCreateParticleEmitter',
+    doc: 'Creates or updates a 3D particle emitter entity with an initial transform.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'emitterId', type: 'u32', doc: 'Logical ID of the Particle Emitter.' },
+      { name: 'emitter', type: { json: 'ParticleEmitter3DDesc' }, doc: 'Emitter configuration.' },
+      { name: 'transform', type: { json: 'Transform3DDesc' }, doc: 'Initial transform.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_set_particle_emitter_transform',
+    methodName: 'realm3dSetParticleEmitterTransform',
+    doc: 'Updates the spatial transform of an existing 3D particle emitter.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'emitterId', type: 'u32', doc: 'Logical ID of the Particle Emitter.' },
+      { name: 'transform', type: { json: 'Transform3DDesc' }, doc: 'New transform.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_particle_emitter_burst',
+    methodName: 'realm3dParticleEmitterBurst',
+    doc: 'Triggers an immediate burst of particles from an existing 3D emitter.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'emitterId', type: 'u32', doc: 'Logical ID of the Particle Emitter.' },
+      { name: 'count', type: 'u32', doc: 'Number of particles to spawn in the burst.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_destroy_particle_emitter',
+    methodName: 'realm3dDestroyParticleEmitter',
+    doc: 'Destroys an existing 3D particle emitter entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'emitterId', type: 'u32', doc: 'Logical ID of the Particle Emitter.' }
+    ],
     returnType: 'i32'
   }
 ];

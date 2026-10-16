@@ -13,6 +13,10 @@ pub enum SurfaceType3D {
     Transparent,
     /// Alpha-tested punch-through surface (foliage, fences).
     Masked,
+    /// Additive blending without depth write (particles, energy, glow).
+    Additive,
+    /// Screen-space optical refraction with background distortion (glass, water, crystals).
+    Refractive,
 }
 
 /// 3D material properties for PBR or standard forward shading.
@@ -33,6 +37,12 @@ pub struct Material3D {
     pub metallic: f32,
     /// Specular reflectance scalar (typically `0.5` for common dielectrics).
     pub reflectance: f32,
+    /// Index of Refraction (e.g. 1.33 for water, 1.52 for crown glass, 2.42 for diamond).
+    #[serde(default = "default_refraction_index")]
+    pub refraction_index: f32,
+    /// Optical distortion strength for screen-space background displacement.
+    #[serde(default = "default_refraction_distortion")]
+    pub refraction_distortion: f32,
     /// Optional logical texture ID for diffuse/albedo map.
     pub albedo_texture_id: Option<u32>,
     /// Optional logical texture ID for tangent-space normal map.
@@ -46,6 +56,14 @@ pub struct Material3D {
     /// Custom parameter vectors `[v0, v1, v2, v3]` passed to `in.custom.v0..v3`.
     #[serde(default = "default_custom_params")]
     pub custom_params: [Vec4; 4],
+}
+
+fn default_refraction_index() -> f32 {
+    1.5
+}
+
+fn default_refraction_distortion() -> f32 {
+    0.05
 }
 
 fn default_custom_params() -> [Vec4; 4] {
@@ -62,6 +80,8 @@ impl Default for Material3D {
             roughness: 0.5,
             metallic: 0.0,
             reflectance: 0.5,
+            refraction_index: 1.5,
+            refraction_distortion: 0.05,
             albedo_texture_id: None,
             normal_texture_id: None,
             metallic_roughness_texture_id: None,
@@ -87,6 +107,8 @@ impl Material3D {
             SurfaceType3D::Opaque => 0u32,
             SurfaceType3D::Transparent => 1u32,
             SurfaceType3D::Masked => 2u32,
+            SurfaceType3D::Additive => 3u32,
+            SurfaceType3D::Refractive => 4u32,
         };
 
         if self.albedo_texture_id.is_some() {
@@ -110,6 +132,12 @@ impl Material3D {
             emissive_color: self.emissive_color,
             pbr_params: Vec4::new(self.roughness, self.metallic, self.reflectance, 0.5),
             flags: UVec4::new(flags, 0, 0, 0),
+            refraction_params: Vec4::new(
+                self.refraction_index,
+                self.refraction_distortion,
+                0.0,
+                0.0,
+            ),
             custom_v0: self.custom_params[0],
             custom_v1: self.custom_params[1],
             custom_v2: self.custom_params[2],
@@ -118,7 +146,7 @@ impl Material3D {
     }
 }
 
-/// GPU layout of Material3D aligned to 16-byte boundaries (128 bytes total).
+/// GPU layout of Material3D aligned to 16-byte boundaries (144 bytes total).
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
 pub struct Material3DUniform {
@@ -130,6 +158,8 @@ pub struct Material3DUniform {
     pub pbr_params: Vec4,
     /// Flags for surface type and active texture slots.
     pub flags: UVec4,
+    /// Refraction parameters: `[index_of_refraction, distortion_strength, 0.0, 0.0]`.
+    pub refraction_params: Vec4,
     /// Custom parameter vectors v0, v1, v2, v3 (64 bytes).
     pub custom_v0: Vec4,
     pub custom_v1: Vec4,

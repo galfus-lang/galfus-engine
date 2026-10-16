@@ -11,6 +11,7 @@ pub mod geometry;
 pub mod light;
 pub mod material;
 pub mod model;
+pub mod particle;
 pub mod primitives;
 pub mod transform;
 
@@ -22,4 +23,7 @@ pub use geometry::{Geometry3D, Vertex3D};
 pub use light::{Light3D, Light3DUniform, LightKind3D};
 pub use material::{Material3D, Material3DUniform, SurfaceType3D};
 pub use model::{Model3D, Model3DUniform};
+pub use particle::{
+    EmissionShape3D, Particle3D, Particle3DInstance, ParticleEmitter3D, ParticleEmitterState3D,
+};
 pub use transform::Transform3D;

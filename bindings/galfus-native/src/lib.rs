@@ -3,6 +3,8 @@ pub mod ffi_multiverse;
 pub mod ffi_realm_2d;
 pub mod ffi_realm_2d_desc;
 pub mod ffi_realm_3d;
+pub mod ffi_realm_3d_desc;
+pub mod ffi_realm_3d_particles;
 pub mod ffi_resources;
 #[cfg(feature = "napi")]
 pub mod napi_bind;
@@ -12,6 +14,7 @@ pub use ffi::*;
 pub use ffi_multiverse::*;
 pub use ffi_realm_2d::*;
 pub use ffi_realm_3d::*;
+pub use ffi_realm_3d_particles::*;
 pub use ffi_resources::*;
 #[cfg(feature = "napi")]
 pub use napi_bind::*;

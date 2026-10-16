@@ -32,6 +32,8 @@ pub struct DrawCollector<'a> {
     pub masked: Vec<CollectedDrawItem<'a>>,
     /// Alpha-blended semi-transparent geometry sorted back-to-front for correct alpha blending.
     pub transparent: Vec<CollectedDrawItem<'a>>,
+    /// Screen-space refractive geometry sorted back-to-front.
+    pub refractive: Vec<CollectedDrawItem<'a>>,
     /// Number of models discarded during camera frustum culling.
     pub culled_count: usize,
 }
@@ -102,7 +104,10 @@ impl<'a> DrawCollector<'a> {
             match surface_type {
                 SurfaceType3D::Opaque => collector.opaque.push(item),
                 SurfaceType3D::Masked => collector.masked.push(item),
-                SurfaceType3D::Transparent => collector.transparent.push(item),
+                SurfaceType3D::Refractive => collector.refractive.push(item),
+                SurfaceType3D::Transparent | SurfaceType3D::Additive => {
+                    collector.transparent.push(item)
+                }
             }
         }
 
@@ -126,7 +131,12 @@ impl<'a> DrawCollector<'a> {
                 })
         });
 
-        // Sort transparent strictly back-to-front (decreasing depth) for correct alpha blending
+        // Sort refractive and transparent strictly back-to-front for correct physical transmission & blending
+        collector.refractive.sort_by(|a, b| {
+            b.depth
+                .partial_cmp(&a.depth)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         collector.transparent.sort_by(|a, b| {
             b.depth
                 .partial_cmp(&a.depth)
@@ -134,5 +144,37 @@ impl<'a> DrawCollector<'a> {
         });
 
         collector
+    }
+}
+
+/// Renders an iterator of collected draw items into a forward render pass.
+pub fn render_draw_items<'a>(
+    pass: &mut wgpu::RenderPass<'a>,
+    pipeline: &'a crate::pipeline::Pipeline3D,
+    items: impl IntoIterator<Item = (&'a CollectedDrawItem<'a>, bool)>,
+    refraction_bg: &'a wgpu::BindGroup,
+) {
+    pass.set_bind_group(3, refraction_bg, &[]);
+    let mut curr_pipe = None;
+    let mut curr_mat = None;
+    let mut curr_geom = None;
+
+    for (item, transparent) in items {
+        let key = (item.shader_effect, transparent);
+        if curr_pipe != Some(key) {
+            pass.set_pipeline(pipeline.get_pipeline(item.shader_effect, transparent));
+            curr_pipe = Some(key);
+        }
+        if curr_mat != Some(item.material_id) {
+            pass.set_bind_group(1, item.material_bg, &[]);
+            curr_mat = Some(item.material_id);
+        }
+        if curr_geom != Some(item.geometry_id) {
+            pass.set_vertex_buffer(0, item.vertex_buffer.slice(..));
+            pass.set_index_buffer(item.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            curr_geom = Some(item.geometry_id);
+        }
+        pass.set_bind_group(2, item.model_bg, &[]);
+        pass.draw_indexed(0..item.index_count, 0, 0..1);
     }
 }

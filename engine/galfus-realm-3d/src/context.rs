@@ -6,17 +6,17 @@ use galfus_realm_3d_resources::camera::Camera3D;
 use galfus_realm_3d_resources::environment::EnvironmentRealm3D;
 use galfus_realm_3d_resources::frustum::Frustum;
 use galfus_realm_3d_resources::geometry::Geometry3D;
-use galfus_realm_3d_resources::light::{Light3D, Light3DUniform};
+use galfus_realm_3d_resources::light::Light3D;
 use galfus_realm_3d_resources::material::Material3D;
 use galfus_realm_3d_resources::model::Model3D;
+use galfus_realm_3d_resources::particle::{ParticleEmitter3D, ParticleEmitterState3D};
 use galfus_realm_3d_resources::transform::Transform3D;
 use galfus_realm_core::error::{RealmError, RealmResult};
 use galfus_realm_core::realm::Realm;
 use galfus_realm_core::types::{RealmInvocationContext, RealmKind, RealmPrepareContext};
 use glam::UVec2;
-use wgpu::util::DeviceExt;
 
-use crate::collector::DrawCollector;
+use crate::collector::{DrawCollector, render_draw_items};
 use crate::pipeline::Pipeline3D;
 use crate::shadow::{ShadowMap3D, ShadowPipeline3D};
 use crate::types::{GpuMeshBuffers, GpuModelEntry, SceneGpuBuffers, validate_id};
@@ -43,6 +43,9 @@ pub struct Realm3DContext {
     post_pipelines: crate::postprocess::PostProcessPipelines,
     light_cull_pipeline: Option<crate::light_cull::LightCullingPipeline3D>,
     gizmos: crate::gizmo::GizmoSystem3D,
+    emitters: BTreeMap<u32, (ParticleEmitter3D, Transform3D, ParticleEmitterState3D)>,
+    particle_renderer: Option<crate::particle::ParticleRenderer3D>,
+    refraction_pipeline: Option<crate::refraction::RefractionPipeline3D>,
     scene_buffers: Option<SceneGpuBuffers>,
     depth_texture: Option<(wgpu::Texture, wgpu::TextureView, UVec2)>,
     bones: Vec<glam::Mat4>,
@@ -68,6 +71,9 @@ impl Realm3DContext {
             post_pipelines: crate::postprocess::PostProcessPipelines::new(),
             light_cull_pipeline: None,
             gizmos: crate::gizmo::GizmoSystem3D::new(),
+            emitters: BTreeMap::new(),
+            particle_renderer: None,
+            refraction_pipeline: None,
             scene_buffers: None,
             depth_texture: None,
             bones: Vec::new(),
@@ -91,12 +97,10 @@ impl Realm3DContext {
 
     /// Updates the transform of an existing `Camera3D`.
     pub fn set_camera_transform(&mut self, id: u32, transform: Transform3D) -> RealmResult<()> {
-        let realm_id = self.id;
-        let entry = self
-            .cameras
+        self.cameras
             .get_mut(&id)
-            .ok_or_else(|| not_found(realm_id, "Camera", id))?;
-        entry.1 = transform;
+            .ok_or_else(|| not_found(self.id, "Camera", id))?
+            .1 = transform;
         self.dirty = true;
         Ok(())
     }
@@ -132,11 +136,10 @@ impl Realm3DContext {
 
     /// Updates the transform of an existing `Model3D`.
     pub fn set_model_transform(&mut self, id: u32, transform: Transform3D) -> RealmResult<()> {
-        let realm_id = self.id;
         let entry = self
             .models
             .get_mut(&id)
-            .ok_or_else(|| not_found(realm_id, "Model", id))?;
+            .ok_or_else(|| not_found(self.id, "Model", id))?;
         entry.1 = transform;
         entry.2 = None;
         entry.3 = None;
@@ -181,12 +184,10 @@ impl Realm3DContext {
 
     /// Updates the transform of an existing `Light3D`.
     pub fn set_light_transform(&mut self, id: u32, transform: Transform3D) -> RealmResult<()> {
-        let realm_id = self.id;
-        let entry = self
-            .lights
+        self.lights
             .get_mut(&id)
-            .ok_or_else(|| not_found(realm_id, "Light", id))?;
-        entry.1 = transform;
+            .ok_or_else(|| not_found(self.id, "Light", id))?
+            .1 = transform;
         self.dirty = true;
         Ok(())
     }
@@ -197,22 +198,61 @@ impl Realm3DContext {
         self.dirty = true;
     }
 
-    /// Queues a debug line segment between `start` and `end`.
+    /// Creates or updates a 3D particle emitter.
+    pub fn create_particle_emitter(
+        &mut self,
+        id: u32,
+        emitter: ParticleEmitter3D,
+        transform: Transform3D,
+    ) -> RealmResult<()> {
+        validate_id(id)?;
+        self.emitters
+            .insert(id, (emitter, transform, ParticleEmitterState3D::new()));
+        Ok(())
+    }
+
+    /// Sets the transform of an existing 3D particle emitter.
+    pub fn set_particle_emitter_transform(
+        &mut self,
+        id: u32,
+        transform: Transform3D,
+    ) -> RealmResult<()> {
+        let entry = self
+            .emitters
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))?;
+        entry.1 = transform;
+        Ok(())
+    }
+
+    /// Triggers an immediate burst of particles on an emitter.
+    pub fn particle_emitter_burst(&mut self, id: u32, count: u32) -> RealmResult<()> {
+        let (emitter, transform, state) = self
+            .emitters
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))?;
+        state.burst(emitter, count, transform.position, transform.rotation);
+        Ok(())
+    }
+
+    /// Destroys an existing 3D particle emitter.
+    pub fn destroy_particle_emitter(&mut self, id: u32) -> RealmResult<()> {
+        self.emitters
+            .remove(&id)
+            .map(|_| ())
+            .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))
+    }
+
+    /// Queues debug gizmo drawing primitives.
     pub fn draw_line(&mut self, start: glam::Vec3, end: glam::Vec3, color: glam::Vec4) {
         self.gizmos.draw_line(start, end, color);
     }
-
-    /// Queues a debug Axis-Aligned Bounding Box (AABB) wireframe.
     pub fn draw_aabb(&mut self, min: glam::Vec3, max: glam::Vec3, color: glam::Vec4) {
         self.gizmos.draw_aabb(min, max, color);
     }
-
-    /// Queues a debug polyline sequence.
     pub fn draw_polyline(&mut self, points: &[glam::Vec3], color: glam::Vec4, closed: bool) {
         self.gizmos.draw_polyline(points, color, closed);
     }
-
-    /// Clears any queued gizmos.
     pub fn clear_gizmos(&mut self) {
         self.gizmos.clear();
     }
@@ -231,6 +271,15 @@ impl Realm for Realm3DContext {
         let device = ctx.device;
         let queue = ctx.queue;
         self.total_time += ctx.delta_time;
+
+        for (emitter, transform, state) in self.emitters.values_mut() {
+            state.update(
+                emitter,
+                ctx.delta_time,
+                transform.position,
+                transform.rotation,
+            );
+        }
 
         if self.pipeline.is_none() {
             self.pipeline = Some(Pipeline3D::new(device, wgpu::TextureFormat::Rgba8Unorm));
@@ -251,72 +300,18 @@ impl Realm for Realm3DContext {
             .shadow_pipeline
             .get_or_insert_with(|| ShadowPipeline3D::new(device, &pipeline.model_layout));
 
-        if self.scene_buffers.is_none() || self.dirty {
-            let bones_data = if self.bones.is_empty() {
-                vec![glam::Mat4::IDENTITY]
-            } else {
-                self.bones.clone()
-            };
-            let bones_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Bones Storage Buffer"),
-                contents: bytemuck::cast_slice(&bones_data),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            });
-
-            let shadow_map = match self.shadow_map.as_mut() {
-                Some(sm) => {
-                    sm.update_bones(device, shadow_pipe, &bones_buf);
-                    sm
-                }
-                None => {
-                    self.shadow_map = Some(ShadowMap3D::new(device, shadow_pipe, &bones_buf));
-                    self.shadow_map.as_mut().unwrap()
-                }
-            };
-
-            let env_uniform = self.environment.build_uniform(0.0);
-            let mut shadow_counter = 0u32;
-            let mut lights_data: Vec<Light3DUniform> = self
-                .lights
-                .values()
-                .map(|(l, t)| {
-                    if l.cast_shadow && l.active {
-                        let layers_needed =
-                            if l.kind == galfus_realm_3d_resources::light::LightKind3D::Point {
-                                6
-                            } else {
-                                1
-                            };
-                        if shadow_counter + layers_needed <= crate::shadow::MAX_SHADOW_LIGHTS {
-                            let base_layer = shadow_counter;
-                            shadow_counter += layers_needed;
-                            l.build_uniform_with_layer(t, base_layer)
-                        } else {
-                            l.build_uniform(t)
-                        }
-                    } else {
-                        l.build_uniform(t)
-                    }
-                })
-                .collect();
-            if lights_data.is_empty() {
-                lights_data.push(bytemuck::Zeroable::zeroed());
-            }
-
-            self.scene_buffers = Some(SceneGpuBuffers::build(
-                device,
-                pipeline,
-                shadow_map,
-                &env_uniform,
-                &lights_data,
-                self.lights.len() as u32,
-                bones_buf,
-            ));
-            self.dirty = false;
-        } else if let Some(scene) = &self.scene_buffers {
-            let env_uniform = self.environment.build_uniform(0.0);
-            queue.write_buffer(&scene.env_buf, 0, bytemuck::bytes_of(&env_uniform));
-        }
+        crate::types::sync_scene_buffers(
+            device,
+            queue,
+            pipeline,
+            shadow_pipe,
+            &mut self.shadow_map,
+            &mut self.scene_buffers,
+            &self.environment,
+            &self.lights,
+            &self.bones,
+            &mut self.dirty,
+        );
 
         Ok(())
     }
@@ -341,6 +336,7 @@ impl Realm for Realm3DContext {
 
         let width = ctx.viewport.z.max(1);
         let height = ctx.viewport.w.max(1);
+        let size = UVec2::new(width, height);
         let aspect = width as f32 / height as f32;
 
         let camera_uniform = camera.build_uniform(camera_transform, aspect);
@@ -357,32 +353,8 @@ impl Realm for Realm3DContext {
         queue.write_buffer(&scene_buffers.env_buf, 0, bytemuck::bytes_of(&env_uniform));
 
         // Ensure Reverse-Z depth texture matches invocation viewport size
-        let size = UVec2::new(width, height);
-        if let Some((_, _, d_size)) = &self.depth_texture
-            && *d_size != size
-        {
-            self.depth_texture = None;
-        }
-        if self.depth_texture.is_none() {
-            let tex = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Realm3D Depth Texture"),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Depth32Float,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
-            self.depth_texture = Some((tex, view, size));
-        }
-        let (_, depth_view, _) = self.depth_texture.as_ref().unwrap();
+        let depth_view =
+            crate::types::ensure_depth_texture(device, &mut self.depth_texture, width, height);
 
         // Initialize and update Skybox if configured
         let sky_pipe = self
@@ -442,14 +414,50 @@ impl Realm for Realm3DContext {
             );
         }
 
+        let (mut alpha_instances, mut additive_instances) =
+            crate::particle::collect_emitter_instances(&self.emitters, &self.materials);
+
+        let alpha_count = alpha_instances.len() as u32;
+        let additive_count = additive_instances.len() as u32;
+
+        let has_refr = !collector.refractive.is_empty();
+        let (behind_alpha, behind_additive) = if has_refr && (alpha_count > 0 || additive_count > 0)
+        {
+            let min_refr = collector
+                .refractive
+                .iter()
+                .map(|i| i.depth)
+                .fold(f32::INFINITY, f32::min);
+            let threshold = (min_refr.sqrt() - 0.6).max(0.0).powi(2);
+            let cam_pos = camera_transform.position;
+            (
+                crate::particle::partition_by_depth(&mut alpha_instances, cam_pos, threshold),
+                crate::particle::partition_by_depth(&mut additive_instances, cam_pos, threshold),
+            )
+        } else {
+            (0, 0)
+        };
+
+        if alpha_count > 0 || additive_count > 0 {
+            let particle_renderer = self.particle_renderer.get_or_insert_with(|| {
+                crate::particle::ParticleRenderer3D::new(
+                    device,
+                    ctx.target_format,
+                    &pipeline.scene_layout,
+                )
+            });
+            particle_renderer.upload(device, queue, &alpha_instances, &additive_instances);
+        }
+
+        // 1. Opaque & Masked forward geometry pass
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Realm3D Forward Pass"),
+                label: Some("Realm3D Opaque Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: ctx.target_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load, // Render into existing cleared target
+                        load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
                     depth_slice: None,
@@ -468,7 +476,7 @@ impl Realm for Realm3DContext {
                 multiview_mask: None,
             });
 
-            // 1. Draw Skybox at Reverse-Z far plane (0.0) before geometry if enabled
+            // Draw Skybox at Reverse-Z far plane (0.0) before geometry if enabled
             if self.environment.skybox.mode
                 != galfus_realm_3d_resources::environment::SkyboxMode3D::None
                 && let Some(sky_pipe) = &self.skybox_pipeline
@@ -478,37 +486,101 @@ impl Realm for Realm3DContext {
                 pass.draw(0..3, 0..1);
             }
 
-            // 2. Render forward geometry models
             pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
-
-            let mut curr_pipe_key = None;
-            let mut curr_mat_id = None;
-            let mut curr_geom_id = None;
-
-            let draws = collector
+            let opaque_draws = collector
                 .opaque
                 .iter()
                 .chain(collector.masked.iter())
-                .map(|i| (i, false))
-                .chain(collector.transparent.iter().map(|i| (i, true)));
+                .map(|i| (i, false));
+            render_draw_items(
+                &mut pass,
+                pipeline,
+                opaque_draws,
+                &pipeline.dummy_refraction_bg,
+            );
 
-            for (item, transparent) in draws {
-                let pipe_key = (item.shader_effect, transparent);
-                if curr_pipe_key != Some(pipe_key) {
-                    pass.set_pipeline(pipeline.get_pipeline(item.shader_effect, transparent));
-                    curr_pipe_key = Some(pipe_key);
+            // Draw background particles before capturing opaque texture so they distort through refractive surfaces
+            if behind_alpha > 0 || behind_additive > 0 {
+                pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
+                if let Some(particle_renderer) = &self.particle_renderer {
+                    particle_renderer.render(&mut pass, 0..behind_alpha, 0..behind_additive);
                 }
-                if curr_mat_id != Some(item.material_id) {
-                    pass.set_bind_group(1, item.material_bg, &[]);
-                    curr_mat_id = Some(item.material_id);
-                }
-                if curr_geom_id != Some(item.geometry_id) {
-                    pass.set_vertex_buffer(0, item.vertex_buffer.slice(..));
-                    pass.set_index_buffer(item.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                    curr_geom_id = Some(item.geometry_id);
-                }
-                pass.set_bind_group(2, item.model_bg, &[]);
-                pass.draw_indexed(0..item.index_count, 0, 0..1);
+            }
+        }
+
+        // 2. Capture opaque frame for optical refraction if refractive models exist
+        if has_refr {
+            let refr = self.refraction_pipeline.get_or_insert_with(|| {
+                crate::refraction::RefractionPipeline3D::new(
+                    device,
+                    ctx.target_format,
+                    width,
+                    height,
+                )
+            });
+            refr.resize(device, ctx.target_format, width, height);
+            refr.capture_opaque(device, &mut encoder, ctx.target_view);
+        }
+
+        // 3. Translucent, Refractive, and Foreground Particle pass
+        let has_trans = !collector.transparent.is_empty();
+        let has_front_particles = alpha_count > behind_alpha || additive_count > behind_additive;
+        if has_refr || has_trans || has_front_particles {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Realm3D Refractive & Transparent Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: ctx.target_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+
+            pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
+
+            if has_refr {
+                let refr_bg = self
+                    .refraction_pipeline
+                    .as_ref()
+                    .map(|r| r.bind_group())
+                    .unwrap_or(&pipeline.dummy_refraction_bg);
+                render_draw_items(
+                    &mut pass,
+                    pipeline,
+                    collector.refractive.iter().map(|i| (i, true)),
+                    refr_bg,
+                );
+            }
+            if has_trans {
+                render_draw_items(
+                    &mut pass,
+                    pipeline,
+                    collector.transparent.iter().map(|i| (i, true)),
+                    &pipeline.dummy_refraction_bg,
+                );
+            }
+
+            if has_front_particles && let Some(particle_renderer) = &self.particle_renderer {
+                pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
+                particle_renderer.render(
+                    &mut pass,
+                    behind_alpha..alpha_count,
+                    behind_additive..additive_count,
+                );
             }
         }
 
