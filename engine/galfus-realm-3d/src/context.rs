@@ -40,8 +40,9 @@ pub struct Realm3DContext {
     shadow_pipeline: Option<ShadowPipeline3D>,
     shadow_map: Option<ShadowMap3D>,
     skybox_pipeline: Option<crate::skybox::SkyboxPipeline3D>,
-    outline_pipeline: Option<crate::outline::OutlinePipeline3D>,
-    ssao_pipeline: Option<crate::ssao::SsaoPipeline3D>,
+    post_pipelines: crate::postprocess::PostProcessPipelines,
+    light_cull_pipeline: Option<crate::light_cull::LightCullingPipeline3D>,
+    gizmos: crate::gizmo::GizmoSystem3D,
     scene_buffers: Option<SceneGpuBuffers>,
     depth_texture: Option<(wgpu::Texture, wgpu::TextureView, UVec2)>,
     bones: Vec<glam::Mat4>,
@@ -64,8 +65,9 @@ impl Realm3DContext {
             shadow_pipeline: None,
             shadow_map: None,
             skybox_pipeline: None,
-            outline_pipeline: None,
-            ssao_pipeline: None,
+            post_pipelines: crate::postprocess::PostProcessPipelines::new(),
+            light_cull_pipeline: None,
+            gizmos: crate::gizmo::GizmoSystem3D::new(),
             scene_buffers: None,
             depth_texture: None,
             bones: Vec::new(),
@@ -193,6 +195,26 @@ impl Realm3DContext {
     pub fn set_environment(&mut self, environment: EnvironmentRealm3D) {
         self.environment = environment;
         self.dirty = true;
+    }
+
+    /// Queues a debug line segment between `start` and `end`.
+    pub fn draw_line(&mut self, start: glam::Vec3, end: glam::Vec3, color: glam::Vec4) {
+        self.gizmos.draw_line(start, end, color);
+    }
+
+    /// Queues a debug Axis-Aligned Bounding Box (AABB) wireframe.
+    pub fn draw_aabb(&mut self, min: glam::Vec3, max: glam::Vec3, color: glam::Vec4) {
+        self.gizmos.draw_aabb(min, max, color);
+    }
+
+    /// Queues a debug polyline sequence.
+    pub fn draw_polyline(&mut self, points: &[glam::Vec3], color: glam::Vec4, closed: bool) {
+        self.gizmos.draw_polyline(points, color, closed);
+    }
+
+    /// Clears any queued gizmos.
+    pub fn clear_gizmos(&mut self) {
+        self.gizmos.clear();
     }
 }
 
@@ -383,6 +405,22 @@ impl Realm for Realm3DContext {
         });
 
         let cam_frustum = Frustum::from_view_projection(camera_uniform.view_projection);
+
+        // Optional parallel GPU light culling against camera frustum
+        if !self.lights.is_empty() {
+            let cull_pipe = self
+                .light_cull_pipeline
+                .get_or_insert_with(|| crate::light_cull::LightCullingPipeline3D::new(device, 256));
+            cull_pipe.dispatch(
+                device,
+                queue,
+                &mut encoder,
+                &scene_buffers.lights_buf,
+                self.lights.len() as u32,
+                &cam_frustum.planes,
+            );
+        }
+
         let collector = DrawCollector::collect(
             &self.models,
             &self.geometries,
@@ -474,65 +512,26 @@ impl Realm for Realm3DContext {
             }
         }
 
-        // 3. Screen-space model outline dilation pass (matching .old post-process)
-        if self.environment.outline.enabled
-            && self
-                .models
-                .values()
-                .any(|(m, _, _, _)| m.active && m.cast_outline)
-        {
-            let outline_pipe = self.outline_pipeline.get_or_insert_with(|| {
-                crate::outline::OutlinePipeline3D::new(
-                    device,
-                    &pipeline.scene_layout,
-                    &pipeline.model_layout,
-                    ctx.target_format,
-                )
-            });
-            let outline_items = self.models.values().filter_map(|(m, trans, _, bg_opt)| {
-                if !m.active || !m.cast_outline {
-                    return None;
-                }
-                let (geom, gpu_mesh) = self.geometries.get(&m.geometry_id)?;
-                let (v, i, count) = gpu_mesh.as_ref()?;
-                let world_aabb = geom.aabb.transform(&trans.matrix());
-                if !cam_frustum.intersects_aabb(world_aabb.min, world_aabb.max) {
-                    return None;
-                }
-                Some((bg_opt.as_ref()?, v, i, *count))
-            });
-            outline_pipe.render(
-                crate::outline::OutlineRenderDesc {
-                    device,
-                    queue,
-                    encoder: &mut encoder,
-                    size,
-                    scene_bind_group: &scene_buffers.bind_group,
-                    depth_view,
-                    target_view: ctx.target_view,
-                    config: &self.environment.outline,
-                },
-                outline_items,
-            );
-        }
-
-        // 4. Screen-Space Ambient Occlusion (SSAO) pass
-        if self.environment.ssao.enabled {
-            let ssao_pipe = self.ssao_pipeline.get_or_insert_with(|| {
-                crate::ssao::SsaoPipeline3D::new(device, ctx.target_format, size.x, size.y)
-            });
-            ssao_pipe.resize(device, size.x, size.y);
-            ssao_pipe.render(
+        // 3-6. Screen-space post-processing: Outlines, SSAO, Bloom HDR glow, and Debug Gizmos
+        self.post_pipelines.execute(
+            crate::postprocess::PostProcessDesc {
                 device,
                 queue,
-                &mut encoder,
+                encoder: &mut encoder,
+                target_view: ctx.target_view,
+                target_format: ctx.target_format,
                 depth_view,
-                ctx.target_view,
-                &camera_uniform.projection,
-                &camera_uniform.projection.inverse(),
-                &self.environment.ssao,
-            );
-        }
+                size,
+                scene_buffers,
+                pipeline,
+                environment: &self.environment,
+                cam_frustum: &cam_frustum,
+                projection: &camera_uniform.projection,
+                models: &self.models,
+                geometries: &self.geometries,
+            },
+            &mut self.gizmos,
+        );
 
         queue.submit(Some(encoder.finish()));
         Ok(())

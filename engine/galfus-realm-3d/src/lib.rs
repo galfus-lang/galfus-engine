@@ -3,10 +3,14 @@
 //! Autonomous 3D Realm implementing the `galfus-realm-core` contract with
 //! Reverse-Z rendering, PBR-like lighting, and declarative entity management.
 
+pub mod bloom;
 pub mod collector;
 pub mod context;
+pub mod gizmo;
+pub mod light_cull;
 pub mod outline;
 pub mod pipeline;
+pub mod postprocess;
 pub mod shader;
 pub mod shadow;
 pub mod skybox;
@@ -15,8 +19,11 @@ pub mod ssao_shader;
 pub mod surface_effect;
 pub mod types;
 
+pub use bloom::BloomPipeline3D;
 pub use collector::DrawCollector;
 pub use context::Realm3DContext;
+pub use gizmo::{GizmoPipeline3D, GizmoSystem3D, GizmoVertex};
+pub use light_cull::LightCullingPipeline3D;
 pub use outline::OutlinePipeline3D;
 pub use pipeline::Pipeline3D;
 pub use shader::REALM_3D_SHADER;
@@ -73,8 +80,39 @@ mod tests {
         let light_transform = Transform3D::default();
         assert!(realm.create_light(1, light, light_transform).is_ok());
 
-        // Update environment
-        realm.set_environment(EnvironmentRealm3D::default());
+        // Test gizmo commands
+        realm.draw_line(Vec3::ZERO, Vec3::Y, Vec4::ONE);
+        realm.draw_aabb(
+            Vec3::splat(-1.0),
+            Vec3::splat(1.0),
+            Vec4::new(1.0, 1.0, 0.0, 1.0),
+        );
+        realm.draw_polyline(
+            &[Vec3::X, Vec3::Y, Vec3::Z],
+            Vec4::new(0.0, 1.0, 1.0, 1.0),
+            true,
+        );
+
+        // Update environment with bloom enabled
+        let mut env = EnvironmentRealm3D::default();
+        env.bloom.enabled = true;
+        realm.set_environment(env);
+    }
+
+    #[test]
+    fn test_gizmo_system_operations() {
+        let mut gizmos = GizmoSystem3D::new();
+        assert!(gizmos.vertices().is_empty());
+
+        gizmos.draw_line(Vec3::ZERO, Vec3::ONE, Vec4::ONE);
+        assert_eq!(gizmos.vertices().len(), 2);
+
+        gizmos.draw_aabb(Vec3::ZERO, Vec3::ONE, Vec4::ONE);
+        // 12 edges * 2 vertices = 24
+        assert_eq!(gizmos.vertices().len(), 26);
+
+        gizmos.clear();
+        assert!(gizmos.vertices().is_empty());
     }
 
     #[test]
@@ -121,6 +159,12 @@ mod tests {
             )
             .unwrap();
 
+        // Enable Bloom and queue Gizmo
+        let mut env = EnvironmentRealm3D::default();
+        env.bloom.enabled = true;
+        realm.set_environment(env);
+        realm.draw_line(Vec3::ZERO, Vec3::Y, Vec4::ONE);
+
         // 1. Prepare phase
         let prep = RealmPrepareContext {
             frame_id: 1,
@@ -142,7 +186,7 @@ mod tests {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
         let target_view = texture.create_view(&wgpu::TextureViewDescriptor::default());

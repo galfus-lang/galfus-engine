@@ -144,9 +144,9 @@ function extractKey(input: { physicalKey: string; logicalKey: any }): string {
   return phys;
 }
 
-export async function runDemo6(): Promise<void> {
+export async function runDemo7(): Promise<void> {
   console.log('================================================================');
-  console.log('   GALFUS ENGINE - DEMO 6: 2D REALM MATERIAL SHADER EFFECTS');
+  console.log('   GALFUS ENGINE - DEMO 7: 2D REALM MATERIAL SHADER EFFECTS');
   console.log('================================================================');
   console.log('Initializing Platform & Multiverse Subsystems...');
 
@@ -156,7 +156,7 @@ export async function runDemo6(): Promise<void> {
   const windowId = 1;
   galfus.windowCreate({
     id: windowId,
-    title: 'Galfus Engine - Demo 6: 2D Realm Material Shader Effects',
+    title: 'Galfus Engine - Demo 7: 2D Realm Material Shader Effects',
     size: [1024, 768],
     resizable: true,
     decorations: true
@@ -521,7 +521,7 @@ export async function runDemo6(): Promise<void> {
     await Bun.sleep(16);
   }
 
-  console.log('==> Shutting down Demo 6...');
+  console.log('==> Shutting down Demo 7...');
   galfus.multiverseDestroyInvocation(INVOCATION_MAIN);
   galfus.realm2dDestroy(REALM_2D);
   galfus.windowClose(windowId);

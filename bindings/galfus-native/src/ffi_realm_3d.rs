@@ -101,6 +101,28 @@ impl From<Geometry3DDesc> for Geometry3D {
                 d.subdivisions.unwrap_or(32),
                 d.subdivisions.unwrap_or(16),
             ),
+            Some("cylinder") => Geometry3D::cylinder(
+                d.radius.unwrap_or(1.0),
+                d.size.unwrap_or(2.0),
+                d.subdivisions.unwrap_or(32),
+            ),
+            Some("capsule") => Geometry3D::capsule(
+                d.radius.unwrap_or(0.5),
+                d.size.unwrap_or(1.5),
+                d.subdivisions.unwrap_or(8),
+                d.subdivisions.unwrap_or(32),
+            ),
+            Some("pyramid") => Geometry3D::pyramid(
+                d.size.unwrap_or(1.0),
+                d.size.unwrap_or(1.0),
+                d.size.unwrap_or(1.5),
+            ),
+            Some("torus") => Geometry3D::torus(
+                d.radius.unwrap_or(1.0),
+                d.radius.unwrap_or(1.0) * 0.3,
+                d.subdivisions.unwrap_or(32),
+                d.subdivisions.unwrap_or(16),
+            ),
             _ => {
                 let vertices = d
                     .vertices
@@ -343,6 +365,28 @@ impl From<SsaoConfig3DDesc> for galfus_realm_3d_resources::environment::SsaoConf
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct BloomConfig3DDesc {
+    enabled: Option<bool>,
+    threshold: Option<f32>,
+    knee: Option<f32>,
+    intensity: Option<f32>,
+    scatter: Option<f32>,
+}
+
+impl From<BloomConfig3DDesc> for galfus_realm_3d_resources::environment::BloomConfig3D {
+    fn from(d: BloomConfig3DDesc) -> Self {
+        Self {
+            enabled: d.enabled.unwrap_or(false),
+            threshold: d.threshold.unwrap_or(1.0),
+            knee: d.knee.unwrap_or(0.5),
+            intensity: d.intensity.unwrap_or(0.8),
+            scatter: d.scatter.unwrap_or(0.7),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct EnvironmentRealm3DDesc {
     ambient_color: Option<[f32; 4]>,
     clear_color: Option<[f32; 4]>,
@@ -355,6 +399,7 @@ struct EnvironmentRealm3DDesc {
     skybox: Option<SkyboxConfig3DDesc>,
     outline: Option<OutlineConfig3DDesc>,
     ssao: Option<SsaoConfig3DDesc>,
+    bloom: Option<BloomConfig3DDesc>,
 }
 
 impl From<EnvironmentRealm3DDesc> for EnvironmentRealm3D {
@@ -385,6 +430,7 @@ impl From<EnvironmentRealm3DDesc> for EnvironmentRealm3D {
             skybox: d.skybox.map(Into::into).unwrap_or_default(),
             outline: d.outline.map(Into::into).unwrap_or_default(),
             ssao: d.ssao.map(Into::into).unwrap_or_default(),
+            bloom: d.bloom.map(Into::into).unwrap_or_default(),
         }
     }
 }
@@ -872,6 +918,92 @@ pub unsafe extern "C" fn galfus_realm_3d_update_bones(
         realm
             .update_model_bones(model_id, &matrices)
             .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Queues a debug 3D line segment.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_draw_line(
+    realm_id: u32,
+    x0: f32,
+    y0: f32,
+    z0: f32,
+    x1: f32,
+    y1: f32,
+    z1: f32,
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+) -> i32 {
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm.draw_line(
+            glam::Vec3::new(x0, y0, z0),
+            glam::Vec3::new(x1, y1, z1),
+            glam::Vec4::new(r, g, b, a),
+        );
+        Ok(())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Queues a debug 3D Axis-Aligned Bounding Box (AABB).
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_draw_aabb(
+    realm_id: u32,
+    min_x: f32,
+    min_y: f32,
+    min_z: f32,
+    max_x: f32,
+    max_y: f32,
+    max_z: f32,
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+) -> i32 {
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm.draw_aabb(
+            glam::Vec3::new(min_x, min_y, min_z),
+            glam::Vec3::new(max_x, max_y, max_z),
+            glam::Vec4::new(r, g, b, a),
+        );
+        Ok(())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Clears any queued gizmos in Realm 3D.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_clear_gizmos(realm_id: u32) -> i32 {
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm.clear_gizmos();
+        Ok(())
     }) {
         Ok(()) => 0,
         Err(e) => {

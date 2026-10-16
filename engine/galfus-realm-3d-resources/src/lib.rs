@@ -11,11 +11,12 @@ pub mod geometry;
 pub mod light;
 pub mod material;
 pub mod model;
+pub mod primitives;
 pub mod transform;
 
 pub use aabb::Aabb;
 pub use camera::{Camera3D, Camera3DUniform, CameraKind3D};
-pub use environment::{Environment3DUniform, EnvironmentRealm3D, FogMode3D};
+pub use environment::{BloomConfig3D, Environment3DUniform, EnvironmentRealm3D, FogMode3D};
 pub use frustum::Frustum;
 pub use geometry::{Geometry3D, Vertex3D};
 pub use light::{Light3D, Light3DUniform, LightKind3D};

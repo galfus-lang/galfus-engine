@@ -42,7 +42,12 @@ export const realm3dDescriptors: DescSpec[] = [
     name: 'Geometry3DDesc',
     doc: '3D mesh definition with built-in primitives (cube, plane, sphere) or custom vertices and indices.',
     fields: {
-      primitive: { type: { enum: ['cube', 'plane', 'sphere', 'custom'] }, optional: true },
+      primitive: {
+        type: {
+          enum: ['cube', 'plane', 'sphere', 'cylinder', 'capsule', 'pyramid', 'torus', 'custom']
+        },
+        optional: true
+      },
       size: { type: 'number', optional: true },
       radius: { type: 'number', optional: true },
       subdivisions: { type: 'number', optional: true },
@@ -156,7 +161,20 @@ export const realm3dDescriptors: DescSpec[] = [
       exposure: { type: 'number', optional: true },
       skybox: { type: { ref: 'SkyboxConfig3DDesc' }, optional: true },
       outline: { type: { ref: 'OutlineConfig3DDesc' }, optional: true },
-      ssao: { type: { ref: 'SsaoConfig3DDesc' }, optional: true }
+      ssao: { type: { ref: 'SsaoConfig3DDesc' }, optional: true },
+      bloom: { type: { ref: 'BloomConfig3DDesc' }, optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'BloomConfig3DDesc',
+    doc: 'Screen-space multi-scale Bloom HDR glow parameters.',
+    fields: {
+      enabled: { type: 'boolean', optional: true },
+      threshold: { type: 'number', optional: true },
+      knee: { type: 'number', optional: true },
+      intensity: { type: 'number', optional: true },
+      scatter: { type: 'number', optional: true }
     }
   }
 ];
@@ -294,6 +312,51 @@ export const realm3dFunctions: FunctionSpec[] = [
         doc: 'Array of bone transform floats (multiples of 16)'
       }
     ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_draw_line',
+    methodName: 'realm3dDrawLine',
+    doc: 'Queues a 3D debug line segment between start and end with an RGBA color.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'x0', type: 'f32', doc: 'Start X coordinate.' },
+      { name: 'y0', type: 'f32', doc: 'Start Y coordinate.' },
+      { name: 'z0', type: 'f32', doc: 'Start Z coordinate.' },
+      { name: 'x1', type: 'f32', doc: 'End X coordinate.' },
+      { name: 'y1', type: 'f32', doc: 'End Y coordinate.' },
+      { name: 'z1', type: 'f32', doc: 'End Z coordinate.' },
+      { name: 'r', type: 'f32', doc: 'Red color channel [0.0..1.0].' },
+      { name: 'g', type: 'f32', doc: 'Green color channel [0.0..1.0].' },
+      { name: 'b', type: 'f32', doc: 'Blue color channel [0.0..1.0].' },
+      { name: 'a', type: 'f32', doc: 'Alpha opacity channel [0.0..1.0].' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_draw_aabb',
+    methodName: 'realm3dDrawAabb',
+    doc: 'Queues a 3D debug Axis-Aligned Bounding Box (AABB) wireframe.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'minX', type: 'f32', doc: 'Min X boundary.' },
+      { name: 'minY', type: 'f32', doc: 'Min Y boundary.' },
+      { name: 'minZ', type: 'f32', doc: 'Min Z boundary.' },
+      { name: 'maxX', type: 'f32', doc: 'Max X boundary.' },
+      { name: 'maxY', type: 'f32', doc: 'Max Y boundary.' },
+      { name: 'maxZ', type: 'f32', doc: 'Max Z boundary.' },
+      { name: 'r', type: 'f32', doc: 'Red color channel.' },
+      { name: 'g', type: 'f32', doc: 'Green color channel.' },
+      { name: 'b', type: 'f32', doc: 'Blue color channel.' },
+      { name: 'a', type: 'f32', doc: 'Alpha opacity channel.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_clear_gizmos',
+    methodName: 'realm3dClearGizmos',
+    doc: 'Clears any queued debug gizmos in the 3D Realm.',
+    params: [{ name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' }],
     returnType: 'i32'
   }
 ];

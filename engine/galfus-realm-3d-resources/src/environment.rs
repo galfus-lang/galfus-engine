@@ -147,6 +147,34 @@ impl Default for SsaoConfig3D {
     }
 }
 
+/// Bloom HDR glow configuration.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BloomConfig3D {
+    /// Whether Bloom HDR glow is active.
+    pub enabled: bool,
+    /// Minimum luminance threshold to trigger glow (default: 1.0).
+    pub threshold: f32,
+    /// Soft knee transition curve width (default: 0.5).
+    pub knee: f32,
+    /// Blending intensity of the bloom halo (default: 0.8).
+    pub intensity: f32,
+    /// Dispersion/diffusion factor across blur steps (default: 0.7).
+    pub scatter: f32,
+}
+
+impl Default for BloomConfig3D {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            threshold: 1.0,
+            knee: 0.5,
+            intensity: 0.8,
+            scatter: 0.7,
+        }
+    }
+}
+
 /// Global environment lighting, clear, fog, and exposure settings for a `Realm3DContext`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -176,6 +204,9 @@ pub struct EnvironmentRealm3D {
     /// SSAO configuration.
     #[serde(default)]
     pub ssao: SsaoConfig3D,
+    /// Bloom configuration.
+    #[serde(default)]
+    pub bloom: BloomConfig3D,
 }
 
 impl Default for EnvironmentRealm3D {
@@ -192,6 +223,7 @@ impl Default for EnvironmentRealm3D {
             skybox: SkyboxConfig3D::default(),
             outline: OutlineConfig3D::default(),
             ssao: SsaoConfig3D::default(),
+            bloom: BloomConfig3D::default(),
         }
     }
 }

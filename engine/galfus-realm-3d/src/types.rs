@@ -40,7 +40,7 @@ pub fn validate_id(id: u32) -> RealmResult<()> {
 pub struct SceneGpuBuffers {
     pub camera_buf: wgpu::Buffer,
     pub env_buf: wgpu::Buffer,
-    pub _lights_buf: wgpu::Buffer,
+    pub lights_buf: wgpu::Buffer,
     pub _lights_header_buf: wgpu::Buffer,
     pub _bones_buf: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
@@ -104,7 +104,7 @@ impl SceneGpuBuffers {
         Self {
             camera_buf,
             env_buf,
-            _lights_buf: lights_buf,
+            lights_buf,
             _lights_header_buf: lights_header_buf,
             _bones_buf: bones_buf,
             bind_group,

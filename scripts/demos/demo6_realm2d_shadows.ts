@@ -83,9 +83,9 @@ function extractKey(input: { physicalKey: string; logicalKey: any }): string {
   return phys;
 }
 
-export async function runDemo5(): Promise<void> {
+export async function runDemo6(): Promise<void> {
   console.log(`================================================================
-   GALFUS ENGINE - DEMO 5: 2D REALM & POLAR SOFT SHADOWS
+   GALFUS ENGINE - DEMO 6: 2D REALM & POLAR SOFT SHADOWS
 ================================================================
 Initializing Platform & Multiverse Subsystems...`);
 
@@ -95,7 +95,7 @@ Initializing Platform & Multiverse Subsystems...`);
   const windowId = 1;
   galfus.windowCreate({
     id: windowId,
-    title: 'Galfus Engine - Demo 5: 2D Realm & Dynamic Soft Shadows',
+    title: 'Galfus Engine - Demo 6: 2D Realm & Dynamic Soft Shadows',
     size: [1024, 768],
     resizable: true,
     decorations: true
@@ -587,7 +587,7 @@ CONTROLS:
     await Bun.sleep(16);
   }
 
-  console.log('==> Shutting down Demo 5...');
+  console.log('==> Shutting down Demo 6...');
   galfus.multiverseDestroyInvocation(INVOCATION_MAIN);
   galfus.realm2dDestroy(REALM_2D);
   galfus.windowClose(windowId);

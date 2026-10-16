@@ -215,6 +215,31 @@ impl Geometry3D {
             indices,
         }
     }
+
+    /// Generates a cylinder with circular caps centered at the origin along the Y axis.
+    pub fn cylinder(radius: f32, height: f32, sectors: u32) -> Self {
+        crate::primitives::cylinder(radius, height, sectors)
+    }
+
+    /// Generates a capsule (pill) with hemispherical caps along the Y axis.
+    pub fn capsule(radius: f32, cylinder_height: f32, rings: u32, sectors: u32) -> Self {
+        crate::primitives::capsule(radius, cylinder_height, rings, sectors)
+    }
+
+    /// Generates a pyramid with a rectangular base on the XZ plane and an apex at `+height/2`.
+    pub fn pyramid(width: f32, depth: f32, height: f32) -> Self {
+        crate::primitives::pyramid(width, depth, height)
+    }
+
+    /// Generates a torus (doughnut) centered on the origin in the XZ plane.
+    pub fn torus(
+        major_radius: f32,
+        minor_radius: f32,
+        major_segments: u32,
+        minor_segments: u32,
+    ) -> Self {
+        crate::primitives::torus(major_radius, minor_radius, major_segments, minor_segments)
+    }
 }
 
 #[cfg(test)]
@@ -237,5 +262,61 @@ mod tests {
         assert_eq!(plane.indices.len(), 6);
         assert_eq!(plane.aabb.min, glam::Vec3::new(-5.0, 0.0, -5.0));
         assert_eq!(plane.aabb.max, glam::Vec3::new(5.0, 0.0, 5.0));
+    }
+
+    #[test]
+    fn test_cylinder_generation() {
+        let cyl = Geometry3D::cylinder(1.0, 4.0, 16);
+        assert!(!cyl.vertices.is_empty());
+        assert!(!cyl.indices.is_empty());
+        assert_eq!(cyl.aabb.min.y, -2.0);
+        assert_eq!(cyl.aabb.max.y, 2.0);
+
+        // Verify top cap triangle face normal points in +Y
+        let top_i0 = cyl.indices[96] as usize;
+        let top_i1 = cyl.indices[97] as usize;
+        let top_i2 = cyl.indices[98] as usize;
+        let v0 = glam::Vec3::from(cyl.vertices[top_i0].position);
+        let v1 = glam::Vec3::from(cyl.vertices[top_i1].position);
+        let v2 = glam::Vec3::from(cyl.vertices[top_i2].position);
+        let top_n = (v1 - v0).cross(v2 - v0);
+        assert!(top_n.y > 0.0, "Top cap normal must point outwards (+Y)");
+
+        // Verify bottom cap triangle face normal points in -Y
+        let bot_i0 = cyl.indices[144] as usize;
+        let bot_i1 = cyl.indices[145] as usize;
+        let bot_i2 = cyl.indices[146] as usize;
+        let bv0 = glam::Vec3::from(cyl.vertices[bot_i0].position);
+        let bv1 = glam::Vec3::from(cyl.vertices[bot_i1].position);
+        let bv2 = glam::Vec3::from(cyl.vertices[bot_i2].position);
+        let bot_n = (bv1 - bv0).cross(bv2 - bv0);
+        assert!(bot_n.y < 0.0, "Bottom cap normal must point outwards (-Y)");
+    }
+
+    #[test]
+    fn test_capsule_generation() {
+        let cap = Geometry3D::capsule(1.0, 2.0, 4, 16);
+        assert!(!cap.vertices.is_empty());
+        assert!(!cap.indices.is_empty());
+        assert_eq!(cap.aabb.min.y, -2.0);
+        assert_eq!(cap.aabb.max.y, 2.0);
+    }
+
+    #[test]
+    fn test_pyramid_generation() {
+        let pyr = Geometry3D::pyramid(2.0, 2.0, 3.0);
+        assert!(!pyr.vertices.is_empty());
+        assert!(!pyr.indices.is_empty());
+        assert_eq!(pyr.aabb.min.y, -1.5);
+        assert_eq!(pyr.aabb.max.y, 1.5);
+    }
+
+    #[test]
+    fn test_torus_generation() {
+        let tor = Geometry3D::torus(3.0, 1.0, 16, 8);
+        assert!(!tor.vertices.is_empty());
+        assert!(!tor.indices.is_empty());
+        assert!(tor.aabb.max.x > 3.9);
+        assert!(tor.aabb.min.x < -3.9);
     }
 }
