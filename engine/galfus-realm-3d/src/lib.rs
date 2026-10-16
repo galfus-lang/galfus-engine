@@ -3,6 +3,7 @@
 //! Autonomous 3D Realm implementing the `galfus-realm-core` contract with
 //! Reverse-Z rendering, PBR-like lighting, and declarative entity management.
 
+pub mod api;
 pub mod bloom;
 pub mod collector;
 pub mod context;
@@ -11,6 +12,7 @@ pub mod light_cull;
 pub mod outline;
 pub mod particle;
 pub mod pipeline;
+pub mod portal;
 pub mod postprocess;
 pub mod refraction;
 pub mod shader;
@@ -29,6 +31,7 @@ pub use light_cull::LightCullingPipeline3D;
 pub use outline::OutlinePipeline3D;
 pub use particle::ParticleRenderer3D;
 pub use pipeline::Pipeline3D;
+pub use portal::PortalPipeline3D;
 pub use refraction::RefractionPipeline3D;
 pub use shader::REALM_3D_SHADER;
 pub use shadow::{ShadowMap3D, ShadowPipeline3D};

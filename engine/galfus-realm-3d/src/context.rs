@@ -8,7 +8,6 @@ use galfus_realm_3d_resources::frustum::Frustum;
 use galfus_realm_3d_resources::geometry::Geometry3D;
 use galfus_realm_3d_resources::light::Light3D;
 use galfus_realm_3d_resources::material::Material3D;
-use galfus_realm_3d_resources::model::Model3D;
 use galfus_realm_3d_resources::particle::{ParticleEmitter3D, ParticleEmitterState3D};
 use galfus_realm_3d_resources::transform::Transform3D;
 use galfus_realm_core::error::{RealmError, RealmResult};
@@ -19,38 +18,41 @@ use glam::UVec2;
 use crate::collector::{DrawCollector, render_draw_items};
 use crate::pipeline::Pipeline3D;
 use crate::shadow::{ShadowMap3D, ShadowPipeline3D};
-use crate::types::{GpuMeshBuffers, GpuModelEntry, SceneGpuBuffers, validate_id};
+use crate::types::{GpuMeshBuffers, GpuModelEntry, SceneGpuBuffers};
 
 #[inline]
-fn not_found(realm_id: u32, kind: &str, id: u32) -> RealmError {
+pub(crate) fn not_found(realm_id: u32, kind: &str, id: u32) -> RealmError {
     RealmError::ResourceNotFound(realm_id, format!("{kind} {id} not found"))
 }
 
 /// Autonomous 3D Realm managing 3D scenes, entities, Reverse-Z rendering, and lighting.
 pub struct Realm3DContext {
-    id: u32,
-    cameras: BTreeMap<u32, (Camera3D, Transform3D)>,
-    materials: BTreeMap<u32, (Material3D, Option<wgpu::Buffer>, Option<wgpu::BindGroup>)>,
-    geometries: BTreeMap<u32, (Geometry3D, Option<GpuMeshBuffers>)>,
-    models: BTreeMap<u32, GpuModelEntry>,
-    lights: BTreeMap<u32, (Light3D, Transform3D)>,
-    environment: EnvironmentRealm3D,
+    pub(crate) id: u32,
+    pub(crate) cameras: BTreeMap<u32, (Camera3D, Transform3D)>,
+    pub(crate) materials:
+        BTreeMap<u32, (Material3D, Option<wgpu::Buffer>, Option<wgpu::BindGroup>)>,
+    pub(crate) geometries: BTreeMap<u32, (Geometry3D, Option<GpuMeshBuffers>)>,
+    pub(crate) models: BTreeMap<u32, GpuModelEntry>,
+    pub(crate) lights: BTreeMap<u32, (Light3D, Transform3D)>,
+    pub(crate) environment: EnvironmentRealm3D,
 
-    pipeline: Option<Pipeline3D>,
-    shadow_pipeline: Option<ShadowPipeline3D>,
-    shadow_map: Option<ShadowMap3D>,
-    skybox_pipeline: Option<crate::skybox::SkyboxPipeline3D>,
-    post_pipelines: crate::postprocess::PostProcessPipelines,
-    light_cull_pipeline: Option<crate::light_cull::LightCullingPipeline3D>,
-    gizmos: crate::gizmo::GizmoSystem3D,
-    emitters: BTreeMap<u32, (ParticleEmitter3D, Transform3D, ParticleEmitterState3D)>,
-    particle_renderer: Option<crate::particle::ParticleRenderer3D>,
-    refraction_pipeline: Option<crate::refraction::RefractionPipeline3D>,
-    scene_buffers: Option<SceneGpuBuffers>,
-    depth_texture: Option<(wgpu::Texture, wgpu::TextureView, UVec2)>,
-    bones: Vec<glam::Mat4>,
-    total_time: f32,
-    dirty: bool,
+    pub(crate) pipeline: Option<Pipeline3D>,
+    pub(crate) shadow_pipeline: Option<ShadowPipeline3D>,
+    pub(crate) shadow_map: Option<ShadowMap3D>,
+    pub(crate) skybox_pipeline: Option<crate::skybox::SkyboxPipeline3D>,
+    pub(crate) post_pipelines: crate::postprocess::PostProcessPipelines,
+    pub(crate) light_cull_pipeline: Option<crate::light_cull::LightCullingPipeline3D>,
+    pub(crate) gizmos: crate::gizmo::GizmoSystem3D,
+    pub(crate) emitters: BTreeMap<u32, (ParticleEmitter3D, Transform3D, ParticleEmitterState3D)>,
+    pub(crate) portals: BTreeMap<u32, galfus_realm_3d_resources::portal::Portal3D>,
+    pub(crate) particle_renderer: Option<crate::particle::ParticleRenderer3D>,
+    pub(crate) refraction_pipeline: Option<crate::refraction::RefractionPipeline3D>,
+    pub(crate) portal_pipeline: Option<crate::portal::PortalPipeline3D>,
+    pub(crate) scene_buffers: Option<SceneGpuBuffers>,
+    pub(crate) depth_texture: Option<(wgpu::Texture, wgpu::TextureView, UVec2)>,
+    pub(crate) bones: Vec<glam::Mat4>,
+    pub(crate) total_time: f32,
+    pub(crate) dirty: bool,
 }
 
 impl Realm3DContext {
@@ -72,189 +74,16 @@ impl Realm3DContext {
             light_cull_pipeline: None,
             gizmos: crate::gizmo::GizmoSystem3D::new(),
             emitters: BTreeMap::new(),
+            portals: BTreeMap::new(),
             particle_renderer: None,
             refraction_pipeline: None,
+            portal_pipeline: None,
             scene_buffers: None,
             depth_texture: None,
             bones: Vec::new(),
             total_time: 0.0,
             dirty: true,
         }
-    }
-
-    /// Registers or updates a `Camera3D` with its `Transform3D`.
-    pub fn create_camera(
-        &mut self,
-        id: u32,
-        camera: Camera3D,
-        transform: Transform3D,
-    ) -> RealmResult<()> {
-        validate_id(id)?;
-        self.cameras.insert(id, (camera, transform));
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Updates the transform of an existing `Camera3D`.
-    pub fn set_camera_transform(&mut self, id: u32, transform: Transform3D) -> RealmResult<()> {
-        self.cameras
-            .get_mut(&id)
-            .ok_or_else(|| not_found(self.id, "Camera", id))?
-            .1 = transform;
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Registers or updates a `Material3D`.
-    pub fn create_material(&mut self, id: u32, material: Material3D) -> RealmResult<()> {
-        validate_id(id)?;
-        self.materials.insert(id, (material, None, None));
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Registers or updates a `Geometry3D`.
-    pub fn create_geometry(&mut self, id: u32, geometry: Geometry3D) -> RealmResult<()> {
-        validate_id(id)?;
-        self.geometries.insert(id, (geometry, None));
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Registers or updates a `Model3D` with its `Transform3D`.
-    pub fn create_model(
-        &mut self,
-        id: u32,
-        model: Model3D,
-        transform: Transform3D,
-    ) -> RealmResult<()> {
-        validate_id(id)?;
-        self.models.insert(id, (model, transform, None, None));
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Updates the transform of an existing `Model3D`.
-    pub fn set_model_transform(&mut self, id: u32, transform: Transform3D) -> RealmResult<()> {
-        let entry = self
-            .models
-            .get_mut(&id)
-            .ok_or_else(|| not_found(self.id, "Model", id))?;
-        entry.1 = transform;
-        entry.2 = None;
-        entry.3 = None;
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Sets or updates the skeletal bone matrix palette for a specific model.
-    pub fn update_model_bones(
-        &mut self,
-        model_id: u32,
-        matrices: &[glam::Mat4],
-    ) -> RealmResult<()> {
-        let realm_id = self.id;
-        let entry = self
-            .models
-            .get_mut(&model_id)
-            .ok_or_else(|| not_found(realm_id, "Model", model_id))?;
-        let bone_offset = self.bones.len() as u32;
-        let bone_count = matrices.len() as u32;
-        self.bones.extend_from_slice(matrices);
-        entry.0.bone_offset = bone_offset;
-        entry.0.bone_count = bone_count;
-        entry.2 = None;
-        entry.3 = None;
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Registers or updates a `Light3D` with its `Transform3D`.
-    pub fn create_light(
-        &mut self,
-        id: u32,
-        light: Light3D,
-        transform: Transform3D,
-    ) -> RealmResult<()> {
-        validate_id(id)?;
-        self.lights.insert(id, (light, transform));
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Updates the transform of an existing `Light3D`.
-    pub fn set_light_transform(&mut self, id: u32, transform: Transform3D) -> RealmResult<()> {
-        self.lights
-            .get_mut(&id)
-            .ok_or_else(|| not_found(self.id, "Light", id))?
-            .1 = transform;
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Updates the global `EnvironmentRealm3D` atmospheric configuration.
-    pub fn set_environment(&mut self, environment: EnvironmentRealm3D) {
-        self.environment = environment;
-        self.dirty = true;
-    }
-
-    /// Creates or updates a 3D particle emitter.
-    pub fn create_particle_emitter(
-        &mut self,
-        id: u32,
-        emitter: ParticleEmitter3D,
-        transform: Transform3D,
-    ) -> RealmResult<()> {
-        validate_id(id)?;
-        self.emitters
-            .insert(id, (emitter, transform, ParticleEmitterState3D::new()));
-        Ok(())
-    }
-
-    /// Sets the transform of an existing 3D particle emitter.
-    pub fn set_particle_emitter_transform(
-        &mut self,
-        id: u32,
-        transform: Transform3D,
-    ) -> RealmResult<()> {
-        let entry = self
-            .emitters
-            .get_mut(&id)
-            .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))?;
-        entry.1 = transform;
-        Ok(())
-    }
-
-    /// Triggers an immediate burst of particles on an emitter.
-    pub fn particle_emitter_burst(&mut self, id: u32, count: u32) -> RealmResult<()> {
-        let (emitter, transform, state) = self
-            .emitters
-            .get_mut(&id)
-            .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))?;
-        state.burst(emitter, count, transform.position, transform.rotation);
-        Ok(())
-    }
-
-    /// Destroys an existing 3D particle emitter.
-    pub fn destroy_particle_emitter(&mut self, id: u32) -> RealmResult<()> {
-        self.emitters
-            .remove(&id)
-            .map(|_| ())
-            .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))
-    }
-
-    /// Queues debug gizmo drawing primitives.
-    pub fn draw_line(&mut self, start: glam::Vec3, end: glam::Vec3, color: glam::Vec4) {
-        self.gizmos.draw_line(start, end, color);
-    }
-    pub fn draw_aabb(&mut self, min: glam::Vec3, max: glam::Vec3, color: glam::Vec4) {
-        self.gizmos.draw_aabb(min, max, color);
-    }
-    pub fn draw_polyline(&mut self, points: &[glam::Vec3], color: glam::Vec4, closed: bool) {
-        self.gizmos.draw_polyline(points, color, closed);
-    }
-    pub fn clear_gizmos(&mut self) {
-        self.gizmos.clear();
     }
 }
 
@@ -449,6 +278,116 @@ impl Realm for Realm3DContext {
             particle_renderer.upload(device, queue, &alpha_instances, &additive_instances);
         }
 
+        // 0. Render offscreen mirror / optical portal pass if mirrors exist
+        let has_mirrors = !collector.mirrors.is_empty();
+        if has_mirrors {
+            let portal_pipe = self.portal_pipeline.get_or_insert_with(|| {
+                crate::portal::PortalPipeline3D::new(
+                    device,
+                    ctx.target_format,
+                    &pipeline.refraction_layout,
+                    width,
+                    height,
+                )
+            });
+            portal_pipe.resize(
+                device,
+                &pipeline.refraction_layout,
+                ctx.target_format,
+                width,
+                height,
+            );
+
+            let primary_item = collector.mirrors[0];
+            let primary_portal = self
+                .portals
+                .values()
+                .find(|p| p.model_id == primary_item.model_id && p.active);
+            let mirror_transform = self
+                .models
+                .get(&primary_item.model_id)
+                .map(|m| m.1)
+                .unwrap_or_default();
+            let is_horizontal = self
+                .geometries
+                .get(&primary_item.geometry_id)
+                .and_then(|g| g.0.label.as_deref())
+                .map(|l| l == "Plane3D")
+                .unwrap_or(false);
+
+            let is_portal = primary_portal
+                .and_then(|p| p.exit_transform.as_ref())
+                .is_some();
+            let mirror_normal = if is_portal {
+                None
+            } else if is_horizontal {
+                Some(mirror_transform.rotation * glam::Vec3::Y)
+            } else {
+                Some(mirror_transform.rotation * glam::Vec3::Z)
+            };
+
+            let v_cam = if let Some(p) = primary_portal
+                && let Some(exit) = &p.exit_transform
+            {
+                crate::portal::PortalPipeline3D::compute_portal_camera(
+                    &camera_uniform,
+                    &mirror_transform,
+                    exit,
+                )
+            } else {
+                crate::portal::PortalPipeline3D::compute_mirror_camera(
+                    &camera_uniform,
+                    &mirror_transform,
+                    is_horizontal,
+                )
+            };
+
+            queue.write_buffer(
+                &portal_pipe.virtual_camera_buf,
+                0,
+                bytemuck::bytes_of(&v_cam),
+            );
+
+            if let Some(shadow_map) = &self.shadow_map {
+                let v_bg = scene_buffers.create_camera_bind_group(
+                    device,
+                    pipeline,
+                    shadow_map,
+                    &portal_pipe.virtual_camera_buf,
+                );
+                let v_collector = crate::portal::PortalPipeline3D::collect_virtual_items(
+                    &self.models,
+                    &self.geometries,
+                    &self.materials,
+                    &v_cam,
+                    primary_item.model_id,
+                    mirror_transform.position,
+                    mirror_normal,
+                );
+                let opaque_draws = v_collector
+                    .opaque
+                    .iter()
+                    .chain(v_collector.masked.iter())
+                    .map(|i| (i, false));
+                let particle_draw = self
+                    .particle_renderer
+                    .as_ref()
+                    .filter(|_| alpha_count > 0 || additive_count > 0)
+                    .map(|p| (p, alpha_count, additive_count));
+                portal_pipe.render_portal_pass(
+                    crate::portal::PortalPassDesc {
+                        encoder: &mut encoder,
+                        pipeline,
+                        virtual_scene_bg: &v_bg,
+                        sky_pipe: self.skybox_pipeline.as_ref(),
+                        sky_mode: self.environment.skybox.mode,
+                        particles: particle_draw,
+                    },
+                    opaque_draws,
+                );
+            }
+        }
+
         // 1. Opaque & Masked forward geometry pass
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -522,10 +461,10 @@ impl Realm for Realm3DContext {
             refr.capture_opaque(device, &mut encoder, ctx.target_view);
         }
 
-        // 3. Translucent, Refractive, and Foreground Particle pass
+        // 3. Translucent, Refractive, Mirror, and Foreground Particle pass
         let has_trans = !collector.transparent.is_empty();
         let has_front_particles = alpha_count > behind_alpha || additive_count > behind_additive;
-        if has_refr || has_trans || has_front_particles {
+        if has_refr || has_mirrors || has_trans || has_front_particles {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Realm3D Refractive & Transparent Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -552,6 +491,19 @@ impl Realm for Realm3DContext {
 
             pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
 
+            if has_mirrors {
+                let portal_bg = self
+                    .portal_pipeline
+                    .as_ref()
+                    .map(|p| p.bind_group())
+                    .unwrap_or(&pipeline.dummy_refraction_bg);
+                render_draw_items(
+                    &mut pass,
+                    pipeline,
+                    collector.mirrors.iter().map(|i| (i, false)),
+                    portal_bg,
+                );
+            }
             if has_refr {
                 let refr_bg = self
                     .refraction_pipeline

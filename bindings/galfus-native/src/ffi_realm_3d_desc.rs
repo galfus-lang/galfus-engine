@@ -96,6 +96,7 @@ impl From<Geometry3DDesc> for Geometry3D {
         match d.primitive.as_deref() {
             Some("cube") => Geometry3D::cube(d.size.unwrap_or(1.0)),
             Some("plane") => Geometry3D::plane(d.size.unwrap_or(1.0), d.size.unwrap_or(1.0)),
+            Some("quad") => Geometry3D::quad(d.size.unwrap_or(1.0), d.size.unwrap_or(1.0)),
             Some("sphere") => Geometry3D::sphere(
                 d.radius.unwrap_or(1.0),
                 d.subdivisions.unwrap_or(32),
@@ -168,6 +169,8 @@ impl From<Material3DDesc> for Material3D {
             Some("transparent") => SurfaceType3D::Transparent,
             Some("masked") => SurfaceType3D::Masked,
             Some("refractive") => SurfaceType3D::Refractive,
+            Some("mirror") => SurfaceType3D::Mirror,
+            Some("portal") => SurfaceType3D::Portal,
             _ => SurfaceType3D::Opaque,
         };
         let mut custom_params = [Vec4::ZERO; 4];
@@ -541,6 +544,26 @@ impl From<ParticleEmitter3DDesc> for ParticleEmitter3D {
                 .map(Into::into)
                 .unwrap_or(EmissionShape3D::Point),
             active: d.active,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Portal3DDesc {
+    pub model_id: u32,
+    pub exit_transform: Option<Transform3DDesc>,
+    pub active: Option<bool>,
+    pub resolution_scale: Option<f32>,
+}
+
+impl From<Portal3DDesc> for galfus_realm_3d_resources::portal::Portal3D {
+    fn from(d: Portal3DDesc) -> Self {
+        Self {
+            model_id: d.model_id,
+            exit_transform: d.exit_transform.map(Into::into),
+            active: d.active.unwrap_or(true),
+            resolution_scale: d.resolution_scale.unwrap_or(1.0),
         }
     }
 }

@@ -379,6 +379,25 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         final_color = transmitted + spec_reflection + s_out.emissive;
     }
 
+    // Planar reflection for mirrors (5u) and optical portals (6u)
+    let is_mirror_or_portal = (material.flags.x & 7u) == 5u || (material.flags.x & 7u) == 6u;
+    if (is_mirror_or_portal) {
+        let screen_dims = vec2<f32>(textureDimensions(opaque_screen_texture));
+        var screen_uv = in.clip_position.xy / max(screen_dims, vec2<f32>(1.0));
+        if ((material.flags.x & 7u) == 5u) {
+            screen_uv.x = 1.0 - screen_uv.x;
+        }
+        let refl_color = textureSample(opaque_screen_texture, opaque_screen_sampler, screen_uv).rgb;
+        if ((material.flags.x & 7u) == 5u) {
+            let fresnel = pow(1.0 - max(dot(N, V), 0.0), 2.0);
+            let tint = mix(albedo.rgb, vec3<f32>(1.0), fresnel * 0.4);
+            let refl_strength = material.pbr_params.z;
+            final_color = refl_color * tint * refl_strength + direct_light + s_out.emissive;
+        } else {
+            final_color = refl_color + s_out.emissive;
+        }
+    }
+
     // Fog blending
     let fog_mode = u32(round(env.fog_params.w));
     if (fog_mode > 0u) {
@@ -398,7 +417,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     var out_alpha = albedo.a;
-    if (is_refractive) {
+    if (is_refractive || is_mirror_or_portal) {
         out_alpha = 1.0;
     }
     return vec4<f32>(final_color, out_alpha);

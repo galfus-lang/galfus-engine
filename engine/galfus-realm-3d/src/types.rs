@@ -110,6 +110,34 @@ impl SceneGpuBuffers {
             bind_group,
         }
     }
+
+    /// Creates a scene bind group referencing a custom virtual camera buffer (e.g. for mirrors and portals).
+    pub fn create_camera_bind_group(
+        &self,
+        device: &wgpu::Device,
+        pipeline: &crate::pipeline::Pipeline3D,
+        shadow_map: &crate::shadow::ShadowMap3D,
+        camera_buf: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        let b_entry = |binding, resource| wgpu::BindGroupEntry { binding, resource };
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Virtual Camera Scene Bind Group"),
+            layout: &pipeline.scene_layout,
+            entries: &[
+                b_entry(0, camera_buf.as_entire_binding()),
+                b_entry(1, self.env_buf.as_entire_binding()),
+                b_entry(2, self.lights_buf.as_entire_binding()),
+                b_entry(3, self._lights_header_buf.as_entire_binding()),
+                b_entry(
+                    4,
+                    wgpu::BindingResource::TextureView(&shadow_map.array_view),
+                ),
+                b_entry(5, wgpu::BindingResource::Sampler(&shadow_map.sampler)),
+                b_entry(6, self._bones_buf.as_entire_binding()),
+                b_entry(7, shadow_map.matrices_buffer.as_entire_binding()),
+            ],
+        })
+    }
 }
 
 /// Vertex buffer, index buffer, and index count tuple for GPU meshes.

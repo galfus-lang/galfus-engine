@@ -17,6 +17,10 @@ pub enum SurfaceType3D {
     Additive,
     /// Screen-space optical refraction with background distortion (glass, water, crystals).
     Refractive,
+    /// Planar reflection mirror.
+    Mirror,
+    /// Visual teleportation gateway.
+    Portal,
 }
 
 /// 3D material properties for PBR or standard forward shading.
@@ -109,6 +113,8 @@ impl Material3D {
             SurfaceType3D::Masked => 2u32,
             SurfaceType3D::Additive => 3u32,
             SurfaceType3D::Refractive => 4u32,
+            SurfaceType3D::Mirror => 5u32,
+            SurfaceType3D::Portal => 6u32,
         };
 
         if self.albedo_texture_id.is_some() {

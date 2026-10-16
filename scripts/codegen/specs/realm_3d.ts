@@ -44,7 +44,17 @@ export const realm3dDescriptors: DescSpec[] = [
     fields: {
       primitive: {
         type: {
-          enum: ['cube', 'plane', 'sphere', 'cylinder', 'capsule', 'pyramid', 'torus', 'custom']
+          enum: [
+            'cube',
+            'plane',
+            'quad',
+            'sphere',
+            'cylinder',
+            'capsule',
+            'pyramid',
+            'torus',
+            'custom'
+          ]
         },
         optional: true
       },
@@ -61,7 +71,9 @@ export const realm3dDescriptors: DescSpec[] = [
     doc: 'PBR 3D material properties and surface configuration.',
     fields: {
       surfaceType: {
-        type: { enum: ['opaque', 'transparent', 'masked', 'additive', 'refractive'] },
+        type: {
+          enum: ['opaque', 'transparent', 'masked', 'additive', 'refractive', 'mirror', 'portal']
+        },
         optional: true
       },
       baseColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
@@ -192,6 +204,28 @@ export const realm3dDescriptors: DescSpec[] = [
       extents: { type: { tuple: ['number', 'number', 'number'] }, optional: true },
       angleRad: { type: 'number', optional: true },
       height: { type: 'number', optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'Portal3DDesc',
+    doc: 'Planar mirror or optical portal gateway configuration.',
+    fields: {
+      modelId: {
+        type: 'number',
+        doc: 'Entrance model ID defining portal surface and spatial transform.'
+      },
+      exitTransform: {
+        type: { ref: 'Transform3DDesc' },
+        optional: true,
+        doc: 'Optional destination transform. If omitted, operates as a planar mirror.'
+      },
+      active: { type: 'boolean', optional: true, doc: 'Whether the mirror/portal is active.' },
+      resolutionScale: {
+        type: 'number',
+        optional: true,
+        doc: 'Offscreen buffer resolution scale factor (default 1.0).'
+      }
     }
   },
   {
@@ -442,6 +476,38 @@ export const realm3dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'emitterId', type: 'u32', doc: 'Logical ID of the Particle Emitter.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_portal',
+    methodName: 'realm3dCreatePortal',
+    doc: 'Registers or updates a 3D optical portal or planar mirror.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'portalId', type: 'u32', doc: 'Logical ID of the Portal.' },
+      { name: 'portal', type: { json: 'Portal3DDesc' }, doc: 'Portal configuration.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_set_portal_active',
+    methodName: 'realm3dSetPortalActive',
+    doc: 'Sets whether an existing 3D portal or mirror is active.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'portalId', type: 'u32', doc: 'Logical ID of the Portal.' },
+      { name: 'active', type: 'bool', doc: 'Active state.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_destroy_portal',
+    methodName: 'realm3dDestroyPortal',
+    doc: 'Destroys an existing 3D portal or mirror.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'portalId', type: 'u32', doc: 'Logical ID of the Portal.' }
     ],
     returnType: 'i32'
   }

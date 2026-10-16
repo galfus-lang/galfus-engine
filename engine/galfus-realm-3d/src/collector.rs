@@ -34,6 +34,8 @@ pub struct DrawCollector<'a> {
     pub transparent: Vec<CollectedDrawItem<'a>>,
     /// Screen-space refractive geometry sorted back-to-front.
     pub refractive: Vec<CollectedDrawItem<'a>>,
+    /// Planar reflection mirrors and optical portals sorted front-to-back.
+    pub mirrors: Vec<CollectedDrawItem<'a>>,
     /// Number of models discarded during camera frustum culling.
     pub culled_count: usize,
 }
@@ -105,6 +107,7 @@ impl<'a> DrawCollector<'a> {
                 SurfaceType3D::Opaque => collector.opaque.push(item),
                 SurfaceType3D::Masked => collector.masked.push(item),
                 SurfaceType3D::Refractive => collector.refractive.push(item),
+                SurfaceType3D::Mirror | SurfaceType3D::Portal => collector.mirrors.push(item),
                 SurfaceType3D::Transparent | SurfaceType3D::Additive => {
                     collector.transparent.push(item)
                 }
@@ -140,6 +143,11 @@ impl<'a> DrawCollector<'a> {
         collector.transparent.sort_by(|a, b| {
             b.depth
                 .partial_cmp(&a.depth)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        collector.mirrors.sort_by(|a, b| {
+            a.depth
+                .partial_cmp(&b.depth)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 

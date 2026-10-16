@@ -12,6 +12,7 @@ pub mod light;
 pub mod material;
 pub mod model;
 pub mod particle;
+pub mod portal;
 pub mod primitives;
 pub mod transform;
 
@@ -26,4 +27,5 @@ pub use model::{Model3D, Model3DUniform};
 pub use particle::{
     EmissionShape3D, Particle3D, Particle3DInstance, ParticleEmitter3D, ParticleEmitterState3D,
 };
+pub use portal::Portal3D;
 pub use transform::Transform3D;

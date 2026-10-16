@@ -165,6 +165,29 @@ impl Geometry3D {
         }
     }
 
+    /// Generates a vertical quad centered on the origin in the XY plane facing +Z.
+    pub fn quad(width: f32, height: f32) -> Self {
+        let hw = width * 0.5;
+        let hh = height * 0.5;
+
+        let vertices = vec![
+            Vertex3D::new([-hw, -hh, 0.0], [0.0, 0.0, 1.0], [0.0, 1.0]),
+            Vertex3D::new([hw, -hh, 0.0], [0.0, 0.0, 1.0], [1.0, 1.0]),
+            Vertex3D::new([hw, hh, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0]),
+            Vertex3D::new([-hw, hh, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0]),
+        ];
+
+        let indices = vec![0, 1, 2, 0, 2, 3];
+        let aabb = Aabb::from_vertices(&vertices);
+
+        Self {
+            label: Some("Quad3D".into()),
+            aabb,
+            vertices,
+            indices,
+        }
+    }
+
     /// Generates a UV sphere with a given radius and tessellation subdivisions.
     pub fn sphere(radius: f32, rings: u32, sectors: u32) -> Self {
         let rings = rings.max(3);
