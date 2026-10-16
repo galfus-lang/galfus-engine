@@ -1,5 +1,6 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
 import type { Vertex3DDesc } from '../../sdk/typescript/galfus.ts';
+import { extractKey, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
 const REALM_3D = 10;
@@ -195,57 +196,8 @@ function computeBoneSkinningPalette(
   return palette;
 }
 
-function quatFromLookAt(
-  eye: [number, number, number],
-  target: [number, number, number],
-  up: [number, number, number] = [0, 1, 0]
-): [number, number, number, number] {
-  let [fx, fy, fz] = [target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]];
-  const fLen = Math.hypot(fx, fy, fz);
-  if (fLen < 1e-6) return [0, 0, 0, 1];
-  fx /= fLen;
-  fy /= fLen;
-  fz /= fLen;
-
-  let [sx, sy, sz] = [fy * up[2] - fz * up[1], fz * up[0] - fx * up[2], fx * up[1] - fy * up[0]];
-  const sLen = Math.hypot(sx, sy, sz);
-  if (sLen > 1e-6) {
-    sx /= sLen;
-    sy /= sLen;
-    sz /= sLen;
-  }
-
-  const [ux, uy, uz] = [sy * fz - sz * fy, sz * fx - sx * fz, sx * fy - sy * fx];
-  const [m00, m10, m20, m01, m11, m21, m02, m12, m22] = [sx, sy, sz, ux, uy, uz, -fx, -fy, -fz];
-  const tr = m00 + m11 + m22;
-  if (tr > 0) {
-    const s = 0.5 / Math.sqrt(tr + 1.0);
-    return [(m21 - m12) * s, (m02 - m20) * s, (m10 - m01) * s, 0.25 / s];
-  } else if (m00 > m11 && m00 > m22) {
-    const s = 2.0 * Math.sqrt(1.0 + m00 - m11 - m22);
-    return [0.25 * s, (m01 + m10) / s, (m02 + m20) / s, (m21 - m12) / s];
-  } else if (m11 > m22) {
-    const s = 2.0 * Math.sqrt(1.0 + m11 - m00 - m22);
-    return [(m01 + m10) / s, 0.25 * s, (m12 + m21) / s, (m02 - m20) / s];
-  }
-  const s = 2.0 * Math.sqrt(1.0 + m22 - m00 - m11);
-  return [(m02 + m20) / s, (m12 + m21) / s, 0.25 * s, (m10 - m01) / s];
-}
-
-function extractKey(input: { physicalKey: string; logicalKey: any }): string {
-  if (typeof input.logicalKey === 'object' && input.logicalKey !== null) {
-    if (typeof input.logicalKey.character === 'string')
-      return input.logicalKey.character.toLowerCase();
-    if (typeof input.logicalKey.named === 'string') return input.logicalKey.named.toLowerCase();
-  }
-  const p = input.physicalKey.toLowerCase();
-  if (p.startsWith('key') && p.length === 4) return p.slice(3);
-  if (p.startsWith('digit') && p.length === 6) return p.slice(5);
-  return p;
-}
-
-export async function runDemo3(): Promise<void> {
-  console.log('=== Galfus Engine - Demo 3 (TypeScript / Bun): Procedural Skeletal Bones ===\n');
+export async function runDemo3d2(): Promise<void> {
+  console.log('=== Galfus Engine - Demo 3D-2 (TypeScript / Bun): Procedural Skeletal Bones ===\n');
 
   const galfus = new GalfusBun();
   galfus.platformInit();
@@ -253,7 +205,7 @@ export async function runDemo3(): Promise<void> {
   const windowId = 1;
   galfus.windowCreate({
     id: windowId,
-    title: 'Galfus Engine - Demo 3: Procedural Skeletal Bones (12-Joint Skinning)',
+    title: 'Galfus Engine - Demo 3D-2: Procedural Skeletal Bones (12-Joint Skinning)',
     size: [1280, 720],
     resizable: true,
     decorations: true
@@ -582,7 +534,7 @@ export async function runDemo3(): Promise<void> {
     if (now - fpsTimer >= 1000.0) {
       const fps = (frameCount * 1000.0) / (now - fpsTimer);
       console.log(
-        `[Demo 3] FPS: ${fps.toFixed(1)} | Mode: ${modeNames[animMode]} | Bones: ${BONE_COUNT} | CamDist: ${camRadius.toFixed(1)}`
+        `[Demo 3D-2] FPS: ${fps.toFixed(1)} | Mode: ${modeNames[animMode]} | Bones: ${BONE_COUNT} | CamDist: ${camRadius.toFixed(1)}`
       );
       frameCount = 0;
       fpsTimer = now;
@@ -591,7 +543,7 @@ export async function runDemo3(): Promise<void> {
     await Bun.sleep(1);
   }
 
-  console.log('==> Cleaning up Demo 3 resources...');
+  console.log('==> Cleaning up Demo 3D-2 resources...');
   galfus.platformShutdown();
-  console.log('✔ Demo 3 finished cleanly.');
+  console.log('✔ Demo 3D-2 finished cleanly.');
 }

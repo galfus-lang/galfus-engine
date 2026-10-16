@@ -1,5 +1,11 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
 import type { Transform3DDesc } from '../../sdk/typescript/galfus.ts';
+import { extractKey, eulerToQuat, quatFromLookAt } from './utils.ts';
+import {
+  FRESNEL_SURFACE_SNIPPET,
+  WORLD_WAVE_SURFACE_SNIPPET,
+  HOLOGRAM_SURFACE_SNIPPET
+} from './shaders_3d.ts';
 
 const TARGET_WINDOW = 1;
 const REALM_3D = 10;
@@ -23,164 +29,9 @@ const LIGHT_DIR_ID = 1;
 const LIGHT_POINT_ID = 2;
 const LIGHT_SPOT_ID = 3;
 
-/** Surface Effect 1: Fresnel Rim Glow with pulse */
-const FRESNEL_SURFACE_SNIPPET = `
-fn surface_effect(in: SurfaceInput) -> SurfaceOutput {
-    var out: SurfaceOutput;
-    out.albedo = in.albedo;
-    out.roughness = in.roughness;
-    out.metallic = in.metallic;
-    out.normal = in.world_normal;
-
-    let rim_color = in.custom.v0.rgb;
-    let rim_power = in.custom.v1.x;
-    let pulse_speed = in.custom.v1.y;
-
-    let fresnel = pow(1.0 - max(dot(in.world_normal, in.view_dir), 0.0), rim_power);
-    let pulse = 0.5 + 0.5 * sin(in.time * pulse_speed);
-    out.emissive = in.emissive + rim_color * fresnel * pulse;
-    return out;
-}
-`;
-
-/** Surface Effect 2: Dynamic World-Position Wave */
-const WORLD_WAVE_SURFACE_SNIPPET = `
-fn surface_effect(in: SurfaceInput) -> SurfaceOutput {
-    var out: SurfaceOutput;
-    out.roughness = in.roughness;
-    out.metallic = in.metallic;
-    out.normal = in.world_normal;
-
-    let wave_speed = in.custom.v1.x;
-    let wave_freq = in.custom.v1.y;
-    let wave = 0.5 + 0.5 * sin(in.world_pos.y * wave_freq + in.time * wave_speed);
-
-    let color_a = in.custom.v0.rgb;
-    let color_b = in.custom.v2.rgb;
-    out.albedo = vec4<f32>(mix(color_a, color_b, wave), in.albedo.a);
-    out.emissive = mix(vec3<f32>(0.02), color_b * 0.4, wave);
-    return out;
-}
-`;
-
-/** Surface Effect 3: Hologram Scanlines & Alpha */
-const HOLOGRAM_SURFACE_SNIPPET = `
-fn surface_effect(in: SurfaceInput) -> SurfaceOutput {
-    var out: SurfaceOutput;
-    out.roughness = 0.15;
-    out.metallic = 0.85;
-    out.normal = in.world_normal;
-
-    let scanline_freq = in.custom.v1.x;
-    let scanline_speed = in.custom.v1.y;
-    let scan = 0.5 + 0.5 * sin(in.uv.y * scanline_freq + in.time * scanline_speed);
-
-    let holo_color = in.custom.v0.rgb;
-    let alpha = clamp(0.35 + 0.65 * scan, 0.2, 1.0);
-    out.albedo = vec4<f32>(holo_color * 0.7, alpha);
-    out.emissive = holo_color * (0.35 + 0.65 * scan);
-    return out;
-}
-`;
-
-function extractKey(input: { physicalKey: string; logicalKey: any }): string {
-  if (typeof input.logicalKey === 'object' && input.logicalKey !== null) {
-    if ('character' in input.logicalKey && typeof input.logicalKey.character === 'string') {
-      return input.logicalKey.character.toLowerCase();
-    }
-    if ('named' in input.logicalKey && typeof input.logicalKey.named === 'string') {
-      return input.logicalKey.named.toLowerCase();
-    }
-  }
-  const phys = input.physicalKey.toLowerCase();
-  if (phys.startsWith('key') && phys.length === 4) {
-    return phys.slice(3);
-  }
-  if (phys.startsWith('digit') && phys.length === 6) {
-    return phys.slice(5);
-  }
-  return phys;
-}
-
-/** Euler angle (pitch around X, yaw around Y, roll around Z in radians) to quaternion [x, y, z, w] */
-function eulerToQuat(pitch: number, yaw: number, roll: number): [number, number, number, number] {
-  const cy = Math.cos(yaw * 0.5);
-  const sy = Math.sin(yaw * 0.5);
-  const cp = Math.cos(pitch * 0.5);
-  const sp = Math.sin(pitch * 0.5);
-  const cr = Math.cos(roll * 0.5);
-  const sr = Math.sin(roll * 0.5);
-
-  return [
-    sp * cy * cr - cp * sy * sr,
-    cp * sy * cr + sp * cy * sr,
-    cp * cy * sr - sp * sy * cr,
-    cp * cy * cr + sp * sy * sr
-  ];
-}
-
-/** Computes a look-at rotation quaternion pointing from eye to target */
-function quatFromLookAt(
-  eye: [number, number, number],
-  target: [number, number, number],
-  up: [number, number, number] = [0, 1, 0]
-): [number, number, number, number] {
-  let fx = target[0] - eye[0];
-  let fy = target[1] - eye[1];
-  let fz = target[2] - eye[2];
-  const fLen = Math.hypot(fx, fy, fz);
-  if (fLen < 1e-6) return [0, 0, 0, 1];
-  fx /= fLen;
-  fy /= fLen;
-  fz /= fLen;
-
-  let sx = fy * up[2] - fz * up[1];
-  let sy = fz * up[0] - fx * up[2];
-  let sz = fx * up[1] - fy * up[0];
-  let sLen = Math.hypot(sx, sy, sz);
-  if (sLen < 1e-6) {
-    sx = fy * 1.0;
-    sy = 0;
-    sz = -fx * 1.0;
-    sLen = Math.hypot(sx, sy, sz);
-  }
-  sx /= sLen;
-  sy /= sLen;
-  sz /= sLen;
-
-  const ux = sy * fz - sz * fy;
-  const uy = sz * fx - sx * fz;
-  const uz = sx * fy - sy * fx;
-
-  const m00 = sx,
-    m10 = sy,
-    m20 = sz;
-  const m01 = ux,
-    m11 = uy,
-    m21 = uz;
-  const m02 = -fx,
-    m12 = -fy,
-    m22 = -fz;
-
-  const trace = m00 + m11 + m22;
-  if (trace > 0) {
-    const s = 0.5 / Math.sqrt(trace + 1.0);
-    return [(m21 - m12) * s, (m02 - m20) * s, (m10 - m01) * s, 0.25 / s];
-  } else if (m00 > m11 && m00 > m22) {
-    const s = 2.0 * Math.sqrt(1.0 + m00 - m11 - m22);
-    return [0.25 * s, (m01 + m10) / s, (m02 + m20) / s, (m21 - m12) / s];
-  } else if (m11 > m22) {
-    const s = 2.0 * Math.sqrt(1.0 + m11 - m00 - m22);
-    return [(m01 + m10) / s, 0.25 * s, (m12 + m21) / s, (m02 - m20) / s];
-  } else {
-    const s = 2.0 * Math.sqrt(1.0 + m22 - m00 - m11);
-    return [(m02 + m20) / s, (m12 + m21) / s, 0.25 * s, (m10 - m01) / s];
-  }
-}
-
-export async function runDemo2(): Promise<void> {
+export async function runDemo3d1(): Promise<void> {
   console.log(
-    '=== Galfus Engine - Demo 2 (TypeScript / Bun): 3D Realm (Reverse-Z & Lighting) ===\n'
+    '=== Galfus Engine - Demo 3D-1 (TypeScript / Bun): 3D Realm (Reverse-Z & Lighting) ===\n'
   );
 
   const galfus = new GalfusBun();
@@ -197,7 +48,7 @@ export async function runDemo2(): Promise<void> {
   console.log('==> Creating window...');
   galfus.windowCreate({
     id: windowId,
-    title: 'Galfus Engine - Demo 2 (TS): 3D Realm (Reverse-Z & Shadows)',
+    title: 'Galfus Engine - Demo 3D-1 (TS): 3D Realm (Reverse-Z & Shadows)',
     size: [1024, 768],
     resizable: true,
     decorations: true
@@ -327,65 +178,31 @@ export async function runDemo2(): Promise<void> {
   console.log('✔ Materials created (with custom surface effects)');
 
   console.log('==> Instantiating Models (3 Custom Shader Cubes + Floor)...');
-  // Center Cube: Fresnel Rim Glow
-  galfus.realm3dCreateModel(
-    REALM_3D,
-    MODEL_CUBE_FRESNEL_ID,
-    {
-      geometryId: GEOM_CUBE_ID,
-      materialId: MAT_CUBE_FRESNEL_ID,
-      castShadow: true,
-      receiveShadow: true,
-      castOutline: true,
-      outlineColor: [0.0, 1.0, 0.85, 1.0], // Cyan outline
-      active: true
-    },
-    {
-      position: [0.0, 1.0, 0.0],
-      rotation: [0, 0, 0, 1],
-      scale: [1, 1, 1]
-    }
-  );
+  const createCube = (
+    id: number,
+    matId: number,
+    outlineCol: [number, number, number, number],
+    pos: [number, number, number]
+  ) => {
+    galfus.realm3dCreateModel(
+      REALM_3D,
+      id,
+      {
+        geometryId: GEOM_CUBE_ID,
+        materialId: matId,
+        castShadow: true,
+        receiveShadow: true,
+        castOutline: true,
+        outlineColor: outlineCol,
+        active: true
+      },
+      { position: pos, rotation: [0, 0, 0, 1], scale: [1, 1, 1] }
+    );
+  };
 
-  // Left Cube: World-Position Gradient Wave
-  galfus.realm3dCreateModel(
-    REALM_3D,
-    MODEL_CUBE_WAVE_ID,
-    {
-      geometryId: GEOM_CUBE_ID,
-      materialId: MAT_CUBE_WAVE_ID,
-      castShadow: true,
-      receiveShadow: true,
-      castOutline: true,
-      outlineColor: [0.2, 1.0, 0.4, 1.0], // Emerald outline
-      active: true
-    },
-    {
-      position: [-2.8, 1.0, 0.0],
-      rotation: [0, 0, 0, 1],
-      scale: [1, 1, 1]
-    }
-  );
-
-  // Right Cube: Cyberpunk Hologram Scanlines
-  galfus.realm3dCreateModel(
-    REALM_3D,
-    MODEL_CUBE_HOLO_ID,
-    {
-      geometryId: GEOM_CUBE_ID,
-      materialId: MAT_CUBE_HOLO_ID,
-      castShadow: true,
-      receiveShadow: true,
-      castOutline: true,
-      outlineColor: [0.3, 0.6, 1.0, 1.0], // Cyber blue outline
-      active: true
-    },
-    {
-      position: [2.8, 1.0, 0.0],
-      rotation: [0, 0, 0, 1],
-      scale: [1, 1, 1]
-    }
-  );
+  createCube(MODEL_CUBE_FRESNEL_ID, MAT_CUBE_FRESNEL_ID, [0.0, 1.0, 0.85, 1.0], [0.0, 1.0, 0.0]);
+  createCube(MODEL_CUBE_WAVE_ID, MAT_CUBE_WAVE_ID, [0.2, 1.0, 0.4, 1.0], [-2.8, 1.0, 0.0]);
+  createCube(MODEL_CUBE_HOLO_ID, MAT_CUBE_HOLO_ID, [0.3, 0.6, 1.0, 1.0], [2.8, 1.0, 0.0]);
 
   // Floor Plane
   galfus.realm3dCreateModel(
@@ -533,19 +350,19 @@ export async function runDemo2(): Promise<void> {
   updateInvocationFilters();
   console.log('✔ Invocation created');
 
-  console.log('\n================================================================');
-  console.log(' controls:');
-  console.log('   [Left / Right Arrow]  : Manual Orbit Camera Around Cube');
-  console.log('   [Up / Down Arrow]     : Adjust Camera Distance (Zoom)');
-  console.log('   [O]                   : Toggle Camera Auto-Orbit');
-  console.log('   [F]                   : Cycle Distance Fog Mode (None / Linear / Exp)');
-  console.log('   [K]                   : Toggle Procedural Skybox (Procedural / None)');
-  console.log('   [L]                   : Toggle Silhouette Outline (On / Off)');
-  console.log('   [P]                   : Cycle Invocation Post-Processing Filters');
-  console.log('   [Space]               : Toggle Cube Rotation Pause');
-  console.log('   [R]                   : Reset Camera Position');
-  console.log('   [Escape]              : Exit');
-  console.log('================================================================\n');
+  console.log(`================================================================
+ controls:
+   [Left / Right Arrow]  : Manual Orbit Camera Around Cube
+   [Up / Down Arrow]     : Adjust Camera Distance (Zoom)
+   [O]                   : Toggle Camera Auto-Orbit
+   [F]                   : Cycle Distance Fog Mode (None / Linear / Exp)
+   [K]                   : Toggle Procedural Skybox (Procedural / None)
+   [L]                   : Toggle Silhouette Outline (On / Off)
+   [P]                   : Cycle Invocation Post-Processing Filters
+   [Space]               : Toggle Cube Rotation Pause
+   [R]                   : Reset Camera Position
+   [Escape]              : Exit
+================================================================\n`);
 
   let running = true;
   let frameCount = 0;
@@ -731,5 +548,5 @@ export async function runDemo2(): Promise<void> {
 
   console.log('==> Cleaning up...');
   galfus.platformShutdown();
-  console.log('✔ Platform shutdown cleanly. Demo 2 finished.');
+  console.log('✔ Platform shutdown cleanly. Demo 3D-1 finished.');
 }

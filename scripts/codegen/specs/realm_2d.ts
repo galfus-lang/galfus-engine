@@ -32,7 +32,10 @@ export const realm2dDescriptors: DescSpec[] = [
     doc: '2D material properties with surface classification, texture ID, and optional WGSL surface effect.',
     fields: {
       baseColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      surfaceType: { type: { enum: ['opaque', 'transparent', 'masked'] }, optional: true },
+      surfaceType: {
+        type: { enum: ['opaque', 'transparent', 'masked', 'additive'] },
+        optional: true
+      },
       textureId: { type: 'number', optional: true },
       alphaCutoff: { type: 'number', optional: true },
       shaderEffect: { type: 'string', optional: true },
@@ -103,6 +106,45 @@ export const realm2dDescriptors: DescSpec[] = [
       ambient: { type: 'number', optional: true },
       lightRadius: { type: 'number', optional: true },
       angularResolution: { type: 'number', optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'EmissionShape2DDesc',
+    doc: '2D particle emission shape (point, circle, rectangle, line).',
+    fields: {
+      type: { type: { enum: ['point', 'circle', 'rectangle', 'line'] } },
+      radius: { type: 'number', optional: true },
+      extents: { type: { tuple: ['number', 'number'] }, optional: true },
+      direction: { type: { tuple: ['number', 'number'] }, optional: true },
+      length: { type: 'number', optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'ParticleEmitter2DDesc',
+    doc: '2D particle emitter configuration (rates, lifetime, speed, colors, sizes, gravity, drag).',
+    fields: {
+      materialId: { type: 'number', optional: true },
+      maxParticles: { type: 'number', optional: true },
+      spawnRate: { type: 'number', optional: true },
+      lifetimeRange: { type: { tuple: ['number', 'number'] }, optional: true },
+      speedRange: { type: { tuple: ['number', 'number'] }, optional: true },
+      direction: { type: { tuple: ['number', 'number'] }, optional: true },
+      spreadAngleRad: { type: 'number', optional: true },
+      gravity: { type: { tuple: ['number', 'number'] }, optional: true },
+      drag: { type: 'number', optional: true },
+      startSizeRange: { type: { tuple: ['number', 'number'] }, optional: true },
+      endSizeRange: { type: { tuple: ['number', 'number'] }, optional: true },
+      startColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      endColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      rotationSpeedRange: { type: { tuple: ['number', 'number'] }, optional: true },
+      uvRect: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      emissionShape: { type: { ref: 'EmissionShape2DDesc' }, optional: true },
+      zLayer: { type: 'number', optional: true },
+      castShadow: { type: 'boolean', optional: true },
+      receiveShadow: { type: 'boolean', optional: true },
+      active: { type: 'boolean', optional: true }
     }
   }
 ];
@@ -232,6 +274,50 @@ export const realm2dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
       { name: 'config', type: { json: 'Shadow2DConfigDesc' }, doc: 'Shadow configuration.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_create_particle_emitter',
+    methodName: 'realm2dCreateParticleEmitter',
+    doc: 'Creates or updates a 2D particle emitter entity with an initial transform.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'emitterId', type: 'u32', doc: 'Logical ID of the Particle Emitter.' },
+      { name: 'emitter', type: { json: 'ParticleEmitter2DDesc' }, doc: 'Emitter configuration.' },
+      { name: 'transform', type: { json: 'Transform2DDesc' }, doc: 'Initial transform.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_set_particle_emitter_transform',
+    methodName: 'realm2dSetParticleEmitterTransform',
+    doc: 'Updates the spatial transform of an existing 2D particle emitter.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'emitterId', type: 'u32', doc: 'Logical ID of the Particle Emitter.' },
+      { name: 'transform', type: { json: 'Transform2DDesc' }, doc: 'New transform.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_particle_emitter_burst',
+    methodName: 'realm2dParticleEmitterBurst',
+    doc: 'Triggers an immediate burst of particles from an existing 2D emitter.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'emitterId', type: 'u32', doc: 'Logical ID of the Particle Emitter.' },
+      { name: 'count', type: 'u32', doc: 'Number of particles to spawn in the burst.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_destroy_particle_emitter',
+    methodName: 'realm2dDestroyParticleEmitter',
+    doc: 'Destroys an existing 2D particle emitter entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'emitterId', type: 'u32', doc: 'Logical ID of the Particle Emitter.' }
     ],
     returnType: 'i32'
   }

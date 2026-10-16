@@ -1,73 +1,81 @@
-import { runDemo1 } from './demo1_multiverse.ts';
-import { runDemo2 } from './demo2_realm3d.ts';
-import { runDemo3 } from './demo3_bones.ts';
-import { runDemo4 } from './demo4_ssao_point_shadows.ts';
-import { runDemo5 } from './demo5_realm3d_features.ts';
-import { runDemo6 } from './demo6_realm2d_shadows.ts';
-import { runDemo7 } from './demo7_realm2d_effects.ts';
+import { runDemoMv1 } from './demo_mv1_multiverse.ts';
+import { runDemo3d1 } from './demo_3d1_orbit.ts';
+import { runDemo3d2 } from './demo_3d2_bones.ts';
+import { runDemo3d3 } from './demo_3d3_ssao_shadows.ts';
+import { runDemo3d4 } from './demo_3d4_features.ts';
+import { runDemo2d1 } from './demo_2d1_shadows.ts';
+import { runDemo2d2 } from './demo_2d2_effects_particles.ts';
 
 function printHelp(): void {
   console.log('=== Galfus Engine - TypeScript / Bun Demos ===');
   console.log('Usage:');
-  console.log('  bun scripts/demos/main.ts [demo_number]');
-  console.log('  bun run demo [demo_number]\n');
-  console.log('Available Demos:');
-  console.log('  1  - Multiverse split-screen viewports & post-processing filters (Default)');
-  console.log('  2  - 3D Realm with Reverse-Z, interactive camera orbit, and dynamic lighting');
-  console.log('  3  - 3D Procedural Skeletal Bones (12-Joint Skinning & Realtime Shadows)');
-  console.log('  4  - 3D Point Light Omnidirectional Shadows (6 Cube Faces) & SSAO');
-  console.log('  5  - 3D Advanced Features: Primitives, Bloom HDR, Gizmos & Compute Light Culling');
-  console.log('  6  - 2D Realm with Orthographic Reverse-Z, Point Lights, and Polar Soft Shadows');
-  console.log(
-    '  7  - 2D Realm Material Custom Shader Effects (Plasma, Hologram, Lava, Caustics)\n'
-  );
+  console.log('  bun demo <demo_id>');
+  console.log('  bun scripts/demos/main.ts [demo_id]\n');
+  console.log('Available Demos:\n');
+  console.log('  [Multiverse]');
+  console.log('    mv1   - Split-screen viewports & post-processing filters (Default)');
+  console.log('\n  [Realm 3D]');
+  console.log('    3d1   - Reverse-Z, interactive camera orbit, and dynamic lighting');
+  console.log('    3d2   - Procedural Skeletal Bones (12-Joint Skinning & Shadows)');
+  console.log('    3d3   - Point Light Omnidirectional Shadows (6 Cube Faces) & SSAO');
+  console.log('    3d4   - Advanced: Primitives, Bloom HDR, Gizmos & Compute Light Culling');
+  console.log('\n  [Realm 2D]');
+  console.log('    2d1   - Orthographic Reverse-Z, Point Lights, and Polar Soft Shadows');
+  console.log('    2d2   - Material Custom Shader Effects & 2D Particle Emitters\n');
 }
 
 async function main(): Promise<void> {
-  const arg = process.argv[2];
+  const rawArg = process.argv[2];
+  const arg = rawArg ? rawArg.toLowerCase().replace(/[-_]/g, '') : undefined;
 
   switch (arg) {
+    case 'mv1':
     case '1':
     case undefined:
       if (!arg) {
-        console.log('No demo number specified. Defaulting to Demo 1 (Multiverse).');
-        console.log('Use `bun run demo <1|2|3|4|5|6|7>` to choose a specific demo.\n');
+        console.log('No demo specified. Defaulting to Demo MV1 (Multiverse).');
+        console.log('Use `bun demo <id>` to choose a specific demo (e.g. 3d1, 2d1, mv1).\n');
       }
-      await runDemo1();
+      await runDemoMv1();
       break;
 
+    case '3d1':
     case '2':
-      await runDemo2();
+      await runDemo3d1();
       break;
 
+    case '3d2':
     case '3':
-      await runDemo3();
+      await runDemo3d2();
       break;
 
+    case '3d3':
     case '4':
-      await runDemo4();
+      await runDemo3d3();
       break;
 
+    case '3d4':
     case '5':
-      await runDemo5();
+      await runDemo3d4();
       break;
 
+    case '2d1':
     case '6':
-      await runDemo6();
+      await runDemo2d1();
       break;
 
+    case '2d2':
     case '7':
-      await runDemo7();
+      await runDemo2d2();
       break;
 
-    case '--help':
-    case '-h':
     case 'help':
+    case 'h':
       printHelp();
       break;
 
     default:
-      console.error(`Unknown demo number or argument: '${arg}'\n`);
+      console.error(`Unknown demo identifier or argument: '${rawArg}'\n`);
       printHelp();
       process.exit(1);
   }

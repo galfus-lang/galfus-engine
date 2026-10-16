@@ -13,6 +13,8 @@ pub enum SurfaceType2D {
     Transparent,
     /// Alpha-tested punch-through surface (discarding fragments under cutoff).
     Masked,
+    /// Additive blending for glowing particles, fire, and magic energy.
+    Additive,
 }
 
 /// 2D Material component specifying base color tint, textures, blending, and custom WGSL effects.
@@ -55,6 +57,16 @@ impl Default for Material2D {
 }
 
 impl Material2D {
+    /// Returns the integer ID of the surface blending type for pipeline keys.
+    pub fn surface_type_id(&self) -> u32 {
+        match self.surface_type {
+            SurfaceType2D::Opaque => 0,
+            SurfaceType2D::Transparent => 1,
+            SurfaceType2D::Masked => 2,
+            SurfaceType2D::Additive => 3,
+        }
+    }
+
     /// Creates a material with solid color and transparent blending.
     pub fn solid_color(base_color: Vec4) -> Self {
         Self {
@@ -73,11 +85,7 @@ impl Material2D {
 
     /// Builds the GPU-ready uniform representation adhering to WGSL 16-byte alignment.
     pub fn build_uniform(&self) -> Material2DUniform {
-        let mut flags = match self.surface_type {
-            SurfaceType2D::Opaque => 0u32,
-            SurfaceType2D::Transparent => 1u32,
-            SurfaceType2D::Masked => 2u32,
-        };
+        let mut flags = self.surface_type_id();
 
         if self.texture_id.is_some() {
             flags |= 1 << 4;

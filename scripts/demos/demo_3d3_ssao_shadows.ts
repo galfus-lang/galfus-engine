@@ -1,5 +1,5 @@
 /**
- * Demo 4 - 3D Point Light Omnidirectional Shadows (6 Cube Faces) & Real-time SSAO
+ * Demo 3D-3 - 3D Point Light Omnidirectional Shadows (6 Cube Faces) & Real-time SSAO
  *
  * Demonstrates:
  * 1. Omni-directional Point Light with 6-face shadow map casting 360° real-time Reverse-Z shadows.
@@ -9,6 +9,7 @@
  */
 
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
+import { extractKey, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
 const REALM_3D = 10;
@@ -26,88 +27,8 @@ const GEOM_ORB = 203;
 const LIGHT_POINT = 301;
 const LIGHT_SUN = 302;
 
-function extractKey(input: any): string {
-  if (input.logicalKey) {
-    if (typeof input.logicalKey === 'string') {
-      return input.logicalKey.toLowerCase();
-    }
-    if ('character' in input.logicalKey && typeof input.logicalKey.character === 'string') {
-      return input.logicalKey.character.toLowerCase();
-    }
-    if ('named' in input.logicalKey && typeof input.logicalKey.named === 'string') {
-      return input.logicalKey.named.toLowerCase();
-    }
-  }
-  const phys = input.physicalKey.toLowerCase();
-  if (phys.startsWith('key') && phys.length === 4) {
-    return phys.slice(3);
-  }
-  if (phys.startsWith('digit') && phys.length === 6) {
-    return phys.slice(5);
-  }
-  return phys;
-}
-
-function quatFromLookAt(
-  eye: [number, number, number],
-  target: [number, number, number],
-  up: [number, number, number] = [0.0, 1.0, 0.0]
-): [number, number, number, number] {
-  let fx = target[0] - eye[0];
-  let fy = target[1] - eye[1];
-  let fz = target[2] - eye[2];
-  const fLen = Math.hypot(fx, fy, fz);
-  if (fLen < 1e-6) return [0, 0, 0, 1];
-  fx /= fLen;
-  fy /= fLen;
-  fz /= fLen;
-
-  let sx = fy * up[2] - fz * up[1];
-  let sy = fz * up[0] - fx * up[2];
-  let sz = fx * up[1] - fy * up[0];
-  let sLen = Math.hypot(sx, sy, sz);
-  if (sLen < 1e-6) {
-    sx = fy * 1.0;
-    sy = 0;
-    sz = -fx * 1.0;
-    sLen = Math.hypot(sx, sy, sz);
-  }
-  sx /= sLen;
-  sy /= sLen;
-  sz /= sLen;
-
-  const ux = sy * fz - sz * fy;
-  const uy = sz * fx - sx * fz;
-  const uz = sx * fy - sy * fx;
-
-  const m00 = sx,
-    m10 = sy,
-    m20 = sz;
-  const m01 = ux,
-    m11 = uy,
-    m21 = uz;
-  const m02 = -fx,
-    m12 = -fy,
-    m22 = -fz;
-
-  const trace = m00 + m11 + m22;
-  if (trace > 0) {
-    const s = 0.5 / Math.sqrt(trace + 1.0);
-    return [(m21 - m12) * s, (m02 - m20) * s, (m10 - m01) * s, 0.25 / s];
-  } else if (m00 > m11 && m00 > m22) {
-    const s = 2.0 * Math.sqrt(1.0 + m00 - m11 - m22);
-    return [0.25 * s, (m01 + m10) / s, (m02 + m20) / s, (m21 - m12) / s];
-  } else if (m11 > m22) {
-    const s = 2.0 * Math.sqrt(1.0 + m11 - m00 - m22);
-    return [(m01 + m10) / s, 0.25 * s, (m12 + m21) / s, (m02 - m20) / s];
-  } else {
-    const s = 2.0 * Math.sqrt(1.0 + m22 - m00 - m11);
-    return [(m02 + m20) / s, (m12 + m21) / s, 0.25 * s, (m10 - m01) / s];
-  }
-}
-
-export async function runDemo4(): Promise<void> {
-  console.log('=== Galfus Engine - Demo 4: Point Shadows & SSAO ===');
+export async function runDemo3d3(): Promise<void> {
+  console.log('=== Galfus Engine - Demo 3D-3: Point Shadows & SSAO ===');
   console.log('Controls:');
   console.log('  [O]      : Toggle camera auto-orbit');
   console.log('  [S]      : Toggle SSAO on/off');
@@ -126,7 +47,7 @@ export async function runDemo4(): Promise<void> {
   const windowId = 1;
   galfus.windowCreate({
     id: windowId,
-    title: 'Galfus Realm 3D - Point Shadows & SSAO',
+    title: 'Galfus Realm 3D - Demo 3D-3: Point Shadows & SSAO',
     size: [1024, 768],
     resizable: true,
     decorations: true
@@ -351,22 +272,22 @@ export async function runDemo4(): Promise<void> {
             break;
           } else if (key === 's') {
             ssaoEnabled = !ssaoEnabled;
-            console.log(`[Demo 4] SSAO toggled: ${ssaoEnabled ? 'ON' : 'OFF'}`);
+            console.log(`[Demo 3D-3] SSAO toggled: ${ssaoEnabled ? 'ON' : 'OFF'}`);
             applyEnvironment(totalTime * 0.1);
           } else if (key === '1' || key === '-') {
             ssaoIntensity = Math.max(0.1, Number((ssaoIntensity - 0.1).toFixed(2)));
-            console.log(`[Demo 4] SSAO Intensity: ${ssaoIntensity}`);
+            console.log(`[Demo 3D-3] SSAO Intensity: ${ssaoIntensity}`);
             applyEnvironment(totalTime * 0.1);
           } else if (key === '2' || key === '+' || key === '=') {
             ssaoIntensity = Math.min(2.5, Number((ssaoIntensity + 0.1).toFixed(2)));
-            console.log(`[Demo 4] SSAO Intensity: ${ssaoIntensity}`);
+            console.log(`[Demo 3D-3] SSAO Intensity: ${ssaoIntensity}`);
             applyEnvironment(totalTime * 0.1);
           } else if (key === ' ' || key === 'space') {
             lightOrbitPaused = !lightOrbitPaused;
-            console.log(`[Demo 4] Light orbit: ${lightOrbitPaused ? 'PAUSED' : 'ACTIVE'}`);
+            console.log(`[Demo 3D-3] Light orbit: ${lightOrbitPaused ? 'PAUSED' : 'ACTIVE'}`);
           } else if (key === 'o') {
             autoOrbit = !autoOrbit;
-            console.log(`[Demo 4] Auto-orbit: ${autoOrbit ? 'ON' : 'OFF'}`);
+            console.log(`[Demo 3D-3] Auto-orbit: ${autoOrbit ? 'ON' : 'OFF'}`);
           }
         }
       }
@@ -411,5 +332,5 @@ export async function runDemo4(): Promise<void> {
   }
 
   galfus.platformShutdown();
-  console.log('Demo 4 completed cleanly.');
+  console.log('Demo 3D-3 completed cleanly.');
 }

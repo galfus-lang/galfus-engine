@@ -1,4 +1,5 @@
 import { GalfusBun, type Sprite2DDesc } from '../../sdk/bun/galfus.ts';
+import { extractKey } from './utils.ts';
 
 const TARGET_WINDOW = 1;
 const REALM_2D = 20;
@@ -71,21 +72,9 @@ fn surface_effect(in: SurfaceInput2D) -> SurfaceOutput2D {
 }
 `;
 
-function extractKey(input: { physicalKey: string; logicalKey: any }): string {
-  const lk = input.logicalKey;
-  if (typeof lk === 'object' && lk !== null) {
-    if (typeof lk.character === 'string') return lk.character.toLowerCase();
-    if (typeof lk.named === 'string') return lk.named.toLowerCase();
-  }
-  const phys = input.physicalKey.toLowerCase();
-  if (phys.startsWith('key') && phys.length === 4) return phys.slice(3);
-  if (phys.startsWith('digit') && phys.length === 6) return phys.slice(5);
-  return phys;
-}
-
-export async function runDemo6(): Promise<void> {
+export async function runDemo2d1(): Promise<void> {
   console.log(`================================================================
-   GALFUS ENGINE - DEMO 6: 2D REALM & POLAR SOFT SHADOWS
+   GALFUS ENGINE - DEMO 2D-1: 2D REALM & POLAR SOFT SHADOWS
 ================================================================
 Initializing Platform & Multiverse Subsystems...`);
 
@@ -95,7 +84,7 @@ Initializing Platform & Multiverse Subsystems...`);
   const windowId = 1;
   galfus.windowCreate({
     id: windowId,
-    title: 'Galfus Engine - Demo 6: 2D Realm & Dynamic Soft Shadows',
+    title: 'Galfus Engine - Demo 2D-1: 2D Realm & Dynamic Soft Shadows',
     size: [1024, 768],
     resizable: true,
     decorations: true
@@ -587,7 +576,7 @@ CONTROLS:
     await Bun.sleep(16);
   }
 
-  console.log('==> Shutting down Demo 6...');
+  console.log('==> Shutting down Demo 2D-1...');
   galfus.multiverseDestroyInvocation(INVOCATION_MAIN);
   galfus.realm2dDestroy(REALM_2D);
   galfus.windowClose(windowId);

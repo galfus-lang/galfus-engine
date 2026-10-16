@@ -1,6 +1,7 @@
 pub mod ffi;
 pub mod ffi_multiverse;
 pub mod ffi_realm_2d;
+pub mod ffi_realm_2d_desc;
 pub mod ffi_realm_3d;
 pub mod ffi_resources;
 #[cfg(feature = "napi")]

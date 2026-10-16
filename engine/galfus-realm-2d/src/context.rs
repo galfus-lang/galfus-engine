@@ -4,7 +4,8 @@ use crate::pipeline::{PipelineKey2D, PipelineManager2D};
 use crate::shadow::{ShadowManager2D, rasterize_shadow_samples_for_light};
 use crate::types::{
     BatchKey2D, Camera2D, Item2DInstanceRaw, Light2D, Material2D, Material2DUniform, Occluder2D,
-    OccluderSilhouette2D, Shadow2DConfig, Shape2D, Sprite2D, Transform2D,
+    OccluderSilhouette2D, ParticleEmitter2D, ParticleEmitterState2D, Shadow2DConfig, Shape2D,
+    Sprite2D, Transform2D,
 };
 use bytemuck::cast_slice;
 use galfus_realm_core::{
@@ -21,6 +22,7 @@ pub struct Realm2DContext {
     pub shapes: HashMap<u32, (Shape2D, Transform2D)>,
     pub materials: HashMap<u32, Material2D>,
     pub lights: HashMap<u32, Light2D>,
+    pub emitters: HashMap<u32, (ParticleEmitter2D, Transform2D, ParticleEmitterState2D)>,
     pub dirty: bool,
 
     pub pipeline_manager: Option<PipelineManager2D>,
@@ -42,6 +44,7 @@ impl Realm2DContext {
             shapes: HashMap::new(),
             materials: HashMap::new(),
             lights: HashMap::new(),
+            emitters: HashMap::new(),
             dirty: true,
             pipeline_manager: None,
             batch_builder: BatchBuilder2D::new(),
@@ -108,6 +111,38 @@ impl Realm2DContext {
         self.dirty = true;
     }
 
+    pub fn set_particle_emitter(
+        &mut self,
+        emitter_id: u32,
+        emitter: ParticleEmitter2D,
+        transform: Transform2D,
+    ) {
+        let max_particles = emitter.max_particles as usize;
+        let state = ParticleEmitterState2D::new(max_particles);
+        self.emitters
+            .insert(emitter_id, (emitter, transform, state));
+        self.dirty = true;
+    }
+
+    pub fn set_particle_emitter_transform(&mut self, emitter_id: u32, transform: Transform2D) {
+        if let Some((_, t, _)) = self.emitters.get_mut(&emitter_id) {
+            *t = transform;
+            self.dirty = true;
+        }
+    }
+
+    pub fn particle_emitter_burst(&mut self, emitter_id: u32, count: u32) {
+        if let Some((cfg, transform, state)) = self.emitters.get_mut(&emitter_id) {
+            state.burst(count, transform.position, cfg);
+            self.dirty = true;
+        }
+    }
+
+    pub fn remove_particle_emitter(&mut self, emitter_id: u32) {
+        self.emitters.remove(&emitter_id);
+        self.dirty = true;
+    }
+
     fn ensure_gpu_resources(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
         if self.pipeline_manager.is_some() {
             return;
@@ -137,6 +172,9 @@ impl Realm for Realm2DContext {
 
     fn prepare(&mut self, ctx: &RealmPrepareContext<'_>) -> RealmResult<()> {
         self.total_time += ctx.delta_time;
+        for (cfg, transform, state) in self.emitters.values_mut() {
+            state.update(ctx.delta_time, transform.position, cfg);
+        }
         let device = ctx.device;
         let queue = ctx.queue;
         self.ensure_gpu_resources(device, queue);
@@ -297,6 +335,51 @@ impl Realm for Realm2DContext {
                 instance,
                 occluder_only: shape.occluder_only,
             });
+        }
+
+        for (&_, (cfg, transform, state)) in &self.emitters {
+            let material_id = cfg.material_id.unwrap_or(0);
+            let surface_type = self
+                .materials
+                .get(&material_id)
+                .map(|m| m.surface_type_id())
+                .unwrap_or(1);
+
+            for p in &state.particles {
+                let life_pct = (p.age / p.lifetime).clamp(0.0, 1.0);
+                let current_size = p.start_size + (p.end_size - p.start_size) * life_pct;
+                let current_color = p.start_color.lerp(p.end_color, life_pct);
+
+                let model_matrix = crate::types::compute_particle_matrix(
+                    p.position,
+                    p.rotation,
+                    current_size,
+                    transform.z_layer,
+                );
+
+                let instance = Item2DInstanceRaw {
+                    model_matrix,
+                    tint: current_color,
+                    uv_rect: cfg.uv_rect,
+                    shadow_params: Vec4::new(
+                        if cfg.receive_shadow { 1.0 } else { 0.0 },
+                        if cfg.cast_shadow { 1.0 } else { 0.0 },
+                        -10000.0,
+                        10000.0,
+                    ),
+                };
+
+                self.batch_builder.push(PreparedItem2D {
+                    key: BatchKey2D {
+                        z_layer: transform.z_layer,
+                        material_id,
+                        geometry_id: 0,
+                        surface_type,
+                    },
+                    instance,
+                    occluder_only: false,
+                });
+            }
         }
 
         self.batch_builder.build();

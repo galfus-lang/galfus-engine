@@ -1,4 +1,5 @@
 import { GalfusBun, type Sprite2DDesc } from '../../sdk/bun/galfus.ts';
+import { extractKey } from './utils.ts';
 
 const TARGET_WINDOW = 1;
 const REALM_2D = 30;
@@ -12,6 +13,7 @@ const MAT_HOLO_ID = 3;
 const MAT_LAVA_ID = 4;
 const MAT_CAUSTIC_ID = 5;
 const MAT_BORDER_ID = 6;
+const MAT_SPARKS_ID = 7;
 
 // Entity IDs
 const SPRITE_FLOOR_ID = 1;
@@ -20,12 +22,14 @@ const SPRITE_BORDER_BOTTOM = 3;
 const SPRITE_BORDER_LEFT = 4;
 const SPRITE_BORDER_RIGHT = 5;
 
-// Effect Showcase Shapes / Sprites
+// Effect Showcase Shapes / Sprites & Emitters
 const SHAPE_PLASMA_ID = 10;
 const SPRITE_HOLO_ID = 11;
 const SHAPE_LAVA_ID = 12;
 const SPRITE_CAUSTIC_ID = 13;
 const SHAPE_CENTER_ORB = 14;
+const EMITTER_LAVA_ID = 20;
+const EMITTER_PLASMA_ID = 21;
 
 // Dynamic Light IDs
 const LIGHT_ORBIT_ID = 1;
@@ -129,24 +133,9 @@ fn surface_effect(in: SurfaceInput2D) -> SurfaceOutput2D {
 }
 `;
 
-function extractKey(input: { physicalKey: string; logicalKey: any }): string {
-  if (typeof input.logicalKey === 'object' && input.logicalKey !== null) {
-    if ('character' in input.logicalKey && typeof input.logicalKey.character === 'string') {
-      return input.logicalKey.character.toLowerCase();
-    }
-    if ('named' in input.logicalKey && typeof input.logicalKey.named === 'string') {
-      return input.logicalKey.named.toLowerCase();
-    }
-  }
-  const phys = input.physicalKey.toLowerCase();
-  if (phys.startsWith('key') && phys.length === 4) return phys.slice(3);
-  if (phys.startsWith('digit') && phys.length === 6) return phys.slice(5);
-  return phys;
-}
-
-export async function runDemo7(): Promise<void> {
+export async function runDemo2d2(): Promise<void> {
   console.log('================================================================');
-  console.log('   GALFUS ENGINE - DEMO 7: 2D REALM MATERIAL SHADER EFFECTS');
+  console.log('   GALFUS ENGINE - DEMO 2D-2: 2D MATERIAL SHADER EFFECTS & PARTICLES');
   console.log('================================================================');
   console.log('Initializing Platform & Multiverse Subsystems...');
 
@@ -156,7 +145,7 @@ export async function runDemo7(): Promise<void> {
   const windowId = 1;
   galfus.windowCreate({
     id: windowId,
-    title: 'Galfus Engine - Demo 7: 2D Realm Material Shader Effects',
+    title: 'Galfus Engine - Demo 2D-2: 2D Material Shaders & Particles',
     size: [1024, 768],
     resizable: true,
     decorations: true
@@ -242,6 +231,12 @@ export async function runDemo7(): Promise<void> {
       [0.0, 0.0, 0.0, 0.0],
       [0.0, 0.0, 0.0, 0.0]
     ]
+  });
+
+  // 7. Additive Blended Sparks Material for Particle Emitters
+  galfus.realm2dCreateMaterial(REALM_2D, MAT_SPARKS_ID, {
+    surfaceType: 'additive',
+    baseColor: [1.0, 0.7, 0.2, 1.0]
   });
 
   console.log('==> Creating Arena & Showcase Elements...');
@@ -346,6 +341,54 @@ export async function runDemo7(): Promise<void> {
     { position: [0.0, 0.0], rotation: 0.785, zLayer: 2 }
   );
 
+  console.log('==> Creating 2D Particle Emitters (Additive Glow & Shader Effects)...');
+  // Emitter 1: Molten Lava Core Rising Embers
+  galfus.realm2dCreateParticleEmitter(
+    REALM_2D,
+    EMITTER_LAVA_ID,
+    {
+      materialId: MAT_SPARKS_ID,
+      maxParticles: 350,
+      spawnRate: 40.0,
+      lifetimeRange: [1.0, 2.2],
+      speedRange: [1.2, 3.2],
+      direction: [0.0, 1.0],
+      spreadAngleRad: 0.9,
+      gravity: [0.0, 0.6],
+      drag: 0.15,
+      startSizeRange: [0.2, 0.35],
+      endSizeRange: [0.02, 0.08],
+      startColor: [1.0, 0.85, 0.3, 1.0],
+      endColor: [1.0, 0.15, 0.0, 0.0],
+      emissionShape: { type: 'rectangle', extents: [3.2, 0.4] },
+      zLayer: 5
+    },
+    { position: [-6.0, -2.4], zLayer: 5 }
+  );
+
+  // Emitter 2: Plasma Vortex Radial Sparks (using custom PLASMA_SURFACE_SNIPPET!)
+  galfus.realm2dCreateParticleEmitter(
+    REALM_2D,
+    EMITTER_PLASMA_ID,
+    {
+      materialId: MAT_PLASMA_ID,
+      maxParticles: 250,
+      spawnRate: 35.0,
+      lifetimeRange: [1.2, 2.6],
+      speedRange: [1.0, 2.8],
+      direction: [1.0, 0.0],
+      spreadAngleRad: 6.28,
+      drag: 0.35,
+      startSizeRange: [0.25, 0.45],
+      endSizeRange: [0.05, 0.12],
+      startColor: [0.95, 0.2, 0.8, 1.0],
+      endColor: [0.1, 0.2, 0.85, 0.0],
+      emissionShape: { type: 'circle', radius: 1.0 },
+      zLayer: 5
+    },
+    { position: [-6.0, 4.0], zLayer: 5 }
+  );
+
   console.log('==> Configuring 2D Lights & Shadows...');
   galfus.realm2dSetShadowConfig(REALM_2D, {
     ambient: 0.2,
@@ -396,6 +439,7 @@ export async function runDemo7(): Promise<void> {
   console.log('CONTROLS:');
   console.log('  [W][A][S][D] / Arrows : Pan Camera across the gallery');
   console.log('  [SPACE]               : Pause / Resume Orbit Animation');
+  console.log('  [P]                   : Trigger Particle Bursts (Lava Sparks & Plasma)');
   console.log('  [1] / [2]             : Decrease / Increase Plasma Rotation Speed');
   console.log('  [R]                   : Reset Camera & Parameters');
   console.log('  [ESC]                 : Quit demo');
@@ -442,6 +486,11 @@ export async function runDemo7(): Promise<void> {
           if (key === 'space') {
             paused = !paused;
             console.log(`[Animation] ${paused ? 'PAUSED' : 'RESUMED'}`);
+          }
+          if (key === 'p') {
+            galfus.realm2dParticleEmitterBurst(REALM_2D, EMITTER_LAVA_ID, 60);
+            galfus.realm2dParticleEmitterBurst(REALM_2D, EMITTER_PLASMA_ID, 60);
+            console.log('[Particles] Triggered burst on Lava & Plasma emitters!');
           }
           if (key === '1') {
             rotSpeed = Math.max(0.1, rotSpeed - 0.2);
@@ -521,7 +570,7 @@ export async function runDemo7(): Promise<void> {
     await Bun.sleep(16);
   }
 
-  console.log('==> Shutting down Demo 7...');
+  console.log('==> Shutting down Demo 2D-2...');
   galfus.multiverseDestroyInvocation(INVOCATION_MAIN);
   galfus.realm2dDestroy(REALM_2D);
   galfus.windowClose(windowId);

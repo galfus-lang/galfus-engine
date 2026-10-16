@@ -184,6 +184,19 @@ impl PipelineManager2D {
                 0 => None,                                   // Opaque
                 1 => Some(wgpu::BlendState::ALPHA_BLENDING), // Transparent
                 2 => Some(wgpu::BlendState::ALPHA_BLENDING), // Masked
+                3 => Some(wgpu::BlendState {
+                    // Additive
+                    color: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::SrcAlpha,
+                        dst_factor: wgpu::BlendFactor::One,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                    alpha: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::Zero,
+                        dst_factor: wgpu::BlendFactor::One,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                }),
                 _ => Some(wgpu::BlendState::ALPHA_BLENDING),
             };
 

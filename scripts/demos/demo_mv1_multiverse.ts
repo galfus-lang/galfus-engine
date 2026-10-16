@@ -1,5 +1,6 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
 import type { InvocationFilter } from '../../sdk/typescript/galfus.ts';
+import { extractKey } from './utils.ts';
 
 const TARGET_WINDOW = 1;
 const REALM_COLOR = 10;
@@ -21,28 +22,9 @@ fn screen_effect(in: ScreenInput) -> vec4<f32> {
 }
 `;
 
-function extractKey(input: { physicalKey: string; logicalKey: any }): string {
-  if (typeof input.logicalKey === 'object' && input.logicalKey !== null) {
-    if ('character' in input.logicalKey && typeof input.logicalKey.character === 'string') {
-      return input.logicalKey.character.toLowerCase();
-    }
-    if ('named' in input.logicalKey && typeof input.logicalKey.named === 'string') {
-      return input.logicalKey.named.toLowerCase();
-    }
-  }
-  const phys = input.physicalKey.toLowerCase();
-  if (phys.startsWith('key') && phys.length === 4) {
-    return phys.slice(3);
-  }
-  if (phys.startsWith('digit') && phys.length === 6) {
-    return phys.slice(5);
-  }
-  return phys;
-}
-
-export async function runDemo1(): Promise<void> {
+export async function runDemoMv1(): Promise<void> {
   console.log(
-    '=== Galfus Engine - Demo 1 (TypeScript / Bun): Split-Screen & Post-Processing ===\n'
+    '=== Galfus Engine - Demo MV1 (TypeScript / Bun): Split-Screen & Post-Processing ===\n'
   );
 
   const galfus = new GalfusBun();
@@ -59,7 +41,7 @@ export async function runDemo1(): Promise<void> {
   console.log('==> Creating window...');
   galfus.windowCreate({
     id: windowId,
-    title: 'Galfus Engine - Demo 1 (TS): Split-Screen & Sepia Post-Processing',
+    title: 'Galfus Engine - Demo MV1 (TS): Split-Screen & Sepia Post-Processing',
     size: [1024, 768],
     resizable: true,
     decorations: true
@@ -133,7 +115,6 @@ export async function runDemo1(): Promise<void> {
   let filterMode: 'sepia' | 'invert' | 'none' = 'sepia';
   let frame = 0;
   let lastTime = Date.now();
-  let lastFpsUpdate = Date.now();
 
   const setColor = (idx: number) => {
     paletteIdx = idx % COLOR_PALETTE.length;
@@ -254,12 +235,6 @@ export async function runDemo1(): Promise<void> {
       galfus.multiverseDispatch(frame, deltaSecs);
 
       frame++;
-      if (now - lastFpsUpdate >= 250) {
-        const fps = (1.0 / deltaSecs).toFixed(0);
-        const title = `Galfus TS Demo 1 | Left: RAW | Right: ${filterMode.toUpperCase()} | FPS: ${fps} | Frame: ${frame}`;
-        galfus.windowSetTitle(windowId, title);
-        lastFpsUpdate = now;
-      }
 
       await Bun.sleep(16);
     }
@@ -276,6 +251,6 @@ export async function runDemo1(): Promise<void> {
     }
     console.log('==> Shutting down platform context...');
     galfus.platformShutdown();
-    console.log('✔ Demo 1 shutdown clean. Goodbye!\n');
+    console.log('✔ Demo MV1 shutdown clean. Goodbye!\n');
   }
 }
