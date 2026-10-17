@@ -135,7 +135,7 @@ galfus.multiverseCreateInvocation(100, {
   realmId: 10,
   targetId: 1,
   cameraSlot: 1,
-  viewport: { unit: 'normalized', x: 0.0, y: 0.0, width: 1.0, height: 1.0 },
+  viewport: { width: { vw: 100 }, height: { vh: 100 } },
   filters: ['sepia'],
   zIndex: 0,
   enabled: true,
@@ -143,11 +143,12 @@ galfus.multiverseCreateInvocation(100, {
 });
 galfus.multiverseSetInvocationCameraSlot(100, 3, true);
 galfus.multiverseSetInvocationViewport(100, {
-  unit: 'pixels',
-  x: 0,
-  y: 0,
-  width: 400,
-  height: 300
+  anchorX: 'left',
+  anchorY: 'top',
+  offsetX: { px: 0 },
+  offsetY: { px: 0 },
+  width: { px: 400 },
+  height: { px: 300 }
 });
 galfus.multiverseSetInvocationFilters(100, [{ custom: { shaderId: 1001 } }]);
 galfus.multiverseSetInvocationClearColor(100, 0.0, 0.0, 0.0, 1.0, true);

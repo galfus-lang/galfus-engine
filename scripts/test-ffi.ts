@@ -53,7 +53,7 @@ galfus.multiverseCreateInvocation(100, {
   realmId: 10,
   targetId: 1,
   cameraSlot: 1,
-  viewport: { unit: 'normalized', x: 0.0, y: 0.0, width: 0.5, height: 1.0 },
+  viewport: { anchorX: 'left', width: { vw: 50 }, height: { vh: 100 } },
   filters: ['sepia'],
   zIndex: 0,
   enabled: true,
@@ -65,11 +65,8 @@ console.log('✔ Created Invocation (#100) with Sepia filter');
 console.log('==> Testing Invocation dynamic mutations...');
 galfus.multiverseSetInvocationCameraSlot(100, 2, true);
 galfus.multiverseSetInvocationViewport(100, {
-  unit: 'normalized',
-  x: 0.0,
-  y: 0.0,
-  width: 1.0,
-  height: 1.0
+  width: { vw: 100 },
+  height: { vh: 100 }
 });
 console.log('==> Testing ShaderEffects custom shader registration...');
 galfus.multiverseRegisterShader(

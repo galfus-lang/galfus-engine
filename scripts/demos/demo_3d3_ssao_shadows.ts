@@ -234,7 +234,7 @@ export async function runDemo3d3(): Promise<void> {
     realmId: REALM_3D,
     targetId: TARGET_WINDOW,
     cameraSlot: 1,
-    viewport: { unit: 'normalized', x: 0.0, y: 0.0, width: 1.0, height: 1.0 },
+    viewport: { width: { vw: 100 }, height: { vh: 100 } },
     clearColor: [0.01, 0.01, 0.02, 1.0]
   });
 

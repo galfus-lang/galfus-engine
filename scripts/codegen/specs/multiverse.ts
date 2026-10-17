@@ -54,39 +54,17 @@ export const multiverseDescriptors: DescSpec[] = [
     ]
   },
   {
-    kind: 'union',
+    kind: 'object',
     name: 'ViewportRect',
-    doc: 'Viewport rectangle defined via responsive anchors (CSS px, vw, vh) or legacy coordinates.',
-    variants: [
-      {
-        inline: {
-          anchorX: { type: { ref: 'AnchorX' }, optional: true },
-          anchorY: { type: { ref: 'AnchorY' }, optional: true },
-          offsetX: { type: { ref: 'UnitValue' }, optional: true },
-          offsetY: { type: { ref: 'UnitValue' }, optional: true },
-          width: { type: { ref: 'UnitValue' } },
-          height: { type: { ref: 'UnitValue' } }
-        }
-      },
-      {
-        inline: {
-          unit: { type: { literal: 'pixels' } },
-          x: { type: 'number' },
-          y: { type: 'number' },
-          width: { type: 'number' },
-          height: { type: 'number' }
-        }
-      },
-      {
-        inline: {
-          unit: { type: { literal: 'normalized' } },
-          x: { type: 'number' },
-          y: { type: 'number' },
-          width: { type: 'number' },
-          height: { type: 'number' }
-        }
-      }
-    ]
+    doc: 'Viewport rectangle defined via responsive anchors (CSS px, vw, vh).',
+    fields: {
+      anchorX: { type: { ref: 'AnchorX' }, optional: true },
+      anchorY: { type: { ref: 'AnchorY' }, optional: true },
+      offsetX: { type: { ref: 'UnitValue' }, optional: true },
+      offsetY: { type: { ref: 'UnitValue' }, optional: true },
+      width: { type: { ref: 'UnitValue' } },
+      height: { type: { ref: 'UnitValue' } }
+    }
   },
   {
     kind: 'union',

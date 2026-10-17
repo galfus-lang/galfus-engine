@@ -370,7 +370,7 @@ Initializing Platform & Multiverse Subsystems...`);
     targetId: TARGET_WINDOW,
     cameraSlot: 1,
     clearColor: [0.06, 0.07, 0.09, 1.0], // Deep space navy clear
-    viewport: { unit: 'normalized', x: 0.0, y: 0.0, width: 1.0, height: 1.0 }
+    viewport: { width: { vw: 100 }, height: { vh: 100 } }
   });
 
   console.log('✔ Multiverse schedule configured');

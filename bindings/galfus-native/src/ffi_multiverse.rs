@@ -443,7 +443,7 @@ mod tests {
 
         // 3. Create invocation with cameraSlot
         let inv_json = CString::new(
-            r#"{"targetId":1,"realmId":10,"cameraSlot":2,"zIndex":0,"enabled":true,"viewport":{"unit":"normalized","x":0.0,"y":0.0,"width":1.0,"height":1.0},"clearColor":[0.0,0.0,0.0,1.0]}"#,
+            r#"{"targetId":1,"realmId":10,"cameraSlot":2,"zIndex":0,"enabled":true,"viewport":{"width":{"vw":100.0},"height":{"vh":100.0}},"clearColor":[0.0,0.0,0.0,1.0]}"#,
         )
         .unwrap();
         assert_eq!(
@@ -459,7 +459,7 @@ mod tests {
 
         // 5. Mutate viewport
         let vp_json =
-            CString::new(r#"{"unit":"normalized","x":0.0,"y":0.0,"width":0.5,"height":1.0}"#)
+            CString::new(r#"{"anchorX":"left","width":{"vw":50.0},"height":{"vh":100.0}}"#)
                 .unwrap();
         assert_eq!(
             unsafe { galfus_multiverse_set_invocation_viewport(100, vp_json.as_ptr()) },

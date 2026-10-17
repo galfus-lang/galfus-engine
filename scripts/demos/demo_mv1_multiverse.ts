@@ -78,25 +78,35 @@ export async function runDemoMv1(): Promise<void> {
     realmId: REALM_COLOR,
     targetId: TARGET_WINDOW,
     cameraSlot: 1,
-    viewport: { unit: 'normalized', x: 0.0, y: 0.0, width: 0.5, height: 1.0 },
+    viewport: {
+      anchorX: 'left',
+      anchorY: 'top',
+      width: { vw: 50 },
+      height: { vh: 100 }
+    },
     filters: [],
     zIndex: 0,
     enabled: true,
     clearColor: initialColor
   });
-  console.log('    Left  (#100): Viewport (0.0..0.5) -> Normal / Raw Pass');
+  console.log('    Left  (#100): Viewport (0..50vw) -> Normal / Raw Pass');
 
   galfus.multiverseCreateInvocation(INVOCATION_RIGHT, {
     realmId: REALM_COLOR,
     targetId: TARGET_WINDOW,
     cameraSlot: 2,
-    viewport: { unit: 'normalized', x: 0.5, y: 0.0, width: 0.5, height: 1.0 },
+    viewport: {
+      anchorX: 'right',
+      anchorY: 'top',
+      width: { vw: 50 },
+      height: { vh: 100 }
+    },
     filters: ['sepia'],
     zIndex: 0,
     enabled: true,
     clearColor: initialColor
   });
-  console.log('    Right (#101): Viewport (0.5..1.0) -> Sepia Post-Process Filter');
+  console.log('    Right (#101): Viewport (50..100vw) -> Sepia Post-Process Filter');
 
   console.log('==> Registering custom WGSL ShaderEffect (#500: Invert Color)...');
   galfus.multiverseRegisterShader(SHADER_CUSTOM_INVERT, INVERT_WGSL);

@@ -373,7 +373,7 @@ export async function runDemoMv2(): Promise<void> {
     realmId: REALM_2D,
     targetId: TARGET_2D_RTT,
     cameraSlot: 1,
-    viewport: { unit: 'normalized', x: 0.0, y: 0.0, width: 1.0, height: 1.0 },
+    viewport: { width: { vw: 100 }, height: { vh: 100 } },
     filters: [],
     zIndex: 0,
     enabled: true,
@@ -381,12 +381,12 @@ export async function runDemoMv2(): Promise<void> {
   });
   console.log('    [Pass 1] RTT     (#100): Realm 2D -> TARGET_2D_RTT (512x512)');
 
-  // Invocation 2: Realm 3D renders Fullscreen to Window (x: 0..1, y: 0..1)
+  // Invocation 2: Realm 3D renders Fullscreen to Window
   galfus.multiverseCreateInvocation(INVOCATION_3D_MAIN, {
     realmId: REALM_3D,
     targetId: TARGET_WINDOW,
     cameraSlot: 1,
-    viewport: { unit: 'normalized', x: 0.0, y: 0.0, width: 1.0, height: 1.0 },
+    viewport: { width: { vw: 100 }, height: { vh: 100 } },
     filters: [],
     zIndex: 0,
     enabled: true,
