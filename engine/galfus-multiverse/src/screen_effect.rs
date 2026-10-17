@@ -20,10 +20,46 @@ fn vs_main(@builtin(vertex_index) id: u32) -> VertexOutput {
 
 @group(0) @binding(0) var t_input: texture_2d<f32>;
 @group(0) @binding(1) var s_input: sampler;
+@group(0) @binding(2) var screen_tex_0: texture_2d<f32>;
+@group(0) @binding(3) var screen_tex_1: texture_2d<f32>;
+@group(0) @binding(4) var screen_tex_2: texture_2d<f32>;
+@group(0) @binding(5) var screen_tex_3: texture_2d<f32>;
+@group(0) @binding(6) var screen_tex_4: texture_2d<f32>;
+@group(0) @binding(7) var screen_tex_5: texture_2d<f32>;
+@group(0) @binding(8) var screen_tex_6: texture_2d<f32>;
+@group(0) @binding(9) var screen_tex_7: texture_2d<f32>;
+@group(0) @binding(10) var sampler_linear_repeat: sampler;
+@group(0) @binding(11) var sampler_linear_clamp: sampler;
+@group(0) @binding(12) var sampler_nearest_repeat: sampler;
+@group(0) @binding(13) var sampler_nearest_clamp: sampler;
+
+fn sample_screen_texture_with_sampler(tex: texture_2d<f32>, uv: vec2<f32>, sampler_idx: u32) -> vec4<f32> {
+    switch (sampler_idx) {
+        case 1u: { return textureSample(tex, sampler_linear_clamp, uv); }
+        case 2u: { return textureSample(tex, sampler_nearest_repeat, uv); }
+        case 3u: { return textureSample(tex, sampler_nearest_clamp, uv); }
+        default: { return textureSample(tex, sampler_linear_repeat, uv); }
+    }
+}
+
+fn sample_screen_texture(slot: u32, uv: vec2<f32>, sampler_idx: u32) -> vec4<f32> {
+    switch (slot) {
+        case 0u: { return sample_screen_texture_with_sampler(screen_tex_0, uv, sampler_idx); }
+        case 1u: { return sample_screen_texture_with_sampler(screen_tex_1, uv, sampler_idx); }
+        case 2u: { return sample_screen_texture_with_sampler(screen_tex_2, uv, sampler_idx); }
+        case 3u: { return sample_screen_texture_with_sampler(screen_tex_3, uv, sampler_idx); }
+        case 4u: { return sample_screen_texture_with_sampler(screen_tex_4, uv, sampler_idx); }
+        case 5u: { return sample_screen_texture_with_sampler(screen_tex_5, uv, sampler_idx); }
+        case 6u: { return sample_screen_texture_with_sampler(screen_tex_6, uv, sampler_idx); }
+        case 7u: { return sample_screen_texture_with_sampler(screen_tex_7, uv, sampler_idx); }
+        default: { return vec4<f32>(1.0, 1.0, 1.0, 1.0); }
+    }
+}
 
 struct ScreenInput {
     uv: vec2<f32>,
     color: vec4<f32>,
+    sampler_index: u32,
 };
 
 // --- User Screen Effect Snippet ---
@@ -36,6 +72,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var screen_in: ScreenInput;
     screen_in.uv = in.uv;
     screen_in.color = sampled;
+    screen_in.sampler_index = 0u;
     return screen_effect(screen_in);
 }
 "#;

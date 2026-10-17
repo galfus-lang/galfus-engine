@@ -143,12 +143,57 @@ fn fs_blit(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 "#;
 
+fn create_1x1_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: &str,
+    color: [u8; 4],
+) -> (wgpu::Texture, wgpu::TextureView) {
+    let size = wgpu::Extent3d {
+        width: 1,
+        height: 1,
+        depth_or_array_layers: 1,
+    };
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &color,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(4),
+            rows_per_image: Some(1),
+        },
+        size,
+    );
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
+}
+
 /// Internal post-processing coordinator for invocation filter passes.
 pub(crate) struct PostProcessor {
     bind_group_layout: Arc<wgpu::BindGroupLayout>,
     pipeline_layout: Arc<wgpu::PipelineLayout>,
     shader_module: wgpu::ShaderModule,
     sampler: wgpu::Sampler,
+    samplers: galfus_gpu_manager::StandardSamplers,
+    fallback_white_view: wgpu::TextureView,
+    fallback_normal_view: wgpu::TextureView,
+    fallback_black_view: wgpu::TextureView,
+    _fallback_textures: (wgpu::Texture, wgpu::Texture, wgpu::Texture),
     pipelines: HashMap<(String, wgpu::TextureFormat), wgpu::RenderPipeline>,
     custom_shaders: HashMap<u32, wgpu::ShaderModule>,
 }
@@ -163,28 +208,61 @@ pub struct FilterPassDesc<'a> {
 }
 
 impl PostProcessor {
-    pub fn new(device: &wgpu::Device) -> Self {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
+        let samplers = galfus_gpu_manager::StandardSamplers::new(device);
+        let (white_tex, fallback_white_view) =
+            create_1x1_texture(device, queue, "PostProcess White Fallback", [255, 255, 255, 255]);
+        let (normal_tex, fallback_normal_view) =
+            create_1x1_texture(device, queue, "PostProcess Normal Fallback", [128, 128, 255, 255]);
+        let (black_tex, fallback_black_view) =
+            create_1x1_texture(device, queue, "PostProcess Black Fallback", [0, 0, 0, 0]);
+
+        let mut entries = Vec::with_capacity(14);
+        // Binding 0: Main screen texture
+        entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        });
+        // Binding 1: Screen sampler
+        entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 1,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            count: None,
+        });
+        // Bindings 2..=9: 8 Auxiliary textures
+        for i in 2..=9 {
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: i,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            });
+        }
+        // Bindings 10..=13: 4 Standard samplers
+        for i in 10..=13 {
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: i,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            });
+        }
+
         let bind_group_layout = Arc::new(device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: Some("PostProcess BGL"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
+                entries: &entries,
             },
         ));
 
@@ -217,6 +295,11 @@ impl PostProcessor {
             pipeline_layout,
             shader_module,
             sampler,
+            samplers,
+            fallback_white_view,
+            fallback_normal_view,
+            fallback_black_view,
+            _fallback_textures: (white_tex, normal_tex, black_tex),
             pipelines: HashMap::new(),
             custom_shaders: HashMap::new(),
         }
@@ -320,30 +403,47 @@ impl PostProcessor {
         Ok(())
     }
 
-    pub fn render_filter(
+    pub fn render_filter<'tex>(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         filter: Option<&InvocationFilter>,
+        textures: &dyn Fn(u32) -> Option<&'tex wgpu::TextureView>,
         pass_desc: &FilterPassDesc<'_>,
     ) -> MultiverseResult<()> {
-        let effect_key = match filter {
-            Some(InvocationFilter::Sepia) => "sepia".to_string(),
-            Some(InvocationFilter::Grayscale) => "grayscale".to_string(),
-            Some(InvocationFilter::Invert) => "invert".to_string(),
-            Some(InvocationFilter::Vignette) => "vignette".to_string(),
-            Some(InvocationFilter::TonemapAces) => "tonemap_aces".to_string(),
-            Some(InvocationFilter::ChromaticAberration) => "chromatic_aberration".to_string(),
-            Some(InvocationFilter::FilmGrain) => "film_grain".to_string(),
-            Some(InvocationFilter::EdgeOutline) => "edge_outline".to_string(),
-            Some(InvocationFilter::Posterize) => "posterize".to_string(),
-            Some(InvocationFilter::Blur) => "blur".to_string(),
-            Some(InvocationFilter::Sharpen) => "sharpen".to_string(),
-            Some(InvocationFilter::Custom { shader_id }) => format!("custom:{shader_id}"),
-            _ => "blit".to_string(),
+        let (effect_key, aux_slots, _sampler_idx) = match filter {
+            Some(InvocationFilter::Sepia) => ("sepia".to_string(), &[None; 8], 0),
+            Some(InvocationFilter::Grayscale) => ("grayscale".to_string(), &[None; 8], 0),
+            Some(InvocationFilter::Invert) => ("invert".to_string(), &[None; 8], 0),
+            Some(InvocationFilter::Vignette) => ("vignette".to_string(), &[None; 8], 0),
+            Some(InvocationFilter::TonemapAces) => ("tonemap_aces".to_string(), &[None; 8], 0),
+            Some(InvocationFilter::ChromaticAberration) => {
+                ("chromatic_aberration".to_string(), &[None; 8], 0)
+            }
+            Some(InvocationFilter::FilmGrain) => ("film_grain".to_string(), &[None; 8], 0),
+            Some(InvocationFilter::EdgeOutline) => ("edge_outline".to_string(), &[None; 8], 0),
+            Some(InvocationFilter::Posterize) => ("posterize".to_string(), &[None; 8], 0),
+            Some(InvocationFilter::Blur) => ("blur".to_string(), &[None; 8], 0),
+            Some(InvocationFilter::Sharpen) => ("sharpen".to_string(), &[None; 8], 0),
+            Some(InvocationFilter::Custom {
+                shader_id,
+                textures,
+                sampler_index,
+            }) => (format!("custom:{shader_id}"), textures, *sampler_index),
+            _ => ("blit".to_string(), &[None; 8], 0),
         };
 
         self.ensure_pipeline(device, &effect_key, pass_desc.dst_format)?;
+
+        let mut views: [&wgpu::TextureView; 8] = [&self.fallback_white_view; 8];
+        views[1] = &self.fallback_normal_view;
+        views[4] = &self.fallback_black_view;
+
+        for (i, slot) in aux_slots.iter().enumerate() {
+            if let Some(view) = slot.and_then(textures) {
+                views[i] = view;
+            }
+        }
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("PostProcess Pass BindGroup"),
@@ -356,6 +456,54 @@ impl PostProcessor {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(views[0]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(views[1]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(views[2]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::TextureView(views[3]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: wgpu::BindingResource::TextureView(views[4]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: wgpu::BindingResource::TextureView(views[5]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 8,
+                    resource: wgpu::BindingResource::TextureView(views[6]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 9,
+                    resource: wgpu::BindingResource::TextureView(views[7]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 10,
+                    resource: wgpu::BindingResource::Sampler(&self.samplers.linear_repeat),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 11,
+                    resource: wgpu::BindingResource::Sampler(&self.samplers.linear_clamp),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 12,
+                    resource: wgpu::BindingResource::Sampler(&self.samplers.nearest_repeat),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 13,
+                    resource: wgpu::BindingResource::Sampler(&self.samplers.nearest_clamp),
                 },
             ],
         });

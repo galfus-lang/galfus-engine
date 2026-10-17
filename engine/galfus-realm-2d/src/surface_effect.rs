@@ -16,6 +16,7 @@ struct SurfaceInput2D {
     uv: vec2<f32>,
     color: vec4<f32>,
     time: f32,
+    sampler_index: u32,
     custom: CustomParams2D,
 };
 

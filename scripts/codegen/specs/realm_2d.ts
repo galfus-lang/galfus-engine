@@ -37,6 +37,10 @@ export const realm2dDescriptors: DescSpec[] = [
         optional: true
       },
       textureId: { type: 'number', optional: true },
+      normalTextureId: { type: 'number', optional: true },
+      emissiveTextureId: { type: 'number', optional: true },
+      textureSlots: { type: { array: 'number' }, optional: true },
+      samplerIndex: { type: 'number', optional: true },
       alphaCutoff: { type: 'number', optional: true },
       shaderEffect: { type: 'string', optional: true },
       customParams: {

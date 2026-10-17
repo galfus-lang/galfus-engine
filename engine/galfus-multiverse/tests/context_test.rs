@@ -310,7 +310,7 @@ fn test_screen_effect_filter_lifecycle() {
             target_id,
             camera_slot: None,
             viewport: ViewportRect::default(),
-            filters: vec![InvocationFilter::Custom { shader_id: 42 }],
+            filters: vec![InvocationFilter::custom(42)],
             z_index: 0,
             enabled: true,
             clear_color: None,
@@ -324,7 +324,7 @@ fn test_screen_effect_filter_lifecycle() {
     assert_eq!(schedule.target_blocks[0].invocations.len(), 1);
     assert_eq!(
         schedule.target_blocks[0].invocations[0].filters,
-        vec![InvocationFilter::Custom { shader_id: 42 }]
+        vec![InvocationFilter::custom(42)]
     );
 
     assert!(mv.dispatch(1, 0.016).is_ok());

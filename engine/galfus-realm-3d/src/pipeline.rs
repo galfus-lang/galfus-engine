@@ -13,8 +13,53 @@ pub struct Pipeline3D {
     pub model_layout: wgpu::BindGroupLayout,
     pub refraction_layout: wgpu::BindGroupLayout,
     pub dummy_refraction_bg: wgpu::BindGroup,
+    pub samplers: galfus_gpu_manager::StandardSamplers,
+    pub fallback_white_view: wgpu::TextureView,
+    pub fallback_normal_view: wgpu::TextureView,
+    pub fallback_black_view: wgpu::TextureView,
+    _fallback_textures: (wgpu::Texture, wgpu::Texture, wgpu::Texture),
     pub target_format: wgpu::TextureFormat,
     custom_pipelines: HashMap<(u64, bool), wgpu::RenderPipeline>,
+}
+
+fn create_1x1_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: &str,
+    color: [u8; 4],
+) -> (wgpu::Texture, wgpu::TextureView) {
+    let size = wgpu::Extent3d {
+        width: 1,
+        height: 1,
+        depth_or_array_layers: 1,
+    };
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &color,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(4),
+            rows_per_image: Some(1),
+        },
+        size,
+    );
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
 }
 
 fn create_3d_render_pipeline(
@@ -103,7 +148,19 @@ fn create_3d_render_pipeline(
 }
 
 impl Pipeline3D {
-    pub fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target_format: wgpu::TextureFormat,
+    ) -> Self {
+        let samplers = galfus_gpu_manager::StandardSamplers::new(device);
+        let (white_tex, fallback_white_view) =
+            create_1x1_texture(device, queue, "Fallback White", [255, 255, 255, 255]);
+        let (normal_tex, fallback_normal_view) =
+            create_1x1_texture(device, queue, "Fallback Normal", [128, 128, 255, 255]);
+        let (black_tex, fallback_black_view) =
+            create_1x1_texture(device, queue, "Fallback Black", [0, 0, 0, 0]);
+
         let default_source = crate::shader::get_default_realm_3d_shader();
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Realm3D Default Shader"),
@@ -197,19 +254,41 @@ impl Pipeline3D {
             ],
         });
 
-        // Group 1: Material
-        let material_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Realm3D Material Layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
+        // Group 1: Material (Uniform + 8 Textures + 4 Standard Samplers)
+        let mut material_entries = Vec::with_capacity(13);
+        material_entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        });
+        for i in 1..=8 {
+            material_entries.push(wgpu::BindGroupLayoutEntry {
+                binding: i,
                 visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
                 },
                 count: None,
-            }],
+            });
+        }
+        for i in 9..=12 {
+            material_entries.push(wgpu::BindGroupLayoutEntry {
+                binding: i,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            });
+        }
+        let material_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Realm3D Material Layout"),
+            entries: &material_entries,
         });
 
         // Group 2: Model
@@ -306,6 +385,11 @@ impl Pipeline3D {
             model_layout,
             refraction_layout,
             dummy_refraction_bg,
+            samplers,
+            fallback_white_view,
+            fallback_normal_view,
+            fallback_black_view,
+            _fallback_textures: (white_tex, normal_tex, black_tex),
             target_format,
             custom_pipelines: HashMap::new(),
         }

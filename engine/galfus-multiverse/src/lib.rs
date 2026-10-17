@@ -10,6 +10,7 @@
 
 pub mod context;
 pub mod error;
+pub(crate) mod executor;
 pub(crate) mod postprocess;
 pub mod resolver;
 pub mod schedule;

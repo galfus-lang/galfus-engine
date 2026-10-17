@@ -158,6 +158,11 @@ pub struct Material3DDesc {
     pub refraction_distortion: Option<f32>,
     pub albedo_texture_id: Option<u32>,
     pub normal_texture_id: Option<u32>,
+    pub metallic_roughness_texture_id: Option<u32>,
+    pub occlusion_texture_id: Option<u32>,
+    pub emissive_texture_id: Option<u32>,
+    pub texture_slots: Option<Vec<Option<u32>>>,
+    pub sampler_index: Option<u32>,
     pub shader_effect: Option<String>,
     pub custom_params: Option<Vec<[f32; 4]>>,
 }
@@ -179,6 +184,12 @@ impl From<Material3DDesc> for Material3D {
                 custom_params[idx] = Vec4::new(p[0], p[1], p[2], p[3]);
             }
         }
+        let mut texture_slots = [None; 8];
+        if let Some(slots) = d.texture_slots {
+            for (idx, slot) in slots.into_iter().take(8).enumerate() {
+                texture_slots[idx] = slot;
+            }
+        }
         Material3D {
             surface_type,
             base_color: d
@@ -196,8 +207,11 @@ impl From<Material3DDesc> for Material3D {
             refraction_distortion: d.refraction_distortion.unwrap_or(0.05),
             albedo_texture_id: d.albedo_texture_id,
             normal_texture_id: d.normal_texture_id,
-            metallic_roughness_texture_id: None,
-            emissive_texture_id: None,
+            metallic_roughness_texture_id: d.metallic_roughness_texture_id,
+            occlusion_texture_id: d.occlusion_texture_id,
+            emissive_texture_id: d.emissive_texture_id,
+            texture_slots,
+            sampler_index: d.sampler_index.unwrap_or(0),
             shader_effect: d.shader_effect,
             custom_params,
             label: None,

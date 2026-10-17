@@ -27,8 +27,14 @@ pub struct Material2D {
     pub surface_type: SurfaceType2D,
     /// Base surface RGBA color multiplier.
     pub base_color: Vec4,
-    /// Optional logical texture ID for diffuse / atlas map.
+    /// Optional logical texture ID for diffuse / atlas map (Slot 0).
     pub texture_id: Option<u32>,
+    /// Universal 8-slot texture array `[Slot 0 .. Slot 7]`.
+    #[serde(default = "default_texture_slots")]
+    pub texture_slots: [Option<u32>; 8],
+    /// Sampler index: 0 = LinearRepeat, 1 = LinearClamp, 2 = NearestRepeat, 3 = NearestClamp.
+    #[serde(default)]
+    pub sampler_index: u32,
     /// Alpha cutoff threshold for `SurfaceType2D::Masked`.
     pub alpha_cutoff: f32,
     /// Optional custom WGSL snippet implementing `fn surface_effect(in: SurfaceInput2D) -> SurfaceOutput2D`.
@@ -36,6 +42,10 @@ pub struct Material2D {
     /// Custom parameter vectors `[v0, v1, v2, v3]` accessible inside custom effects.
     #[serde(default = "default_custom_params")]
     pub custom_params: [Vec4; 4],
+}
+
+fn default_texture_slots() -> [Option<u32>; 8] {
+    [None; 8]
 }
 
 fn default_custom_params() -> [Vec4; 4] {
@@ -49,6 +59,8 @@ impl Default for Material2D {
             surface_type: SurfaceType2D::Transparent,
             base_color: Vec4::ONE,
             texture_id: None,
+            texture_slots: [None; 8],
+            sampler_index: 0,
             alpha_cutoff: 0.5,
             shader_effect: None,
             custom_params: [Vec4::ZERO; 4],
@@ -65,6 +77,15 @@ impl Material2D {
             SurfaceType2D::Masked => 2,
             SurfaceType2D::Additive => 3,
         }
+    }
+
+    /// Resolves the effective 8 texture slots, merging texture_id into slot 0.
+    pub fn resolved_texture_slots(&self) -> [Option<u32>; 8] {
+        let mut slots = self.texture_slots;
+        if slots[0].is_none() {
+            slots[0] = self.texture_id;
+        }
+        slots
     }
 
     /// Creates a material with solid color and transparent blending.
@@ -87,7 +108,8 @@ impl Material2D {
     pub fn build_uniform(&self) -> Material2DUniform {
         let mut flags = self.surface_type_id();
 
-        if self.texture_id.is_some() {
+        let slots = self.resolved_texture_slots();
+        if slots[0].is_some() {
             flags |= 1 << 4;
         }
         if self.shader_effect.is_some() {
@@ -97,7 +119,7 @@ impl Material2D {
         Material2DUniform {
             base_color: self.base_color,
             params: Vec4::new(self.alpha_cutoff, 1.0, 1.0, 0.0),
-            flags: UVec4::new(flags, 0, 0, 0),
+            flags: UVec4::new(flags, self.sampler_index, 0, 0),
             custom_v0: self.custom_params[0],
             custom_v1: self.custom_params[1],
             custom_v2: self.custom_params[2],

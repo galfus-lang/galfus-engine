@@ -182,8 +182,6 @@ impl Realm for Realm2DContext {
         // Sync materials
         let pipeline_manager = self.pipeline_manager.as_ref().unwrap();
         let gpu_res = self.gpu_res.as_ref().unwrap();
-        let linear_sampler = &gpu_res.linear_sampler;
-        let fallback_view = &gpu_res.fallback_texture_view;
 
         for (&mat_id, mat) in &self.materials {
             if !self.material_bind_groups.contains_key(&mat_id) {
@@ -196,24 +194,18 @@ impl Realm for Realm2DContext {
                 );
                 queue.write_buffer(&buf, 0, bytemuck::bytes_of(&uniform));
 
-                let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some(&format!("galfus_2d_mat_bg_{mat_id}")),
-                    layout: &pipeline_manager.material_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: buf.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::TextureView(fallback_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::Sampler(linear_sampler),
-                        },
-                    ],
-                });
+                let resolved_slots = mat.resolved_texture_slots();
+                let bg = crate::gpu::create_material_bind_group_2d(
+                    device,
+                    &pipeline_manager.material_bind_group_layout,
+                    &gpu_res.samplers,
+                    &gpu_res.fallback_texture_view,
+                    &gpu_res.fallback_normal_view,
+                    &gpu_res.fallback_black_view,
+                    &buf,
+                    &resolved_slots,
+                    ctx.textures,
+                );
 
                 self.material_uniform_buffers.insert(mat_id, buf);
                 self.material_bind_groups.insert(mat_id, bg);
@@ -462,10 +454,10 @@ impl Realm for Realm2DContext {
             });
 
             rpass.set_viewport(
-                ctx.viewport.x as f32,
-                ctx.viewport.y as f32,
-                ctx.viewport.z as f32,
-                ctx.viewport.w as f32,
+                0.0,
+                0.0,
+                width as f32,
+                height as f32,
                 0.0,
                 1.0,
             );

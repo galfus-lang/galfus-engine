@@ -77,7 +77,9 @@ export const multiverseDescriptors: DescSpec[] = [
           custom: {
             type: {
               inline: {
-                shaderId: { type: 'number' }
+                shaderId: { type: 'number' },
+                textures: { type: { array: 'number' }, optional: true },
+                samplerIndex: { type: 'number', optional: true }
               }
             }
           }

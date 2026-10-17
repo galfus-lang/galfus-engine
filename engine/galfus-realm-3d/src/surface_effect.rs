@@ -22,6 +22,7 @@ struct SurfaceInput {
     metallic: f32,
     reflectance: f32,
     time: f32,
+    sampler_index: u32,
     custom: CustomParams,
 };
 

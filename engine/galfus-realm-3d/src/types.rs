@@ -151,10 +151,89 @@ pub type GpuModelEntry = (
     Option<wgpu::BindGroup>,
 );
 
+/// Creates a material bind group with uniform buffer, 8 texture slots, and 4 standard samplers.
+pub fn create_material_bind_group<'tex>(
+    device: &wgpu::Device,
+    pipeline: &crate::pipeline::Pipeline3D,
+    uniform_buf: &wgpu::Buffer,
+    slots: &[Option<u32>; 8],
+    textures: &dyn Fn(u32) -> Option<&'tex wgpu::TextureView>,
+) -> wgpu::BindGroup {
+    let mut views: [&wgpu::TextureView; 8] = [&pipeline.fallback_white_view; 8];
+    views[1] = &pipeline.fallback_normal_view;
+    views[4] = &pipeline.fallback_black_view;
+
+    for (i, slot) in slots.iter().enumerate() {
+        if let Some(view) = slot.and_then(textures) {
+            views[i] = view;
+        }
+    }
+
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("Material Bind Group"),
+        layout: &pipeline.material_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(views[0]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(views[1]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::TextureView(views[2]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::TextureView(views[3]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: wgpu::BindingResource::TextureView(views[4]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: wgpu::BindingResource::TextureView(views[5]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 7,
+                resource: wgpu::BindingResource::TextureView(views[6]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 8,
+                resource: wgpu::BindingResource::TextureView(views[7]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 9,
+                resource: wgpu::BindingResource::Sampler(&pipeline.samplers.linear_repeat),
+            },
+            wgpu::BindGroupEntry {
+                binding: 10,
+                resource: wgpu::BindingResource::Sampler(&pipeline.samplers.linear_clamp),
+            },
+            wgpu::BindGroupEntry {
+                binding: 11,
+                resource: wgpu::BindingResource::Sampler(&pipeline.samplers.nearest_repeat),
+            },
+            wgpu::BindGroupEntry {
+                binding: 12,
+                resource: wgpu::BindingResource::Sampler(&pipeline.samplers.nearest_clamp),
+            },
+        ],
+    })
+}
+
 /// Synchronizes dirty CPU mesh geometries, material uniforms, and model matrix uniforms with the GPU.
-pub fn sync_realm_resources(
+pub fn sync_realm_resources<'a>(
     device: &wgpu::Device,
     pipeline: &mut crate::pipeline::Pipeline3D,
+    textures: &dyn Fn(u32) -> Option<&'a wgpu::TextureView>,
     geometries: &mut std::collections::BTreeMap<
         u32,
         (
@@ -191,14 +270,22 @@ pub fn sync_realm_resources(
 
     // 2. Sync Materials and pre-compile custom surface pipelines
     for (mat, buf_opt, bg_opt) in materials.values_mut() {
-        if buf_opt.is_none() {
-            let (buf, bg) = create_uniform_bg(
+        if buf_opt.is_none() || bg_opt.is_none() {
+            let buf = buf_opt.get_or_insert_with(|| {
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Mat Uniform Buffer"),
+                    contents: bytemuck::bytes_of(&mat.build_uniform()),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                })
+            });
+            let resolved_slots = mat.resolved_texture_slots();
+            let bg = create_material_bind_group(
                 device,
-                "Mat",
-                &pipeline.material_layout,
-                bytemuck::bytes_of(&mat.build_uniform()),
+                pipeline,
+                buf,
+                &resolved_slots,
+                textures,
             );
-            *buf_opt = Some(buf);
             *bg_opt = Some(bg);
         }
         pipeline.ensure_pipeline(

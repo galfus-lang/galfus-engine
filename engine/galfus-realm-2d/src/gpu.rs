@@ -33,10 +33,137 @@ pub struct GpuResources2D {
 
     pub _point_sampler: wgpu::Sampler,
     pub linear_sampler: wgpu::Sampler,
+    pub samplers: galfus_gpu_manager::StandardSamplers,
     pub fallback_texture_view: wgpu::TextureView,
+    pub fallback_normal_view: wgpu::TextureView,
+    pub fallback_black_view: wgpu::TextureView,
+    _fallback_textures: (wgpu::Texture, wgpu::Texture, wgpu::Texture),
     pub fallback_material_buffer: wgpu::Buffer,
     pub fallback_material_bind_group: wgpu::BindGroup,
     pub global_bind_group: wgpu::BindGroup,
+}
+
+fn create_1x1_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: &str,
+    color: [u8; 4],
+) -> (wgpu::Texture, wgpu::TextureView) {
+    let size = wgpu::Extent3d {
+        width: 1,
+        height: 1,
+        depth_or_array_layers: 1,
+    };
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &color,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(4),
+            rows_per_image: Some(1),
+        },
+        size,
+    );
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
+}
+
+/// Creates a 2D material bind group with uniform buffer, 8 texture slots, and 4 standard samplers.
+#[allow(clippy::too_many_arguments)]
+pub fn create_material_bind_group_2d<'tex>(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    samplers: &galfus_gpu_manager::StandardSamplers,
+    fallback_white: &wgpu::TextureView,
+    fallback_normal: &wgpu::TextureView,
+    fallback_black: &wgpu::TextureView,
+    uniform_buf: &wgpu::Buffer,
+    slots: &[Option<u32>; 8],
+    textures: &dyn Fn(u32) -> Option<&'tex wgpu::TextureView>,
+) -> wgpu::BindGroup {
+    let mut views: [&wgpu::TextureView; 8] = [fallback_white; 8];
+    views[1] = fallback_normal;
+    views[4] = fallback_black;
+
+    for (i, slot) in slots.iter().enumerate() {
+        if let Some(view) = slot.and_then(textures) {
+            views[i] = view;
+        }
+    }
+
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("galfus_2d_mat_bg"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(views[0]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(views[1]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::TextureView(views[2]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::TextureView(views[3]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: wgpu::BindingResource::TextureView(views[4]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: wgpu::BindingResource::TextureView(views[5]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 7,
+                resource: wgpu::BindingResource::TextureView(views[6]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 8,
+                resource: wgpu::BindingResource::TextureView(views[7]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 9,
+                resource: wgpu::BindingResource::Sampler(&samplers.linear_repeat),
+            },
+            wgpu::BindGroupEntry {
+                binding: 10,
+                resource: wgpu::BindingResource::Sampler(&samplers.linear_clamp),
+            },
+            wgpu::BindGroupEntry {
+                binding: 11,
+                resource: wgpu::BindingResource::Sampler(&samplers.nearest_repeat),
+            },
+            wgpu::BindGroupEntry {
+                binding: 12,
+                resource: wgpu::BindingResource::Sampler(&samplers.nearest_clamp),
+            },
+        ],
+    })
 }
 
 impl GpuResources2D {
@@ -118,22 +245,13 @@ impl GpuResources2D {
             ..Default::default()
         });
 
-        let fallback_tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("galfus_2d_white_fallback_tex"),
-            size: wgpu::Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let fallback_texture_view =
-            fallback_tex.create_view(&wgpu::TextureViewDescriptor::default());
+        let samplers = galfus_gpu_manager::StandardSamplers::new(device);
+        let (white_tex, fallback_texture_view) =
+            create_1x1_texture(device, queue, "Fallback White 2D", [255, 255, 255, 255]);
+        let (normal_tex, fallback_normal_view) =
+            create_1x1_texture(device, queue, "Fallback Normal 2D", [128, 128, 255, 255]);
+        let (black_tex, fallback_black_view) =
+            create_1x1_texture(device, queue, "Fallback Black 2D", [0, 0, 0, 0]);
 
         let fallback_material_buffer = create_gpu_buffer(
             device,
@@ -148,24 +266,17 @@ impl GpuResources2D {
             bytemuck::bytes_of(&default_mat),
         );
 
-        let fallback_material_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("galfus_2d_fallback_mat_bg"),
-            layout: &pipeline_manager.material_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: fallback_material_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&fallback_texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&linear_sampler),
-                },
-            ],
-        });
+        let fallback_material_bind_group = create_material_bind_group_2d(
+            device,
+            &pipeline_manager.material_bind_group_layout,
+            &samplers,
+            &fallback_texture_view,
+            &fallback_normal_view,
+            &fallback_black_view,
+            &fallback_material_buffer,
+            &[None; 8],
+            &|_| None,
+        );
 
         let global_bind_group = Self::build_global_bind_group(
             device,
@@ -186,7 +297,11 @@ impl GpuResources2D {
             shadow_sample_buffer,
             _point_sampler: point_sampler,
             linear_sampler,
+            samplers,
             fallback_texture_view,
+            fallback_normal_view,
+            fallback_black_view,
+            _fallback_textures: (white_tex, normal_tex, black_tex),
             fallback_material_buffer,
             fallback_material_bind_group,
             global_bind_group,

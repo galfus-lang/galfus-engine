@@ -85,6 +85,10 @@ pub struct Material2DDesc {
     #[serde(default = "default_surface_type_2d")]
     pub surface_type: String,
     pub texture_id: Option<u32>,
+    pub normal_texture_id: Option<u32>,
+    pub emissive_texture_id: Option<u32>,
+    pub texture_slots: Option<Vec<Option<u32>>>,
+    pub sampler_index: Option<u32>,
     pub alpha_cutoff: Option<f32>,
     pub shader_effect: Option<String>,
     pub custom_params: Option<[[f32; 4]; 4]>,
@@ -114,11 +118,25 @@ impl From<Material2DDesc> for Material2D {
             ],
             None => [Vec4::ZERO; 4],
         };
+        let mut texture_slots = [None; 8];
+        if let Some(slots) = d.texture_slots {
+            for (idx, slot) in slots.into_iter().take(8).enumerate() {
+                texture_slots[idx] = slot;
+            }
+        }
+        if texture_slots[1].is_none() {
+            texture_slots[1] = d.normal_texture_id;
+        }
+        if texture_slots[4].is_none() {
+            texture_slots[4] = d.emissive_texture_id;
+        }
         Material2D {
             label: None,
             surface_type,
             base_color: Vec4::from_slice(&d.base_color),
             texture_id: d.texture_id,
+            texture_slots,
+            sampler_index: d.sampler_index.unwrap_or(0),
             alpha_cutoff: d.alpha_cutoff.unwrap_or(0.5),
             shader_effect: d.shader_effect,
             custom_params,

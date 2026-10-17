@@ -111,6 +111,7 @@ mod tests {
             delta_time: 0.016,
             device: &device,
             queue: &queue,
+            textures: &|_| None,
         };
         assert!(realm.prepare(&prep).is_ok());
 

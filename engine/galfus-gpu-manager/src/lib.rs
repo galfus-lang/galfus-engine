@@ -44,7 +44,7 @@ pub use layout::{
 };
 pub use manager::GpuManager;
 pub use pipeline::{DerivedPipelineDesc, PipelineManager, RenderPipelineTargetConfig};
-pub use sampler::{GpuSampler, SamplerManager};
+pub use sampler::{GpuSampler, SamplerManager, StandardSamplers};
 pub use surface::GpuSurface;
 pub use texture::{GpuTexture, GpuTextureView, TextureManager};
 pub use types::{

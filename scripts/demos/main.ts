@@ -1,4 +1,5 @@
 import { runDemoMv1 } from './demo_mv1_multiverse.ts';
+import { runDemoMv2 } from './demo_mv2_split_texture_reuse.ts';
 import { runDemo3d1 } from './demo_3d1_orbit.ts';
 import { runDemo3d2 } from './demo_3d2_bones.ts';
 import { runDemo3d3 } from './demo_3d3_ssao_shadows.ts';
@@ -17,6 +18,7 @@ function printHelp(): void {
   console.log('Available Demos:\n');
   console.log('  [Multiverse]');
   console.log('    mv1   - Split-screen viewports & post-processing filters (Default)');
+  console.log('    mv2   - Fullscreen 3D + 2D corner minimap & RTT texture reuse on 3D cube');
   console.log('\n  [Realm 3D]');
   console.log('    3d1   - Reverse-Z, interactive camera orbit, and dynamic lighting');
   console.log('    3d2   - Procedural Skeletal Bones (12-Joint Skinning & Shadows)');
@@ -39,9 +41,13 @@ async function main(): Promise<void> {
     case undefined:
       if (!arg) {
         console.log('No demo specified. Defaulting to Demo MV1 (Multiverse).');
-        console.log('Use `bun demo <id>` to choose a specific demo (e.g. 3d1, 2d1, mv1).\n');
+        console.log('Use `bun demo <id>` to choose a specific demo (e.g. 3d1, 2d1, mv1, mv2).\n');
       }
       await runDemoMv1();
+      break;
+
+    case 'mv2':
+      await runDemoMv2();
       break;
 
     case '3d1':

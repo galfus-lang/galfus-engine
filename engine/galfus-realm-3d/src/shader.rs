@@ -63,6 +63,41 @@ struct ModelUniform {
 @group(0) @binding(7) var<storage, read> shadow_matrices: array<mat4x4<f32>>;
 
 @group(1) @binding(0) var<uniform> material: MaterialUniform;
+@group(1) @binding(1) var mat_tex_0: texture_2d<f32>;
+@group(1) @binding(2) var mat_tex_1: texture_2d<f32>;
+@group(1) @binding(3) var mat_tex_2: texture_2d<f32>;
+@group(1) @binding(4) var mat_tex_3: texture_2d<f32>;
+@group(1) @binding(5) var mat_tex_4: texture_2d<f32>;
+@group(1) @binding(6) var mat_tex_5: texture_2d<f32>;
+@group(1) @binding(7) var mat_tex_6: texture_2d<f32>;
+@group(1) @binding(8) var mat_tex_7: texture_2d<f32>;
+@group(1) @binding(9) var sampler_linear_repeat: sampler;
+@group(1) @binding(10) var sampler_linear_clamp: sampler;
+@group(1) @binding(11) var sampler_nearest_repeat: sampler;
+@group(1) @binding(12) var sampler_nearest_clamp: sampler;
+
+fn sample_texture_with_sampler(tex: texture_2d<f32>, uv: vec2<f32>, sampler_idx: u32) -> vec4<f32> {
+    switch (sampler_idx) {
+        case 1u: { return textureSample(tex, sampler_linear_clamp, uv); }
+        case 2u: { return textureSample(tex, sampler_nearest_repeat, uv); }
+        case 3u: { return textureSample(tex, sampler_nearest_clamp, uv); }
+        default: { return textureSample(tex, sampler_linear_repeat, uv); }
+    }
+}
+
+fn sample_material_texture(slot: u32, uv: vec2<f32>, sampler_idx: u32) -> vec4<f32> {
+    switch (slot) {
+        case 0u: { return sample_texture_with_sampler(mat_tex_0, uv, sampler_idx); }
+        case 1u: { return sample_texture_with_sampler(mat_tex_1, uv, sampler_idx); }
+        case 2u: { return sample_texture_with_sampler(mat_tex_2, uv, sampler_idx); }
+        case 3u: { return sample_texture_with_sampler(mat_tex_3, uv, sampler_idx); }
+        case 4u: { return sample_texture_with_sampler(mat_tex_4, uv, sampler_idx); }
+        case 5u: { return sample_texture_with_sampler(mat_tex_5, uv, sampler_idx); }
+        case 6u: { return sample_texture_with_sampler(mat_tex_6, uv, sampler_idx); }
+        case 7u: { return sample_texture_with_sampler(mat_tex_7, uv, sampler_idx); }
+        default: { return vec4<f32>(1.0, 1.0, 1.0, 1.0); }
+    }
+}
 @group(2) @binding(0) var<uniform> object: ModelUniform;
 @group(3) @binding(0) var opaque_screen_texture: texture_2d<f32>;
 @group(3) @binding(1) var opaque_screen_sampler: sampler;
@@ -158,6 +193,7 @@ struct SurfaceInput {
     metallic: f32,
     reflectance: f32,
     time: f32,
+    sampler_index: u32,
     custom: CustomParams,
 };
 
@@ -242,17 +278,24 @@ fn sample_shadow_layer(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let mat_sampler_idx = material.flags.y;
+    let tex_albedo = sample_texture_with_sampler(mat_tex_0, in.uv, mat_sampler_idx);
+    let tex_mr = sample_texture_with_sampler(mat_tex_2, in.uv, mat_sampler_idx);
+    let tex_ao = sample_texture_with_sampler(mat_tex_3, in.uv, mat_sampler_idx);
+    let tex_emissive = sample_texture_with_sampler(mat_tex_4, in.uv, mat_sampler_idx);
+
     var s_in: SurfaceInput;
     s_in.world_pos = in.world_pos;
     s_in.world_normal = normalize(in.world_normal);
     s_in.view_dir = normalize(camera.position.xyz - in.world_pos);
     s_in.uv = in.uv;
-    s_in.albedo = material.base_color;
-    s_in.emissive = material.emissive_color.rgb;
-    s_in.roughness = clamp(material.pbr_params.x, 0.04, 1.0);
-    s_in.metallic = clamp(material.pbr_params.y, 0.0, 1.0);
+    s_in.albedo = material.base_color * tex_albedo;
+    s_in.emissive = material.emissive_color.rgb + tex_emissive.rgb;
+    s_in.roughness = clamp(material.pbr_params.x * tex_mr.g, 0.04, 1.0);
+    s_in.metallic = clamp(material.pbr_params.y * tex_mr.b, 0.0, 1.0);
     s_in.reflectance = material.pbr_params.z;
     s_in.time = env.misc_params.z;
+    s_in.sampler_index = mat_sampler_idx;
     s_in.custom.v0 = material.custom_v0;
     s_in.custom.v1 = material.custom_v1;
     s_in.custom.v2 = material.custom_v2;
@@ -360,7 +403,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
-    let ambient = albedo.rgb * env.ambient_color.rgb * env.ambient_color.a;
+    let ambient = albedo.rgb * env.ambient_color.rgb * env.ambient_color.a * tex_ao.r;
     var final_color = ambient + direct_light + s_out.emissive;
 
     // Refraction transmission for glass, water, crystals

@@ -85,6 +85,11 @@ export const realm3dDescriptors: DescSpec[] = [
       refractionDistortion: { type: 'number', optional: true },
       albedoTextureId: { type: 'number', optional: true },
       normalTextureId: { type: 'number', optional: true },
+      metallicRoughnessTextureId: { type: 'number', optional: true },
+      occlusionTextureId: { type: 'number', optional: true },
+      emissiveTextureId: { type: 'number', optional: true },
+      textureSlots: { type: { array: 'number' }, optional: true },
+      samplerIndex: { type: 'number', optional: true },
       shaderEffect: { type: 'string', optional: true },
       customParams: {
         type: { array: { tuple: ['number', 'number', 'number', 'number'] } },

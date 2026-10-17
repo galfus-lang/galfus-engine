@@ -23,6 +23,8 @@ pub struct RealmPrepareContext<'a> {
     pub device: &'a wgpu::Device,
     /// Active GPU command queue.
     pub queue: &'a wgpu::Queue,
+    /// Resolver to query shared GPU texture views by their host logical ID.
+    pub textures: &'a (dyn Fn(u32) -> Option<&'a wgpu::TextureView> + 'a),
 }
 
 /// Context passed to a realm when rendering a specific invocation.

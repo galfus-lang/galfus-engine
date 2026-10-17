@@ -111,7 +111,7 @@ impl Realm for Realm3DContext {
         }
 
         if self.pipeline.is_none() {
-            self.pipeline = Some(Pipeline3D::new(device, wgpu::TextureFormat::Rgba8Unorm));
+            self.pipeline = Some(Pipeline3D::new(device, queue, wgpu::TextureFormat::Rgba8Unorm));
         }
         let pipeline = self.pipeline.as_mut().unwrap();
 
@@ -119,6 +119,7 @@ impl Realm for Realm3DContext {
         crate::types::sync_realm_resources(
             device,
             pipeline,
+            ctx.textures,
             &mut self.geometries,
             &mut self.materials,
             &mut self.models,

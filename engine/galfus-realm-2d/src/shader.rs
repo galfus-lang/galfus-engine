@@ -53,8 +53,41 @@ struct Material2DUniform {
 };
 
 @group(1) @binding(0) var<uniform> material: Material2DUniform;
-@group(1) @binding(1) var material_texture: texture_2d<f32>;
-@group(1) @binding(2) var material_sampler: sampler;
+@group(1) @binding(1) var mat_tex_0: texture_2d<f32>;
+@group(1) @binding(2) var mat_tex_1: texture_2d<f32>;
+@group(1) @binding(3) var mat_tex_2: texture_2d<f32>;
+@group(1) @binding(4) var mat_tex_3: texture_2d<f32>;
+@group(1) @binding(5) var mat_tex_4: texture_2d<f32>;
+@group(1) @binding(6) var mat_tex_5: texture_2d<f32>;
+@group(1) @binding(7) var mat_tex_6: texture_2d<f32>;
+@group(1) @binding(8) var mat_tex_7: texture_2d<f32>;
+@group(1) @binding(9) var sampler_linear_repeat: sampler;
+@group(1) @binding(10) var sampler_linear_clamp: sampler;
+@group(1) @binding(11) var sampler_nearest_repeat: sampler;
+@group(1) @binding(12) var sampler_nearest_clamp: sampler;
+
+fn sample_texture_with_sampler(tex: texture_2d<f32>, uv: vec2<f32>, sampler_idx: u32) -> vec4<f32> {
+    switch (sampler_idx) {
+        case 1u: { return textureSample(tex, sampler_linear_clamp, uv); }
+        case 2u: { return textureSample(tex, sampler_nearest_repeat, uv); }
+        case 3u: { return textureSample(tex, sampler_nearest_clamp, uv); }
+        default: { return textureSample(tex, sampler_linear_repeat, uv); }
+    }
+}
+
+fn sample_material_texture(slot: u32, uv: vec2<f32>, sampler_idx: u32) -> vec4<f32> {
+    switch (slot) {
+        case 0u: { return sample_texture_with_sampler(mat_tex_0, uv, sampler_idx); }
+        case 1u: { return sample_texture_with_sampler(mat_tex_1, uv, sampler_idx); }
+        case 2u: { return sample_texture_with_sampler(mat_tex_2, uv, sampler_idx); }
+        case 3u: { return sample_texture_with_sampler(mat_tex_3, uv, sampler_idx); }
+        case 4u: { return sample_texture_with_sampler(mat_tex_4, uv, sampler_idx); }
+        case 5u: { return sample_texture_with_sampler(mat_tex_5, uv, sampler_idx); }
+        case 6u: { return sample_texture_with_sampler(mat_tex_6, uv, sampler_idx); }
+        case 7u: { return sample_texture_with_sampler(mat_tex_7, uv, sampler_idx); }
+        default: { return vec4<f32>(1.0, 1.0, 1.0, 1.0); }
+    }
+}
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -401,9 +434,10 @@ fn sample_shadow_visibility(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let mat_sampler_idx = material.flags.y;
     var tex_color = in.color;
     if ((material.flags.x & (1u << 4u)) != 0u) {
-        tex_color *= textureSample(material_texture, material_sampler, in.uv);
+        tex_color *= sample_texture_with_sampler(mat_tex_0, in.uv, mat_sampler_idx);
     }
 
     // Alpha test for Masked surface type
@@ -418,7 +452,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         material.custom_v2,
         material.custom_v3,
     );
-    let surface_in = SurfaceInput2D(in.world_pos, in.uv, tex_color, camera.params.x, custom);
+    let surface_in = SurfaceInput2D(in.world_pos, in.uv, tex_color, camera.params.x, mat_sampler_idx, custom);
     let surface_out = surface_effect(surface_in);
 
     // Dynamic 2D Lighting

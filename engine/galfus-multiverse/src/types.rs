@@ -60,8 +60,25 @@ pub enum InvocationFilter {
     Blur,
     /// High-pass unsharp masking filter enhancing edge sharpness.
     Sharpen,
-    /// Custom post-processing shader module ID.
-    Custom { shader_id: u32 },
+    /// Custom post-processing shader module ID with optional texture slots and sampler index.
+    Custom {
+        shader_id: u32,
+        #[serde(default)]
+        textures: [Option<u32>; 8],
+        #[serde(default)]
+        sampler_index: u32,
+    },
+}
+
+impl InvocationFilter {
+    /// Creates a custom shader filter with no auxiliary textures and default linear repeat sampler.
+    pub fn custom(shader_id: u32) -> Self {
+        Self::Custom {
+            shader_id,
+            textures: [None; 8],
+            sampler_index: 0,
+        }
+    }
 }
 
 /// Layout specification for a realm invocation's viewport.
@@ -273,6 +290,13 @@ mod tests {
 
         let json_filter = r#"{"custom":{"shaderId":500}}"#;
         let filter: InvocationFilter = serde_json::from_str(json_filter).unwrap();
-        assert_eq!(filter, InvocationFilter::Custom { shader_id: 500 });
+        assert_eq!(
+            filter,
+            InvocationFilter::Custom {
+                shader_id: 500,
+                textures: [None; 8],
+                sampler_index: 0,
+            }
+        );
     }
 }

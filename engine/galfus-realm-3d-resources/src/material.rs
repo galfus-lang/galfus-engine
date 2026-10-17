@@ -47,19 +47,31 @@ pub struct Material3D {
     /// Optical distortion strength for screen-space background displacement.
     #[serde(default = "default_refraction_distortion")]
     pub refraction_distortion: f32,
-    /// Optional logical texture ID for diffuse/albedo map.
+    /// Optional logical texture ID for diffuse/albedo map (Slot 0).
     pub albedo_texture_id: Option<u32>,
-    /// Optional logical texture ID for tangent-space normal map.
+    /// Optional logical texture ID for tangent-space normal map (Slot 1).
     pub normal_texture_id: Option<u32>,
-    /// Optional logical texture ID for metallic/roughness map.
+    /// Optional logical texture ID for metallic/roughness map (Slot 2).
     pub metallic_roughness_texture_id: Option<u32>,
-    /// Optional logical texture ID for emissive glow map.
+    /// Optional logical texture ID for ambient occlusion map (Slot 3).
+    pub occlusion_texture_id: Option<u32>,
+    /// Optional logical texture ID for emissive glow map (Slot 4).
     pub emissive_texture_id: Option<u32>,
+    /// Universal 8-slot texture array `[Slot 0 .. Slot 7]`.
+    #[serde(default = "default_texture_slots")]
+    pub texture_slots: [Option<u32>; 8],
+    /// Sampler index: 0 = LinearRepeat, 1 = LinearClamp, 2 = NearestRepeat, 3 = NearestClamp.
+    #[serde(default)]
+    pub sampler_index: u32,
     /// Optional custom WGSL snippet implementing `fn surface_effect(in: SurfaceInput) -> SurfaceOutput`.
     pub shader_effect: Option<String>,
     /// Custom parameter vectors `[v0, v1, v2, v3]` passed to `in.custom.v0..v3`.
     #[serde(default = "default_custom_params")]
     pub custom_params: [Vec4; 4],
+}
+
+fn default_texture_slots() -> [Option<u32>; 8] {
+    [None; 8]
 }
 
 fn default_refraction_index() -> f32 {
@@ -89,7 +101,10 @@ impl Default for Material3D {
             albedo_texture_id: None,
             normal_texture_id: None,
             metallic_roughness_texture_id: None,
+            occlusion_texture_id: None,
             emissive_texture_id: None,
+            texture_slots: [None; 8],
+            sampler_index: 0,
             shader_effect: None,
             custom_params: [Vec4::ZERO; 4],
         }
@@ -97,6 +112,27 @@ impl Default for Material3D {
 }
 
 impl Material3D {
+    /// Resolves the effective 8 texture slots, merging specific semantic IDs into the array.
+    pub fn resolved_texture_slots(&self) -> [Option<u32>; 8] {
+        let mut slots = self.texture_slots;
+        if slots[0].is_none() {
+            slots[0] = self.albedo_texture_id;
+        }
+        if slots[1].is_none() {
+            slots[1] = self.normal_texture_id;
+        }
+        if slots[2].is_none() {
+            slots[2] = self.metallic_roughness_texture_id;
+        }
+        if slots[3].is_none() {
+            slots[3] = self.occlusion_texture_id;
+        }
+        if slots[4].is_none() {
+            slots[4] = self.emissive_texture_id;
+        }
+        slots
+    }
+
     /// Creates a simple solid color material.
     pub fn solid_color(base_color: Vec4) -> Self {
         Self {
@@ -117,27 +153,31 @@ impl Material3D {
             SurfaceType3D::Portal => 6u32,
         };
 
-        if self.albedo_texture_id.is_some() {
+        let slots = self.resolved_texture_slots();
+        if slots[0].is_some() {
             flags |= 1 << 4;
         }
-        if self.normal_texture_id.is_some() {
+        if slots[1].is_some() {
             flags |= 1 << 5;
         }
-        if self.metallic_roughness_texture_id.is_some() {
+        if slots[2].is_some() {
             flags |= 1 << 6;
         }
-        if self.emissive_texture_id.is_some() {
+        if slots[3].is_some() {
             flags |= 1 << 7;
         }
-        if self.shader_effect.is_some() {
+        if slots[4].is_some() {
             flags |= 1 << 8;
+        }
+        if self.shader_effect.is_some() {
+            flags |= 1 << 9;
         }
 
         Material3DUniform {
             base_color: self.base_color,
             emissive_color: self.emissive_color,
             pbr_params: Vec4::new(self.roughness, self.metallic, self.reflectance, 0.5),
-            flags: UVec4::new(flags, 0, 0, 0),
+            flags: UVec4::new(flags, self.sampler_index, 0, 0),
             refraction_params: Vec4::new(
                 self.refraction_index,
                 self.refraction_distortion,

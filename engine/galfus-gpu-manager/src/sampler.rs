@@ -101,3 +101,64 @@ impl SamplerManager {
         Ok(())
     }
 }
+
+/// Pre-configured universal samplers shared across the entire engine.
+pub struct StandardSamplers {
+    pub linear_repeat: wgpu::Sampler,
+    pub linear_clamp: wgpu::Sampler,
+    pub nearest_repeat: wgpu::Sampler,
+    pub nearest_clamp: wgpu::Sampler,
+}
+
+impl StandardSamplers {
+    /// Creates the 4 standard universal GPU samplers.
+    pub fn new(device: &wgpu::Device) -> Self {
+        let linear_repeat = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Galfus Standard Linear Repeat Sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            ..Default::default()
+        });
+        let linear_clamp = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Galfus Standard Linear Clamp Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            ..Default::default()
+        });
+        let nearest_repeat = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Galfus Standard Nearest Repeat Sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
+        let nearest_clamp = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Galfus Standard Nearest Clamp Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
+        Self {
+            linear_repeat,
+            linear_clamp,
+            nearest_repeat,
+            nearest_clamp,
+        }
+    }
+}
+
