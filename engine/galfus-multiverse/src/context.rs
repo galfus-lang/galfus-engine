@@ -470,4 +470,3 @@ impl MultiverseContext {
         crate::executor::execute_frame(self, frame_id, delta_time)
     }
 }
-

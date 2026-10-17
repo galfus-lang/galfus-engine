@@ -32,10 +32,42 @@ export const multiverseDescriptors: DescSpec[] = [
     }
   },
   {
+    kind: 'enum',
+    name: 'AnchorX',
+    doc: 'Horizontal viewport anchor alignment.',
+    values: ['left', 'center', 'right']
+  },
+  {
+    kind: 'enum',
+    name: 'AnchorY',
+    doc: 'Vertical viewport anchor alignment.',
+    values: ['top', 'center', 'bottom']
+  },
+  {
+    kind: 'union',
+    name: 'UnitValue',
+    doc: 'Measurement unit for viewport dimensions and offsets (pixels or percentage of width/height).',
+    variants: [
+      { inline: { px: { type: 'number' } } },
+      { inline: { vw: { type: 'number' } } },
+      { inline: { vh: { type: 'number' } } }
+    ]
+  },
+  {
     kind: 'union',
     name: 'ViewportRect',
-    doc: 'Viewport rectangle defined in pixels or normalized (0.0 to 1.0) coordinates.',
+    doc: 'Viewport rectangle defined via responsive anchors (CSS px, vw, vh) or legacy coordinates.',
     variants: [
+      {
+        inline: {
+          anchorX: { type: { ref: 'AnchorX' }, optional: true },
+          anchorY: { type: { ref: 'AnchorY' }, optional: true },
+          offsetX: { type: { ref: 'UnitValue' }, optional: true },
+          offsetY: { type: { ref: 'UnitValue' }, optional: true },
+          width: { type: { ref: 'UnitValue' } },
+          height: { type: { ref: 'UnitValue' } }
+        }
+      },
       {
         inline: {
           unit: { type: { literal: 'pixels' } },

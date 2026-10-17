@@ -24,5 +24,6 @@ pub use screen_effect::{
     BUILTIN_BLIT_SNIPPET, BUILTIN_SEPIA_SNIPPET, SCREEN_EFFECT_TEMPLATE, compose_screen_effect,
 };
 pub use types::{
-    InvocationDesc, InvocationFilter, TargetDesc, TargetKind, TargetTextureBinding, ViewportRect,
+    AnchorX, AnchorY, InvocationDesc, InvocationFilter, LegacyViewportRect, TargetDesc, TargetKind,
+    TargetTextureBinding, UnitValue, ViewportRect,
 };

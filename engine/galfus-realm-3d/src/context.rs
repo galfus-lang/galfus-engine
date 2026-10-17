@@ -111,7 +111,11 @@ impl Realm for Realm3DContext {
         }
 
         if self.pipeline.is_none() {
-            self.pipeline = Some(Pipeline3D::new(device, queue, wgpu::TextureFormat::Rgba8Unorm));
+            self.pipeline = Some(Pipeline3D::new(
+                device,
+                queue,
+                wgpu::TextureFormat::Rgba8Unorm,
+            ));
         }
         let pipeline = self.pipeline.as_mut().unwrap();
 

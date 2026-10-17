@@ -210,10 +210,18 @@ pub struct FilterPassDesc<'a> {
 impl PostProcessor {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let samplers = galfus_gpu_manager::StandardSamplers::new(device);
-        let (white_tex, fallback_white_view) =
-            create_1x1_texture(device, queue, "PostProcess White Fallback", [255, 255, 255, 255]);
-        let (normal_tex, fallback_normal_view) =
-            create_1x1_texture(device, queue, "PostProcess Normal Fallback", [128, 128, 255, 255]);
+        let (white_tex, fallback_white_view) = create_1x1_texture(
+            device,
+            queue,
+            "PostProcess White Fallback",
+            [255, 255, 255, 255],
+        );
+        let (normal_tex, fallback_normal_view) = create_1x1_texture(
+            device,
+            queue,
+            "PostProcess Normal Fallback",
+            [128, 128, 255, 255],
+        );
         let (black_tex, fallback_black_view) =
             create_1x1_texture(device, queue, "PostProcess Black Fallback", [0, 0, 0, 0]);
 

@@ -279,13 +279,7 @@ pub fn sync_realm_resources<'a>(
                 })
             });
             let resolved_slots = mat.resolved_texture_slots();
-            let bg = create_material_bind_group(
-                device,
-                pipeline,
-                buf,
-                &resolved_slots,
-                textures,
-            );
+            let bg = create_material_bind_group(device, pipeline, buf, &resolved_slots, textures);
             *bg_opt = Some(bg);
         }
         pipeline.ensure_pipeline(

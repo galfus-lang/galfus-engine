@@ -1,5 +1,5 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
-import type { InvocationFilter } from '../../sdk/typescript/galfus.ts';
+import type { InvocationFilter, ViewportRect } from '../../sdk/typescript/galfus.ts';
 import { extractKey, eulerToQuat, quatFromLookAt } from './utils.ts';
 
 // Target IDs
@@ -258,11 +258,26 @@ export async function runDemoMv2(): Promise<void> {
   );
 
   // 2D Materials
-  galfus.realm2dCreateMaterial(REALM_2D, MAT_2D_BG_ID, { surfaceType: 'opaque', baseColor: [0.06, 0.07, 0.11, 1.0] });
-  galfus.realm2dCreateMaterial(REALM_2D, MAT_2D_CORE_ID, { surfaceType: 'opaque', baseColor: [0.95, 0.25, 0.45, 1.0] });
-  galfus.realm2dCreateMaterial(REALM_2D, MAT_2D_ORBIT_A_ID, { surfaceType: 'opaque', baseColor: [0.15, 0.85, 0.95, 1.0] });
-  galfus.realm2dCreateMaterial(REALM_2D, MAT_2D_ORBIT_B_ID, { surfaceType: 'opaque', baseColor: [1.0, 0.82, 0.2, 1.0] });
-  galfus.realm2dCreateMaterial(REALM_2D, MAT_2D_PARTICLE_ID, { surfaceType: 'additive', baseColor: [1.0, 0.9, 0.5, 1.0] });
+  galfus.realm2dCreateMaterial(REALM_2D, MAT_2D_BG_ID, {
+    surfaceType: 'opaque',
+    baseColor: [0.06, 0.07, 0.11, 1.0]
+  });
+  galfus.realm2dCreateMaterial(REALM_2D, MAT_2D_CORE_ID, {
+    surfaceType: 'opaque',
+    baseColor: [0.95, 0.25, 0.45, 1.0]
+  });
+  galfus.realm2dCreateMaterial(REALM_2D, MAT_2D_ORBIT_A_ID, {
+    surfaceType: 'opaque',
+    baseColor: [0.15, 0.85, 0.95, 1.0]
+  });
+  galfus.realm2dCreateMaterial(REALM_2D, MAT_2D_ORBIT_B_ID, {
+    surfaceType: 'opaque',
+    baseColor: [1.0, 0.82, 0.2, 1.0]
+  });
+  galfus.realm2dCreateMaterial(REALM_2D, MAT_2D_PARTICLE_ID, {
+    surfaceType: 'additive',
+    baseColor: [1.0, 0.9, 0.5, 1.0]
+  });
 
   // Background Sprite & Shapes
   galfus.realm2dCreateSprite(
@@ -275,21 +290,39 @@ export async function runDemoMv2(): Promise<void> {
   galfus.realm2dCreateShape(
     REALM_2D,
     SHAPE_2D_CORE_ID,
-    { kind: 'rectangle', size: [3.2, 3.2], materialId: MAT_2D_CORE_ID, castShadow: false, receiveShadow: false },
+    {
+      kind: 'rectangle',
+      size: [3.2, 3.2],
+      materialId: MAT_2D_CORE_ID,
+      castShadow: false,
+      receiveShadow: false
+    },
     { position: [0.0, 0.0], rotation: 0.0, zLayer: 2 }
   );
 
   galfus.realm2dCreateShape(
     REALM_2D,
     SHAPE_2D_ORBIT_A_ID,
-    { kind: 'circle', radius: 1.0, materialId: MAT_2D_ORBIT_A_ID, castShadow: false, receiveShadow: false },
+    {
+      kind: 'circle',
+      radius: 1.0,
+      materialId: MAT_2D_ORBIT_A_ID,
+      castShadow: false,
+      receiveShadow: false
+    },
     { position: [3.5, 0.0], rotation: 0.0, zLayer: 3 }
   );
 
   galfus.realm2dCreateShape(
     REALM_2D,
     SHAPE_2D_ORBIT_B_ID,
-    { kind: 'rectangle', size: [1.6, 1.6], materialId: MAT_2D_ORBIT_B_ID, castShadow: false, receiveShadow: false },
+    {
+      kind: 'rectangle',
+      size: [1.6, 1.6],
+      materialId: MAT_2D_ORBIT_B_ID,
+      castShadow: false,
+      receiveShadow: false
+    },
     { position: [-3.5, 0.0], rotation: 0.0, zLayer: 3 }
   );
 
@@ -361,14 +394,15 @@ export async function runDemoMv2(): Promise<void> {
   });
   console.log('    [Pass 2] 3D Main (#101): Realm 3D -> Fullscreen Window (z: 0)');
 
-  // Invocation 3: Realm 2D renders as Corner Minimap HUD overlay (right corner with padding)
+  // Invocation 3: Realm 2D renders as Corner Minimap HUD overlay using CSS-like responsive anchored viewport
   let minimapBottom = false;
-  const getMinimapViewport = (bottom: boolean) => ({
-    unit: 'normalized' as const,
-    x: 0.70,
-    y: bottom ? 0.64 : 0.04,
-    width: 0.26,
-    height: 0.32
+  const getMinimapViewport = (bottom: boolean): ViewportRect => ({
+    anchorX: 'right',
+    anchorY: bottom ? 'bottom' : 'top',
+    offsetX: { px: -24 },
+    offsetY: { px: bottom ? -24 : 24 },
+    width: { vh: 28 },
+    height: { vh: 28 }
   });
 
   galfus.multiverseCreateInvocation(INVOCATION_2D_MINIMAP, {
@@ -381,15 +415,15 @@ export async function runDemoMv2(): Promise<void> {
     enabled: true,
     clearColor: [0.06, 0.07, 0.11, 1.0]
   });
-  console.log('    [Pass 3] Minimap (#102): Realm 2D -> HUD Overlay (Right Corner with Padding, z: 10)');
+  console.log(
+    '    [Pass 3] Minimap (#102): Realm 2D -> HUD Overlay (Right Corner with Padding, z: 10)'
+  );
 
   // Resolve and inspect schedule order
   const schedule = galfus.multiverseResolve();
   console.log(`✔ Multiverse DAG resolved: ${schedule.targetBlocks.length} target blocks ordered:`);
   for (const block of schedule.targetBlocks) {
-    console.log(
-      `   Target #${block.targetId} with ${block.invocations.length} invocations`
-    );
+    console.log(`   Target #${block.targetId} with ${block.invocations.length} invocations`);
   }
 
   console.log(`
@@ -480,7 +514,11 @@ Controls:
       // Animate 3D Point Light Orbit
       const lightOrbit = totalTime * 1.5;
       galfus.realm3dSetLightTransform(REALM_3D, LIGHT_3D_POINT_ID, {
-        position: [Math.cos(lightOrbit) * 3.2, 2.0 + Math.sin(lightOrbit * 2.0) * 0.8, Math.sin(lightOrbit) * 3.2],
+        position: [
+          Math.cos(lightOrbit) * 3.2,
+          2.0 + Math.sin(lightOrbit * 2.0) * 0.8,
+          Math.sin(lightOrbit) * 3.2
+        ],
         rotation: [0, 0, 0, 1],
         scale: [1, 1, 1]
       });
@@ -538,9 +576,7 @@ Controls:
               INVOCATION_2D_MINIMAP,
               getMinimapViewport(minimapBottom)
             );
-            console.log(
-              `Minimap Corner: ${minimapBottom ? 'BOTTOM-RIGHT' : 'TOP-RIGHT'}`
-            );
+            console.log(`Minimap Corner: ${minimapBottom ? 'BOTTOM-RIGHT' : 'TOP-RIGHT'}`);
           }
 
           if (key === 'f') {

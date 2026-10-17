@@ -453,14 +453,7 @@ impl Realm for Realm2DContext {
                 multiview_mask: None,
             });
 
-            rpass.set_viewport(
-                0.0,
-                0.0,
-                width as f32,
-                height as f32,
-                0.0,
-                1.0,
-            );
+            rpass.set_viewport(0.0, 0.0, width as f32, height as f32, 0.0, 1.0);
             rpass.set_vertex_buffer(0, quad_vbo.slice(..));
             rpass.set_vertex_buffer(1, instance_buf.slice(..));
             rpass.set_index_buffer(quad_ibo.slice(..), wgpu::IndexFormat::Uint16);

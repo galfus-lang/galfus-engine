@@ -81,10 +81,81 @@ impl InvocationFilter {
     }
 }
 
+/// Measurement unit for viewport sizing and positioning (physical pixels, target width % or target height %).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UnitValue {
+    /// Fixed physical pixels.
+    Px(f32),
+    /// Percentage (0.0..=100.0) of target width (CSS vw).
+    Vw(f32),
+    /// Percentage (0.0..=100.0) of target height (CSS vh).
+    Vh(f32),
+}
+
+impl Default for UnitValue {
+    fn default() -> Self {
+        Self::Px(0.0)
+    }
+}
+
+impl UnitValue {
+    /// Resolves the unit value to physical pixels given target dimensions.
+    pub fn resolve(&self, target_size: UVec2) -> f32 {
+        match *self {
+            Self::Px(val) => val,
+            Self::Vw(pct) => (pct / 100.0) * target_size.x as f32,
+            Self::Vh(pct) => (pct / 100.0) * target_size.y as f32,
+        }
+    }
+}
+
+/// Horizontal viewport anchor point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AnchorX {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
+/// Vertical viewport anchor point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AnchorY {
+    #[default]
+    Top,
+    Center,
+    Bottom,
+}
+
 /// Layout specification for a realm invocation's viewport.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "unit")]
+#[serde(untagged, rename_all = "camelCase")]
 pub enum ViewportRect {
+    /// Responsive viewport anchored to an edge/corner with independent CSS units (px, vw, vh).
+    #[serde(rename_all = "camelCase")]
+    Anchored {
+        #[serde(default)]
+        anchor_x: AnchorX,
+        #[serde(default)]
+        anchor_y: AnchorY,
+        #[serde(default)]
+        offset_x: UnitValue,
+        #[serde(default)]
+        offset_y: UnitValue,
+        width: UnitValue,
+        height: UnitValue,
+    },
+    /// Legacy explicit coordinates format.
+    Legacy(LegacyViewportRect),
+}
+
+/// Legacy viewport representation.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "unit")]
+pub enum LegacyViewportRect {
     /// Physical pixel coordinates [x, y, width, height].
     Pixels {
         x: u32,
@@ -102,45 +173,108 @@ pub enum ViewportRect {
 }
 
 impl ViewportRect {
-    /// Creates a viewport in physical pixels.
-    pub const fn pixels(x: u32, y: u32, width: u32, height: u32) -> Self {
-        Self::Pixels {
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-
-    /// Creates a viewport in normalized coordinates (0.0..=1.0).
-    pub const fn normalized(x: f32, y: f32, width: f32, height: f32) -> Self {
-        Self::Normalized {
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-
-    /// Fullscreen viewport spanning 100% of target dimensions.
+    /// Fullscreen viewport spanning 100vw and 100vh.
     pub const fn full() -> Self {
-        Self::Normalized {
-            x: 0.0,
-            y: 0.0,
-            width: 1.0,
-            height: 1.0,
+        Self::Anchored {
+            anchor_x: AnchorX::Left,
+            anchor_y: AnchorY::Top,
+            offset_x: UnitValue::Px(0.0),
+            offset_y: UnitValue::Px(0.0),
+            width: UnitValue::Vw(100.0),
+            height: UnitValue::Vh(100.0),
+        }
+    }
+
+    /// Creates a viewport in physical pixels (legacy helper).
+    pub const fn pixels(x: u32, y: u32, width: u32, height: u32) -> Self {
+        Self::Legacy(LegacyViewportRect::Pixels {
+            x,
+            y,
+            width,
+            height,
+        })
+    }
+
+    /// Creates a viewport in normalized coordinates (legacy helper).
+    pub const fn normalized(x: f32, y: f32, width: f32, height: f32) -> Self {
+        Self::Legacy(LegacyViewportRect::Normalized {
+            x,
+            y,
+            width,
+            height,
+        })
+    }
+
+    /// Creates an anchored viewport with CSS-like units.
+    pub const fn anchored(
+        anchor_x: AnchorX,
+        anchor_y: AnchorY,
+        offset_x: UnitValue,
+        offset_y: UnitValue,
+        width: UnitValue,
+        height: UnitValue,
+    ) -> Self {
+        Self::Anchored {
+            anchor_x,
+            anchor_y,
+            offset_x,
+            offset_y,
+            width,
+            height,
         }
     }
 
     /// Resolves the viewport against target dimensions.
     pub fn resolve(&self, target_size: UVec2) -> UVec4 {
         match *self {
-            Self::Pixels {
+            Self::Anchored {
+                anchor_x,
+                anchor_y,
+                offset_x,
+                offset_y,
+                width,
+                height,
+            } => {
+                let w = width.resolve(target_size).max(1.0).round() as u32;
+                let h = height.resolve(target_size).max(1.0).round() as u32;
+
+                let base_x = match anchor_x {
+                    AnchorX::Left => 0.0,
+                    AnchorX::Center => 0.5 * target_size.x as f32,
+                    AnchorX::Right => target_size.x as f32,
+                };
+                let pivot_x = match anchor_x {
+                    AnchorX::Left => 0.0,
+                    AnchorX::Center => 0.5,
+                    AnchorX::Right => 1.0,
+                };
+
+                let base_y = match anchor_y {
+                    AnchorY::Top => 0.0,
+                    AnchorY::Center => 0.5 * target_size.y as f32,
+                    AnchorY::Bottom => target_size.y as f32,
+                };
+                let pivot_y = match anchor_y {
+                    AnchorY::Top => 0.0,
+                    AnchorY::Center => 0.5,
+                    AnchorY::Bottom => 1.0,
+                };
+
+                let raw_x = base_x - (pivot_x * w as f32) + offset_x.resolve(target_size);
+                let raw_y = base_y - (pivot_y * h as f32) + offset_y.resolve(target_size);
+
+                let px = (raw_x.round() as i64).clamp(0, target_size.x as i64) as u32;
+                let py = (raw_y.round() as i64).clamp(0, target_size.y as i64) as u32;
+                let pw = w.min(target_size.x.saturating_sub(px)).max(1);
+                let ph = h.min(target_size.y.saturating_sub(py)).max(1);
+                UVec4::new(px, py, pw, ph)
+            }
+            Self::Legacy(LegacyViewportRect::Pixels {
                 x,
                 y,
                 width,
                 height,
-            } => {
+            }) => {
                 let px = x.min(target_size.x);
                 let py = y.min(target_size.y);
                 let w = if width == 0 {
@@ -155,12 +289,12 @@ impl ViewportRect {
                 };
                 UVec4::new(px, py, w, h)
             }
-            Self::Normalized {
+            Self::Legacy(LegacyViewportRect::Normalized {
                 x,
                 y,
                 width,
                 height,
-            } => {
+            }) => {
                 let tw = target_size.x as f32;
                 let th = target_size.y as f32;
                 let px = ((x.clamp(0.0, 1.0) * tw).round() as u32).min(target_size.x);
@@ -298,5 +432,84 @@ mod tests {
                 sampler_index: 0,
             }
         );
+    }
+
+    #[test]
+    fn test_anchored_viewport_resolution() {
+        let target = UVec2::new(1000, 800);
+
+        // 1. Top-Right minimap: 28vh x 28vh with 20px padding
+        let minimap = ViewportRect::anchored(
+            AnchorX::Right,
+            AnchorY::Top,
+            UnitValue::Px(-20.0),
+            UnitValue::Px(20.0),
+            UnitValue::Vh(25.0),
+            UnitValue::Vh(25.0),
+        );
+        let resolved = minimap.resolve(target);
+        // 25% of 800 = 200
+        assert_eq!(resolved.z, 200);
+        assert_eq!(resolved.w, 200);
+        // x: 1000 - 200 - 20 = 780
+        assert_eq!(resolved.x, 780);
+        // y: 0 + 20 = 20
+        assert_eq!(resolved.y, 20);
+
+        // 2. Center HUD: 50vw x 40vh centered
+        let center_hud = ViewportRect::anchored(
+            AnchorX::Center,
+            AnchorY::Center,
+            UnitValue::Px(0.0),
+            UnitValue::Px(0.0),
+            UnitValue::Vw(50.0),
+            UnitValue::Vh(40.0),
+        );
+        let hud_res = center_hud.resolve(target);
+        assert_eq!(hud_res.z, 500);
+        assert_eq!(hud_res.w, 320);
+        assert_eq!(hud_res.x, 250);
+        assert_eq!(hud_res.y, 240);
+
+        // 3. Bottom-Right minimap: 200px x 200px with -20px padding
+        let bottom_right = ViewportRect::anchored(
+            AnchorX::Right,
+            AnchorY::Bottom,
+            UnitValue::Px(-20.0),
+            UnitValue::Px(-20.0),
+            UnitValue::Px(200.0),
+            UnitValue::Px(200.0),
+        );
+        let br_res = bottom_right.resolve(target);
+        assert_eq!(br_res.z, 200);
+        assert_eq!(br_res.w, 200);
+        assert_eq!(br_res.x, 780);
+        assert_eq!(br_res.y, 580);
+    }
+
+    #[test]
+    fn test_anchored_viewport_serde_json() {
+        let json_anchored = r#"{
+            "anchorX": "right",
+            "anchorY": "top",
+            "offsetX": {"px": -24.0},
+            "offsetY": {"px": 24.0},
+            "width": {"vh": 28.0},
+            "height": {"vh": 28.0}
+        }"#;
+        let vp: ViewportRect = serde_json::from_str(json_anchored).unwrap();
+        let target = UVec2::new(1920, 1080);
+        let res = vp.resolve(target);
+        // 28% of 1080 = 302.4 -> 302
+        assert_eq!(res.w, 302);
+        assert_eq!(res.z, 302);
+        // x: 1920 - 302 - 24 = 1594
+        assert_eq!(res.x, 1594);
+        assert_eq!(res.y, 24);
+
+        // Legacy formats still deserialize cleanly
+        let json_legacy_norm = r#"{"unit":"normalized","x":0.0,"y":0.0,"width":1.0,"height":0.5}"#;
+        let vp_norm: ViewportRect = serde_json::from_str(json_legacy_norm).unwrap();
+        assert_eq!(vp_norm.resolve(target), UVec4::new(0, 0, 1920, 540));
     }
 }
