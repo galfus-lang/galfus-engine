@@ -515,5 +515,55 @@ export const realm3dFunctions: FunctionSpec[] = [
       { name: 'portalId', type: 'u32', doc: 'Logical ID of the Portal.' }
     ],
     returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_destroy_camera',
+    methodName: 'realm3dDestroyCamera',
+    doc: 'Destroys an existing 3D camera entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_destroy_material',
+    methodName: 'realm3dDestroyMaterial',
+    doc: 'Destroys an existing 3D material entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'materialId', type: 'u32', doc: 'Logical ID of the Material.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_destroy_geometry',
+    methodName: 'realm3dDestroyGeometry',
+    doc: 'Destroys an existing 3D geometry entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_destroy_model',
+    methodName: 'realm3dDestroyModel',
+    doc: 'Destroys an existing 3D model entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'modelId', type: 'u32', doc: 'Logical ID of the Model.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_destroy_light',
+    methodName: 'realm3dDestroyLight',
+    doc: 'Destroys an existing 3D light entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'lightId', type: 'u32', doc: 'Logical ID of the Light.' }
+    ],
+    returnType: 'i32'
   }
 ];

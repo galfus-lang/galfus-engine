@@ -1,5 +1,6 @@
 import { runDemoMv1 } from './demo_mv1_multiverse.ts';
 import { runDemoMv2 } from './demo_mv2_split_texture_reuse.ts';
+import { runDemoMv3 } from './demo_mv3_cycle_multiverse.ts';
 import { runDemo3d1 } from './demo_3d1_orbit.ts';
 import { runDemo3d2 } from './demo_3d2_bones.ts';
 import { runDemo3d3 } from './demo_3d3_ssao_shadows.ts';
@@ -19,6 +20,7 @@ function printHelp(): void {
   console.log('  [Multiverse]');
   console.log('    mv1   - Split-screen viewports & post-processing filters (Default)');
   console.log('    mv2   - Fullscreen 3D + 2D corner minimap & RTT texture reuse on 3D cube');
+  console.log('    mv3   - Multiverse Realm Cyclic Dependencies & Soft-Cut Feedback Loop');
   console.log('\n  [Realm 3D]');
   console.log('    3d1   - Reverse-Z, interactive camera orbit, and dynamic lighting');
   console.log('    3d2   - Procedural Skeletal Bones (12-Joint Skinning & Shadows)');
@@ -48,6 +50,10 @@ async function main(): Promise<void> {
 
     case 'mv2':
       await runDemoMv2();
+      break;
+
+    case 'mv3':
+      await runDemoMv3();
       break;
 
     case '3d1':

@@ -324,5 +324,55 @@ export const realm2dFunctions: FunctionSpec[] = [
       { name: 'emitterId', type: 'u32', doc: 'Logical ID of the Particle Emitter.' }
     ],
     returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_destroy_camera',
+    methodName: 'realm2dDestroyCamera',
+    doc: 'Destroys an existing 2D camera entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_destroy_material',
+    methodName: 'realm2dDestroyMaterial',
+    doc: 'Destroys an existing 2D material entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'materialId', type: 'u32', doc: 'Logical ID of the Material.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_destroy_sprite',
+    methodName: 'realm2dDestroySprite',
+    doc: 'Destroys an existing 2D sprite entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'spriteId', type: 'u32', doc: 'Logical ID of the Sprite.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_destroy_shape',
+    methodName: 'realm2dDestroyShape',
+    doc: 'Destroys an existing 2D shape entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'shapeId', type: 'u32', doc: 'Logical ID of the Shape.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_destroy_light',
+    methodName: 'realm2dDestroyLight',
+    doc: 'Destroys an existing 2D light entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'lightId', type: 'u32', doc: 'Logical ID of the Light.' }
+    ],
+    returnType: 'i32'
   }
 ];

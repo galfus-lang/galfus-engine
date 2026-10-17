@@ -4,8 +4,8 @@ use crate::pipeline::{PipelineKey2D, PipelineManager2D};
 use crate::shadow::{ShadowManager2D, rasterize_shadow_samples_for_light};
 use crate::types::{
     BatchKey2D, Camera2D, Item2DInstanceRaw, Light2D, Material2D, Material2DUniform, Occluder2D,
-    OccluderSilhouette2D, ParticleEmitter2D, ParticleEmitterState2D, Shadow2DConfig, Shape2D,
-    Sprite2D, Transform2D,
+    OccluderSilhouette2D, ParticleEmitter2D, ParticleEmitterState2D, Shape2D, Sprite2D,
+    Transform2D,
 };
 use bytemuck::cast_slice;
 use galfus_realm_core::{
@@ -30,9 +30,9 @@ pub struct Realm2DContext {
     pub shadow_manager: ShadowManager2D,
     pub gpu_res: Option<GpuResources2D>,
 
-    total_time: f32,
-    material_bind_groups: HashMap<u32, wgpu::BindGroup>,
-    material_uniform_buffers: HashMap<u32, wgpu::Buffer>,
+    pub(crate) total_time: f32,
+    pub(crate) material_bind_groups: HashMap<u32, wgpu::BindGroup>,
+    pub(crate) material_uniform_buffers: HashMap<u32, wgpu::Buffer>,
 }
 
 impl Realm2DContext {
@@ -54,93 +54,6 @@ impl Realm2DContext {
             material_bind_groups: HashMap::new(),
             material_uniform_buffers: HashMap::new(),
         }
-    }
-
-    /// Sets or updates a camera in the realm.
-    pub fn set_camera(&mut self, camera_id: u32, camera: Camera2D, transform: Transform2D) {
-        self.cameras.insert(camera_id, (camera, transform));
-        self.dirty = true;
-    }
-    pub fn set_camera_transform(&mut self, camera_id: u32, transform: Transform2D) {
-        if let Some((_, t)) = self.cameras.get_mut(&camera_id) {
-            *t = transform;
-            self.dirty = true;
-        }
-    }
-    pub fn set_material(&mut self, material_id: u32, material: Material2D) {
-        self.materials.insert(material_id, material);
-        self.material_bind_groups.remove(&material_id);
-        self.material_uniform_buffers.remove(&material_id);
-        self.dirty = true;
-    }
-    pub fn set_sprite(&mut self, sprite_id: u32, sprite: Sprite2D, transform: Transform2D) {
-        self.sprites.insert(sprite_id, (sprite, transform));
-        self.dirty = true;
-    }
-    pub fn set_sprite_transform(&mut self, sprite_id: u32, transform: Transform2D) {
-        if let Some((_, t)) = self.sprites.get_mut(&sprite_id) {
-            *t = transform;
-            self.dirty = true;
-        }
-    }
-    pub fn set_shape(&mut self, shape_id: u32, shape: Shape2D, transform: Transform2D) {
-        self.shapes.insert(shape_id, (shape, transform));
-        self.dirty = true;
-    }
-    pub fn set_shape_transform(&mut self, shape_id: u32, transform: Transform2D) {
-        if let Some((_, t)) = self.shapes.get_mut(&shape_id) {
-            *t = transform;
-            self.dirty = true;
-        }
-    }
-    pub fn set_light(&mut self, light_id: u32, light: Light2D) {
-        self.lights.insert(light_id, light);
-        self.shadow_manager.mark_dirty();
-        self.dirty = true;
-    }
-    pub fn set_light_transform(&mut self, light_id: u32, transform: Transform2D) {
-        if let Some(light) = self.lights.get_mut(&light_id) {
-            light.position = transform.position;
-            light.z = transform.z_layer as f32;
-            self.shadow_manager.mark_dirty();
-            self.dirty = true;
-        }
-    }
-    pub fn set_shadow_config(&mut self, config: Shadow2DConfig) {
-        self.shadow_manager = ShadowManager2D::new(config);
-        self.dirty = true;
-    }
-
-    pub fn set_particle_emitter(
-        &mut self,
-        emitter_id: u32,
-        emitter: ParticleEmitter2D,
-        transform: Transform2D,
-    ) {
-        let max_particles = emitter.max_particles as usize;
-        let state = ParticleEmitterState2D::new(max_particles);
-        self.emitters
-            .insert(emitter_id, (emitter, transform, state));
-        self.dirty = true;
-    }
-
-    pub fn set_particle_emitter_transform(&mut self, emitter_id: u32, transform: Transform2D) {
-        if let Some((_, t, _)) = self.emitters.get_mut(&emitter_id) {
-            *t = transform;
-            self.dirty = true;
-        }
-    }
-
-    pub fn particle_emitter_burst(&mut self, emitter_id: u32, count: u32) {
-        if let Some((cfg, transform, state)) = self.emitters.get_mut(&emitter_id) {
-            state.burst(count, transform.position, cfg);
-            self.dirty = true;
-        }
-    }
-
-    pub fn remove_particle_emitter(&mut self, emitter_id: u32) {
-        self.emitters.remove(&emitter_id);
-        self.dirty = true;
     }
 
     fn ensure_gpu_resources(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {

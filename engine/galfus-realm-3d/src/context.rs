@@ -50,6 +50,7 @@ pub struct Realm3DContext {
     pub(crate) portal_pipeline: Option<crate::portal::PortalPipeline3D>,
     pub(crate) scene_buffers: Option<SceneGpuBuffers>,
     pub(crate) depth_texture: Option<(wgpu::Texture, wgpu::TextureView, UVec2)>,
+    pub(crate) model_bones: BTreeMap<u32, Vec<glam::Mat4>>,
     pub(crate) bones: Vec<glam::Mat4>,
     pub(crate) total_time: f32,
     pub(crate) dirty: bool,
@@ -80,6 +81,7 @@ impl Realm3DContext {
             portal_pipeline: None,
             scene_buffers: None,
             depth_texture: None,
+            model_bones: BTreeMap::new(),
             bones: Vec::new(),
             total_time: 0.0,
             dirty: true,
@@ -109,6 +111,8 @@ impl Realm for Realm3DContext {
                 transform.rotation,
             );
         }
+
+        self.rebuild_bones();
 
         if self.pipeline.is_none() {
             self.pipeline = Some(Pipeline3D::new(

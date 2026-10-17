@@ -87,19 +87,80 @@ impl Realm3DContext {
         matrices: &[glam::Mat4],
     ) -> RealmResult<()> {
         let realm_id = self.id;
-        let entry = self
-            .models
-            .get_mut(&model_id)
-            .ok_or_else(|| not_found(realm_id, "Model", model_id))?;
-        let bone_offset = self.bones.len() as u32;
-        let bone_count = matrices.len() as u32;
-        self.bones.extend_from_slice(matrices);
-        entry.0.bone_offset = bone_offset;
-        entry.0.bone_count = bone_count;
-        entry.2 = None;
-        entry.3 = None;
+        if !self.models.contains_key(&model_id) {
+            return Err(not_found(realm_id, "Model", model_id));
+        }
+        self.model_bones.insert(model_id, matrices.to_vec());
         self.dirty = true;
         Ok(())
+    }
+
+    /// Rebuilds the unified skeletal bone buffer from per-model bone states.
+    pub(crate) fn rebuild_bones(&mut self) {
+        if self.model_bones.is_empty() {
+            return;
+        }
+        self.bones.clear();
+        for (model_id, matrices) in &self.model_bones {
+            if let Some(entry) = self.models.get_mut(model_id) {
+                entry.0.bone_offset = self.bones.len() as u32;
+                entry.0.bone_count = matrices.len() as u32;
+                self.bones.extend_from_slice(matrices);
+                entry.2 = None;
+                entry.3 = None;
+            }
+        }
+    }
+
+    /// Destroys an existing `Camera3D`.
+    pub fn destroy_camera(&mut self, id: u32) -> RealmResult<()> {
+        self.cameras
+            .remove(&id)
+            .map(|_| {
+                self.dirty = true;
+            })
+            .ok_or_else(|| not_found(self.id, "Camera", id))
+    }
+
+    /// Destroys an existing `Material3D`.
+    pub fn destroy_material(&mut self, id: u32) -> RealmResult<()> {
+        self.materials
+            .remove(&id)
+            .map(|_| {
+                self.dirty = true;
+            })
+            .ok_or_else(|| not_found(self.id, "Material", id))
+    }
+
+    /// Destroys an existing `Geometry3D`.
+    pub fn destroy_geometry(&mut self, id: u32) -> RealmResult<()> {
+        self.geometries
+            .remove(&id)
+            .map(|_| {
+                self.dirty = true;
+            })
+            .ok_or_else(|| not_found(self.id, "Geometry", id))
+    }
+
+    /// Destroys an existing `Model3D` and its skeletal bone palette if present.
+    pub fn destroy_model(&mut self, id: u32) -> RealmResult<()> {
+        self.model_bones.remove(&id);
+        self.models
+            .remove(&id)
+            .map(|_| {
+                self.dirty = true;
+            })
+            .ok_or_else(|| not_found(self.id, "Model", id))
+    }
+
+    /// Destroys an existing `Light3D`.
+    pub fn destroy_light(&mut self, id: u32) -> RealmResult<()> {
+        self.lights
+            .remove(&id)
+            .map(|_| {
+                self.dirty = true;
+            })
+            .ok_or_else(|| not_found(self.id, "Light", id))
     }
 
     /// Registers or updates a `Light3D` with its `Transform3D`.

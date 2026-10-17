@@ -30,7 +30,8 @@ pub struct MultiverseContext {
     pub(crate) surfaces: HashMap<u32, GpuSurface>,
     pub(crate) target_textures:
         HashMap<u32, (GpuTextureHandle, GpuTextureViewHandle, wgpu::TextureFormat)>,
-    pub(crate) scratch_texture: Option<(GpuTextureHandle, GpuTextureViewHandle, UVec2)>,
+    pub(crate) scratch_textures: HashMap<u32, (GpuTextureHandle, GpuTextureViewHandle, UVec2)>,
+    pub(crate) ping_pong_texture: Option<(GpuTextureHandle, GpuTextureViewHandle, UVec2)>,
     pub(crate) post_processor: Option<PostProcessor>,
     pub(crate) gpu_manager: Option<GpuManager>,
 
@@ -58,7 +59,8 @@ impl MultiverseContext {
             gpu_manager: None,
             surfaces: HashMap::new(),
             target_textures: HashMap::new(),
-            scratch_texture: None,
+            scratch_textures: HashMap::new(),
+            ping_pong_texture: None,
             post_processor: None,
             cached_schedule: None,
             dirty: true,
@@ -264,7 +266,20 @@ impl MultiverseContext {
         ) {
             let _ = gpu.textures.destroy_texture(tex_handle);
         }
-        self.invocations.retain(|_, inv| inv.target_id != target_id);
+        let removed_invs: Vec<u32> = self
+            .invocations
+            .iter()
+            .filter(|(_, inv)| inv.target_id == target_id)
+            .map(|(&id, _)| id)
+            .collect();
+        for inv_id in removed_invs {
+            self.invocations.remove(&inv_id);
+            if let (Some((tex_h, _, _)), Some(gpu)) =
+                (self.scratch_textures.remove(&inv_id), &mut self.gpu_manager)
+            {
+                let _ = gpu.textures.destroy_texture(tex_h);
+            }
+        }
         self.bindings.retain(|b| b.source_target_id != target_id);
         self.dirty = true;
         Ok(())
@@ -301,7 +316,20 @@ impl MultiverseContext {
         if self.realms.remove(&realm_id).is_none() {
             return Err(MultiverseError::RealmNotFound(realm_id));
         }
-        self.invocations.retain(|_, inv| inv.realm_id != realm_id);
+        let removed_invs: Vec<u32> = self
+            .invocations
+            .iter()
+            .filter(|(_, inv)| inv.realm_id == realm_id)
+            .map(|(&id, _)| id)
+            .collect();
+        for inv_id in removed_invs {
+            self.invocations.remove(&inv_id);
+            if let (Some((tex_h, _, _)), Some(gpu)) =
+                (self.scratch_textures.remove(&inv_id), &mut self.gpu_manager)
+            {
+                let _ = gpu.textures.destroy_texture(tex_h);
+            }
+        }
         self.bindings.retain(|b| b.realm_id != realm_id);
         self.dirty = true;
         Ok(())
@@ -328,10 +356,16 @@ impl MultiverseContext {
         Ok(())
     }
 
-    /// Destroys an invocation.
+    /// Destroys an invocation and frees its scratch GPU texture if allocated.
     pub fn destroy_invocation(&mut self, invocation_id: u32) -> MultiverseResult<()> {
         if self.invocations.remove(&invocation_id).is_none() {
             return Err(MultiverseError::InvocationNotFound(invocation_id));
+        }
+        if let (Some((tex_h, _, _)), Some(gpu)) = (
+            self.scratch_textures.remove(&invocation_id),
+            &mut self.gpu_manager,
+        ) {
+            let _ = gpu.textures.destroy_texture(tex_h);
         }
         self.dirty = true;
         Ok(())

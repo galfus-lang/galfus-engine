@@ -78,7 +78,9 @@ pub unsafe extern "C" fn galfus_realm_2d_create_camera(
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
             .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm.set_camera(camera_id, cam_desc.into(), trans);
+        realm
+            .set_camera(camera_id, cam_desc.into(), trans)
+            .map_err(|e| e.to_string())?;
         Ok(())
     }) {
         Ok(()) => 0,
@@ -144,7 +146,9 @@ pub unsafe extern "C" fn galfus_realm_2d_create_material(
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
             .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm.set_material(material_id, mat_desc.into());
+        realm
+            .set_material(material_id, mat_desc.into())
+            .map_err(|e| e.to_string())?;
         Ok(())
     }) {
         Ok(()) => 0,
@@ -189,7 +193,9 @@ pub unsafe extern "C" fn galfus_realm_2d_create_sprite(
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
             .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm.set_sprite(sprite_id, sprite_desc.into(), trans);
+        realm
+            .set_sprite(sprite_id, sprite_desc.into(), trans)
+            .map_err(|e| e.to_string())?;
         Ok(())
     }) {
         Ok(()) => 0,
@@ -263,7 +269,9 @@ pub unsafe extern "C" fn galfus_realm_2d_create_shape(
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
             .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm.set_shape(shape_id, shape_desc.into(), trans);
+        realm
+            .set_shape(shape_id, shape_desc.into(), trans)
+            .map_err(|e| e.to_string())?;
         Ok(())
     }) {
         Ok(()) => 0,
@@ -335,7 +343,9 @@ pub unsafe extern "C" fn galfus_realm_2d_create_light(
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
             .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm.set_light(light_id, light);
+        realm
+            .set_light(light_id, light)
+            .map_err(|e| e.to_string())?;
         Ok(())
     }) {
         Ok(()) => 0,
@@ -452,7 +462,9 @@ pub unsafe extern "C" fn galfus_realm_2d_create_particle_emitter(
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
             .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm.set_particle_emitter(emitter_id, emitter_desc.into(), transform);
+        realm
+            .set_particle_emitter(emitter_id, emitter_desc.into(), transform)
+            .map_err(|e| e.to_string())?;
         Ok(())
     }) {
         Ok(()) => 0,

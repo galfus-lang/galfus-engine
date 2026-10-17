@@ -49,7 +49,6 @@ pub(crate) fn execute_frame(
     // 2. GPU execution path
     let gpu = ctx.gpu_manager.as_mut().unwrap();
     let mut surface_textures: HashMap<u32, wgpu::SurfaceTexture> = HashMap::new();
-    let mut scratch = ctx.scratch_texture.take();
 
     for block in &schedule.target_blocks {
         let target = ctx.targets.get(&block.target_id);
@@ -124,17 +123,22 @@ pub(crate) fn execute_frame(
             let vp = step.resolved_viewport;
             let width = vp.z.max(1);
             let height = vp.w.max(1);
+            let needed_size = UVec2::new(width, height);
 
-            // Ensure scratch texture matches invocation viewport size
-            if let Some((old_tex, _, size)) = scratch
-                && size != UVec2::new(width, height)
-            {
-                let _ = gpu.textures.destroy_texture(old_tex);
-                scratch = None;
-            }
-            if scratch.is_none() {
+            // Ensure invocation scratch texture matches its viewport size
+            let needs_scratch_realloc = match ctx.scratch_textures.get(&step.invocation_id) {
+                Some((_, _, size)) => *size != needed_size,
+                None => true,
+            };
+            if needs_scratch_realloc {
+                if let Some((old_tex, _, _)) = ctx.scratch_textures.remove(&step.invocation_id) {
+                    let _ = gpu.textures.destroy_texture(old_tex);
+                }
                 let tex_desc = GpuTextureDesc {
-                    label: Some("Multiverse Invocation Scratch Texture".to_string()),
+                    label: Some(format!(
+                        "Multiverse Invocation #{} Scratch",
+                        step.invocation_id
+                    )),
                     width,
                     height,
                     depth_or_layers: 1,
@@ -154,10 +158,11 @@ pub(crate) fn execute_frame(
                     .get_texture(tex_h)
                     .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
                     .default_view();
-                scratch = Some((tex_h, view_h, UVec2::new(width, height)));
+                ctx.scratch_textures
+                    .insert(step.invocation_id, (tex_h, view_h, needed_size));
             }
 
-            let (_, scratch_view_h, _) = scratch.as_ref().unwrap();
+            let (_, scratch_view_h, _) = ctx.scratch_textures.get(&step.invocation_id).unwrap();
             let scratch_view = gpu
                 .textures
                 .get_view(*scratch_view_h)
@@ -215,18 +220,44 @@ pub(crate) fn execute_frame(
                     .map_err(|e| MultiverseError::RealmError(realm.id(), e.to_string()))?;
             }
 
-            // Composite scratch texture into target_view with filter at viewport vp
+            if step.filters.len() > 1 {
+                let needs_pp_realloc = match ctx.ping_pong_texture {
+                    Some((_, _, size)) => size != needed_size,
+                    None => true,
+                };
+                if needs_pp_realloc {
+                    if let Some((old_tex, _, _)) = ctx.ping_pong_texture.take() {
+                        let _ = gpu.textures.destroy_texture(old_tex);
+                    }
+                    let pp_desc = GpuTextureDesc {
+                        label: Some("Multiverse Filter PingPong Texture".to_string()),
+                        width,
+                        height,
+                        depth_or_layers: 1,
+                        mip_levels: 1,
+                        sample_count: 1,
+                        dimension: TextureDimension::D2,
+                        format: NormalizedTextureFormat::Rgba8Unorm,
+                        usages: TextureUsageFlags::default(),
+                    };
+                    let device = gpu.context.device_arc();
+                    let pp_tex_h = gpu
+                        .textures
+                        .create_texture(&device, &pp_desc)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
+                    let pp_view_h = gpu
+                        .textures
+                        .get_texture(pp_tex_h)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
+                        .default_view();
+                    ctx.ping_pong_texture = Some((pp_tex_h, pp_view_h, needed_size));
+                }
+            }
+
+            // Composite scratch texture into target_view with filter chain at viewport vp
             if let (Some(target_v), Some(target_fmt), Some(post_proc)) =
                 (&target_view, target_format, &mut ctx.post_processor)
             {
-                let filter = step.filters.first();
-                let pass_desc = FilterPassDesc {
-                    src_view: &scratch_view,
-                    dst_view: target_v,
-                    dst_format: target_fmt,
-                    dst_size: target_size,
-                    viewport: Some(vp),
-                };
                 let target_textures = &ctx.target_textures;
                 let tex_resolver = |id: u32| {
                     if let Some((_, view_h, _)) = target_textures.get(&id)
@@ -236,18 +267,97 @@ pub(crate) fn execute_frame(
                     }
                     gpu.textures.get_logical_view(id).ok().map(|v| v.raw())
                 };
-                post_proc.render_filter(
-                    gpu.device(),
-                    gpu.queue(),
-                    filter,
-                    &tex_resolver,
-                    &pass_desc,
-                )?;
+
+                if step.filters.is_empty() {
+                    let pass_desc = FilterPassDesc {
+                        src_view: &scratch_view,
+                        dst_view: target_v,
+                        dst_format: target_fmt,
+                        dst_size: target_size,
+                        viewport: Some(vp),
+                    };
+                    post_proc.render_filter(
+                        gpu.device(),
+                        gpu.queue(),
+                        None,
+                        &tex_resolver,
+                        &pass_desc,
+                    )?;
+                } else if step.filters.len() == 1 {
+                    let pass_desc = FilterPassDesc {
+                        src_view: &scratch_view,
+                        dst_view: target_v,
+                        dst_format: target_fmt,
+                        dst_size: target_size,
+                        viewport: Some(vp),
+                    };
+                    post_proc.render_filter(
+                        gpu.device(),
+                        gpu.queue(),
+                        Some(&step.filters[0]),
+                        &tex_resolver,
+                        &pass_desc,
+                    )?;
+                } else {
+                    // Multi-filter chaining via ping-pong intermediate texture
+                    let pp_view_h = ctx.ping_pong_texture.as_ref().unwrap().1;
+                    let ping_pong_view = gpu
+                        .textures
+                        .get_view(pp_view_h)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
+                        .raw()
+                        .clone();
+
+                    let mut current_is_scratch = true;
+                    for (i, filter) in step.filters.iter().enumerate() {
+                        let is_last = i == step.filters.len() - 1;
+                        if is_last {
+                            let src = if current_is_scratch {
+                                &scratch_view
+                            } else {
+                                &ping_pong_view
+                            };
+                            let pass_desc = FilterPassDesc {
+                                src_view: src,
+                                dst_view: target_v,
+                                dst_format: target_fmt,
+                                dst_size: target_size,
+                                viewport: Some(vp),
+                            };
+                            post_proc.render_filter(
+                                gpu.device(),
+                                gpu.queue(),
+                                Some(filter),
+                                &tex_resolver,
+                                &pass_desc,
+                            )?;
+                        } else {
+                            let (src, dst) = if current_is_scratch {
+                                (&scratch_view, &ping_pong_view)
+                            } else {
+                                (&ping_pong_view, &scratch_view)
+                            };
+                            let pass_desc = FilterPassDesc {
+                                src_view: src,
+                                dst_view: dst,
+                                dst_format: wgpu::TextureFormat::Rgba8Unorm,
+                                dst_size: needed_size,
+                                viewport: None,
+                            };
+                            post_proc.render_filter(
+                                gpu.device(),
+                                gpu.queue(),
+                                Some(filter),
+                                &tex_resolver,
+                                &pass_desc,
+                            )?;
+                            current_is_scratch = !current_is_scratch;
+                        }
+                    }
+                }
             }
         }
     }
-
-    ctx.scratch_texture = scratch;
 
     // Present all active window swapchains
     for (_, surface_tex) in surface_textures {

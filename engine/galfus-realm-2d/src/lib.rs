@@ -3,6 +3,7 @@
 //! Complete 2D rendering realm providing high-performance batched sprite rendering,
 //! vector shapes, dynamic 2D point lighting, polar soft shadows, and custom surface effects.
 
+pub mod api;
 pub mod batch;
 pub mod context;
 pub mod gpu;
