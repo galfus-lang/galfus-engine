@@ -7,7 +7,7 @@ use crate::window::WindowEvent;
 
 /// Aggregated, normalized platform event delivered to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase")]
 pub enum PlatformEvent {
     /// Window lifecycle, dimensions, or state event.
     Window(WindowEvent),

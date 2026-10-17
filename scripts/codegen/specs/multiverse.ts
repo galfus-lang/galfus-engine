@@ -488,5 +488,54 @@ export const multiverseFunctions: FunctionSpec[] = [
       }
     ],
     returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_clear',
+    methodName: 'realmClear',
+    doc: 'Clears all entities, materials, and scene resources in a Realm without unregistering it.',
+    params: [
+      {
+        name: 'realmId',
+        type: 'u32',
+        doc: 'Logical ID of the Realm to clear'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_destroy',
+    methodName: 'realmDestroy',
+    doc: 'Destroys a Realm, frees all internal GPU resources, and unregisters it from the Multiverse.',
+    params: [
+      {
+        name: 'realmId',
+        type: 'u32',
+        doc: 'Logical ID of the Realm to destroy'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_get_target_size',
+    methodName: 'multiverseGetTargetSizeRaw',
+    doc: 'Reads the resolved size (width, height) of a Multiverse Target into two uint32 out pointers.',
+    params: [
+      {
+        name: 'targetId',
+        type: 'u32',
+        doc: 'Target logical ID'
+      },
+      {
+        name: 'outWidth',
+        type: 'ptr',
+        doc: 'Pointer to uint32 receiving width in physical pixels'
+      },
+      {
+        name: 'outHeight',
+        type: 'ptr',
+        doc: 'Pointer to uint32 receiving height in physical pixels'
+      }
+    ],
+    returnType: 'i32'
   }
 ];

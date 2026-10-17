@@ -464,19 +464,17 @@ export async function runDemo2d2(): Promise<void> {
     // Pump window and input events
     const events = galfus.platformPumpEvents();
     for (const ev of events) {
-      if ('window' in ev) {
-        const win = ev.window;
-        if ('closeRequested' in win) {
+      if (ev.kind === 'window') {
+        if (ev.type === 'closeRequested') {
           running = false;
           break;
-        } else if ('resized' in win) {
-          windowSize = [win.resized.width, win.resized.height];
-          galfus.multiverseUpdateWindowSize(windowId, win.resized.width, win.resized.height);
+        } else if (ev.type === 'resized') {
+          windowSize = [ev.width, ev.height];
+          galfus.multiverseUpdateWindowSize(windowId, ev.width, ev.height);
         }
-      } else if ('keyboard' in ev && 'input' in ev.keyboard) {
-        const input = ev.keyboard.input;
-        const key = extractKey(input);
-        if (input.state === 'pressed') {
+      } else if (ev.kind === 'keyboard' && ev.type === 'input') {
+        const key = extractKey(ev);
+        if (ev.state === 'pressed') {
           keysDown.add(key);
 
           if (key === 'escape') {
@@ -506,7 +504,7 @@ export async function runDemo2d2(): Promise<void> {
             paused = false;
             console.log('[Reset] Restored default view.');
           }
-        } else if (input.state === 'released') {
+        } else if (ev.state === 'released') {
           keysDown.delete(key);
         }
       }

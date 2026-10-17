@@ -68,6 +68,12 @@ function renderDescriptor(desc: DescSpec): string {
 
 function mapParamTsType(type: DataType): string {
   if (isJson(type)) {
+    if (type.json === 'Transform3DDesc') {
+      return `Transform3DDesc | Float32Array | number[] | string`;
+    }
+    if (type.json === 'Transform2DDesc') {
+      return `Transform2DDesc | Float32Array | number[] | string`;
+    }
     return `${type.json} | string`;
   }
   if (isJsonArray(type)) {
@@ -86,6 +92,8 @@ function mapParamTsType(type: DataType): string {
       return 'string';
     case 'void':
       return 'void';
+    case 'ptr':
+      return 'any';
     default:
       return 'any';
   }
@@ -138,6 +146,43 @@ export class TypeScriptStrategy implements CodegenStrategy {
       lines.push('');
     }
 
+    lines.push(
+      '/** Ergonomic helper factories for ViewportRect responsive descriptors. */',
+      'export const ViewportRect = {',
+      '  full(): ViewportRect {',
+      '    return {',
+      '      width: { vw: 100 },',
+      '      height: { vh: 100 }',
+      '    };',
+      '  },',
+      '  px(x: number, y: number, width: number, height: number): ViewportRect {',
+      '    return {',
+      '      offsetX: { px: x },',
+      '      offsetY: { px: y },',
+      '      width: { px: width },',
+      '      height: { px: height }',
+      '    };',
+      '  },',
+      '  pip(',
+      "    anchorX: AnchorX = 'right',",
+      "    anchorY: AnchorY = 'bottom',",
+      '    widthVw = 30,',
+      '    heightVh = 30,',
+      '    marginPx = 20',
+      '  ): ViewportRect {',
+      '    return {',
+      '      anchorX,',
+      '      anchorY,',
+      '      offsetX: { px: marginPx },',
+      '      offsetY: { px: marginPx },',
+      '      width: { vw: widthVw },',
+      '      height: { vh: heightVh }',
+      '    };',
+      '  }',
+      '};',
+      ''
+    );
+
     lines.push('/** Native interface signature exposed by Galfus Engine (Node-API / Bun). */');
     lines.push('export interface GalfusEngine {');
 
@@ -148,6 +193,33 @@ export class TypeScriptStrategy implements CodegenStrategy {
       lines.push(`  /** ${fn.doc} */`);
       lines.push(`  ${fn.methodName}(${params}): ${retType};`);
     }
+
+    lines.push('  /** Reads the resolved physical size [width, height] of a Multiverse Target. */');
+    lines.push('  multiverseGetTargetSize?(targetId: number): [number, number];');
+    lines.push('  /** Reads the inner physical size [width, height] of a Platform window. */');
+    lines.push('  platformGetWindowSize?(windowId: number): [number, number];');
+    lines.push(
+      '  /** Reads the 10-float transform array [px, py, pz, rx, ry, rz, rw, sx, sy, sz] of a 3D model. */'
+    );
+    lines.push('  realm3dGetModelTransform?(realmId: number, modelId: number): Float32Array;');
+    lines.push(
+      '  /** Reads the 10-float transform array [px, py, pz, rx, ry, rz, rw, sx, sy, sz] of a 3D camera. */'
+    );
+    lines.push('  realm3dGetCameraTransform?(realmId: number, cameraId: number): Float32Array;');
+    lines.push(
+      '  /** Reads the world-space bounding box { min: [x,y,z], max: [x,y,z] } of a 3D model. */'
+    );
+    lines.push(
+      '  realm3dGetModelAabb?(realmId: number, modelId: number): { min: [number, number, number]; max: [number, number, number] };'
+    );
+    lines.push(
+      '  /** Reads the 6-float transform array [px, py, rot, sx, sy, zLayer] of a 2D sprite. */'
+    );
+    lines.push('  realm2dGetSpriteTransform?(realmId: number, spriteId: number): Float32Array;');
+    lines.push(
+      '  /** Reads the 6-float transform array [px, py, rot, sx, sy, zLayer] of a 2D camera. */'
+    );
+    lines.push('  realm2dGetCameraTransform?(realmId: number, cameraId: number): Float32Array;');
 
     lines.push('}', '');
     return lines.join('\n');

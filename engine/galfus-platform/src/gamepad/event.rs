@@ -4,7 +4,11 @@ use super::types::{GamepadAxis, GamepadButton, GamepadButtonState};
 
 /// Normalized gamepad input event.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum GamepadEvent {
     /// A new gamepad was connected.
     Connected {

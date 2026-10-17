@@ -280,5 +280,28 @@ export const platformFunctions: FunctionSpec[] = [
       }
     ],
     returnType: 'i32'
+  },
+  {
+    cName: 'galfus_platform_get_window_size',
+    methodName: 'platformGetWindowSizeRaw',
+    doc: 'Reads the physical inner size (width, height) of a Platform window into two uint32 out pointers.',
+    params: [
+      {
+        name: 'windowId',
+        type: 'u32',
+        doc: 'Window logical ID'
+      },
+      {
+        name: 'outWidth',
+        type: 'ptr',
+        doc: 'Pointer to uint32 receiving width in physical pixels'
+      },
+      {
+        name: 'outHeight',
+        type: 'ptr',
+        doc: 'Pointer to uint32 receiving height in physical pixels'
+      }
+    ],
+    returnType: 'i32'
   }
 ];

@@ -303,6 +303,11 @@ impl MultiverseContext {
         self.register_realm(Box::new(realm))
     }
 
+    /// Returns a downcasted reference to a registered Realm.
+    pub fn get_realm<T: 'static>(&self, realm_id: u32) -> Option<&T> {
+        self.realms.get(&realm_id)?.as_any().downcast_ref::<T>()
+    }
+
     /// Returns a downcasted mutable reference to a registered Realm.
     pub fn get_realm_mut<T: 'static>(&mut self, realm_id: u32) -> Option<&mut T> {
         self.realms
@@ -311,11 +316,41 @@ impl MultiverseContext {
             .downcast_mut::<T>()
     }
 
-    /// Unregisters a Realm and clears associated invocations.
-    pub fn unregister_realm(&mut self, realm_id: u32) -> MultiverseResult<()> {
-        if self.realms.remove(&realm_id).is_none() {
-            return Err(MultiverseError::RealmNotFound(realm_id));
+    /// Returns the resolved pixel size of a Target, if registered.
+    pub fn target_size(&self, target_id: u32) -> Option<glam::UVec2> {
+        let target = self.targets.get(&target_id)?;
+        match &target.kind {
+            crate::TargetKind::Window { window_id } => self
+                .window_sizes
+                .get(window_id)
+                .copied()
+                .or(Some(glam::UVec2::new(800, 600))),
+            crate::TargetKind::Texture { width, height, .. } => {
+                Some(glam::UVec2::new(*width, *height))
+            }
         }
+    }
+
+    /// Clears a Realm's entities and scene resources without unregistering it.
+    pub fn clear_realm(&mut self, realm_id: u32) -> MultiverseResult<()> {
+        let realm = self
+            .realms
+            .get_mut(&realm_id)
+            .ok_or(MultiverseError::RealmNotFound(realm_id))?;
+        realm
+            .clear()
+            .map_err(|e| MultiverseError::RealmError(realm_id, e.to_string()))?;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Unregisters a Realm, destroys its GPU resources, and clears associated invocations.
+    pub fn unregister_realm(&mut self, realm_id: u32) -> MultiverseResult<()> {
+        let mut realm = match self.realms.remove(&realm_id) {
+            Some(r) => r,
+            None => return Err(MultiverseError::RealmNotFound(realm_id)),
+        };
+        let _ = realm.destroy();
         let removed_invs: Vec<u32> = self
             .invocations
             .iter()
@@ -487,6 +522,29 @@ impl MultiverseContext {
     /// Resolves and returns the execution schedule, caching the result until the graph is mutated.
     pub fn resolve(&mut self) -> MultiverseResult<&MultiverseSchedule> {
         if self.dirty || self.cached_schedule.is_none() {
+            // Validate that if any realm references a Target ID as texture, a TargetTextureBinding exists
+            for (&realm_id, realm) in &self.realms {
+                for tex_id in realm.referenced_texture_ids() {
+                    if self.targets.contains_key(&tex_id) {
+                        let has_binding = self
+                            .bindings
+                            .iter()
+                            .any(|b| b.realm_id == realm_id && b.source_target_id == tex_id);
+                        if !has_binding {
+                            log::warn!(
+                                "[Multiverse WARNING] Realm {} material references Target ID {} as texture, but no TargetTextureBinding was declared in Multiverse!",
+                                realm_id,
+                                tex_id
+                            );
+                            eprintln!(
+                                "[Multiverse WARNING] Realm {} material references Target ID {} as texture, but no TargetTextureBinding was declared in Multiverse!",
+                                realm_id, tex_id
+                            );
+                        }
+                    }
+                }
+            }
+
             let schedule = resolve_schedule(
                 &self.targets,
                 &self.invocations,

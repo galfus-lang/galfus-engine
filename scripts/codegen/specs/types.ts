@@ -1,4 +1,5 @@
-export type PrimitiveType = 'void' | 'bool' | 'i32' | 'u32' | 'u64' | 'f32' | 'f64' | 'string';
+export type PrimitiveType =
+  'void' | 'bool' | 'i32' | 'u32' | 'u64' | 'f32' | 'f64' | 'string' | 'ptr';
 
 export type DataType = PrimitiveType | { json: string } | { jsonArray: string };
 

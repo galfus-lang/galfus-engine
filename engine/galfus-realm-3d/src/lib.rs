@@ -14,6 +14,7 @@ pub mod particle;
 pub mod pipeline;
 pub mod portal;
 pub mod postprocess;
+pub mod realm_impl;
 pub mod refraction;
 pub mod shader;
 pub mod shadow;

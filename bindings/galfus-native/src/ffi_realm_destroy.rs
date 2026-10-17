@@ -185,3 +185,29 @@ pub extern "C" fn galfus_realm_3d_destroy_light(realm_id: u32, light_id: u32) ->
         }
     }
 }
+
+// --- General Realm Lifecycle ---
+
+/// Clears all entities and scene resources in a Realm while keeping it registered.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_clear(realm_id: u32) -> i32 {
+    match with_multiverse_mut(|mv| mv.clear_realm(realm_id).map_err(|e| e.to_string())) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Destroys a Realm and unregisters it from the Multiverse, freeing all associated GPU resources.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_destroy(realm_id: u32) -> i32 {
+    match with_multiverse_mut(|mv| mv.unregister_realm(realm_id).map_err(|e| e.to_string())) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}

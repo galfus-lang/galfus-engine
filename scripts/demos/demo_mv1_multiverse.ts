@@ -168,23 +168,20 @@ export async function runDemoMv1(): Promise<void> {
 
       const events = galfus.platformPumpEvents();
       for (const ev of events) {
-        if ('window' in ev) {
-          const win = ev.window;
-          if ('closeRequested' in win) {
+        if (ev.kind === 'window') {
+          if (ev.type === 'closeRequested') {
             console.log('Window close requested.');
             running = false;
-          } else if ('resized' in win) {
-            galfus.multiverseUpdateWindowSize(windowId, win.resized.width, win.resized.height);
+          } else if (ev.type === 'resized') {
+            galfus.multiverseUpdateWindowSize(windowId, ev.width, ev.height);
           }
-        } else if ('pointer' in ev && 'button' in ev.pointer) {
-          const btn = ev.pointer.button;
-          if (btn.state === 'pressed' && btn.button === 'primary') {
+        } else if (ev.kind === 'pointer' && ev.type === 'button') {
+          if (ev.state === 'pressed' && ev.button === 'primary') {
             setColor(paletteIdx + 1);
           }
-        } else if ('keyboard' in ev && 'input' in ev.keyboard) {
-          const input = ev.keyboard.input;
-          if (input.state === 'pressed') {
-            const key = extractKey(input);
+        } else if (ev.kind === 'keyboard' && ev.type === 'input') {
+          if (ev.state === 'pressed') {
+            const key = extractKey(ev);
 
             if (key === 'escape') {
               console.log('Escape pressed: Exiting demo.');

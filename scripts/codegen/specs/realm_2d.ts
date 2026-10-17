@@ -374,5 +374,49 @@ export const realm2dFunctions: FunctionSpec[] = [
       { name: 'lightId', type: 'u32', doc: 'Logical ID of the Light.' }
     ],
     returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_set_sprite_transform_raw',
+    methodName: 'realm2dSetSpriteTransformRaw',
+    doc: 'Updates 2D sprite transform directly from a 6-float buffer [px, py, rot, sx, sy, z_layer].',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'spriteId', type: 'u32', doc: 'Logical ID of the Sprite.' },
+      { name: 'ptr', type: 'ptr', doc: 'Pointer to 6-element float array' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_set_camera_transform_raw',
+    methodName: 'realm2dSetCameraTransformRaw',
+    doc: 'Updates 2D camera transform directly from a 6-float buffer [px, py, rot, sx, sy, z_layer].',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' },
+      { name: 'ptr', type: 'ptr', doc: 'Pointer to 6-element float array' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_get_sprite_transform',
+    methodName: 'realm2dGetSpriteTransformRaw',
+    doc: 'Reads the transform of an existing Sprite instance into an out 6-float buffer.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'spriteId', type: 'u32', doc: 'Logical ID of the Sprite.' },
+      { name: 'outPtr', type: 'ptr', doc: 'Pointer to out 6-element float array' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_get_camera_transform',
+    methodName: 'realm2dGetCameraTransformRaw',
+    doc: 'Reads the transform of an existing Camera instance into an out 6-float buffer.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' },
+      { name: 'outPtr', type: 'ptr', doc: 'Pointer to out 6-element float array' }
+    ],
+    returnType: 'i32'
   }
 ];

@@ -77,92 +77,68 @@ export const platformDescriptors: DescSpec[] = [
     variants: [
       {
         inline: {
-          move: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                pointerId: { type: 'number' },
-                pointerType: { type: { ref: 'PointerType' } },
-                position: { type: { tuple: ['number', 'number'] } },
-                delta: { type: { tuple: ['number', 'number'] } },
-                pressure: { type: 'number' }
-              }
-            }
-          }
+          kind: { type: { literal: 'pointer' } },
+          type: { type: { literal: 'move' } },
+          windowId: { type: 'number' },
+          pointerId: { type: 'number' },
+          pointerType: { type: { ref: 'PointerType' } },
+          position: { type: { tuple: ['number', 'number'] } },
+          delta: { type: { tuple: ['number', 'number'] } },
+          pressure: { type: 'number' }
         }
       },
       {
         inline: {
-          button: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                pointerId: { type: 'number' },
-                pointerType: { type: { ref: 'PointerType' } },
-                position: { type: { tuple: ['number', 'number'] } },
-                button: { type: { ref: 'PointerButton' } },
-                state: { type: { ref: 'PointerButtonState' } },
-                pressure: { type: 'number' }
-              }
-            }
-          }
+          kind: { type: { literal: 'pointer' } },
+          type: { type: { literal: 'button' } },
+          windowId: { type: 'number' },
+          pointerId: { type: 'number' },
+          pointerType: { type: { ref: 'PointerType' } },
+          position: { type: { tuple: ['number', 'number'] } },
+          button: { type: { ref: 'PointerButton' } },
+          state: { type: { ref: 'PointerButtonState' } },
+          pressure: { type: 'number' }
         }
       },
       {
         inline: {
-          enter: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                pointerId: { type: 'number' },
-                pointerType: { type: { ref: 'PointerType' } },
-                position: { type: { tuple: ['number', 'number'] } }
-              }
-            }
-          }
+          kind: { type: { literal: 'pointer' } },
+          type: { type: { literal: 'enter' } },
+          windowId: { type: 'number' },
+          pointerId: { type: 'number' },
+          pointerType: { type: { ref: 'PointerType' } },
+          position: { type: { tuple: ['number', 'number'] } }
         }
       },
       {
         inline: {
-          leave: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                pointerId: { type: 'number' },
-                pointerType: { type: { ref: 'PointerType' } },
-                position: { type: { tuple: ['number', 'number'] } }
-              }
-            }
-          }
+          kind: { type: { literal: 'pointer' } },
+          type: { type: { literal: 'leave' } },
+          windowId: { type: 'number' },
+          pointerId: { type: 'number' },
+          pointerType: { type: { ref: 'PointerType' } },
+          position: { type: { tuple: ['number', 'number'] } }
         }
       },
       {
         inline: {
-          cancel: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                pointerId: { type: 'number' },
-                pointerType: { type: { ref: 'PointerType' } },
-                position: { type: { tuple: ['number', 'number'] } }
-              }
-            }
-          }
+          kind: { type: { literal: 'pointer' } },
+          type: { type: { literal: 'cancel' } },
+          windowId: { type: 'number' },
+          pointerId: { type: 'number' },
+          pointerType: { type: { ref: 'PointerType' } },
+          position: { type: { tuple: ['number', 'number'] } }
         }
       },
       {
         inline: {
-          scroll: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                pointerId: { type: 'number' },
-                pointerType: { type: { ref: 'PointerType' } },
-                position: { type: { tuple: ['number', 'number'] } },
-                delta: { type: { ref: 'ScrollDelta' } }
-              }
-            }
-          }
+          kind: { type: { literal: 'pointer' } },
+          type: { type: { literal: 'scroll' } },
+          windowId: { type: 'number' },
+          pointerId: { type: 'number' },
+          pointerType: { type: { ref: 'PointerType' } },
+          position: { type: { tuple: ['number', 'number'] } },
+          delta: { type: { ref: 'ScrollDelta' } }
         }
       }
     ]
@@ -197,31 +173,23 @@ export const platformDescriptors: DescSpec[] = [
     variants: [
       {
         inline: {
-          input: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                physicalKey: { type: 'string' },
-                logicalKey: { type: { ref: 'LogicalKey' } },
-                text: { type: 'string', optional: true },
-                state: { type: { ref: 'ElementState' } },
-                modifiers: { type: { ref: 'ModifiersState' } },
-                repeat: { type: 'boolean' }
-              }
-            }
-          }
+          kind: { type: { literal: 'keyboard' } },
+          type: { type: { literal: 'input' } },
+          windowId: { type: 'number' },
+          physicalKey: { type: 'string' },
+          logicalKey: { type: { ref: 'LogicalKey' } },
+          text: { type: 'string', optional: true },
+          state: { type: { ref: 'ElementState' } },
+          modifiers: { type: { ref: 'ModifiersState' } },
+          repeat: { type: 'boolean' }
         }
       },
       {
         inline: {
-          modifiersChanged: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                modifiers: { type: { ref: 'ModifiersState' } }
-              }
-            }
-          }
+          kind: { type: { literal: 'keyboard' } },
+          type: { type: { literal: 'modifiersChanged' } },
+          windowId: { type: 'number' },
+          modifiers: { type: { ref: 'ModifiersState' } }
         }
       }
     ]
@@ -233,87 +201,59 @@ export const platformDescriptors: DescSpec[] = [
     variants: [
       {
         inline: {
-          resized: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                width: { type: 'number' },
-                height: { type: 'number' },
-                scaleFactor: { type: 'number' }
-              }
-            }
-          }
+          kind: { type: { literal: 'window' } },
+          type: { type: { literal: 'resized' } },
+          windowId: { type: 'number' },
+          width: { type: 'number' },
+          height: { type: 'number' },
+          scaleFactor: { type: 'number' }
         }
       },
       {
         inline: {
-          moved: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                x: { type: 'number' },
-                y: { type: 'number' }
-              }
-            }
-          }
+          kind: { type: { literal: 'window' } },
+          type: { type: { literal: 'moved' } },
+          windowId: { type: 'number' },
+          x: { type: 'number' },
+          y: { type: 'number' }
         }
       },
       {
         inline: {
-          closeRequested: {
-            type: {
-              inline: {
-                windowId: { type: 'number' }
-              }
-            }
-          }
+          kind: { type: { literal: 'window' } },
+          type: { type: { literal: 'closeRequested' } },
+          windowId: { type: 'number' }
         }
       },
       {
         inline: {
-          focusChanged: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                focused: { type: 'boolean' }
-              }
-            }
-          }
+          kind: { type: { literal: 'window' } },
+          type: { type: { literal: 'focusChanged' } },
+          windowId: { type: 'number' },
+          focused: { type: 'boolean' }
         }
       },
       {
         inline: {
-          occluded: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                occluded: { type: 'boolean' }
-              }
-            }
-          }
+          kind: { type: { literal: 'window' } },
+          type: { type: { literal: 'occluded' } },
+          windowId: { type: 'number' },
+          occluded: { type: 'boolean' }
         }
       },
       {
         inline: {
-          scaleFactorChanged: {
-            type: {
-              inline: {
-                windowId: { type: 'number' },
-                scaleFactor: { type: 'number' }
-              }
-            }
-          }
+          kind: { type: { literal: 'window' } },
+          type: { type: { literal: 'scaleFactorChanged' } },
+          windowId: { type: 'number' },
+          scaleFactor: { type: 'number' }
         }
       },
       {
         inline: {
-          redrawRequested: {
-            type: {
-              inline: {
-                windowId: { type: 'number' }
-              }
-            }
-          }
+          kind: { type: { literal: 'window' } },
+          type: { type: { literal: 'redrawRequested' } },
+          windowId: { type: 'number' }
         }
       }
     ]
@@ -380,51 +320,35 @@ export const platformDescriptors: DescSpec[] = [
     variants: [
       {
         inline: {
-          connected: {
-            type: {
-              inline: {
-                gamepadId: { type: 'number' },
-                name: { type: 'string' }
-              }
-            }
-          }
+          kind: { type: { literal: 'gamepad' } },
+          type: { type: { literal: 'connected' } },
+          gamepadId: { type: 'number' },
+          name: { type: 'string' }
         }
       },
       {
         inline: {
-          disconnected: {
-            type: {
-              inline: {
-                gamepadId: { type: 'number' }
-              }
-            }
-          }
+          kind: { type: { literal: 'gamepad' } },
+          type: { type: { literal: 'disconnected' } },
+          gamepadId: { type: 'number' }
         }
       },
       {
         inline: {
-          button: {
-            type: {
-              inline: {
-                gamepadId: { type: 'number' },
-                button: { type: { ref: 'GamepadButton' } },
-                state: { type: { ref: 'GamepadButtonState' } }
-              }
-            }
-          }
+          kind: { type: { literal: 'gamepad' } },
+          type: { type: { literal: 'button' } },
+          gamepadId: { type: 'number' },
+          button: { type: { ref: 'GamepadButton' } },
+          state: { type: { ref: 'GamepadButtonState' } }
         }
       },
       {
         inline: {
-          axis: {
-            type: {
-              inline: {
-                gamepadId: { type: 'number' },
-                axis: { type: { ref: 'GamepadAxis' } },
-                value: { type: 'number' }
-              }
-            }
-          }
+          kind: { type: { literal: 'gamepad' } },
+          type: { type: { literal: 'axis' } },
+          gamepadId: { type: 'number' },
+          axis: { type: { ref: 'GamepadAxis' } },
+          value: { type: 'number' }
         }
       }
     ]
@@ -434,10 +358,10 @@ export const platformDescriptors: DescSpec[] = [
     name: 'PlatformEvent',
     doc: 'Root enum of all events dispatched from the platform layer.',
     variants: [
-      { inline: { window: { type: { ref: 'WindowEvent' } } } },
-      { inline: { pointer: { type: { ref: 'PointerEvent' } } } },
-      { inline: { keyboard: { type: { ref: 'KeyboardEvent' } } } },
-      { inline: { gamepad: { type: { ref: 'GamepadEvent' } } } }
+      { ref: 'WindowEvent' },
+      { ref: 'PointerEvent' },
+      { ref: 'KeyboardEvent' },
+      { ref: 'GamepadEvent' }
     ]
   }
 ];

@@ -40,6 +40,11 @@ impl Realm2DContext {
         }
     }
 
+    /// Returns the transform of an existing Camera2D.
+    pub fn get_camera_transform(&self, camera_id: u32) -> Option<Transform2D> {
+        self.cameras.get(&camera_id).map(|(_, t)| *t)
+    }
+
     pub fn set_material(&mut self, material_id: u32, material: Material2D) -> RealmResult<()> {
         self.validate_id(material_id)?;
         self.materials.insert(material_id, material);
@@ -66,6 +71,11 @@ impl Realm2DContext {
             *t = transform;
             self.dirty = true;
         }
+    }
+
+    /// Returns the transform of an existing Sprite2D.
+    pub fn get_sprite_transform(&self, sprite_id: u32) -> Option<Transform2D> {
+        self.sprites.get(&sprite_id).map(|(_, t)| *t)
     }
 
     pub fn set_shape(

@@ -429,19 +429,17 @@ CONTROLS:
     // Pump window and input events
     const events = galfus.platformPumpEvents();
     for (const ev of events) {
-      if ('window' in ev) {
-        const win = ev.window;
-        if ('closeRequested' in win) {
+      if (ev.kind === 'window') {
+        if (ev.type === 'closeRequested') {
           running = false;
           break;
-        } else if ('resized' in win) {
-          windowSize = [win.resized.width, win.resized.height];
-          galfus.multiverseUpdateWindowSize(windowId, win.resized.width, win.resized.height);
+        } else if (ev.type === 'resized') {
+          windowSize = [ev.width, ev.height];
+          galfus.multiverseUpdateWindowSize(windowId, ev.width, ev.height);
         }
-      } else if ('keyboard' in ev && 'input' in ev.keyboard) {
-        const input = ev.keyboard.input;
-        const key = extractKey(input);
-        if (input.state === 'pressed') {
+      } else if (ev.kind === 'keyboard' && ev.type === 'input') {
+        const key = extractKey(ev);
+        if (ev.state === 'pressed') {
           keysDown.add(key);
 
           if (key === 'escape') {
@@ -501,14 +499,13 @@ CONTROLS:
             updatePlayerLight();
             console.log('[Reset] Restored initial positions and parameters.');
           }
-        } else if (input.state === 'released') {
+        } else if (ev.state === 'released') {
           keysDown.delete(key);
         }
-      } else if ('pointer' in ev) {
-        const ptrEv = ev.pointer;
-        if ('button' in ptrEv) isMouseDown = ptrEv.button.state === 'pressed';
-        if (isMouseDown && ('button' in ptrEv || 'move' in ptrEv)) {
-          const pos = 'button' in ptrEv ? ptrEv.button.position : ptrEv.move.position;
+      } else if (ev.kind === 'pointer') {
+        if (ev.type === 'button') isMouseDown = ev.state === 'pressed';
+        if (isMouseDown && (ev.type === 'button' || ev.type === 'move')) {
+          const pos = ev.position;
           const aspect = windowSize[0] / Math.max(1, windowSize[1]);
           playerPos[0] = ((pos[0] / windowSize[0]) * 2.0 - 1.0) * (WORLD_HEIGHT * 0.5 * aspect);
           playerPos[1] = (1.0 - (pos[1] / windowSize[1]) * 2.0) * (WORLD_HEIGHT * 0.5);

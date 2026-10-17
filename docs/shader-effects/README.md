@@ -24,11 +24,11 @@ Instead of requiring developers or host applications to rewrite standard vertex 
 
 Shader Effects are specialized by domain across the engine's modular crates:
 
-| Domain              | Crate                         | Hook Function Signature                                | Primary Use Case                                                   |
-| :------------------ | :---------------------------- | :----------------------------------------------------- | :----------------------------------------------------------------- |
-| **Screen Effects**  | `galfus-multiverse`           | `fn screen_effect(in: ScreenInput) -> vec4<f32>`       | Post-processing, color grading, stylized filters, transitions      |
-| **Surface Effects** | `galfus-realm-3d`             | `fn surface_effect(in: SurfaceInput) -> SurfaceOutput` | PBR material customization, roughness, metallic, emissive, normals |
-| **Sprite Effects**  | `galfus-realm-2d` _(planned)_ | `fn sprite_effect(in: SpriteInput) -> vec4<f32>`       | 2D custom shaders, dissolve, glow, distortion                      |
+| Domain                 | Crate               | Hook Function Signature                                    | Primary Use Case                                                   |
+| :--------------------- | :------------------ | :--------------------------------------------------------- | :----------------------------------------------------------------- |
+| **Screen Effects**     | `galfus-multiverse` | `fn screen_effect(in: ScreenInput) -> vec4<f32>`           | Post-processing, color grading, stylized filters, transitions      |
+| **Surface Effects 3D** | `galfus-realm-3d`   | `fn surface_effect(in: SurfaceInput) -> SurfaceOutput`     | PBR material customization, roughness, metallic, emissive, normals |
+| **Surface Effects 2D** | `galfus-realm-2d`   | `fn surface_effect(in: SurfaceInput2D) -> SurfaceOutput2D` | 2D custom shaders, dissolve, glow, distortion                      |
 
 ---
 

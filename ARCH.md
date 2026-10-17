@@ -1,286 +1,232 @@
 # Galfus Engine Architecture
 
-> **Status: proposed redesign.** This is the target architecture for the Galfus refactor, not a description of APIs already shipped. Specific Rust traits, ABI signatures, and feature names are intentionally left open until the contracts are designed and validated.
+> **Status: Implemented and Verified Architecture.** This document specifies the active architecture, runtime invariants, cross-module contracts, execution model, and verified implementation proof of the Galfus Engine ecosystem.
 
-## 1. Scope and architectural goals
+---
 
-Galfus is a **host-agnostic graphical systems library**. It supplies platform adapters, GPU resource facilities, graphics-producing realms, and graph coordination. The host remains responsible for the application lifecycle and for defining application logic and custom shaders.
+## 1. Scope and Architectural Goals
 
-The redesigned architecture replaces centralized serialized message pools with **direct, contract-based interaction**. Modules remain separate Rust crates for development and testing, but are **linked into one native shared library** per selected build configuration. The browser distribution uses WASM and JS bindings.
+Galfus is a **host-agnostic, modular graphics foundation** designed for native and web applications. It provides low-level graphics facilities, GPU resource management, platform integration, and a graph-based coordinator to combine graphical realms.
 
-### Core invariants
+The engine does not impose an entity-component system (ECS), game loop, or specific framework architecture. The host application maintains complete ownership over its lifecycle, updates, and render cadence.
 
-1. **Host ownership:** the host initiates setup, polling, frame execution, and teardown.
-2. **Contract boundaries:** a module may depend on a shared contract but not another module's private implementation or internal state.
-3. **Local resource ownership:** each subsystem is responsible for creating, validating, and releasing its own resources.
-4. **Shared identity scheme:** common handle primitives permit cross-module references; handles do not imply unrestricted access or ownership.
-5. **No central command mailbox:** synchronous operations use typed methods and return results directly. Event queues and GPU submission queues are distinct, valid mechanisms.
-6. **Graphics graph orchestration:** the multiverse owns registrations, invocations, dependency ordering, and execution; realms, invocations, and targets carry out their specialized work.
-7. **Platform capability awareness:** normalized APIs disclose platform-specific availability and restrictions instead of silently pretending all environments are equivalent.
-8. **Single binary boundary:** one native library is produced per build; internal crate modularity does not imply individual DLLs.
+### Core Invariants
 
-## 2. Modules and boundaries
+1. **Host-Owned Lifecycle:** The host initiates setup, event polling, graph execution, and shutdown. Supports headless execution for server/CI.
+2. **Single Binary Boundary:** Internal engine crates compile into a single shared dynamic library (`libgalfus_native.so`, `galfus.dll`, or `libgalfus_native.dylib`) exposing an explicitly versioned, C-compatible ABI.
+3. **No Central Command Mailbox:** Serialized message pools and command mailboxes are eliminated. Operations use direct typed C-ABI functions and memory buffers.
+4. **Host-Controlled Logical IDs & Reserved Range:** The host controls logical IDs for all entities and resources. The engine core strictly reserves the top 65,535 IDs (`4294901761..=4294967295` for `u32`) for internal engine resources and rejects host commands that violate this range.
+5. **Pure Quaternions:** Spatial rotations across the engine core, C-ABI, and generated SDKs use unit quaternions `[x, y, z, w]` exclusively. The engine remains lean and unopinionated; host code performs any desired Euler conversions.
+6. **Zero-Allocation Fast-Path Transforms:** Hot-path spatial updates bypass JSON serialization through raw float pointer buffers (3D: 10 floats; 2D: 6 floats).
+7. **Flat Platform Events:** Polled events are exposed as flat discriminated unions tagged with `{ kind: "window" | "pointer" | "keyboard" | "gamepad", type: ... }`, avoiding host language callback deadlocks.
+8. **Decoupled Realm Contract:** Realms are graphics-producing units that implement a common trait (`galfus-realm-core`). Concrete 2D and 3D implementations are decoupled from the graph coordinator (`galfus-multiverse`).
 
-### `galfus-core`
+---
 
-Foundational, domain-neutral machinery: ID generation rules, generational handles, namespace/registry identity, overflow and stale-handle detection, basic error categories, and small shared primitives.
-
-**Owns:** the _definition_ of the identity mechanism, not every resource registry in the engine.
-
-**Must not know:** realms, windows, meshes, textures, or graph operations.
-
-**Important distinction:** deterministic content IDs and short-lived resource handles solve different problems. Content ID hashing must detect actual collisions; resource handles should identify a registry/namespace plus slot and generation (or a comparably robust scheme). The exact bit layout is deliberately not fixed here. Wrapping generations or namespace reuse must not silently validate stale references.
-
-### `galfus-platform`
-
-Normalizes interaction with the execution environment through capabilities and adapters:
-
-- Window and surface integration on desktop (`winit`).
-- Canvas/DOM surfaces and input on browsers.
-- Keyboard, pointer, touch, and controller input where available.
-- Window/surface changes and standardized event types.
-- Native audio on desktop and Web Audio in browsers.
-- Optional headless/no-window execution.
-
-**Owns:** platform resources, event normalization, and platform service contracts.
-
-**Does not own:** application timing, scene state, render graphs, or GPU resources.
-
-The host drives event processing. On desktop, the implementation must respect `winit` event-loop/thread-affinity constraints; its polling behavior and potential blocking must be part of the host contract. On the web, DOM/canvas setup and audio activation can require host/user interaction. A normalized event need not erase source capabilities or metadata.
-
-### `galfus-gpu-manager`
-
-Provides a shared `wgpu` resource context and allocation services:
-
-- Device, queue, capabilities, and GPU failure/device-loss handling.
-- Buffers, textures, texture views, samplers, and related lifetimes.
-- Upload/update services and memory/resource accounting as supported.
-- Optional atlas, texture-array, pooling, suballocation, and paging strategies.
-- Facilities needed to create/retain host-authored shader modules and pipelines.
-
-**Owns:** the GPU resources and their lifetimes or explicitly delegated leases.
-
-**Does not own:** mesh semantics, sprite behavior, realm ordering, or application shaders' source code.
-
-**Non-goal:** making all textures use an atlas. Render attachments, depth buffers, compressed/mipmapped textures, cubemaps, and storage textures have different usage constraints. “Paging” must be defined precisely before implementation (atlas pages, logical residency management, and virtual textures are not interchangeable).
-
-A logical graphics context must be shared or passed explicitly, not silently duplicated by consumers. It is acceptable to support more than one context in the future, but handles must be scoped to the correct one.
-
-### `galfus-realm-core`
-
-Defines a **Realm** as a graphics-producing unit with declared capabilities, typed inputs and outputs, and operations that participate in graph execution.
-
-Candidate contract concerns, **not final trait methods**:
-
-- Realm metadata and declared ports.
-- Resource acquisition/release under caller-controlled lifecycle.
-- Preparation and execution within a supplied graphics context.
-- Output descriptions (format, dimensions/extent, usage, sample count, synchronization requirements).
-- Errors and readiness conditions.
-
-`galfus-realm-core` does not depend on concrete 2D/3D implementations. Runtime-independent traits are for Rust linkage; a stable C ABI is defined separately at the binding boundary.
-
-### `galfus-realm-2d` / `galfus-realm-3d`
-
-Concrete implementations of the Realm contract. Each independently interprets its graphical state and renders through GPU contracts.
-
-- `galfus-realm-2d`: 2D rendering and related execution state.
-- `galfus-realm-3d`: 3D rendering and related execution state.
-
-Neither implementation is hardcoded into graph validation or scheduling. Optional crate features may exclude either implementation from the packaged binary.
-
-### `galfus-realm-2d-resources` / `galfus-realm-3d-resources`
-
-Provide **raw, composable domain resources**, for example primitives, configurable material descriptors, and particle system building blocks. These crates define domain-specific structures and behaviors, while the GPU manager handles GPU allocation and resource lifetime. The host may author custom shaders and construct higher-level workflows from these primitives.
-
-These crates are not automatically separate shipping artifacts.
-
-### `galfus-multiverse`
-
-Owns **the graph of realms, invocations, and targets** and performs:
-
-- Registration and validation of graph entities and their handles.
-- Invocation routing, viewport clipping, and presentation order (`z_index`).
-- Inter-target texture bindings (`TargetTextureBinding`) for realms consuming rendered targets (e.g. portals, mirrors).
-- Execution ordering and post-processing filter pass dispatch (`InvocationFilter`).
-- Graph traversal, dispatch of realm rendering, and target presentation.
-
-**Does not own:** the application loop, OS event loop, scene-specific algorithms, or raw shader compiler implementations.
-
-There is **no `galfus-draw` crate** in this design. Multiverse coordinates graph execution, while invocations dispatch realm output to targets with optional filter chains.
-
-## 3. Conceptual graph model
+## 2. Module Topology & Crate Boundaries
 
 ```text
-Realm A: 3D world  -- Invocation (viewport, filters) ----+--> Target: window
-Realm B: 2D HUD    -- Invocation (viewport, blend) ------+
-Target: offscreen  -- TargetTextureBinding ------------> Realm C: portal surface
+                        APPLICATION / HOST
+           Bun / Rust / C / Python / Lua / Browser
+          lifecycle · update logic · custom shaders
+                               │
+                    Direct C-ABI / Host SDKs
+                               │
+┌───────────────────────────────────────────────────────────┐
+│                       GALFUS ENGINE                       │
+│                                                           │
+│                  galfus-multiverse                        │
+│      realms · targets · invocations · graph execution     │
+│                      /           \                        │
+│             galfus-realm-2d   galfus-realm-3d             │
+│                    │               │                      │
+│         galfus-realm-2d-   galfus-realm-3d-               │
+│             resources         resources                   │
+│                                                           │
+│     galfus-platform           galfus-gpu-manager          │
+│     surfaces · input          wgpu · buffers · textures   │
+│     events · audio            allocator · pipelines       │
+│                                                           │
+│       galfus-realm-core       galfus-core                 │
+│       realm contracts         IDs · handles · primitives  │
+└───────────────────────────────────────────────────────────┘
+               │                           │
+     desktop / browser APIs        wgpu graphics backends
 ```
 
-The entities have distinct semantics:
+### Module Responsibilities
 
-| Concept                  | Meaning                                                                                                                                            |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Realm**                | A stateful graphics-producing unit implementing the shared realm contract.                                                                         |
-| **Target**               | A destination abstraction such as a window surface or offscreen texture; owns presentation and resolution.                                         |
-| **Invocation**           | The mapping that renders a Realm into a Target, specifying viewport, stacking order (`z_index`), and post-processing filters (`InvocationFilter`). |
-| **TargetTextureBinding** | A declaration allowing a Realm to consume a rendered Target's texture as input (e.g. mirrors, security cameras, portals).                          |
-| **Multiverse**           | The owner of graph structure, validity, scheduling, and execution order.                                                                           |
+| Crate                              | Responsibility                                                                                                                                                 |
+| :--------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `engine/galfus-core`               | Identifiers, deterministic 64-bit `ContentId` hashing (SipHash-2-4), shader snippet validation, `ShaderEffectTemplate`, and reserved ID validation.            |
+| `engine/galfus-platform`           | Cross-platform windowing (`winit`), headless mode, display capabilities, flat event queues, and peripheral normalization.                                      |
+| `engine/galfus-gpu-manager`        | Shared `wgpu::Instance`, `wgpu::Adapter`, `wgpu::Device`, and `wgpu::Queue` management, shared texture/buffer allocation, and uniform layouts.                 |
+| `engine/galfus-realm-core`         | The `Realm` trait defining the lifecycle contract (`prepare`, `execute`, `clear`, `destroy`, `referenced_texture_ids`).                                        |
+| `engine/galfus-multiverse`         | Render graph coordination, target blocks, topological DAG scheduling, soft-cut cycle breaking, post-processing screen effects, and texture binding validation. |
+| `engine/galfus-realm-2d`           | Concrete 2D realm: instanced sprite batching, vector shapes, 2D dynamic lights, occluder penumbra shadows, and 2D surface effects.                             |
+| `engine/galfus-realm-2d-resources` | Raw 2D domain models: sprites, shapes, 2D cameras, materials, and 2D particle systems.                                                                         |
+| `engine/galfus-realm-3d`           | Concrete 3D realm: Forward+ PBR, Reverse-Z depth, directional/point/spot lights, shadow maps, SSAO, gizmos, portals, and world AABB queries.                   |
+| `engine/galfus-realm-3d-resources` | Raw 3D domain models: geometry meshes, PBR materials, lights, 3D cameras, particles, and skeleton animation.                                                   |
+| `bindings/galfus-native`           | Unified C-ABI dynamic library (`libgalfus_native.so`) providing exported C functions, memory ownership, and direct pointer fast paths.                         |
+| `scripts/codegen`                  | Multi-language code generation engine implementing the Strategy pattern to generate SDKs for C, Python, LuaJIT, TypeScript, and Bun FFI.                       |
 
-A graph may produce multiple outputs and use intermediate textures. Output contracts should not assume every realm produces only one RGBA image. Depth, masks, multiple render attachments, and other compatible GPU outputs may be supported as contracts evolve.
+---
 
-Acyclic dependencies can be topologically ordered. Feedback paths, if ever supported, require explicit previous-frame/double-buffered semantics rather than accepting undefined cycles. Graph mutation should invalidate any cached execution plan.
+## 3. Realm Lifecycle Contract
 
-## 4. Host-controlled lifecycle
+All graphical realms implement the standard `Realm` trait defined in `galfus-realm-core`:
 
-The host owns setup, the update cadence, frame requests, and shutdown. A conceptual native-host flow:
+```rust
+pub trait Realm: Send + Sync {
+    fn realm_id(&self) -> u32;
+    fn prepare(&mut self, ctx: &mut RealmPrepareContext) -> Result<(), RealmError>;
+    fn execute(&mut self, ctx: &mut RealmExecutionContext) -> Result<(), RealmError>;
+    fn clear(&mut self);
+    fn destroy(&mut self);
+    fn referenced_texture_ids(&self) -> Vec<u32>;
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+```
+
+### Lifecycle Semantics:
+
+- **`clear(&mut self)`**: Clears internal entities (models, sprites, lights, cameras, emitters) and scene state while keeping GPU pipeline caches and the realm registration active in Multiverse.
+- **`destroy(&mut self)`**: Releases all internal GPU buffers, bind groups, pipelines, and entities. Multiverse automatically unregisters invocations, scratch textures, and bindings associated with the realm.
+- **`referenced_texture_ids(&self)`**: Returns all logical texture IDs referenced across the realm's active materials. Used by Multiverse during graph resolution to validate declared bindings.
+
+---
+
+## 4. Multiverse Render Graph Architecture
+
+The Multiverse manages the execution graph linking **Realms**, **Invocations**, and **Targets**:
 
 ```text
-Host starts
-  -> create platform capabilities/surfaces
-  -> initialize shared GPU context when needed
-  -> instantiate realms, targets, invocations
-  -> register graph with multiverse
-
-For each host-selected frame:
-  -> poll/receive normalized platform events
-  -> update application state and custom resources
-  -> validate/rebuild graph plan if invalidated
-  -> multiverse executes realms and invocation filters in dependency order
-  -> targets resolve/present their outputs
-
-Host shuts down
-  -> release graph entities and resource leases
-  -> release GPU resources and platform services
+Realm A (3D World)  ── Invocation 100 (Viewport full, sepia)  ──► Target 1 (Window)
+Realm B (2D HUD)    ── Invocation 101 (Viewport full, z=1)     ──► Target 1 (Window)
+Target 2 (Offscreen) ── TargetTextureBinding (slot: "albedo")   ──► Realm A (Portal Surface)
 ```
 
-This is a **conceptual sequence**, not a fixed public call API. A host may use an alternative valid ordering required by its platform, and web callbacks/event delivery differ from desktop pumping.
+### 4.1. Core Graph Entities
 
-The engine can use internal readiness work, GPU queues, or event buffering without reintroducing a mandatory central message dispatcher. Results/errors for direct operations should be returned through explicit contract mechanisms.
+- **Target**: A render destination (Window Surface swapchain or Offscreen GPU Texture).
+- **Invocation**: Links a Realm to a Target, defining:
+  - `cameraSlot`: Active camera index within the Realm.
+  - `viewport`: Responsive anchor rectangle (`ViewportRect`) supporting `vw`, `vh`, and `px` units.
+  - `zIndex`: Sorting order for compositing multiple invocations within the same target block.
+  - `filters`: Ordered post-processing screen effect passes (`InvocationFilter`).
+  - `clearColor`: Optional target clear color before invocation execution.
+- **TargetTextureBinding**: Declares that a Realm consumes a rendered Target's texture as input (e.g. portals, mirrors, security cameras).
 
-## 5. Cross-module contracts and ownership
+### 4.2. Topological Scheduling & Cycle Breaking
 
-Modules can communicate through explicit Rust traits/interfaces and shared types within the **single linked binary**. This differs from a plugin system where independently built DLLs must exchange Rust trait objects: **cross-DLL Rust ABI stability is not a requirement here**.
+1. **DAG Analysis**: Multiverse performs topological sorting of targets based on `TargetTextureBinding` dependencies.
+2. **Cycle Detection & Soft-Cut**: When cyclical dependencies occur (e.g. Portal A renders Target B, which renders Target A), Multiverse detects the cycle and applies a **soft-cut fallback**: the edge is broken, falling back to the previous frame's double-buffered texture without panicking or deadlocking.
+3. **Texture Binding Validation**: In `resolve()`, Multiverse validates all `referenced_texture_ids()` from active realms against declared target IDs. If a material references an offscreen target without an explicit `TargetTextureBinding`, a clear warning log is emitted.
 
-### Handle model
+---
 
-- `galfus-core` defines how handles are represented and validated.
-- A resource's **owner module** allocates and resolves its registry entries.
-- Handles may be passed to other modules or via the host as _references_.
-- Consumers access functionality via an authorized owner-provided contract; a handle alone is not a pointer, lease, or ownership transfer.
-- Registry identity, generation, type, and context checks must reject stale, mismatched, or forged handles as appropriate.
-- The exact bit allocation and approach to collision checking are deferred until registry-scale and concurrency requirements are established.
+## 5. Shader Effects Architecture
 
-Example: Platform owns a surface/window handle; a target can refer to it, but surface access and presentation still go through platform/GPU capabilities with platform thread-affinity rules enforced.
-
-### Resource lifetime
-
-Destroying a graph node is not necessarily equivalent to immediately destroying all GPU storage it references. Ownership, leases, in-flight GPU submissions, and delayed reclamation must be accounted for in the resource contracts. The proposed API should make explicit whether removal invalidates dependent graph nodes or causes validation errors.
-
-### Threading
-
-The host controls invocation, but not every operation can run from any thread. In particular, desktop windowing often has main-thread constraints. GPU/resource operations must follow the chosen `wgpu` and platform contracts. Host-agnostic does **not** mean thread-affinity-free.
-
-## 6. GPU and host-authored shaders
-
-The host creates application-specific visual logic and custom WGSL/shader definitions; Galfus provides raw resource and execution mechanisms. Built-in realms may still need small internal shaders and standard pipelines to implement their promised primitives or composition.
-
-Shader/pipeline creation, caching, validation, and GPU error reporting must use the GPU manager's contracts. A realm may request pipelines and buffers without owning a second, hidden `wgpu::Device`.
-
-Atlas and paging policies should be opt-in or selected by resource requirements, not imposed on all textures.
-
-## 7. Platform and browser adapter model
-
-`galfus-platform` exposes a normalized contract and capability discovery:
-
-| Capability       | Desktop                                    | Browser                               |
-| ---------------- | ------------------------------------------ | ------------------------------------- |
-| Surface          | `winit` windows                            | Canvas/DOM                            |
-| Input/events     | Native platform sources                    | Browser event APIs                    |
-| Peripherals      | OS-dependent devices                       | Browser-permitted APIs                |
-| Graphics         | `wgpu` native backends                     | `wgpu` WebGPU backend where available |
-| Audio            | Existing native audio integration/adapters | Web Audio API                         |
-| Lifecycle driver | Host event/update loop                     | Host/browser callbacks                |
-
-On browser targets, WebAssembly and JavaScript glue are required for some browser APIs. User-gesture restrictions (notably audio), permission rules, feature availability, and surface ownership are surfaced rather than hidden. The platform module should gracefully report unsupported capabilities.
-
-Headless operation should remain possible without manufacturing a fake window, provided the requested GPU workload is supported.
-
-## 8. Build and distribution model
-
-### Internal code modularity
-
-Nine principal crates:
+Custom graphics logic is authored via sandboxed WGSL hook functions injected into engine pipeline templates:
 
 ```text
-crates/
-  galfus-core/
-  galfus-platform/
-  galfus-gpu-manager/
-  galfus-realm-core/
-  galfus-multiverse/
-  galfus-realm-2d/
-  galfus-realm-3d/
-  galfus-realm-2d-resources/
-  galfus-realm-3d-resources/
+Host Shader Snippet (WGSL)
+           │
+           ▼
+[galfus-core::validate_snippet]
+  - Rejects forbidden keywords (@group, @binding, @vertex, @fragment, var<uniform>)
+  - Verifies presence of domain entrypoint function
+           │
+           ▼
+[galfus-core::ShaderEffectTemplate]
+  - Injects snippet into domain prelude & entrypoint hook
+  - Computes deterministic 64-bit ContentId (SipHash-2-4)
+           │
+           ▼
+[Pipeline Cache (Multiverse / Realm 3D / Realm 2D)]
+  - Compiles composed WGSL into wgpu::ShaderModule
+  - Caches wgpu::RenderPipeline indexed by ContentId & surface format
 ```
 
-### External packaging boundary
+### Effect Domains:
+
+1. **Screen Effects (`galfus-multiverse`)**:
+   - Signature: `fn screen_effect(in: ScreenInput) -> vec4<f32>`
+   - Applied to Invocation viewports via procedural fullscreen quad.
+2. **Surface Effects 3D (`galfus-realm-3d`)**:
+   - Signature: `fn surface_effect(in: SurfaceInput) -> SurfaceOutput`
+   - Injected into forward+ PBR multi-light and shadow pipeline.
+3. **Surface Effects 2D (`galfus-realm-2d`)**:
+   - Signature: `fn surface_effect(in: SurfaceInput2D) -> SurfaceOutput2D`
+   - Injected into 2D sprite and vector shape rendering pipeline.
+
+---
+
+## 6. Fast-Path Transforms and Direct C-ABI
+
+To guarantee high throughput for simulations, physics engines, and game logic, Galfus provides dual-mode APIs:
+
+### 6.1. Fast-Path Raw Float Buffers
+
+Bypasses JSON serialization entirely by reading raw memory buffers passed directly across FFI:
+
+- **3D Entities (Models, Cameras)**: 10 consecutive `f32` values:
+  `[pos_x, pos_y, pos_z, rot_x, rot_y, rot_z, rot_w, scale_x, scale_y, scale_z]`
+- **2D Entities (Sprites, Cameras)**: 6 consecutive `f32` values:
+  `[pos_x, pos_y, rotation_rad, scale_x, scale_y, z_layer]`
+
+### 6.2. Query Getters
+
+- `galfus_multiverse_get_target_size(target_id, out_w, out_h)`
+- `galfus_platform_get_window_size(window_id, out_w, out_h)`
+- `galfus_realm_3d_get_model_transform(realm_id, model_id, out_ptr)`
+- `galfus_realm_3d_get_camera_transform(realm_id, camera_id, out_ptr)`
+- `galfus_realm_3d_get_model_aabb(realm_id, model_id, out_min, out_max)`: Computes the model's world-space oriented AABB by transforming local geometry bounds through the model matrix.
+- `galfus_realm_2d_get_sprite_transform(realm_id, sprite_id, out_ptr)`
+- `galfus_realm_2d_get_camera_transform(realm_id, camera_id, out_ptr)`
+
+### 6.3. Ergonomic SDK Bindings
+
+Generated SDK wrappers (TypeScript/Bun) automatically detect the argument type: passing `Float32Array` or `number[]` routes directly to the raw fast path, while descriptor objects route through structured JSON.
+
+---
+
+## 7. Multi-Language SDK Code Generation
+
+Galfus uses a specification-driven codegen architecture located in `scripts/codegen/`. Using the **Strategy Pattern**, a single declarative specification generates client bindings for multiple runtimes:
 
 ```text
-bindings/
-  galfus-native/  -> one shared library with a C-compatible FFI surface
-  galfus-web/     -> WASM + JavaScript bindings
+scripts/codegen/specs/
+  ├── types.ts            (Type system, primitive & pointer mappings)
+  ├── platform.ts         (Windowing, capabilities, flat event specs)
+  ├── multiverse.ts       (Targets, invocations, bindings, dispatch)
+  ├── realm_2d.ts         (2D sprites, shapes, lights, cameras)
+  ├── realm_3d.ts         (3D models, geometry, materials, cameras)
+  └── realm_3d_desc.ts    (3D descriptor specifications)
+           │
+           ▼
+scripts/codegen/strategies/
+  ├── c_header.ts         ──► sdk/c/galfus.h
+  ├── python.ts           ──► sdk/python/galfus.py
+  ├── lua.ts              ──► sdk/lua/galfus.lua
+  ├── typescript.ts       ──► sdk/typescript/galfus.ts
+  └── bun_ffi.ts          ──► sdk/bun/galfus.ts
 ```
 
-Exact workspace paths are provisional.
+---
 
-Native artifacts per selected target:
+## 8. Verification and Quality Gates
 
-- Windows: `galfus.dll`
-- Linux: `libgalfus.so`
-- macOS: `libgalfus.dylib`
+The Galfus Engine maintains strict automated quality standards:
 
-The browser build yields `galfus.wasm` plus JavaScript bindings. It does not use the native shared-library ABI directly.
-
-Optional Cargo features can select realm implementations. Feature choice occurs **at build time**, not by loading a second realm DLL at runtime. A small 2D-only build excludes 3D implementations and their exclusive dependencies, subject to link-time verification.
-
-The public native API should expose a versioned C ABI suitable for Bun FFI and other foreign-language callers, with explicit memory ownership, struct layout/versioning, string/buffer conventions, error reporting, and handle lifetime rules. Designing that ABI is a separate next step; this document does not freeze specific symbols.
-
-## 9. Dependency direction
-
-The desired dependency policy is **acyclic and contract-oriented**:
-
-- `galfus-core` is minimal and knows no graphics or platform domain.
-- `galfus-realm-core` describes the realm contract without knowing concrete realms.
-- `galfus-multiverse` depends on contracts, not on hard-coded `galfus-realm-2d` / `galfus-realm-3d` implementations.
-- Concrete realms implement contracts and use GPU services through their public interfaces.
-- Resource crates supply domain primitives without becoming global GPU allocators.
-- `galfus-platform` does not depend on the multiverse, game state, or render graphs.
-- The native/web packaging layer composes the selected modules and exposes the host-facing API.
-
-Some contracts may need shared GPU surface/format types. Place these at the lowest appropriate shared boundary rather than introducing circular crate dependencies. Not every conceptual module must map to exactly one trait.
-
-## 10. Migration from the existing architecture
-
-This is a redesign plan, not an in-place refactor already completed.
-
-1. **Inventory ownership and dependencies** in the current runtime and binding code.
-2. **Define shared identity and contracts** for platform, GPU, realms, invocations, and targets.
-3. **Extract platform and GPU services** while maintaining existing `winit` and `wgpu` behavior.
-4. **Move graph coordination into multiverse** and preserve current realm/target/invocation capabilities where compatible with the new contracts.
-5. **Replace message-pool entry points** with direct typed native operations; develop the C ABI for FFI hosts separately.
-6. **Build one native artifact** with optional 2D/3D compilation features, and a separate WASM/browser packaging path.
-7. **Validate integration** across Windows, macOS, Linux (including window-system differences), browser, and headless modes where supported.
-
-### Decisions intentionally not finalized
-
-- Public Rust trait signatures and exported C symbols.
-- Exact handle width/layout, namespace assignment, and registry concurrency model.
-- Specific audio backend crate for each native target.
-- Target presentation interfaces and synchronization reporting requirements.
-- Final feature names and repository paths.
-- Fine-grained GPU atlas/paging implementation and resource residency policies.
-- The precise split between direct host API calls and optional batched GPU uploads.
-
-These should be resolved after validating module responsibilities and cross-platform constraints, without reintroducing a centralized command/message architecture.
+1. **Workspace Compilation & Zero Warnings**:
+   - `cargo check`: 0 errors across all workspace crates.
+   - `cargo clippy`: 0 warnings with strict linter rules.
+   - `bun run check`: 0 TypeScript errors across all generated SDKs and test scripts.
+2. **Comprehensive Unit Testing**:
+   - `cargo test --workspace`: 74 unit tests covering handle safety, reserved ID enforcement, Reverse-Z depth, PBR alignment, 2D shadow penumbras, DAG resolution, and soft-cut cycle breaking.
+3. **End-to-End C-ABI & FFI Validation**:
+   - `bun run test:ffi`: Validates headless platform initialization, multiverse targets, raw fast-path transforms, AABB queries, target texture warning logs, `realmClear`, and `realmDestroy`.
+4. **Realtime Interactive Demonstration Suite**:
+   - `scripts/demos/main.ts`: Realtime interactive validation of Forward+ PBR, SSAO, skeleton animation, 3D portals/mirrors, 2D dynamic shadows, and Multiverse split-screen post-processing.

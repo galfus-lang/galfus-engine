@@ -5,7 +5,11 @@ use crate::pointer::types::{PointerButton, PointerButtonState, PointerType, Scro
 
 /// Normalized pointer event representing mouse, touch, or pen interactions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum PointerEvent {
     /// Pointer changed coordinates within the target surface.
     Move {

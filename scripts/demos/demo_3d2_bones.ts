@@ -438,22 +438,17 @@ export async function runDemo3d2(): Promise<void> {
     // 1. Process Platform Window & Input Events
     const events = galfus.platformPumpEvents();
     for (const ev of events) {
-      if ('window' in ev) {
-        if ('closeRequested' in ev.window) {
+      if (ev.kind === 'window') {
+        if (ev.type === 'closeRequested') {
           running = false;
           break;
-        } else if ('resized' in ev.window) {
-          galfus.multiverseUpdateWindowSize(
-            windowId,
-            ev.window.resized.width,
-            ev.window.resized.height
-          );
+        } else if (ev.type === 'resized') {
+          galfus.multiverseUpdateWindowSize(windowId, ev.width, ev.height);
           updateCamera();
         }
-      } else if ('keyboard' in ev && 'input' in ev.keyboard) {
-        const input = ev.keyboard.input;
-        if (input.state === 'pressed') {
-          const key = extractKey(input);
+      } else if (ev.kind === 'keyboard' && ev.type === 'input') {
+        if (ev.state === 'pressed') {
+          const key = extractKey(ev);
 
           if (key === 'escape') {
             running = false;

@@ -8,6 +8,7 @@ pub mod ffi_realm_3d_particles;
 pub mod ffi_realm_3d_portals;
 pub mod ffi_realm_destroy;
 pub mod ffi_resources;
+pub mod ffi_transforms_getters;
 #[cfg(feature = "napi")]
 pub mod napi_bind;
 pub mod state;
@@ -20,5 +21,6 @@ pub use ffi_realm_3d_particles::*;
 pub use ffi_realm_3d_portals::*;
 pub use ffi_realm_destroy::*;
 pub use ffi_resources::*;
+pub use ffi_transforms_getters::*;
 #[cfg(feature = "napi")]
 pub use napi_bind::*;

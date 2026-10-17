@@ -86,6 +86,20 @@ pub fn init_multiverse() -> Result<(), String> {
     })
 }
 
+/// Executes a closure with an immutable reference to the active multiverse context.
+pub fn with_multiverse<F, R>(f: F) -> Result<R, String>
+where
+    F: FnOnce(&galfus_multiverse::MultiverseContext) -> Result<R, String>,
+{
+    MULTIVERSE.with(|cell| {
+        let borrow = cell.borrow();
+        match borrow.as_ref() {
+            Some(mv) => f(mv),
+            None => Err("MultiverseContext is not initialized".into()),
+        }
+    })
+}
+
 /// Executes a closure with a mutable reference to the active multiverse context.
 pub fn with_multiverse_mut<F, R>(f: F) -> Result<R, String>
 where

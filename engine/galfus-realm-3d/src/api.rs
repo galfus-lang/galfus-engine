@@ -80,6 +80,37 @@ impl Realm3DContext {
         Ok(())
     }
 
+    /// Returns the transform of an existing `Model3D`.
+    pub fn get_model_transform(&self, id: u32) -> RealmResult<Transform3D> {
+        self.models
+            .get(&id)
+            .map(|entry| entry.1)
+            .ok_or_else(|| not_found(self.id, "Model", id))
+    }
+
+    /// Returns the transform of an existing `Camera3D`.
+    pub fn get_camera_transform(&self, id: u32) -> RealmResult<Transform3D> {
+        self.cameras
+            .get(&id)
+            .map(|entry| entry.1)
+            .ok_or_else(|| not_found(self.id, "Camera", id))
+    }
+
+    /// Returns the world-space bounding box (min, max) for an existing `Model3D`.
+    pub fn get_model_aabb(&self, id: u32) -> RealmResult<(glam::Vec3, glam::Vec3)> {
+        let model_entry = self
+            .models
+            .get(&id)
+            .ok_or_else(|| not_found(self.id, "Model", id))?;
+        let geom_id = model_entry.0.geometry_id;
+        let geom = self
+            .geometries
+            .get(&geom_id)
+            .ok_or_else(|| not_found(self.id, "Geometry", geom_id))?;
+        let world_aabb = geom.0.aabb.transform(&model_entry.1.matrix());
+        Ok((world_aabb.min, world_aabb.max))
+    }
+
     /// Sets or updates the skeletal bone matrix palette for a specific model.
     pub fn update_model_bones(
         &mut self,

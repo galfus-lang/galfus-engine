@@ -19,6 +19,21 @@ pub trait Realm: Send + Sync + 'static {
     /// Executes rendering for a specific invocation (e.g. portal camera pass, main camera view).
     fn render(&mut self, context: &RealmInvocationContext<'_>) -> RealmResult<()>;
 
+    /// Clears all entities, lights, emitters, and scene resources, resetting the realm to an empty state.
+    fn clear(&mut self) -> RealmResult<()> {
+        Ok(())
+    }
+
+    /// Releases all GPU resources, pipelines, and allocations held by the realm.
+    fn destroy(&mut self) -> RealmResult<()> {
+        Ok(())
+    }
+
+    /// Returns a list of logical texture IDs currently referenced by the realm's materials or entities.
+    fn referenced_texture_ids(&self) -> Vec<u32> {
+        Vec::new()
+    }
+
     /// Returns a reference for downcasting to a concrete Realm type.
     fn as_any(&self) -> &dyn std::any::Any;
 

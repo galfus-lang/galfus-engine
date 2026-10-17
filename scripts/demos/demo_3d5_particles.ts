@@ -357,19 +357,17 @@ export async function runDemo3d5(): Promise<void> {
     // Handle Input Events
     const events = galfus.platformPumpEvents();
     for (const ev of events) {
-      if ('window' in ev) {
-        const win = ev.window;
-        if ('closeRequested' in win) {
+      if (ev.kind === 'window') {
+        if (ev.type === 'closeRequested') {
           console.log('\nWindow close requested. Exiting demo...');
           running = false;
           break;
-        } else if ('resized' in win) {
-          galfus.multiverseUpdateWindowSize(windowId, win.resized.width, win.resized.height);
+        } else if (ev.type === 'resized') {
+          galfus.multiverseUpdateWindowSize(windowId, ev.width, ev.height);
         }
-      } else if ('keyboard' in ev && 'input' in ev.keyboard) {
-        const input = ev.keyboard.input;
-        if (input.state === 'pressed') {
-          const key = extractKey(input);
+      } else if (ev.kind === 'keyboard' && ev.type === 'input') {
+        if (ev.state === 'pressed') {
+          const key = extractKey(ev);
           if (key === 'escape' || key === 'q') {
             console.log('\nExiting demo...');
             running = false;

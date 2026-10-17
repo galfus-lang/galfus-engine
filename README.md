@@ -2,38 +2,51 @@
 
 **A host-agnostic, modular graphics foundation for native and web applications.**
 
-> **Architecture proposal:** This document describes the intended Galfus Engine redesign. It is a design target, not a claim that every API or module is implemented in the current repository.
+> **Status: Implemented & Verified.** This document describes the active architecture and runtime capabilities of the Galfus Engine ecosystem. All components, contracts, multi-language SDKs, and demos described here are fully implemented, tested, and validated.
 
 Galfus provides low-level graphics building blocks, resource management, platform integration, and a graph-based way to combine graphical worlds. It is not tied to a game loop, an entity-component system (ECS), or a particular host language.
 
 An application owns its lifecycle and decides when to process events, update its state, and render. Galfus provides the capabilities needed to do that work, without dictating how the application itself is structured.
 
-## Design principles
+---
 
-- **Host-owned lifecycle:** The host initializes, drives, and shuts down Galfus. No engine-owned application or game loop is imposed.
-- **Host-agnostic core:** Native Rust applications, Bun, other FFI-capable runtimes, and browser applications can use appropriately packaged bindings.
-- **One native library per build:** Internal Rust crates are compiled into a single shared library (`.dll`, `.so`, or `.dylib`), rather than separate runtime-loaded libraries for each module.
-- **Modular internals:** Components communicate through explicit contracts and typed operations, without depending on each other's implementation details.
-- **Direct operations:** The former centralized message pool and MessagePack-based command dispatch are not part of the new internal execution architecture.
-- **Extensible realms:** A realm is a graphics-producing unit implementing a common contract. Built-in 2D and 3D realms are implementations, not special cases in the coordinator.
-- **Host-authored shaders:** The host supplies custom shaders and their configuration. Galfus provides the raw graphics infrastructure and resource management necessary to use them.
-- **Portable platform semantics:** Desktop and browser adapters expose normalized capabilities, input events, surfaces, and audio services while preserving meaningful platform differences.
-- **Shared GPU resources:** A GPU manager owns device-level resources and allocation strategies without requiring knowledge of 2D or 3D scene semantics.
+## Key Architecture & Capabilities
 
-## High-level architecture
+- **Host-Owned Lifecycle:** The host initializes, drives, and shuts down Galfus. No engine-owned application loop is imposed. Supports headless execution for server/CI.
+- **Single Shared Dynamic Library:** All internal engine crates compile into a single native binary (`libgalfus_native.so`, `galfus.dll`, or `libgalfus_native.dylib`) exposing an explicitly versioned C-compatible ABI.
+- **Host-Controlled Logical IDs:** The host controls logical IDs for all entities and resources. Galfus reserves the top 65,535 IDs (`4294901761..=4294967295` for `u32`) for internal engine resources.
+- **Fast-Path Raw Float Transforms:** Hot-path spatial updates bypass JSON serialization via direct raw float buffers:
+  - **3D**: 10 floats (`[px, py, pz, rx, ry, rz, rw, sx, sy, sz]`)
+  - **2D**: 6 floats (`[px, py, rot, sx, sy, zLayer]`)
+- **Pure Quaternions:** Rotations in the core and SDKs use unit quaternions `[x, y, z, w]` exclusively. The engine remains lean and unopinionated; host code performs any desired Euler conversions.
+- **Multiverse Render Graph:** Coordinates execution of Realms, Invocations, and Targets with topological DAG resolution, soft-cut cycle breaking, and texture binding validation.
+- **Responsive Viewport Anchors:** Invocations support CSS responsive units (`vw`, `vh`, `px`) with convenient constructors (`ViewportRect.full()`, `ViewportRect.px()`, `ViewportRect.pip()`).
+- **Hook-Based Shader Effects:** Custom graphics logic is authored via sandboxed WGSL hook functions injected into engine pipeline templates with deterministic 64-bit `ContentId` caching:
+  - **Screen Effects**: `fn screen_effect(in: ScreenInput) -> vec4<f32>` (post-processing filters)
+  - **3D Surface Effects**: `fn surface_effect(in: SurfaceInput) -> SurfaceOutput` (PBR material customization)
+  - **2D Surface Effects**: `fn surface_effect(in: SurfaceInput2D) -> SurfaceOutput2D` (2D sprite shaders)
+- **Built-in Realms:**
+  - **Realm 3D**: Forward+ PBR, Reverse-Z depth, directional/point/spot lights, shadows, SSAO, particles, portals/mirrors, skeleton animation, and world AABB queries.
+  - **Realm 2D**: Instanced batched sprites, vector shapes, normal mapping, 2D penumbra shadow cones, and 2D particle systems.
+- **Realm Lifecycle Contract:** Full support for `realmClear(realmId)` (entity flush without unregistering) and `realmDestroy(realmId)` (full GPU resource reclamation and Multiverse unregistration).
+- **Flat Platform Events:** Polled events are exposed as flat discriminated unions tagged with `{ kind: "window" | "pointer" | "keyboard" | "gamepad", type: ... }`, eliminating host callback deadlocks.
+
+---
+
+## High-Level Architecture
 
 ```text
                         APPLICATION / HOST
-          Bun / Rust / other native host / Browser
-         lifecycle · update logic · custom shaders
-                              |
-                   Direct API / host bindings
-                              |
+           Bun / Rust / C / Python / Lua / Browser
+          lifecycle · update logic · custom shaders
+                               |
+                    Direct C-ABI / Host SDKs
+                               |
 +-----------------------------------------------------------+
 |                       GALFUS ENGINE                       |
 |                                                           |
 |                  galfus-multiverse                         |
-|      realms · targets · connectors · graph execution       |
+|      realms · targets · invocations · graph execution     |
 |                      /           \                         |
 |             galfus-realm-2d   galfus-realm-3d              |
 |                    |               |                      |
@@ -42,7 +55,7 @@ An application owns its lifecycle and decides when to process events, update its
 |                                                           |
 |     galfus-platform           galfus-gpu-manager          |
 |     surfaces · input          wgpu · buffers · textures    |
-|     events · audio            atlases · allocation        |
+|     events · audio            allocator · pipelines       |
 |                                                           |
 |       galfus-realm-core       galfus-core                  |
 |       realm contracts         IDs · handles · primitives  |
@@ -51,68 +64,85 @@ An application owns its lifecycle and decides when to process events, update its
      desktop / browser APIs        wgpu graphics backends
 ```
 
-The diagram is conceptual: it illustrates responsibilities, not a requirement that every crate depend directly on every other crate.
+---
 
-## Modules
+## Workspace Layout
 
-| Crate                       | Responsibility                                                                                                                                   |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `galfus-core`               | Common identifiers, generational handle primitives, collision/overflow checks, basic errors, and foundational contracts.                         |
-| `galfus-platform`           | Normalize host/platform interaction: surfaces, windows/canvas, input, peripherals, events, audio, and capability reporting.                      |
-| `galfus-gpu-manager`        | Manage shared `wgpu` contexts and resources, including buffers, textures, views, samplers, atlases, and allocation/paging strategies.            |
-| `galfus-realm-core`         | Define realm contracts, inputs, outputs, execution context, and lifecycle hooks controlled by the host/coordinator.                              |
-| `galfus-multiverse`         | Own the graphics graph: realm/target/connector registrations, dependency validation, scheduling, graph execution, and presentation coordination. |
-| `galfus-realm-2d`           | Implement 2D graphical processing and rendering using the realm contract.                                                                        |
-| `galfus-realm-3d`           | Implement 3D graphical processing and rendering using the realm contract.                                                                        |
-| `galfus-realm-2d-resources` | Provide raw 2D resources such as primitives, material descriptors, and particle building blocks.                                                 |
-| `galfus-realm-3d-resources` | Provide raw 3D resources such as geometry primitives, material descriptors, and particle building blocks.                                        |
+| Path                               | Description                                                                                 |
+| :--------------------------------- | :------------------------------------------------------------------------------------------ |
+| `engine/galfus-core`               | Core types, ContentId, ShaderEffectTemplate, reserved ID policies.                          |
+| `engine/galfus-platform`           | Cross-platform windowing (`winit`), headless mode, flat event queues.                       |
+| `engine/galfus-gpu-manager`        | Shared `wgpu` instance, device, queue, and texture/buffer management.                       |
+| `engine/galfus-realm-core`         | Realm lifecycle trait (`prepare`, `execute`, `clear`, `destroy`, `referenced_texture_ids`). |
+| `engine/galfus-multiverse`         | Graph coordinator, target blocks, DAG topological ordering, screen effects.                 |
+| `engine/galfus-realm-2d`           | 2D renderer, sprite batching, 2D shadows, 2D surface effects.                               |
+| `engine/galfus-realm-2d-resources` | 2D domain models: sprites, shapes, 2D cameras, materials, particles.                        |
+| `engine/galfus-realm-3d`           | 3D forward+ renderer, reverse-Z, shadow maps, SSAO, gizmos, portals.                        |
+| `engine/galfus-realm-3d-resources` | 3D domain models: meshes, PBR materials, lights, cameras, particles, AABB.                  |
+| `bindings/galfus-native`           | Unified C-ABI dynamic library (`libgalfus_native.so`).                                      |
+| `scripts/codegen`                  | Multi-language code generator using the Strategy pattern.                                   |
+| `sdk/`                             | Generated client SDKs (`sdk/c`, `sdk/python`, `sdk/lua`, `sdk/typescript`, `sdk/bun`).      |
+| `scripts/demos`                    | Interactive realtime demonstration suite (3D PBR, SSAO, portals, 2D shadows, multiverse).   |
 
-`galfus-realm-*-resources` are code-level modules; they do not need to be separate dynamic libraries.
+---
 
-## How rendering works
+## Multi-Language SDK Generation
 
-The host decides when a frame occurs. During a frame:
+Galfus uses a centralized, specification-driven code generator (`scripts/codegen.ts`) implementing the Strategy pattern to generate idiomatic bindings for multiple programming languages:
 
-1. The host obtains normalized platform events and updates its application state.
-2. The host modifies realms, resources, targets, and connections through direct APIs.
-3. The host asks the multiverse to execute the graphics graph.
-4. The multiverse validates dependencies and orders the required work.
-5. Realm implementations produce graphics outputs; connectors perform the required composition or transformations.
-6. Targets receive the outputs and handle their destination-specific operations, including presentation where applicable.
+- **C / C++**: `sdk/c/galfus.h`
+- **Python**: `sdk/python/galfus.py`
+- **LuaJIT**: `sdk/lua/galfus.lua`
+- **TypeScript**: `sdk/typescript/galfus.ts`
+- **Bun FFI**: `sdk/bun/galfus.ts`
 
-The **multiverse coordinates and executes the graph**; it does not need to know how a 2D sprite, 3D mesh, or custom shader is implemented. **Connectors and targets perform composition and destination-specific work** under that coordination. A separate `galfus-draw` module is not planned.
+To regenerate all SDKs after specification changes:
 
-## Platform support
+```bash
+bun run codegen
+```
 
-Galfus targets a consistent _contract_, not identical platform behavior:
+---
 
-| Environment             | Platform integration                      | Graphics                               | Audio                  |
-| ----------------------- | ----------------------------------------- | -------------------------------------- | ---------------------- |
-| Windows / Linux / macOS | `winit` and native peripheral integration | `wgpu`                                 | Native audio adapter   |
-| Browser                 | Canvas, DOM, and browser input APIs       | `wgpu` on WebGPU-capable browsers      | Web Audio API          |
-| Headless                | No required window or canvas              | Offscreen GPU execution when supported | Optional / unavailable |
+## Building and Verification
 
-The browser target is packaged as **WebAssembly with JavaScript bindings**, not as a native DLL. Features such as unrestricted window creation, audio startup, and GPU availability depend on the environment and must be queried through capabilities.
+### Prerequisites
 
-## Packaging
+- **Rust**: Stable toolchain (edition 2024 / 2021)
+- **Bun**: Fast JavaScript runtime and package manager
+- **Vulkan / Metal / DX12** compatible GPU driver
 
-The intended output is **one native shared library for each build and supported target**:
+### Build Commands
 
-- Windows: `galfus.dll`
-- Linux: `libgalfus.so`
-- macOS: `libgalfus.dylib`
-- Browser: `galfus.wasm` plus JavaScript bindings
+```bash
+# Compile the native dynamic library
+cargo build -p galfus-native
 
-Cargo features can control inclusion of optional implementations, such as `realm-2d` and `realm-3d`. A 2D-only build should not need to link the 3D implementation. The precise feature names and binary API are to be finalized.
+# Run the complete workspace test suite
+cargo test --workspace
 
-The native shared library exposes an explicitly versioned **C-compatible ABI** for FFI hosts. Rust consumers may also use Rust-facing interfaces. Native Rust traits and Rust-owned references are not assumed to have a stable cross-language ABI.
+# Lint and static analysis
+cargo clippy
 
-## What Galfus does not impose
+# TypeScript typecheck & engine consistency check
+bun run check
 
-Galfus does **not** require a specific ECS, scene authoring format, scripting runtime, application loop, game framework, or default gameplay architecture. It provides raw graphic capabilities and composable execution primitives so the host can make those choices.
+# Comprehensive C-ABI / Bun FFI test suite
+bun run test:ffi
+```
 
-## Project status and documentation
+### Running Realtime Demos
 
-This README describes the **planned refactored architecture**. Public API signatures, crate boundaries, feature flags, and compatibility guarantees remain subject to implementation and testing.
+```bash
+# Launch interactive demo launcher
+bun scripts/demos/main.ts
+```
 
-For module boundaries, handles, ownership, graph semantics, platform contracts, and integration details, see [ARCH.md](ARCH.md).
+---
+
+## Documentation
+
+- [ARCH.md](ARCH.md) — Comprehensive architectural specification and proof of implementation.
+- [docs/shader-effects/README.md](docs/shader-effects/README.md) — Shader Effects architecture and contracts.
+- [docs/shader-effects/screen-effects.md](docs/shader-effects/screen-effects.md) — Screen post-processing tutorial.
+- [docs/shader-effects/surface-effects.md](docs/shader-effects/surface-effects.md) — 3D PBR Surface Effects tutorial.

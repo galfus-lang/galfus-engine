@@ -83,6 +83,26 @@ impl Realm for Realm2DContext {
         RealmKind::TwoD
     }
 
+    fn clear(&mut self) -> RealmResult<()> {
+        self.cameras.clear();
+        self.sprites.clear();
+        self.shapes.clear();
+        self.materials.clear();
+        self.lights.clear();
+        self.emitters.clear();
+        self.material_bind_groups.clear();
+        self.material_uniform_buffers.clear();
+        self.dirty = true;
+        Ok(())
+    }
+
+    fn destroy(&mut self) -> RealmResult<()> {
+        self.clear()?;
+        self.pipeline_manager = None;
+        self.gpu_res = None;
+        Ok(())
+    }
+
     fn prepare(&mut self, ctx: &RealmPrepareContext<'_>) -> RealmResult<()> {
         self.total_time += ctx.delta_time;
         for (cfg, transform, state) in self.emitters.values_mut() {
@@ -396,6 +416,20 @@ impl Realm for Realm2DContext {
 
         queue.submit(Some(encoder.finish()));
         Ok(())
+    }
+
+    fn referenced_texture_ids(&self) -> Vec<u32> {
+        let mut ids = Vec::new();
+        for mat in self.materials.values() {
+            for slot in mat.resolved_texture_slots() {
+                if let Some(id) = slot
+                    && id != 0
+                {
+                    ids.push(id);
+                }
+            }
+        }
+        ids
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
