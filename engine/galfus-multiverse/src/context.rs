@@ -34,6 +34,13 @@ pub struct MultiverseContext {
         HashMap<u32, (GpuTextureHandle, GpuTextureViewHandle, wgpu::TextureFormat)>,
     pub(crate) scratch_textures: HashMap<u32, (GpuTextureHandle, GpuTextureViewHandle, UVec2)>,
     pub(crate) ping_pong_texture: Option<(GpuTextureHandle, GpuTextureViewHandle, UVec2)>,
+    pub(crate) smaa_intermediates: Option<(
+        GpuTextureHandle,
+        GpuTextureViewHandle,
+        GpuTextureHandle,
+        GpuTextureViewHandle,
+        UVec2,
+    )>,
     pub(crate) post_processor: Option<PostProcessor>,
     pub(crate) gpu_manager: Option<GpuManager>,
 
@@ -64,6 +71,7 @@ impl MultiverseContext {
             target_textures: HashMap::new(),
             scratch_textures: HashMap::new(),
             ping_pong_texture: None,
+            smaa_intermediates: None,
             post_processor: None,
             cached_schedule: None,
             dirty: true,

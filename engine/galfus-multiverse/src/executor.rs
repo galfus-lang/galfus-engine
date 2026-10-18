@@ -120,9 +120,16 @@ pub(crate) fn execute_frame(
 
         // Execute Invocations
         for step in &block.invocations {
+            let effective_aa = step.anti_aliasing.unwrap_or(ctx.anti_aliasing);
+            let ssaa_scale = match effective_aa {
+                crate::types::AntiAliasingMode::Ssaa2x => 2,
+                crate::types::AntiAliasingMode::Ssaa4x => 4,
+                _ => 1,
+            };
+
             let vp = step.resolved_viewport;
-            let width = vp.z.max(1);
-            let height = vp.w.max(1);
+            let width = vp.z.max(1) * ssaa_scale;
+            let height = vp.w.max(1) * ssaa_scale;
             let needed_size = UVec2::new(width, height);
 
             // Ensure invocation scratch texture matches its viewport size
@@ -202,14 +209,18 @@ pub(crate) fn execute_frame(
             }
             gpu.queue().submit(Some(encoder.finish()));
 
-            // Invoke realm render
+            // Invoke realm render (scaled by ssaa_scale if SSAA is active)
             if let Some(realm) = ctx.realms.get_mut(&step.realm_id) {
+                let mut realm_vp = step.resolved_viewport;
+                realm_vp.z *= ssaa_scale;
+                realm_vp.w *= ssaa_scale;
+
                 let inv_ctx = RealmInvocationContext {
                     frame_id,
                     invocation_id: step.invocation_id,
                     target_id: block.target_id,
                     camera_slot: step.camera_slot,
-                    viewport: step.resolved_viewport,
+                    viewport: realm_vp,
                     device: gpu.device(),
                     queue: gpu.queue(),
                     target_view: &scratch_view,
@@ -220,15 +231,83 @@ pub(crate) fn execute_frame(
                     .map_err(|e| MultiverseError::RealmError(realm.id(), e.to_string()))?;
             }
 
-            let effective_aa = step.anti_aliasing.unwrap_or(ctx.anti_aliasing);
             let mut filters = step.filters.clone();
             if effective_aa == crate::types::AntiAliasingMode::Fxaa
                 && !filters.contains(&crate::types::InvocationFilter::Fxaa)
             {
                 filters.push(crate::types::InvocationFilter::Fxaa);
+            } else if (effective_aa == crate::types::AntiAliasingMode::Ssaa2x
+                || effective_aa == crate::types::AntiAliasingMode::Ssaa4x)
+                && !filters.contains(&crate::types::InvocationFilter::SsaaDownsample)
+            {
+                filters.push(crate::types::InvocationFilter::SsaaDownsample);
             }
 
-            if filters.len() > 1 {
+            let is_smaa = effective_aa == crate::types::AntiAliasingMode::Smaa
+                || filters
+                    .iter()
+                    .any(|f| matches!(f, crate::types::InvocationFilter::Smaa));
+            filters.retain(|f| !matches!(f, crate::types::InvocationFilter::Smaa));
+
+            // Ensure SMAA intermediate textures if SMAA is active
+            if is_smaa {
+                let smaa_size = UVec2::new(width, height);
+                let needs_smaa_realloc = match &ctx.smaa_intermediates {
+                    Some((_, _, _, _, size)) => *size != smaa_size,
+                    None => true,
+                };
+                if needs_smaa_realloc {
+                    if let Some((old_e, _, old_w, _, _)) = ctx.smaa_intermediates.take() {
+                        let _ = gpu.textures.destroy_texture(old_e);
+                        let _ = gpu.textures.destroy_texture(old_w);
+                    }
+                    let edge_desc = GpuTextureDesc {
+                        label: Some("Multiverse SMAA Edge Texture".to_string()),
+                        width,
+                        height,
+                        depth_or_layers: 1,
+                        mip_levels: 1,
+                        sample_count: 1,
+                        dimension: TextureDimension::D2,
+                        format: NormalizedTextureFormat::Rg8Unorm,
+                        usages: TextureUsageFlags::default(),
+                    };
+                    let weight_desc = GpuTextureDesc {
+                        label: Some("Multiverse SMAA Weight Texture".to_string()),
+                        width,
+                        height,
+                        depth_or_layers: 1,
+                        mip_levels: 1,
+                        sample_count: 1,
+                        dimension: TextureDimension::D2,
+                        format: NormalizedTextureFormat::Rgba8Unorm,
+                        usages: TextureUsageFlags::default(),
+                    };
+                    let device = gpu.context.device_arc();
+                    let e_h = gpu
+                        .textures
+                        .create_texture(&device, &edge_desc)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
+                    let e_v = gpu
+                        .textures
+                        .get_texture(e_h)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
+                        .default_view();
+                    let w_h = gpu
+                        .textures
+                        .create_texture(&device, &weight_desc)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
+                    let w_v = gpu
+                        .textures
+                        .get_texture(w_h)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
+                        .default_view();
+                    ctx.smaa_intermediates = Some((e_h, e_v, w_h, w_v, smaa_size));
+                }
+            }
+
+            let needs_pp = filters.len() > 1 || (filters.len() == 1 && is_smaa);
+            if needs_pp {
                 let needs_pp_realloc = match ctx.ping_pong_texture {
                     Some((_, _, size)) => size != needed_size,
                     None => true,
@@ -276,7 +355,75 @@ pub(crate) fn execute_frame(
                     gpu.textures.get_logical_view(id).ok().map(|v| v.raw())
                 };
 
-                if filters.is_empty() {
+                let pp_view_raw = if needs_pp {
+                    let pp_view_h = ctx.ping_pong_texture.as_ref().unwrap().1;
+                    Some(
+                        gpu.textures
+                            .get_view(pp_view_h)
+                            .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
+                            .raw()
+                            .clone(),
+                    )
+                } else {
+                    None
+                };
+
+                let mut current_is_scratch = true;
+                if is_smaa {
+                    for filter in &filters {
+                        let (src, dst) = if current_is_scratch {
+                            (&scratch_view, pp_view_raw.as_ref().unwrap())
+                        } else {
+                            (pp_view_raw.as_ref().unwrap(), &scratch_view)
+                        };
+                        let pass_desc = FilterPassDesc {
+                            src_view: src,
+                            dst_view: dst,
+                            dst_format: wgpu::TextureFormat::Rgba8Unorm,
+                            dst_size: needed_size,
+                            viewport: None,
+                        };
+                        post_proc.render_filter(
+                            gpu.device(),
+                            gpu.queue(),
+                            Some(filter),
+                            &tex_resolver,
+                            &pass_desc,
+                        )?;
+                        current_is_scratch = !current_is_scratch;
+                    }
+
+                    let smaa_source = if current_is_scratch {
+                        &scratch_view
+                    } else {
+                        pp_view_raw.as_ref().unwrap()
+                    };
+
+                    let (_, e_v, _, w_v, _) = ctx.smaa_intermediates.as_ref().unwrap();
+                    let edge_raw = gpu
+                        .textures
+                        .get_view(*e_v)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
+                        .raw()
+                        .clone();
+                    let weight_raw = gpu
+                        .textures
+                        .get_view(*w_v)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
+                        .raw()
+                        .clone();
+
+                    let smaa = post_proc.ensure_smaa(gpu.device(), gpu.queue(), target_fmt);
+                    smaa.render_smaa(
+                        gpu.device(),
+                        gpu.queue(),
+                        smaa_source,
+                        target_v,
+                        &edge_raw,
+                        &weight_raw,
+                        Some(vp),
+                    );
+                } else if filters.is_empty() {
                     let pass_desc = FilterPassDesc {
                         src_view: &scratch_view,
                         dst_view: target_v,
@@ -307,16 +454,7 @@ pub(crate) fn execute_frame(
                         &pass_desc,
                     )?;
                 } else {
-                    // Multi-filter chaining via ping-pong intermediate texture
-                    let pp_view_h = ctx.ping_pong_texture.as_ref().unwrap().1;
-                    let ping_pong_view = gpu
-                        .textures
-                        .get_view(pp_view_h)
-                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
-                        .raw()
-                        .clone();
-
-                    let mut current_is_scratch = true;
+                    let ping_pong_view = pp_view_raw.unwrap();
                     for (i, filter) in filters.iter().enumerate() {
                         let is_last = i == filters.len() - 1;
                         if is_last {

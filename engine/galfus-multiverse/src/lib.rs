@@ -15,6 +15,7 @@ pub(crate) mod postprocess;
 pub mod resolver;
 pub mod schedule;
 pub mod screen_effect;
+pub(crate) mod smaa;
 pub mod types;
 
 pub use context::MultiverseContext;

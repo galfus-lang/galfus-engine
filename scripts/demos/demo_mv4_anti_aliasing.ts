@@ -41,10 +41,14 @@ export async function runDemoMv4(): Promise<void> {
   const windowId = 1;
   const winWidth = 1024;
   const winHeight = 768;
+  const aaModes: AntiAliasingMode[] = ['none', 'fxaa', 'smaa', 'ssaa2x', 'ssaa4x'];
+  let aaIndex = 1; // start on 'fxaa'
+  let currentGlobalAa: AntiAliasingMode = aaModes[aaIndex] ?? 'fxaa';
+
   console.log('==> Creating window...');
   galfus.windowCreate({
     id: windowId,
-    title: 'Galfus Engine - Demo MV-4: Anti-Aliasing (FXAA vs None)',
+    title: `Galfus Engine - Demo MV-4: Anti-Aliasing [${currentGlobalAa.toUpperCase()}]`,
     size: [winWidth, winHeight],
     resizable: true,
     decorations: true
@@ -60,8 +64,7 @@ export async function runDemoMv4(): Promise<void> {
     kind: { type: 'window', windowId }
   });
 
-  // 2. Set initial Global AA to FXAA
-  let currentGlobalAa: AntiAliasingMode = 'fxaa';
+  // 2. Set initial Global AA
   galfus.multiverseSetAntiAliasing(currentGlobalAa);
   console.log(`✔ Multiverse Global Anti-Aliasing set to: [${currentGlobalAa.toUpperCase()}]`);
 
@@ -294,7 +297,9 @@ export async function runDemoMv4(): Promise<void> {
 
   console.log('\n----------------------------------------------------------------');
   console.log(' CONTROLS:');
-  console.log('   [F] / [SPACE] - Cycle Global Anti-Aliasing (FXAA <-> NONE)');
+  console.log(
+    '   [F] / [SPACE] - Cycle Global Anti-Aliasing (NONE -> FXAA -> SMAA -> SSAA 2X -> SSAA 4X)'
+  );
   console.log('   [S]           - Toggle Split-Screen vs Fullscreen Mode');
   console.log('   [R]           - Pause / Resume Rotation');
   console.log('   [ESC]         - Exit Demo');
@@ -328,7 +333,8 @@ export async function runDemoMv4(): Promise<void> {
             running = false;
             break;
           } else if (key === 'f' || key === 'space' || key === ' ') {
-            currentGlobalAa = currentGlobalAa === 'fxaa' ? 'none' : 'fxaa';
+            aaIndex = (aaIndex + 1) % aaModes.length;
+            currentGlobalAa = aaModes[aaIndex] ?? 'none';
             galfus.multiverseSetAntiAliasing(currentGlobalAa);
             const verified = galfus.multiverseGetAntiAliasing();
             console.log(`[MULTIVERSE] Global Anti-Aliasing set to: [${verified.toUpperCase()}]`);

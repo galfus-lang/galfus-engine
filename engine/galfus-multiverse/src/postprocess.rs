@@ -209,6 +209,17 @@ fn fs_fxaa(in: VertexOutput) -> @location(0) vec4<f32> {
     let result_rgb = mix(rgb_m, sampled_rgb, clamp(subpix_blend * 1.25, 0.0, 1.0));
     return vec4<f32>(result_rgb, alpha_m);
 }
+
+@fragment
+fn fs_ssaa_downsample(in: VertexOutput) -> @location(0) vec4<f32> {
+    let dim = vec2<f32>(textureDimensions(t_input));
+    let texel = vec2<f32>(0.5 / max(dim.x, 1.0), 0.5 / max(dim.y, 1.0));
+    var c = textureSample(t_input, s_input, in.uv + vec2<f32>(-texel.x, -texel.y)) * 0.25;
+    c += textureSample(t_input, s_input, in.uv + vec2<f32>(texel.x, -texel.y)) * 0.25;
+    c += textureSample(t_input, s_input, in.uv + vec2<f32>(-texel.x, texel.y)) * 0.25;
+    c += textureSample(t_input, s_input, in.uv + vec2<f32>(texel.x, texel.y)) * 0.25;
+    return c;
+}
 "#;
 
 fn create_1x1_texture(
@@ -264,6 +275,7 @@ pub(crate) struct PostProcessor {
     _fallback_textures: (wgpu::Texture, wgpu::Texture, wgpu::Texture),
     pipelines: HashMap<(String, wgpu::TextureFormat), wgpu::RenderPipeline>,
     custom_shaders: HashMap<u32, wgpu::ShaderModule>,
+    pub(crate) smaa_pipelines: HashMap<wgpu::TextureFormat, crate::smaa::SmaaPipeline>,
 }
 
 /// Parameters defining source texture, destination target view, and optional viewport for a filter pass.
@@ -378,7 +390,19 @@ impl PostProcessor {
             _fallback_textures: (white_tex, normal_tex, black_tex),
             pipelines: HashMap::new(),
             custom_shaders: HashMap::new(),
+            smaa_pipelines: HashMap::new(),
         }
+    }
+
+    pub fn ensure_smaa(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+    ) -> &crate::smaa::SmaaPipeline {
+        self.smaa_pipelines
+            .entry(format)
+            .or_insert_with(|| crate::smaa::SmaaPipeline::new(device, queue, format))
     }
 
     /// Registers a custom shader snippet by composing it against the multiverse screen template.
@@ -437,6 +461,8 @@ impl PostProcessor {
                 (&self.shader_module, "fs_sharpen")
             } else if effect_name == "fxaa" {
                 (&self.shader_module, "fs_fxaa")
+            } else if effect_name == "ssaa_downsample" {
+                (&self.shader_module, "fs_ssaa_downsample")
             } else {
                 (&self.shader_module, "fs_blit")
             };
@@ -504,6 +530,10 @@ impl PostProcessor {
             Some(InvocationFilter::Blur) => ("blur".to_string(), &[None; 8], 0),
             Some(InvocationFilter::Sharpen) => ("sharpen".to_string(), &[None; 8], 0),
             Some(InvocationFilter::Fxaa) => ("fxaa".to_string(), &[None; 8], 0),
+            Some(InvocationFilter::SsaaDownsample) => {
+                ("ssaa_downsample".to_string(), &[None; 8], 0)
+            }
+            Some(InvocationFilter::Smaa) => ("blit".to_string(), &[None; 8], 0),
             Some(InvocationFilter::Custom {
                 shader_id,
                 textures,

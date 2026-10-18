@@ -62,6 +62,10 @@ pub enum InvocationFilter {
     Sharpen,
     /// Fast Approximate Anti-Aliasing (FXAA 3.11) screen-space edge smoothing.
     Fxaa,
+    /// Subpixel Morphological Anti-Aliasing (SMAA 1x).
+    Smaa,
+    /// Super-Sample Anti-Aliasing downsample filter.
+    SsaaDownsample,
     /// Custom post-processing shader module ID with optional texture slots and sampler index.
     Custom {
         shader_id: u32,
@@ -83,6 +87,10 @@ pub enum AntiAliasingMode {
     Fxaa,
     /// Subpixel Morphological Anti-Aliasing (pattern-based edge reconstruction).
     Smaa,
+    /// Super-Sample Anti-Aliasing 2x (renders at 2x resolution, downsamples with area filter).
+    Ssaa2x,
+    /// Super-Sample Anti-Aliasing 4x (renders at 4x resolution, downsamples with area filter).
+    Ssaa4x,
     /// Hardware Multi-Sample Anti-Aliasing 2x.
     Msaa2x,
     /// Hardware Multi-Sample Anti-Aliasing 4x.
