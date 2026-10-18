@@ -29,6 +29,7 @@ Single native shared library packaging boundary and C-compatible ABI for host FF
 - **Automated Multi-Language SDK Generation**:
   - Feeds the strategy-pattern codegen engine to automatically output:
     - `sdk/c/galfus.h` (C/C++ Header)
+    - `sdk/csharp/Galfus.cs` (C# / MonoDevelop P/Invoke wrapper with fast-paths)
     - `sdk/python/galfus.py` (Python ctypes wrapper)
     - `sdk/lua/galfus.lua` (LuaJIT FFI wrapper)
     - `sdk/typescript/galfus.ts` (Canonical TypeScript definitions)

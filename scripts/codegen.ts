@@ -7,6 +7,7 @@ import { PythonStrategy } from './codegen/strategies/python.ts';
 import { LuaStrategy } from './codegen/strategies/lua.ts';
 import { TypeScriptStrategy } from './codegen/strategies/typescript.ts';
 import { BunFfiStrategy } from './codegen/strategies/bun_ffi.ts';
+import { CSharpStrategy } from './codegen/strategies/csharp.ts';
 
 const rootDir = resolve(import.meta.dir, '..');
 
@@ -15,7 +16,8 @@ const STRATEGIES: CodegenStrategy[] = [
   new PythonStrategy(),
   new LuaStrategy(),
   new TypeScriptStrategy(),
-  new BunFfiStrategy()
+  new BunFfiStrategy(),
+  new CSharpStrategy()
 ];
 
 async function main() {
