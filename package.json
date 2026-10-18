@@ -7,6 +7,7 @@
     "check": "bun scripts/check.ts",
     "codegen": "bun scripts/codegen.ts",
     "test:ffi": "bun scripts/test-ffi.ts",
+    "test:binds": "bun scripts/test-binds.ts",
     "test:napi": "cargo build -p galfus-native --features napi && bun scripts/test-napi.ts",
     "demo": "cargo build -p galfus-native && bun scripts/demos/main.ts",
     "typecheck": "bun --check"
