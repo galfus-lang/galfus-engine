@@ -574,6 +574,40 @@ mod tests {
     }
 
     #[test]
+    fn test_tessellate_svg_with_css_style() {
+        let db = fontdb::Database::new();
+        let xml = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+            <style>
+                .danger { fill: #ff0000; stroke: #00ff00; stroke-width: 2px; }
+                #highlight { fill: #0000ff; }
+            </style>
+            <rect class="danger" x="10" y="10" width="40" height="40"/>
+            <circle id="highlight" cx="100" cy="50" r="30"/>
+            <rect style="fill: #ffff00; stroke: #ff00ff;" x="150" y="10" width="20" height="20"/>
+        </svg>"##;
+        let mesh = tessellate_svg(xml, Arc::new(db), "sans-serif").unwrap();
+        assert!(!mesh.vertices.is_empty());
+        // Verify red color from class .danger (RGBA: [5..9])
+        let has_red = mesh
+            .vertices
+            .iter()
+            .any(|v| (v[5] - 1.0).abs() < 0.05 && v[6] < 0.05 && v[7] < 0.05);
+        // Verify blue color from id #highlight
+        let has_blue = mesh
+            .vertices
+            .iter()
+            .any(|v| v[5] < 0.05 && v[6] < 0.05 && (v[7] - 1.0).abs() < 0.05);
+        // Verify yellow color from inline style (RGBA: [1, 1, 0, 1])
+        let has_yellow = mesh
+            .vertices
+            .iter()
+            .any(|v| (v[5] - 1.0).abs() < 0.05 && (v[6] - 1.0).abs() < 0.05 && v[7] < 0.05);
+        assert!(has_red, "Should apply class-based CSS fill");
+        assert!(has_blue, "Should apply ID-based CSS fill");
+        assert!(has_yellow, "Should apply inline style fill");
+    }
+
+    #[test]
     fn test_tessellate_demo_2d3_hud_card() {
         let mut db = fontdb::Database::new();
         db.load_font_data(crate::svg_manager::DEFAULT_FONT_BYTES.to_vec());
