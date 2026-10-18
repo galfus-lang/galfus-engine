@@ -8,7 +8,8 @@
     "codegen": "bun scripts/codegen.ts",
     "test:ffi": "bun scripts/test-ffi.ts",
     "test:binds": "bun scripts/test-binds.ts",
-    "test:napi": "cargo build -p galfus-native --features napi && bun scripts/test-napi.ts",
+    "build:napi": "cargo build -p galfus-native --features napi && cp build/cargo-target/debug/libgalfus_native.so build/cargo-target/debug/galfus.node && cargo build -p galfus-native",
+    "test:napi": "bun run build:napi && bun scripts/test-napi.ts",
     "demo": "cargo build -p galfus-native && bun scripts/demos/main.ts",
     "typecheck": "bun --check"
   },

@@ -38,7 +38,21 @@ runStep('Bun FFI SDK (sdk/bun/galfus.ts)', () => {
   }
 });
 
-// 2. Python SDK Test Suite
+// 2. Node-API Native Addon Test Suite
+runStep('Node-API SDK (sdk/node/galfus.ts)', () => {
+  const result = spawnSync('bun', [resolve(rootDir, 'scripts/test-napi.ts')], {
+    cwd: rootDir,
+    encoding: 'utf-8',
+    stdio: 'pipe'
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `test-napi.ts failed with code ${result.status}:\n${result.stderr || result.stdout}`
+    );
+  }
+});
+
+// 3. Python SDK Test Suite
 runStep('Python 3 SDK (sdk/python/galfus.py)', () => {
   const pyCode = `
 import sys

@@ -1,72 +1,15 @@
+import { existsSync } from 'fs';
 import { resolve } from 'path';
 
-const libPath = resolve(import.meta.dir, '../build/cargo-target/debug/libgalfus_native.so');
+const nodeAddonPath = resolve(import.meta.dir, '../build/cargo-target/debug/galfus.node');
+const soPath = resolve(import.meta.dir, '../build/cargo-target/debug/libgalfus_native.so');
+const libPath = existsSync(nodeAddonPath) ? nodeAddonPath : soPath;
 
 console.log(`==> Loading Node-API native addon from: ${libPath}`);
 
-// Load the native Node-API addon via process.dlopen
-interface GalfusNativeAddon {
-  platformInit(): void;
-  platformInitHeadless(): void;
-  platformShutdown(): void;
-  platformGetCapabilities(): {
-    supportsMultipleWindows: boolean;
-    supportsWindowPositioning: boolean;
-    supportsCursorGrab: boolean;
-    supportsGamepad: boolean;
-    supportsAudio: boolean;
-    isHeadless: boolean;
-  };
-  windowCreate(config: {
-    id: number;
-    title: string;
-    size?: [number, number];
-    resizable?: boolean;
-    decorations?: boolean;
-    transparent?: boolean;
-  }): number;
-  windowClose(windowId: number): void;
-  windowSetTitle(windowId: number, title: string): void;
-  windowSetCursorGrab(windowId: number, mode: number): void;
-  windowSetCursorIcon(windowId: number, icon: number): void;
-  platformPumpEvents(): Array<unknown>;
+import { GalfusNode } from '../sdk/node/galfus.ts';
 
-  // Multiverse Node-API methods
-  multiverseCreateTarget(targetId: number, desc: unknown): void;
-  multiverseDestroyTarget(targetId: number): void;
-  multiverseRegisterColorRealm(realmId: number, r: number, g: number, b: number, a: number): void;
-  multiverseUnregisterRealm(realmId: number): void;
-  multiverseRegisterShader(shaderId: number, source: string): void;
-  multiverseCreateInvocation(invocationId: number, desc: unknown): void;
-  multiverseDestroyInvocation(invocationId: number): void;
-  multiverseSetInvocationEnabled(invocationId: number, enabled: boolean): void;
-  multiverseSetInvocationViewport(invocationId: number, viewport: unknown): void;
-  multiverseSetInvocationFilters(invocationId: number, filters: unknown): void;
-  multiverseSetInvocationClearColor(
-    invocationId: number,
-    r: number,
-    g: number,
-    b: number,
-    a: number,
-    hasClear: boolean
-  ): void;
-  multiverseSetInvocationCameraSlot(
-    invocationId: number,
-    cameraSlot: number,
-    hasSlot: boolean
-  ): void;
-  multiverseUpdateWindowSize(windowId: number, width: number, height: number): void;
-  multiverseBindTargetTexture(binding: unknown): void;
-  multiverseUnbindTargetTexture(realmId: number, slot: string): void;
-  multiverseResolve(): { targetBlocks: Array<unknown> };
-  multiverseDispatch(frameId: number, deltaTime: number): void;
-}
-
-const addonModule: { exports: Partial<GalfusNativeAddon> } = { exports: {} };
-process.dlopen(addonModule, libPath);
-const galfus = addonModule.exports as GalfusNativeAddon;
-
-console.log('==> Exported Node-API symbols count:', Object.keys(galfus).length);
+const galfus = new GalfusNode(libPath);
 
 // 1. Initialize headless platform
 console.log('==> Testing platformInitHeadless()...');

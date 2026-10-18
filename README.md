@@ -68,21 +68,21 @@ An application owns its lifecycle and decides when to process events, update its
 
 ## Workspace Layout
 
-| Path                               | Description                                                                                          |
-| :--------------------------------- | :--------------------------------------------------------------------------------------------------- |
-| `engine/galfus-core`               | Core types, ContentId, ShaderEffectTemplate, reserved ID policies.                                   |
-| `engine/galfus-platform`           | Cross-platform windowing (`winit`), headless mode, flat event queues.                                |
-| `engine/galfus-gpu-manager`        | Shared `wgpu` instance, device, queue, and texture/buffer management.                                |
-| `engine/galfus-realm-core`         | Realm lifecycle trait (`prepare`, `execute`, `clear`, `destroy`, `referenced_texture_ids`).          |
-| `engine/galfus-multiverse`         | Graph coordinator, target blocks, DAG topological ordering, screen effects.                          |
-| `engine/galfus-realm-2d`           | 2D renderer, sprite batching, 2D shadows, 2D surface effects.                                        |
-| `engine/galfus-realm-2d-resources` | 2D domain models: sprites, shapes, 2D cameras, materials, particles.                                 |
-| `engine/galfus-realm-3d`           | 3D forward+ renderer, reverse-Z, shadow maps, SSAO, gizmos, portals.                                 |
-| `engine/galfus-realm-3d-resources` | 3D domain models: meshes, PBR materials, lights, cameras, particles, AABB.                           |
-| `bindings/galfus-native`           | Unified C-ABI dynamic library (`libgalfus_native.so`).                                               |
-| `scripts/codegen`                  | Multi-language code generator using the Strategy pattern.                                            |
-| `sdk/`                             | Generated client SDKs (`sdk/c`, `sdk/csharp`, `sdk/python`, `sdk/lua`, `sdk/typescript`, `sdk/bun`). |
-| `scripts/demos`                    | Interactive realtime demonstration suite (3D PBR, SSAO, portals, 2D shadows, multiverse).            |
+| Path                               | Description                                                                                                      |
+| :--------------------------------- | :--------------------------------------------------------------------------------------------------------------- |
+| `engine/galfus-core`               | Core types, ContentId, ShaderEffectTemplate, reserved ID policies.                                               |
+| `engine/galfus-platform`           | Cross-platform windowing (`winit`), headless mode, flat event queues.                                            |
+| `engine/galfus-gpu-manager`        | Shared `wgpu` instance, device, queue, and texture/buffer management.                                            |
+| `engine/galfus-realm-core`         | Realm lifecycle trait (`prepare`, `execute`, `clear`, `destroy`, `referenced_texture_ids`).                      |
+| `engine/galfus-multiverse`         | Graph coordinator, target blocks, DAG topological ordering, screen effects.                                      |
+| `engine/galfus-realm-2d`           | 2D renderer, sprite batching, 2D shadows, 2D surface effects.                                                    |
+| `engine/galfus-realm-2d-resources` | 2D domain models: sprites, shapes, 2D cameras, materials, particles.                                             |
+| `engine/galfus-realm-3d`           | 3D forward+ renderer, reverse-Z, shadow maps, SSAO, gizmos, portals.                                             |
+| `engine/galfus-realm-3d-resources` | 3D domain models: meshes, PBR materials, lights, cameras, particles, AABB.                                       |
+| `bindings/galfus-native`           | Unified C-ABI dynamic library (`libgalfus_native.so`).                                                           |
+| `scripts/codegen`                  | Multi-language code generator using the Strategy pattern.                                                        |
+| `sdk/`                             | Generated client SDKs (`sdk/c`, `sdk/csharp`, `sdk/python`, `sdk/lua`, `sdk/typescript`, `sdk/bun`, `sdk/node`). |
+| `scripts/demos`                    | Interactive realtime demonstration suite (3D PBR, SSAO, portals, 2D shadows, multiverse).                        |
 
 ---
 
@@ -96,6 +96,7 @@ Galfus uses a centralized, specification-driven code generator (`scripts/codegen
 - **LuaJIT**: `sdk/lua/galfus.lua`
 - **TypeScript**: `sdk/typescript/galfus.ts`
 - **Bun FFI**: `sdk/bun/galfus.ts`
+- **Node.js (Node-API)**: `sdk/node/galfus.ts`
 
 To regenerate all SDKs after specification changes:
 

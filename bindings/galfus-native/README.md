@@ -34,6 +34,7 @@ Single native shared library packaging boundary and C-compatible ABI for host FF
     - `sdk/lua/galfus.lua` (LuaJIT FFI wrapper)
     - `sdk/typescript/galfus.ts` (Canonical TypeScript definitions)
     - `sdk/bun/galfus.ts` (High-performance Bun FFI client with fast-path buffer overloads)
+    - `sdk/node/galfus.ts` (Node-API native addon client for standard Node.js runtimes)
 
 ## Invariants & Design Principles
 
