@@ -535,5 +535,15 @@ export const realm2dFunctions: FunctionSpec[] = [
       { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' }
     ],
     returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_load_font_data',
+    methodName: 'realm2dLoadFontData',
+    doc: 'Registers raw TTF/OTF font binary data from memory (zero filesystem access) via base64. Returns the detected font family name.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'dataBase64', type: 'string', doc: 'Base64 encoded TTF/OTF font binary bytes.' }
+    ],
+    returnType: 'string'
   }
 ];

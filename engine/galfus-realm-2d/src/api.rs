@@ -331,4 +331,13 @@ impl Realm2DContext {
         self.dirty = true;
         Ok(())
     }
+
+    /// Registers raw TTF/OTF font binary data from memory (zero filesystem access).
+    ///
+    /// Returns the detected font family name on success.
+    pub fn load_font_data(&mut self, data: &[u8]) -> RealmResult<String> {
+        self.svg_manager.load_font_data(data).map_err(|e| {
+            galfus_realm_core::RealmError::Internal(format!("Font loading failed: {e}"))
+        })
+    }
 }

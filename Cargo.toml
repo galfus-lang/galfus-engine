@@ -24,6 +24,7 @@ wgpu = "28.0"
 pollster = "0.4"
 resvg = "0.48"
 xmltree = "0.12"
+lyon_tessellation = "1.0"
 
 # Internal workspace crates
 galfus-core = { path = "engine/galfus-core" }

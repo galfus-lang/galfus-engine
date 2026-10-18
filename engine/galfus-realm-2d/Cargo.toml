@@ -17,6 +17,7 @@ thiserror.workspace = true
 wgpu.workspace = true
 resvg.workspace = true
 xmltree.workspace = true
+lyon_tessellation.workspace = true
 
 [dev-dependencies]
 pollster.workspace = true

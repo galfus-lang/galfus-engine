@@ -7,7 +7,7 @@ use galfus_realm_2d_resources::svg::Svg2DDesc;
 use galfus_realm_2d_resources::transform::Transform2D;
 use glam::Vec2;
 
-use crate::ffi::{from_c_str, set_last_error};
+use crate::ffi::{from_c_str, set_last_error, to_c_string};
 use crate::ffi_realm_2d_desc::Transform2DDesc;
 use crate::state::{with_multiverse, with_multiverse_mut};
 
@@ -345,6 +345,44 @@ pub extern "C" fn galfus_realm_2d_destroy_svg(realm_id: u32, svg_id: u32) -> i32
         Err(e) => {
             set_last_error(&e);
             -1
+        }
+    }
+}
+
+/// Registers raw TTF/OTF font binary data from memory (zero filesystem access).
+///
+/// Accepts base64 encoded font data string and returns the detected font family name as a C string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_2d_load_font_data(
+    realm_id: u32,
+    data_base64: *const c_char,
+) -> *mut c_char {
+    let b64 = match unsafe { from_c_str(data_base64) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return std::ptr::null_mut();
+        }
+    };
+    let bytes = match crate::ffi_resources::decode_base64(b64.trim()) {
+        Ok(b) => b,
+        Err(e) => {
+            set_last_error(&format!("Invalid base64 font data: {e}"));
+            return std::ptr::null_mut();
+        }
+    };
+
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm2DContext>(realm_id)
+            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
+        let family = realm.load_font_data(&bytes).map_err(|e| e.to_string())?;
+        Ok(family)
+    }) {
+        Ok(family) => to_c_string(&family),
+        Err(e) => {
+            set_last_error(&e);
+            std::ptr::null_mut()
         }
     }
 }

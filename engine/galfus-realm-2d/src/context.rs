@@ -154,6 +154,7 @@ impl Realm for Realm2DContext {
             queue,
             &pipeline_manager.material_bind_group_layout,
             &gpu_res.samplers,
+            &gpu_res.fallback_texture_view,
             &gpu_res.fallback_normal_view,
             &gpu_res.fallback_black_view,
             &gpu_res.fallback_material_buffer,
@@ -409,8 +410,23 @@ impl Realm for Realm2DContext {
             rpass.set_index_buffer(quad_ibo.slice(..), wgpu::IndexFormat::Uint16);
             rpass.set_bind_group(0, global_bg, &[]);
 
+            let mut current_geo_id = 0u32;
             let pipeline_mgr = self.pipeline_manager.as_mut().unwrap();
             for range in ranges {
+                if range.key.geometry_id != current_geo_id {
+                    current_geo_id = range.key.geometry_id;
+                    if current_geo_id == 0 {
+                        rpass.set_vertex_buffer(0, quad_vbo.slice(..));
+                        rpass.set_index_buffer(quad_ibo.slice(..), wgpu::IndexFormat::Uint16);
+                    } else if let Some(mesh) = self.svg_manager.get_geometry(current_geo_id) {
+                        rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                        rpass.set_index_buffer(
+                            mesh.index_buffer.slice(..),
+                            wgpu::IndexFormat::Uint32,
+                        );
+                    }
+                }
+
                 let mat = self.materials.get(&range.key.material_id);
                 let snippet = mat.and_then(|m| m.shader_effect.as_deref());
                 let effect_id = crate::pipeline::PipelineManager2D::compute_effect_id(snippet);
@@ -427,7 +443,16 @@ impl Realm for Realm2DContext {
                     .get(&range.key.material_id)
                     .unwrap_or(fallback_mat_bg);
                 rpass.set_bind_group(1, mat_bg, &[]);
-                rpass.draw_indexed(0..6, 0, range.start..(range.start + range.count));
+
+                if current_geo_id == 0 {
+                    rpass.draw_indexed(0..6, 0, range.start..(range.start + range.count));
+                } else if let Some(mesh) = self.svg_manager.get_geometry(current_geo_id) {
+                    rpass.draw_indexed(
+                        0..mesh.index_count,
+                        0,
+                        range.start..(range.start + range.count),
+                    );
+                }
             }
         }
 
