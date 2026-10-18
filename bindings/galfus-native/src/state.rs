@@ -5,6 +5,7 @@ use galfus_platform::PlatformContext;
 thread_local! {
     static CONTEXT: RefCell<Option<PlatformContext>> = const { RefCell::new(None) };
     static MULTIVERSE: RefCell<Option<galfus_multiverse::MultiverseContext>> = const { RefCell::new(None) };
+    static ANIMATION: RefCell<Option<galfus_animation::AnimationContext>> = const { RefCell::new(None) };
 }
 
 /// Initializes the global platform context on the calling thread.
@@ -35,9 +36,10 @@ pub fn init_context_headless() -> Result<(), String> {
 
 /// Shuts down and drops the global platform context and multiverse context.
 pub fn shutdown_context() -> Result<(), String> {
+    let anim_dropped = ANIMATION.with(|cell| cell.borrow_mut().take().is_some());
     let mv_dropped = MULTIVERSE.with(|cell| cell.borrow_mut().take().is_some());
     let ctx_dropped = CONTEXT.with(|cell| cell.borrow_mut().take().is_some());
-    if mv_dropped || ctx_dropped {
+    if anim_dropped || mv_dropped || ctx_dropped {
         Ok(())
     } else {
         Err("PlatformContext is not initialized".into())
@@ -137,4 +139,35 @@ pub fn attach_window_to_multiverse(window_id: u32) -> Result<(), String> {
     {
         Err("Window attachment not supported on wasm32 in this build".into())
     }
+}
+
+/// Executes a closure with an immutable reference to the active animation context.
+pub fn with_animation<F, R>(f: F) -> Result<R, String>
+where
+    F: FnOnce(&galfus_animation::AnimationContext) -> Result<R, String>,
+{
+    ANIMATION.with(|cell| {
+        let borrow = cell.borrow();
+        match borrow.as_ref() {
+            Some(anim) => f(anim),
+            None => Err("AnimationContext is not initialized".into()),
+        }
+    })
+}
+
+/// Executes a closure with a mutable reference to the active animation context.
+pub fn with_animation_mut<F, R>(f: F) -> Result<R, String>
+where
+    F: FnOnce(&mut galfus_animation::AnimationContext) -> Result<R, String>,
+{
+    ANIMATION.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        if borrow.is_none() {
+            *borrow = Some(galfus_animation::AnimationContext::new());
+        }
+        match borrow.as_mut() {
+            Some(anim) => f(anim),
+            None => Err("AnimationContext is not initialized".into()),
+        }
+    })
 }

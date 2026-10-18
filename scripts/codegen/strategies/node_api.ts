@@ -157,7 +157,9 @@ export class NodeApiStrategy implements CodegenStrategy {
     for (const fn of context.functions) {
       if (fn.methodName === 'getLastError') continue;
 
-      const params = fn.params.map((p) => `${p.name}: ${mapParamTsType(p.type)}`).join(', ');
+      const params = fn.params
+        .map((p) => `${p.name}${p.optional ? '?' : ''}: ${mapParamTsType(p.type)}`)
+        .join(', ');
       const retType = mapReturnTsType(fn.returnType, !!fn.returnsParamField);
 
       lines.push('');

@@ -1,0 +1,250 @@
+//! # Galfus Animation System
+//!
+//! Autonomous transition and property animation crate for Galfus Engine.
+//! Supports delay, smooth interruptible retargeting, 30+ easing curves,
+//! physical spring simulations, and binding across 3D, 2D, SVG DOM, Multiverse,
+//! and custom user channels.
+
+pub mod applier;
+pub mod context;
+pub mod easing;
+pub mod error;
+pub mod events;
+pub mod target;
+pub mod transition;
+pub mod value;
+
+pub use applier::apply_target_value;
+pub use context::AnimationContext;
+pub use easing::Easing;
+pub use error::{AnimationError, AnimationResult};
+pub use events::{AnimationEvent, AnimationEventType};
+pub use target::AnimationTarget;
+pub use transition::{
+    LoopMode, TransitionConfig, TransitionInstance, TransitionState, TransitionStatus,
+};
+pub use value::AnimValue;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use glam::Quat;
+    use std::f32::consts::PI;
+
+    #[test]
+    fn test_scalar_linear_transition() {
+        let mut ctx = AnimationContext::new();
+        let config = TransitionConfig {
+            duration: 1.0,
+            delay: 0.0,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
+        };
+        ctx.create_transition(1, AnimValue::Scalar(0.0), config)
+            .unwrap();
+        ctx.transition_to(1, AnimValue::Scalar(100.0), None)
+            .unwrap();
+
+        assert_eq!(ctx.get_state(1).unwrap().status, TransitionStatus::Running);
+
+        // Advance 0.5s -> 50.0
+        ctx.step(0.5);
+        let val = ctx.get_value(1).unwrap().as_scalar().unwrap();
+        assert!((val - 50.0).abs() < 1e-4);
+
+        // Advance 0.5s -> 100.0 (Completed)
+        ctx.step(0.5);
+        let state = ctx.get_state(1).unwrap();
+        assert_eq!(state.status, TransitionStatus::Completed);
+        assert!((state.current_value.as_scalar().unwrap() - 100.0).abs() < 1e-4);
+
+        let events = ctx.pump_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, AnimationEventType::Completed);
+    }
+
+    #[test]
+    fn test_delay_countdown() {
+        let mut ctx = AnimationContext::new();
+        let config = TransitionConfig {
+            duration: 1.0,
+            delay: 0.5,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
+        };
+        ctx.create_transition(10, AnimValue::Scalar(10.0), config)
+            .unwrap();
+        ctx.transition_to(10, AnimValue::Scalar(20.0), None)
+            .unwrap();
+
+        assert_eq!(ctx.get_state(10).unwrap().status, TransitionStatus::Delay);
+
+        // Advance 0.25s -> Still in delay
+        ctx.step(0.25);
+        assert_eq!(ctx.get_state(10).unwrap().status, TransitionStatus::Delay);
+        assert_eq!(ctx.get_value(10).unwrap().as_scalar().unwrap(), 10.0);
+        assert!(ctx.pump_events().is_empty());
+
+        // Advance 0.25s -> Delay finishes, transition starts
+        ctx.step(0.25);
+        assert_eq!(ctx.get_state(10).unwrap().status, TransitionStatus::Running);
+        let events = ctx.pump_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, AnimationEventType::Started);
+
+        // Advance remaining 1.0s -> Completed
+        ctx.step(1.0);
+        assert_eq!(
+            ctx.get_state(10).unwrap().status,
+            TransitionStatus::Completed
+        );
+        assert_eq!(ctx.get_value(10).unwrap().as_scalar().unwrap(), 20.0);
+    }
+
+    #[test]
+    fn test_interruptible_smooth_retargeting() {
+        let mut ctx = AnimationContext::new();
+        let config = TransitionConfig {
+            duration: 1.0,
+            delay: 0.0,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
+        };
+        ctx.create_transition(20, AnimValue::Scalar(0.0), config)
+            .unwrap();
+        ctx.transition_to(20, AnimValue::Scalar(100.0), None)
+            .unwrap();
+
+        // Advance half-way to 50.0
+        ctx.step(0.5);
+        let current = ctx.get_value(20).unwrap().as_scalar().unwrap();
+        assert!((current - 50.0).abs() < 1e-4);
+
+        // Interrupt! Redirect towards 250.0 in 2.0s
+        let new_config = TransitionConfig {
+            duration: 2.0,
+            delay: 0.0,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
+        };
+        ctx.transition_to(20, AnimValue::Scalar(250.0), Some(new_config))
+            .unwrap();
+
+        let state = ctx.get_state(20).unwrap();
+        // Start value must seamlessly be 50.0 (no jump back to 0.0)
+        assert!((state.start_value.as_scalar().unwrap() - 50.0).abs() < 1e-4);
+        assert!((state.target_value.as_scalar().unwrap() - 250.0).abs() < 1e-4);
+
+        // Step 1.0s (half of 2.0s from 50 to 250) -> should be 150.0
+        ctx.step(1.0);
+        let current2 = ctx.get_value(20).unwrap().as_scalar().unwrap();
+        assert!((current2 - 150.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_transform3d_shortest_slerp() {
+        let mut ctx = AnimationContext::new();
+        let config = TransitionConfig {
+            duration: 1.0,
+            delay: 0.0,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
+        };
+
+        let start_rot = Quat::IDENTITY;
+        // 90 degrees around Y axis
+        let end_rot = Quat::from_rotation_y(PI * 0.5);
+
+        let start_val = AnimValue::Transform3D([
+            0.0,
+            0.0,
+            0.0,
+            start_rot.x,
+            start_rot.y,
+            start_rot.z,
+            start_rot.w,
+            1.0,
+            1.0,
+            1.0,
+        ]);
+        let end_val = AnimValue::Transform3D([
+            10.0, 20.0, 30.0, end_rot.x, end_rot.y, end_rot.z, end_rot.w, 2.0, 2.0, 2.0,
+        ]);
+
+        ctx.create_transition(30, start_val, config).unwrap();
+        ctx.transition_to(30, end_val, None).unwrap();
+
+        // Step half-way (0.5s)
+        ctx.step(0.5);
+        let mid = ctx.get_value(30).unwrap();
+        let mid_t = mid.to_transform3d().unwrap();
+
+        assert!((mid_t.position.x - 5.0).abs() < 1e-4);
+        assert!((mid_t.position.y - 10.0).abs() < 1e-4);
+        assert!((mid_t.position.z - 15.0).abs() < 1e-4);
+        assert!((mid_t.scale.x - 1.5).abs() < 1e-4);
+
+        // Expected mid rotation is 45 degrees around Y
+        let expected_rot = Quat::from_rotation_y(PI * 0.25);
+        assert!((mid_t.rotation.dot(expected_rot).abs() - 1.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_transform2d_angular_wrapping() {
+        let mut ctx = AnimationContext::new();
+        let config = TransitionConfig {
+            duration: 1.0,
+            delay: 0.0,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
+        };
+
+        // From 350 degrees (5.934 rad) to 10 degrees (0.174 rad)
+        let deg_to_rad = PI / 180.0;
+        let start_rot = 350.0 * deg_to_rad;
+        let end_rot = 10.0 * deg_to_rad;
+
+        let start_val = AnimValue::Transform2D([0.0, 0.0, start_rot, 1.0, 1.0, 0.0]);
+        let end_val = AnimValue::Transform2D([10.0, 10.0, end_rot, 1.0, 1.0, 1.0]);
+
+        ctx.create_transition(40, start_val, config).unwrap();
+        ctx.transition_to(40, end_val, None).unwrap();
+
+        // Step 0.5s -> should take the shortest 20-degree path forward (passing 360/0 deg = 0 rad)
+        ctx.step(0.5);
+        let mid_val = ctx.get_value(40).unwrap();
+        let mid_t = mid_val.to_transform2d().unwrap();
+
+        // Shortest mid rotation between 350 deg and 10 deg is 0/360 deg
+        let rot_sin = mid_t.rotation.sin();
+        let rot_cos = mid_t.rotation.cos();
+        assert!(rot_sin.abs() < 0.05);
+        assert!((rot_cos - 1.0).abs() < 0.05);
+    }
+
+    #[test]
+    fn test_ping_pong_loop_mode() {
+        let mut ctx = AnimationContext::new();
+        let config = TransitionConfig {
+            duration: 1.0,
+            delay: 0.0,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::PingPong,
+        };
+        ctx.create_transition(50, AnimValue::Scalar(0.0), config)
+            .unwrap();
+        ctx.transition_to(50, AnimValue::Scalar(10.0), None)
+            .unwrap();
+
+        // Advance 1.0s -> reaches 10.0 and ping-pongs
+        ctx.step(1.0);
+        let events = ctx.pump_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, AnimationEventType::Looped);
+
+        // Advance 0.5s into bounce -> should be 5.0 (moving back towards 0.0)
+        ctx.step(0.5);
+        let val = ctx.get_value(50).unwrap().as_scalar().unwrap();
+        assert!((val - 5.0).abs() < 1e-4);
+    }
+}

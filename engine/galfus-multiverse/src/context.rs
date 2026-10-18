@@ -470,6 +470,17 @@ impl MultiverseContext {
         Ok(())
     }
 
+    /// Returns an immutable reference to an Invocation description.
+    pub fn get_invocation(&self, invocation_id: u32) -> Option<&InvocationDesc> {
+        self.invocations.get(&invocation_id)
+    }
+
+    /// Returns a mutable reference to an Invocation description, marking the graph dirty.
+    pub fn get_invocation_mut(&mut self, invocation_id: u32) -> Option<&mut InvocationDesc> {
+        self.dirty = true;
+        self.invocations.get_mut(&invocation_id)
+    }
+
     /// Binds a Target's output texture to a Realm slot (e.g. portal surface material).
     pub fn bind_target_texture(&mut self, binding: TargetTextureBinding) -> MultiverseResult<()> {
         if !self.targets.contains_key(&binding.source_target_id) {

@@ -23,14 +23,13 @@ pub(crate) fn not_found(realm_id: u32, kind: &str, id: u32) -> RealmError {
 
 /// Autonomous 3D Realm managing 3D scenes, entities, Reverse-Z rendering, and lighting.
 pub struct Realm3DContext {
-    pub(crate) id: u32,
-    pub(crate) cameras: BTreeMap<u32, (Camera3D, Transform3D)>,
-    pub(crate) materials:
-        BTreeMap<u32, (Material3D, Option<wgpu::Buffer>, Option<wgpu::BindGroup>)>,
-    pub(crate) geometries: BTreeMap<u32, (Geometry3D, Option<GpuMeshBuffers>)>,
-    pub(crate) models: BTreeMap<u32, GpuModelEntry>,
-    pub(crate) lights: BTreeMap<u32, (Light3D, Transform3D)>,
-    pub(crate) environment: EnvironmentRealm3D,
+    pub id: u32,
+    pub cameras: BTreeMap<u32, (Camera3D, Transform3D)>,
+    pub materials: BTreeMap<u32, (Material3D, Option<wgpu::Buffer>, Option<wgpu::BindGroup>)>,
+    pub geometries: BTreeMap<u32, (Geometry3D, Option<GpuMeshBuffers>)>,
+    pub models: BTreeMap<u32, GpuModelEntry>,
+    pub lights: BTreeMap<u32, (Light3D, Transform3D)>,
+    pub environment: EnvironmentRealm3D,
 
     pub(crate) pipeline: Option<Pipeline3D>,
     pub(crate) shadow_pipeline: Option<ShadowPipeline3D>,
@@ -39,8 +38,8 @@ pub struct Realm3DContext {
     pub(crate) post_pipelines: crate::postprocess::PostProcessPipelines,
     pub(crate) light_cull_pipeline: Option<crate::light_cull::LightCullingPipeline3D>,
     pub(crate) gizmos: crate::gizmo::GizmoSystem3D,
-    pub(crate) emitters: BTreeMap<u32, (ParticleEmitter3D, Transform3D, ParticleEmitterState3D)>,
-    pub(crate) portals: BTreeMap<u32, galfus_realm_3d_resources::portal::Portal3D>,
+    pub emitters: BTreeMap<u32, (ParticleEmitter3D, Transform3D, ParticleEmitterState3D)>,
+    pub portals: BTreeMap<u32, galfus_realm_3d_resources::portal::Portal3D>,
     pub(crate) particle_renderer: Option<crate::particle::ParticleRenderer3D>,
     pub(crate) refraction_pipeline: Option<crate::refraction::RefractionPipeline3D>,
     pub(crate) portal_pipeline: Option<crate::portal::PortalPipeline3D>,
@@ -49,7 +48,7 @@ pub struct Realm3DContext {
     pub(crate) model_bones: BTreeMap<u32, Vec<glam::Mat4>>,
     pub(crate) bones: Vec<glam::Mat4>,
     pub(crate) total_time: f32,
-    pub(crate) dirty: bool,
+    pub dirty: bool,
 }
 
 impl Realm3DContext {

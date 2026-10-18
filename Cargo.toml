@@ -36,6 +36,7 @@ galfus-realm-2d = { path = "engine/galfus-realm-2d" }
 galfus-realm-3d = { path = "engine/galfus-realm-3d" }
 galfus-realm-2d-resources = { path = "engine/galfus-realm-2d-resources" }
 galfus-realm-3d-resources = { path = "engine/galfus-realm-3d-resources" }
+galfus-animation = { path = "engine/galfus-animation" }
 
 [profile.dev]
 opt-level = 0

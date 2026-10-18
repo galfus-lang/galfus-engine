@@ -232,4 +232,18 @@ runStep('C# SDK (sdk/csharp/Galfus.cs)', () => {
   }
 });
 
+// 7. Galfus Animation System Test Suite
+runStep('Galfus Animation System (scripts/test-animation.ts)', () => {
+  const result = spawnSync('bun', [resolve(rootDir, 'scripts/test-animation.ts')], {
+    cwd: rootDir,
+    encoding: 'utf-8',
+    stdio: 'pipe'
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `test-animation.ts failed with code ${result.status}:\n${result.stderr || result.stdout}`
+    );
+  }
+});
+
 console.log(`\n🎉 All ${passedTests}/${totalTests} SDK bindings tested and verified successfully!`);

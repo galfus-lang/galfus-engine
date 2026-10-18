@@ -11,6 +11,7 @@ import { runDemo3d7 } from './demo_3d7_portal_mirror.ts';
 import { runDemo2d1 } from './demo_2d1_shadows.ts';
 import { runDemo2d2 } from './demo_2d2_effects_particles.ts';
 import { runDemo2d3 } from './demo_2d3_svg.ts';
+import { runDemoAnim1 } from './demo_anim1_transitions.ts';
 
 function printHelp(): void {
   console.log('=== Galfus Engine - TypeScript / Bun Demos ===');
@@ -18,7 +19,9 @@ function printHelp(): void {
   console.log('  bun demo <demo_id>');
   console.log('  bun scripts/demos/main.ts [demo_id]\n');
   console.log('Available Demos:\n');
-  console.log('  [Multiverse]');
+  console.log('  [Animation System]');
+  console.log('    anim1 - Property transitions, delay, retargeting & reactive vector SVG');
+  console.log('\n  [Multiverse]');
   console.log('    mv1   - Split-screen viewports & post-processing filters (Default)');
   console.log('    mv2   - Fullscreen 3D + 2D corner minimap & RTT texture reuse on 3D cube');
   console.log('    mv3   - Multiverse Realm Cyclic Dependencies & Soft-Cut Feedback Loop');
@@ -101,6 +104,11 @@ async function main(): Promise<void> {
     case '2d3':
     case 'svg':
       await runDemo2d3();
+      break;
+
+    case 'anim1':
+    case 'anim':
+      await runDemoAnim1();
       break;
 
     case 'help':

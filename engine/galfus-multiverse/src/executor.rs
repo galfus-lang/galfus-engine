@@ -171,7 +171,7 @@ pub(crate) fn execute_frame(
                 .clone();
 
             // Clear scratch texture with invocation clear color
-            let clear = step.clear_color.unwrap_or([0.0, 0.0, 0.0, 1.0]);
+            let clear = step.clear_color.unwrap_or([0.0, 0.0, 0.0, 0.0]);
             let mut encoder =
                 gpu.device()
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor {

@@ -1,4 +1,5 @@
 pub mod ffi;
+pub mod ffi_animation;
 pub mod ffi_multiverse;
 pub mod ffi_realm_2d;
 pub mod ffi_realm_2d_desc;
@@ -15,6 +16,7 @@ pub mod napi_bind;
 pub mod state;
 
 pub use ffi::*;
+pub use ffi_animation::*;
 pub use ffi_multiverse::*;
 pub use ffi_realm_2d::*;
 pub use ffi_realm_2d_svg::*;

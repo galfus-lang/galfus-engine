@@ -7,6 +7,7 @@ export interface ParamSpec {
   name: string;
   type: DataType;
   doc: string;
+  optional?: boolean;
 }
 
 export interface FunctionSpec {

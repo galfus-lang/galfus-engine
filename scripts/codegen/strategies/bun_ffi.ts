@@ -201,14 +201,16 @@ export class BunFfiStrategy implements CodegenStrategy {
       '  }',
       '',
       '  private toCJsonOrString(val: any): Uint8Array {',
-      "    const str = typeof val === 'string' ? val : JSON.stringify(val);",
+      "    const str = val === undefined || val === null ? '' : typeof val === 'string' ? val : (JSON.stringify(val) ?? '');",
       "    return Buffer.from(str + '\\0', 'utf-8');",
       '  }',
       ''
     );
 
     for (const fn of context.functions) {
-      const params = fn.params.map((p) => `${p.name}: ${mapParamTsType(p.type)}`).join(', ');
+      const params = fn.params
+        .map((p) => `${p.name}${p.optional ? '?' : ''}: ${mapParamTsType(p.type)}`)
+        .join(', ');
       const retType = mapReturnTsType(fn.returnType, Boolean(fn.returnsParamField));
 
       lines.push(`  /** ${fn.doc} */`);
