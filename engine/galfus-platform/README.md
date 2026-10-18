@@ -1,16 +1,31 @@
 # galfus-platform
 
-Environment normalization, surface adapters, input event dispatch, and platform capability discovery.
+Environment normalization, native window lifecycle, input event processing, audio services, and platform capability discovery.
 
 ## Responsibilities
 
-- **Window & Surface Adapters**: Desktop surface integration via `winit`, canvas abstractions for web environments, and headless operation modes.
-- **Event Normalization**: Unified event representation for keyboard, mouse/pointer, touch, gamepad, and window lifecycle transitions.
-- **Capability Discovery**: Exposes explicit platform capabilities and limitations (e.g. multi-window support, user-gesture audio restrictions, headless support).
-- **Audio Service Adapters**: Interfaces to native desktop audio backends and Web Audio.
+- **Window Lifecycle & Surface Adapters**: Desktop window creation, resize management, and surface attachment via `winit`, as well as complete headless operating modes.
+- **Unified Event Normalization**: Normalizes OS-specific input and window events into structured `PlatformEvent` types covering keyboard, mouse, pointer, touch, and gamepad inputs.
+- **Platform Capability Detection**: Queries runtime operating system features and surfaces capabilities (e.g. multi-window support, cursor locking, gamepad connectivity, audio availability).
+- **Audio Playback Engine**: Provides hardware-accelerated sound effects and music streaming using `kira` and `symphonia`.
 
-## Invariants & Non-Goals
+## Capabilities & Powers
 
-- **Host-Driven**: Does not own or dictate the main loop or update cadence. The host polls or processes events at its discretion.
-- **Thread Affinity Aware**: Respects platform-specific thread constraints (e.g. main-thread requirements for desktop windowing).
-- **Graphics Agnostic**: Does not manage GPU devices, shaders, render pipelines, or scene state.
+- **Desktop Window Management**:
+  - Full control over window creation, title, dimensions, visibility, decorations, and cursor capture/locking.
+  - Reentrant surface binding to `wgpu::Surface` for presentation in the multiverse.
+- **Headless Operating Mode**:
+  - Allows the engine to run without a desktop display server (X11/Wayland/Windows Desktop) for CI testing, automated test suites, and offscreen cloud rendering.
+- **Normalized Input Pipeline**:
+  - Keyboard: Normalizes physical scan codes and logical keys (including character mappings and named navigation keys).
+  - Pointer & Mouse: High-precision cursor positions, deltas, wheel scrolling, button states, and touch pressure extraction.
+  - Gamepad (W3C Standard): Normalizes gamepad axes and buttons to the W3C Standard Gamepad layout with configurable stick deadzones.
+- **Integrated Audio Subsystem**:
+  - Decodes and streams MP3, WAV, Ogg Vorbis, and FLAC audio formats.
+  - Positional playback, volume adjustments, and loop controls.
+
+## Invariants & Design Principles
+
+- **Host-Driven Execution**: Does not hijack or dictate the main loop. The host application pumps events on its own cadence (`platformPumpEvents()`).
+- **Main-Thread Enforcement**: Strictly enforces main-thread execution for OS windowing APIs, preventing platform-specific threading crashes.
+- **Decoupled from Render Logic**: Contains zero scene or rendering logic; outputs pure events and presentation surface handles.

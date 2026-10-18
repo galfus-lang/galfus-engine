@@ -1,17 +1,29 @@
 # galfus-gpu-manager
 
-Shared GPU context lifecycle, resource allocation, and device abstraction built on `wgpu`.
+Shared GPU device lifecycle, resource allocation pools, and low-level rendering abstractions built on `wgpu`.
 
 ## Responsibilities
 
-- **GPU Device & Queue Management**: Manages shared `wgpu::Device`, `wgpu::Queue`, adapter selection, and device-loss recovery.
-- **Resource Allocations**: Creates, caches, and recycles GPU buffers, textures, texture views, and samplers.
-- **Pipeline & Shader Facilities**: Compiles, validates, and caches compute/render pipelines and host-authored shader modules.
-- **Memory & Allocation Strategies**: Provides suballocation, buffer pooling, and opt-in texture atlas/array management.
-- **Resource Accounting**: Tracks GPU memory usage and handles asynchronous resource uploads and staging.
+- **GPU Device & Queue Lifecycle**: Manages the central `wgpu::Device` and `wgpu::Queue`, adapter enumeration, feature discovery, and device-loss recovery.
+- **Resource Pooling & Recycling**: Allocates, pools, and recycles offscreen render targets, scratch depth buffers, and staging upload buffers without frame-to-frame allocation spikes.
+- **Standard Sampler & Fallback Infrastructure**: Provides immutable, engine-wide standard sampler sets and 1x1 fallback textures to guarantee safe binding across all shaders.
+- **Shader Compilation & Validation**: Validates and compiles WGSL shader modules through `naga`, surfacing line-accurate compile errors and reflection metadata.
 
-## Invariants & Non-Goals
+## Capabilities & Powers
 
-- **Scene Agnostic**: Does not know about 2D sprites, 3D meshes, camera transforms, or realm execution order.
-- **Opt-In Strategies**: Does not force all textures into an atlas (render targets, depth buffers, and cubemaps have distinct usage patterns).
-- **Single Context Ownership**: A graphics context is shared explicitly, preventing hidden device duplications across subsystems.
+- **Dynamic Texture Pool**:
+  - Reuses offscreen render textures indexed by `(width, height, format, sample_count, usage)` tuples.
+  - Recycles transient invocation pass textures to eliminate VRAM fragmentation and allocation overhead during window resizes and render-to-texture passes.
+- **Engine-Wide Standard Sampler Bundle**:
+  - Instant access to preconfigured samplers: `LinearRepeat`, `LinearClamp`, `NearestRepeat`, and `NearestClamp`.
+  - Reusable across 2D sprite shaders, 3D PBR materials, SSAO kernels, and multiverse post-processing screen effects.
+- **Safe Fallback Textures & Uniform Buffers**:
+  - Provides pre-allocated 1x1 fallback textures (Pure White, Neutral Normal `[128, 128, 255, 255]`, Black, and Transparent) so optional texture slots always have valid GPU views.
+- **Asynchronous Staging & Buffer Writing**:
+  - Helpers for staging buffer uploads, mesh vertex/index buffer creation, and mapped memory reads for headless image capture.
+
+## Invariants & Design Principles
+
+- **Scene Agnostic**: Zero knowledge of cameras, 2D sprites, 3D meshes, lighting algorithms, or graph execution order.
+- **Single Context Ownership**: A single graphics context (`Device` and `Queue`) is shared explicitly across all realms and multiverse targets, preventing duplicate driver overhead.
+- **Opt-In Strategies**: Does not enforce a mandatory global texture atlas; render targets, cubemaps, and dynamic vector textures operate with native granularity.
