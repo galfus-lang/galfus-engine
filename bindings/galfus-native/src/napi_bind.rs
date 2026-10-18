@@ -380,6 +380,33 @@ pub fn multiverse_dispatch(frame_id: i64, delta_time: f64) -> Result<()> {
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
+#[napi]
+pub fn multiverse_set_anti_aliasing(mode_str: String) -> Result<()> {
+    let mode_json = format!("\"{mode_str}\"");
+    let mode: galfus_multiverse::AntiAliasingMode =
+        serde_json::from_str(&mode_json).map_err(|e| {
+            Error::new(
+                Status::GenericFailure,
+                format!("Invalid AntiAliasingMode '{mode_str}': {e}"),
+            )
+        })?;
+
+    with_multiverse_mut(|mv| {
+        mv.set_anti_aliasing(mode);
+        Ok(())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_get_anti_aliasing() -> Result<String> {
+    let mode = with_multiverse_mut(|mv| Ok(mv.anti_aliasing()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))?;
+    let s = serde_json::to_string(&mode)
+        .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+    Ok(s.trim_matches('"').to_string())
+}
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct NapiTextureCreatePayload {

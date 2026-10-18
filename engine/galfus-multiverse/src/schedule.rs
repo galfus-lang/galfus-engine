@@ -14,6 +14,7 @@ pub struct ResolvedInvocationStep {
     pub z_index: i32,
     pub clear_color: Option<[f32; 4]>,
     pub filters: Vec<InvocationFilter>,
+    pub anti_aliasing: Option<crate::types::AntiAliasingMode>,
 }
 
 /// Execution block for a single target, containing all its ordered invocations.

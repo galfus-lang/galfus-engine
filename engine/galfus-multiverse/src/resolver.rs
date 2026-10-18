@@ -94,6 +94,7 @@ pub fn resolve_schedule(
                     z_index: inv.z_index,
                     clear_color: inv.clear_color,
                     filters: inv.filters.clone(),
+                    anti_aliasing: inv.anti_aliasing,
                 });
             }
         }

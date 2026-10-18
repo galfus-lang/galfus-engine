@@ -220,7 +220,15 @@ pub(crate) fn execute_frame(
                     .map_err(|e| MultiverseError::RealmError(realm.id(), e.to_string()))?;
             }
 
-            if step.filters.len() > 1 {
+            let effective_aa = step.anti_aliasing.unwrap_or(ctx.anti_aliasing);
+            let mut filters = step.filters.clone();
+            if effective_aa == crate::types::AntiAliasingMode::Fxaa
+                && !filters.contains(&crate::types::InvocationFilter::Fxaa)
+            {
+                filters.push(crate::types::InvocationFilter::Fxaa);
+            }
+
+            if filters.len() > 1 {
                 let needs_pp_realloc = match ctx.ping_pong_texture {
                     Some((_, _, size)) => size != needed_size,
                     None => true,
@@ -268,7 +276,7 @@ pub(crate) fn execute_frame(
                     gpu.textures.get_logical_view(id).ok().map(|v| v.raw())
                 };
 
-                if step.filters.is_empty() {
+                if filters.is_empty() {
                     let pass_desc = FilterPassDesc {
                         src_view: &scratch_view,
                         dst_view: target_v,
@@ -283,7 +291,7 @@ pub(crate) fn execute_frame(
                         &tex_resolver,
                         &pass_desc,
                     )?;
-                } else if step.filters.len() == 1 {
+                } else if filters.len() == 1 {
                     let pass_desc = FilterPassDesc {
                         src_view: &scratch_view,
                         dst_view: target_v,
@@ -294,7 +302,7 @@ pub(crate) fn execute_frame(
                     post_proc.render_filter(
                         gpu.device(),
                         gpu.queue(),
-                        Some(&step.filters[0]),
+                        Some(&filters[0]),
                         &tex_resolver,
                         &pass_desc,
                     )?;
@@ -309,8 +317,8 @@ pub(crate) fn execute_frame(
                         .clone();
 
                     let mut current_is_scratch = true;
-                    for (i, filter) in step.filters.iter().enumerate() {
-                        let is_last = i == step.filters.len() - 1;
+                    for (i, filter) in filters.iter().enumerate() {
+                        let is_last = i == filters.len() - 1;
                         if is_last {
                             let src = if current_is_scratch {
                                 &scratch_view

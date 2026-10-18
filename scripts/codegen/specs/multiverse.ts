@@ -82,6 +82,7 @@ export const multiverseDescriptors: DescSpec[] = [
       { literal: 'posterize' },
       { literal: 'blur' },
       { literal: 'sharpen' },
+      { literal: 'fxaa' },
       {
         inline: {
           custom: {
@@ -98,6 +99,12 @@ export const multiverseDescriptors: DescSpec[] = [
     ]
   },
   {
+    kind: 'enum',
+    name: 'AntiAliasingMode',
+    doc: 'Anti-aliasing mode: none, fxaa, smaa, msaa2x, msaa4x, msaa8x, msaa16x.',
+    values: ['none', 'fxaa', 'smaa', 'msaa2x', 'msaa4x', 'msaa8x', 'msaa16x']
+  },
+  {
     kind: 'object',
     name: 'InvocationDesc',
     doc: 'Descriptor linking a Realm to a Target with optional viewport and filters.',
@@ -109,7 +116,8 @@ export const multiverseDescriptors: DescSpec[] = [
       filters: { type: { array: { ref: 'InvocationFilter' } }, optional: true },
       zIndex: { type: 'number', optional: true },
       enabled: { type: 'boolean', optional: true },
-      clearColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true }
+      clearColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      antiAliasing: { type: { ref: 'AntiAliasingMode' }, optional: true }
     }
   },
   {
@@ -133,7 +141,8 @@ export const multiverseDescriptors: DescSpec[] = [
       resolvedViewport: { type: { tuple: ['number', 'number', 'number', 'number'] } },
       zIndex: { type: 'number' },
       clearColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      filters: { type: { array: { ref: 'InvocationFilter' } } }
+      filters: { type: { array: { ref: 'InvocationFilter' } } },
+      antiAliasing: { type: { ref: 'AntiAliasingMode' }, optional: true }
     }
   },
   {
@@ -537,5 +546,25 @@ export const multiverseFunctions: FunctionSpec[] = [
       }
     ],
     returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_set_anti_aliasing',
+    methodName: 'multiverseSetAntiAliasing',
+    doc: 'Sets the global Anti-Aliasing mode for the Multiverse.',
+    params: [
+      {
+        name: 'mode',
+        type: 'string',
+        doc: 'Anti-aliasing mode: none, fxaa, smaa, msaa2x, msaa4x, msaa8x, msaa16x'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_get_anti_aliasing',
+    methodName: 'multiverseGetAntiAliasing',
+    doc: 'Gets the current global Anti-Aliasing mode of the Multiverse.',
+    params: [],
+    returnType: 'string'
   }
 ];

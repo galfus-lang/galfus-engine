@@ -15,11 +15,13 @@ use crate::postprocess::PostProcessor;
 use crate::resolver::resolve_schedule;
 use crate::schedule::MultiverseSchedule;
 use crate::types::{
-    InvocationDesc, InvocationFilter, TargetDesc, TargetKind, TargetTextureBinding, ViewportRect,
+    AntiAliasingMode, InvocationDesc, InvocationFilter, TargetDesc, TargetKind,
+    TargetTextureBinding, ViewportRect,
 };
 
 /// Central Multiverse Context coordinating targets, realms, and invocation scheduling.
 pub struct MultiverseContext {
+    pub anti_aliasing: AntiAliasingMode,
     pub(crate) targets: HashMap<u32, TargetDesc>,
     pub(crate) realms: HashMap<u32, Box<dyn Realm>>,
     pub(crate) invocations: HashMap<u32, InvocationDesc>,
@@ -51,6 +53,7 @@ impl MultiverseContext {
     /// Creates a new empty `MultiverseContext`.
     pub fn new() -> Self {
         Self {
+            anti_aliasing: AntiAliasingMode::None,
             targets: HashMap::new(),
             realms: HashMap::new(),
             invocations: HashMap::new(),
@@ -571,5 +574,18 @@ impl MultiverseContext {
     /// Dispatches a frame by preparing realms and rendering active invocations and connectors in scheduled order.
     pub fn dispatch(&mut self, frame_id: u64, delta_time: f32) -> MultiverseResult<()> {
         crate::executor::execute_frame(self, frame_id, delta_time)
+    }
+
+    /// Sets the global Anti-Aliasing mode for the Multiverse.
+    pub fn set_anti_aliasing(&mut self, mode: AntiAliasingMode) {
+        if self.anti_aliasing != mode {
+            self.anti_aliasing = mode;
+            self.dirty = true;
+        }
+    }
+
+    /// Gets the current global Anti-Aliasing mode of the Multiverse.
+    pub fn anti_aliasing(&self) -> AntiAliasingMode {
+        self.anti_aliasing
     }
 }

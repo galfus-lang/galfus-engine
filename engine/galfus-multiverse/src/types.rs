@@ -60,6 +60,8 @@ pub enum InvocationFilter {
     Blur,
     /// High-pass unsharp masking filter enhancing edge sharpness.
     Sharpen,
+    /// Fast Approximate Anti-Aliasing (FXAA 3.11) screen-space edge smoothing.
+    Fxaa,
     /// Custom post-processing shader module ID with optional texture slots and sampler index.
     Custom {
         shader_id: u32,
@@ -68,6 +70,27 @@ pub enum InvocationFilter {
         #[serde(default)]
         sampler_index: u32,
     },
+}
+
+/// Global and per-invocation Anti-Aliasing mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AntiAliasingMode {
+    /// No anti-aliasing (single-sample, crisp pixel passthrough).
+    #[default]
+    None,
+    /// Fast Approximate Anti-Aliasing (FXAA 3.11 screen-space edge smoothing).
+    Fxaa,
+    /// Subpixel Morphological Anti-Aliasing (pattern-based edge reconstruction).
+    Smaa,
+    /// Hardware Multi-Sample Anti-Aliasing 2x.
+    Msaa2x,
+    /// Hardware Multi-Sample Anti-Aliasing 4x.
+    Msaa4x,
+    /// Hardware Multi-Sample Anti-Aliasing 8x.
+    Msaa8x,
+    /// Hardware Multi-Sample Anti-Aliasing 16x.
+    Msaa16x,
 }
 
 impl InvocationFilter {
@@ -252,6 +275,9 @@ pub struct InvocationDesc {
     pub enabled: bool,
     /// Optional clear color `[r, g, b, a]`.
     pub clear_color: Option<[f32; 4]>,
+    /// Optional Anti-Aliasing mode. When None, automatically inherits the Multiverse global setting.
+    #[serde(default)]
+    pub anti_aliasing: Option<AntiAliasingMode>,
 }
 
 impl Default for InvocationDesc {
@@ -265,6 +291,7 @@ impl Default for InvocationDesc {
             z_index: 0,
             enabled: true,
             clear_color: None,
+            anti_aliasing: None,
         }
     }
 }

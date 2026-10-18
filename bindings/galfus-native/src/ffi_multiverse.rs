@@ -419,6 +419,47 @@ pub extern "C" fn galfus_multiverse_dispatch(frame_id: u64, delta_time: f32) -> 
     }
 }
 
+/// Sets the global Anti-Aliasing mode for the Multiverse. Returns 0 on success, -1 on failure.
+///
+/// # Safety
+/// `mode_str` must be a valid, null-terminated UTF-8 C string pointer (e.g. "none", "fxaa", "msaa4x").
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_multiverse_set_anti_aliasing(mode_str: *const c_char) -> i32 {
+    let mode_raw = match unsafe { from_c_str(mode_str) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+
+    let mode_json = format!("\"{mode_raw}\"");
+    let mode: galfus_multiverse::AntiAliasingMode = match serde_json::from_str(&mode_json) {
+        Ok(m) => m,
+        Err(e) => {
+            set_last_error(&format!("Invalid AntiAliasingMode '{mode_raw}': {e}"));
+            return -1;
+        }
+    };
+
+    let _ = with_multiverse_mut(|mv| {
+        mv.set_anti_aliasing(mode);
+        Ok::<(), String>(())
+    });
+    0
+}
+
+/// Gets the current global Anti-Aliasing mode of the Multiverse as a string pointer.
+/// Caller must free using `galfus_string_free`. Returns null on failure.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_multiverse_get_anti_aliasing() -> *mut c_char {
+    let mode = with_multiverse_mut(|mv| Ok(mv.anti_aliasing()))
+        .unwrap_or(galfus_multiverse::AntiAliasingMode::None);
+    let s = serde_json::to_string(&mode).unwrap_or_else(|_| "\"none\"".to_string());
+    let clean = s.trim_matches('"');
+    to_c_string(clean)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

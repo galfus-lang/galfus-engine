@@ -90,6 +90,7 @@ fn test_multiverse_lifecycle_and_validation() {
         z_index: 0,
         enabled: true,
         clear_color: None,
+        anti_aliasing: None,
     };
     assert!(mv.create_invocation(100, inv).is_ok());
 
@@ -154,6 +155,7 @@ fn test_portal_dependency_ordering() {
             z_index: 0,
             enabled: true,
             clear_color: None,
+            anti_aliasing: None,
         },
     )
     .unwrap();
@@ -170,6 +172,7 @@ fn test_portal_dependency_ordering() {
             z_index: 0,
             enabled: true,
             clear_color: None,
+            anti_aliasing: None,
         },
     )
     .unwrap();
@@ -186,6 +189,7 @@ fn test_portal_dependency_ordering() {
             z_index: 10, // Drawn above 3D
             enabled: true,
             clear_color: None,
+            anti_aliasing: None,
         },
     )
     .unwrap();
@@ -258,6 +262,7 @@ fn test_color_realm_in_multiverse() {
             z_index: 0,
             enabled: true,
             clear_color: Some([0.0, 1.0, 0.0, 1.0]),
+            anti_aliasing: None,
         },
     )
     .unwrap();
@@ -321,6 +326,7 @@ fn test_screen_effect_filter_lifecycle() {
             z_index: 0,
             enabled: true,
             clear_color: None,
+            anti_aliasing: None,
         },
     )
     .unwrap();
@@ -387,6 +393,7 @@ fn test_target_binding_cycle_soft_cut() {
             z_index: 0,
             enabled: true,
             clear_color: None,
+            anti_aliasing: None,
         },
     )
     .unwrap();
@@ -409,6 +416,7 @@ fn test_target_binding_cycle_soft_cut() {
             z_index: 0,
             enabled: true,
             clear_color: None,
+            anti_aliasing: None,
         },
     )
     .unwrap();
@@ -422,4 +430,66 @@ fn test_target_binding_cycle_soft_cut() {
     let schedule = mv.resolve().expect("Cycle should be broken via soft cut");
     assert!(!schedule.soft_cut_edges.is_empty());
     assert_eq!(schedule.target_blocks.len(), 2);
+}
+
+#[test]
+fn test_multiverse_anti_aliasing_global_and_override() {
+    let mut mv = MultiverseContext::new();
+    assert_eq!(mv.anti_aliasing(), AntiAliasingMode::None);
+
+    mv.set_anti_aliasing(AntiAliasingMode::Fxaa);
+    assert_eq!(mv.anti_aliasing(), AntiAliasingMode::Fxaa);
+
+    let target_id = 1;
+    mv.create_target(
+        target_id,
+        TargetDesc {
+            kind: TargetKind::Window { window_id: 1 },
+            size: Some(UVec2::new(800, 600)),
+        },
+    )
+    .unwrap();
+
+    let realm = Box::new(MockRealm::new(10, RealmKind::TwoD));
+    mv.register_realm(realm).unwrap();
+
+    // Invocation 1: inherits global (None specified)
+    mv.create_invocation(
+        101,
+        InvocationDesc {
+            realm_id: 10,
+            target_id,
+            anti_aliasing: None,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    // Invocation 2: explicit override to None (e.g. pixel art layer)
+    mv.create_invocation(
+        102,
+        InvocationDesc {
+            realm_id: 10,
+            target_id,
+            anti_aliasing: Some(AntiAliasingMode::None),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    let schedule = mv.resolve().unwrap();
+    let block = &schedule.target_blocks[0];
+    let inv1 = block
+        .invocations
+        .iter()
+        .find(|i| i.invocation_id == 101)
+        .unwrap();
+    let inv2 = block
+        .invocations
+        .iter()
+        .find(|i| i.invocation_id == 102)
+        .unwrap();
+
+    assert_eq!(inv1.anti_aliasing, None); // Inherits global Fxaa at execution
+    assert_eq!(inv2.anti_aliasing, Some(AntiAliasingMode::None)); // Explicit override
 }
