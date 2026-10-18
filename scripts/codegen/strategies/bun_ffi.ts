@@ -246,6 +246,14 @@ export class BunFfiStrategy implements CodegenStrategy {
         lines.push(`      this.realm2dSetCameraTransformRaw(realmId, cameraId, _arr);`);
         lines.push(`      return;`);
         lines.push(`    }`);
+      } else if (fn.methodName === 'realm2dSetSvgTransform') {
+        lines.push(`    if (Array.isArray(transform) || ArrayBuffer.isView(transform)) {`);
+        lines.push(
+          `      const _arr = ArrayBuffer.isView(transform) ? (transform as Float32Array) : new Float32Array(transform);`
+        );
+        lines.push(`      this.realm2dSetSvgTransformRaw(realmId, svgId, _arr);`);
+        lines.push(`      return;`);
+        lines.push(`    }`);
       }
 
       const ffiArgs: string[] = [];
@@ -359,6 +367,13 @@ export class BunFfiStrategy implements CodegenStrategy {
       '  realm2dGetCameraTransform(realmId: number, cameraId: number): Float32Array {',
       '    const buf = new Float32Array(6);',
       '    this.realm2dGetCameraTransformRaw(realmId, cameraId, buf);',
+      '    return buf;',
+      '  }',
+      '',
+      '  /** Reads the 6-float transform array [px, py, rot, sx, sy, zLayer] of a 2D SVG element. */',
+      '  realm2dGetSvgTransform(realmId: number, svgId: number): Float32Array {',
+      '    const buf = new Float32Array(6);',
+      '    this.realm2dGetSvgTransformRaw(realmId, svgId, buf);',
       '    return buf;',
       '  }',
       ''

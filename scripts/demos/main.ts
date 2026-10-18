@@ -10,6 +10,7 @@ import { runDemo3d6 } from './demo_3d6_refraction.ts';
 import { runDemo3d7 } from './demo_3d7_portal_mirror.ts';
 import { runDemo2d1 } from './demo_2d1_shadows.ts';
 import { runDemo2d2 } from './demo_2d2_effects_particles.ts';
+import { runDemo2d3 } from './demo_2d3_svg.ts';
 
 function printHelp(): void {
   console.log('=== Galfus Engine - TypeScript / Bun Demos ===');
@@ -31,7 +32,10 @@ function printHelp(): void {
   console.log('    3d7   - Planar Reflections & Optical Portals (Virtual Cameras, Offscreen RTT)');
   console.log('\n  [Realm 2D]');
   console.log('    2d1   - Orthographic Reverse-Z, Point Lights, and Polar Soft Shadows');
-  console.log('    2d2   - Material Custom Shader Effects & 2D Particle Emitters\n');
+  console.log('    2d2   - Material Custom Shader Effects & 2D Particle Emitters');
+  console.log(
+    '    2d3   - Reactive Vector SVG (Cyberpunk HUD, Dynamic Attributes, <use> States & Text)\n'
+  );
 }
 
 async function main(): Promise<void> {
@@ -92,6 +96,11 @@ async function main(): Promise<void> {
 
     case '2d2':
       await runDemo2d2();
+      break;
+
+    case '2d3':
+    case 'svg':
+      await runDemo2d3();
       break;
 
     case 'help':

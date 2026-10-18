@@ -148,6 +148,66 @@ if (Math.abs(spriteTf2[0]! - 150) > 0.01 || Math.abs(spriteTf2[5]! - 10) > 0.01)
   throw new Error(`Realm2D Sprite raw update failed: ${spriteTf2}`);
 }
 
+// Create SVG entity
+console.log('==> Testing Realm 2D SVG vector entity & dynamic mutations...');
+const sampleSvg = `<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <circle id="idle" r="20" fill="blue"/>
+    <circle id="hover" r="20" fill="green"/>
+  </defs>
+  <rect id="bg" width="100" height="100" fill="red"/>
+  <use id="icon" href="#idle"/>
+  <text id="label" x="10" y="50" font-size="14" fill="white">Hello</text>
+</svg>`;
+
+galfus.realm2dCreateSvg(
+  30,
+  10,
+  { source: sampleSvg, dimensions: [100, 100] },
+  { position: [100, 200], rotation: 0, scale: [1, 1], zLayer: 2 }
+);
+const svgTf = galfus.realm2dGetSvgTransform(30, 10);
+if (
+  Math.abs(svgTf[0]! - 100) > 0.01 ||
+  Math.abs(svgTf[1]! - 200) > 0.01 ||
+  Math.abs(svgTf[5]! - 2) > 0.01
+) {
+  throw new Error(`Realm2D SVG transform readback failed: ${svgTf}`);
+}
+console.log('✔ Created Svg2D (#10) with initial transform');
+
+// Mutate SVG attributes: switch href to #hover and remove fill from bg
+galfus.realm2dSetSvgAttribute(30, 10, 'icon', 'href', '#hover');
+galfus.realm2dRemoveSvgAttribute(30, 10, 'bg', 'fill');
+galfus.realm2dSetSvgText(30, 10, 'label', 'Updated Svg Text');
+console.log('✔ Mutated SVG element attributes and text content');
+
+// Update SVG transform via fast-path Float32Array
+galfus.realm2dSetSvgTransform(30, 10, new Float32Array([120, 220, 0.5, 2, 2, 5]));
+const svgTf2 = galfus.realm2dGetSvgTransform(30, 10);
+if (
+  Math.abs(svgTf2[0]! - 120) > 0.01 ||
+  Math.abs(svgTf2[1]! - 220) > 0.01 ||
+  Math.abs(svgTf2[5]! - 5) > 0.01
+) {
+  throw new Error(`Realm2D SVG transform raw update failed: ${svgTf2}`);
+}
+console.log('✔ SVG transform updated via fast-path Float32Array');
+
+// Destroy SVG
+galfus.realm2dDestroySvg(30, 10);
+let svgFoundAfterDestroy = false;
+try {
+  galfus.realm2dGetSvgTransform(30, 10);
+  svgFoundAfterDestroy = true;
+} catch {
+  // Expected: destroyed
+}
+if (svgFoundAfterDestroy) {
+  throw new Error('Expected SVG #10 to be destroyed');
+}
+console.log('✔ SVG entity destroyed cleanly');
+
 // 8. Realm Lifecycle: Clear & Destroy
 console.log('==> Testing Realm lifecycle (clear & destroy)...');
 galfus.realmClear(20);

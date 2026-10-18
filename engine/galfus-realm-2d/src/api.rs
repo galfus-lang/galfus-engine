@@ -7,6 +7,7 @@ use galfus_realm_2d_resources::particle::{ParticleEmitter2D, ParticleEmitterStat
 use galfus_realm_2d_resources::shadow::Shadow2DConfig;
 use galfus_realm_2d_resources::shape::Shape2D;
 use galfus_realm_2d_resources::sprite::Sprite2D;
+use galfus_realm_2d_resources::svg::Svg2D;
 use galfus_realm_2d_resources::transform::Transform2D;
 use galfus_realm_core::error::RealmResult;
 
@@ -229,5 +230,105 @@ impl Realm2DContext {
                     format!("Light {light_id}"),
                 )
             })
+    }
+
+    /// Creates or updates a 2D SVG vector entity with an initial transform.
+    pub fn set_svg(&mut self, svg_id: u32, svg: Svg2D, transform: Transform2D) -> RealmResult<()> {
+        self.validate_id(svg_id)?;
+        self.svg_manager.insert(svg_id, svg, transform);
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Replaces the source XML of an existing SVG entity.
+    pub fn set_svg_source(&mut self, svg_id: u32, source: String) -> RealmResult<()> {
+        let instance = self.svg_manager.get_mut(svg_id).ok_or_else(|| {
+            galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
+        })?;
+        instance.svg.set_source(source);
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Sets or overwrites an XML attribute on the element with matching ID in the SVG.
+    pub fn set_svg_attribute(
+        &mut self,
+        svg_id: u32,
+        element_id: &str,
+        name: &str,
+        value: &str,
+    ) -> RealmResult<()> {
+        let instance = self.svg_manager.get_mut(svg_id).ok_or_else(|| {
+            galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
+        })?;
+        if instance.svg.set_attribute(element_id, name, value) {
+            self.dirty = true;
+            Ok(())
+        } else {
+            Err(galfus_realm_core::RealmError::Internal(format!(
+                "Element #{element_id} not found in SVG {svg_id}"
+            )))
+        }
+    }
+
+    /// Removes an XML attribute from the element with matching ID in the SVG.
+    pub fn remove_svg_attribute(
+        &mut self,
+        svg_id: u32,
+        element_id: &str,
+        name: &str,
+    ) -> RealmResult<()> {
+        let instance = self.svg_manager.get_mut(svg_id).ok_or_else(|| {
+            galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
+        })?;
+        if instance.svg.remove_attribute(element_id, name) {
+            self.dirty = true;
+            Ok(())
+        } else {
+            Err(galfus_realm_core::RealmError::Internal(format!(
+                "Element #{element_id} or attribute {name} not found in SVG {svg_id}"
+            )))
+        }
+    }
+
+    /// Updates the text content of the element with matching ID in the SVG.
+    pub fn set_svg_text(&mut self, svg_id: u32, element_id: &str, text: &str) -> RealmResult<()> {
+        let instance = self.svg_manager.get_mut(svg_id).ok_or_else(|| {
+            galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
+        })?;
+        if instance.svg.set_text(element_id, text) {
+            self.dirty = true;
+            Ok(())
+        } else {
+            Err(galfus_realm_core::RealmError::Internal(format!(
+                "Element #{element_id} not found in SVG {svg_id}"
+            )))
+        }
+    }
+
+    /// Updates the spatial transform of an existing SVG entity.
+    pub fn set_svg_transform(&mut self, svg_id: u32, transform: Transform2D) -> RealmResult<()> {
+        let instance = self.svg_manager.get_mut(svg_id).ok_or_else(|| {
+            galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
+        })?;
+        instance.transform = transform;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Reads the spatial transform of an existing SVG entity.
+    pub fn get_svg_transform(&self, svg_id: u32) -> Option<Transform2D> {
+        self.svg_manager.get(svg_id).map(|inst| inst.transform)
+    }
+
+    /// Destroys an existing SVG entity.
+    pub fn destroy_svg(&mut self, svg_id: u32) -> RealmResult<()> {
+        let _ = self.svg_manager.remove(svg_id).ok_or_else(|| {
+            galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
+        })?;
+        let mat_id = crate::svg_manager::svg_material_id(svg_id);
+        self.material_bind_groups.remove(&mat_id);
+        self.dirty = true;
+        Ok(())
     }
 }

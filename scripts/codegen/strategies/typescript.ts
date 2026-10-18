@@ -220,6 +220,10 @@ export class TypeScriptStrategy implements CodegenStrategy {
       '  /** Reads the 6-float transform array [px, py, rot, sx, sy, zLayer] of a 2D camera. */'
     );
     lines.push('  realm2dGetCameraTransform?(realmId: number, cameraId: number): Float32Array;');
+    lines.push(
+      '  /** Reads the 6-float transform array [px, py, rot, sx, sy, zLayer] of a 2D SVG element. */'
+    );
+    lines.push('  realm2dGetSvgTransform?(realmId: number, svgId: number): Float32Array;');
 
     lines.push('}', '');
     return lines.join('\n');

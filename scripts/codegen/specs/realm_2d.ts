@@ -150,6 +150,20 @@ export const realm2dDescriptors: DescSpec[] = [
       receiveShadow: { type: 'boolean', optional: true },
       active: { type: 'boolean', optional: true }
     }
+  },
+  {
+    kind: 'object',
+    name: 'Svg2DDesc',
+    doc: '2D SVG vector entity with mutable DOM and GPU rasterization synchronization.',
+    fields: {
+      label: { type: 'string', optional: true },
+      source: { type: 'string' },
+      dimensions: { type: { tuple: ['number', 'number'] }, optional: true },
+      scaleFactor: { type: 'number', optional: true },
+      materialId: { type: 'number', optional: true },
+      castShadow: { type: 'boolean', optional: true },
+      receiveShadow: { type: 'boolean', optional: true }
+    }
   }
 ];
 
@@ -416,6 +430,109 @@ export const realm2dFunctions: FunctionSpec[] = [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
       { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' },
       { name: 'outPtr', type: 'ptr', doc: 'Pointer to out 6-element float array' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_create_svg',
+    methodName: 'realm2dCreateSvg',
+    doc: 'Creates or updates a 2D SVG vector entity with an initial transform.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
+      { name: 'svg', type: { json: 'Svg2DDesc' }, doc: 'SVG entity descriptor.' },
+      { name: 'transform', type: { json: 'Transform2DDesc' }, doc: 'Initial transform.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_set_svg_source',
+    methodName: 'realm2dSetSvgSource',
+    doc: 'Replaces the complete source XML markup string of an existing SVG entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
+      { name: 'source', type: 'string', doc: 'New SVG XML markup string.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_set_svg_attribute',
+    methodName: 'realm2dSetSvgAttribute',
+    doc: 'Sets or overwrites an XML attribute on the matching element ID in the SVG.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
+      { name: 'elementId', type: 'string', doc: 'Target element ID in the SVG DOM.' },
+      { name: 'name', type: 'string', doc: 'Attribute name (e.g. href, fill, width).' },
+      { name: 'value', type: 'string', doc: 'Attribute value.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_remove_svg_attribute',
+    methodName: 'realm2dRemoveSvgAttribute',
+    doc: 'Removes an XML attribute from the matching element ID in the SVG.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
+      { name: 'elementId', type: 'string', doc: 'Target element ID in the SVG DOM.' },
+      { name: 'name', type: 'string', doc: 'Attribute name to remove.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_set_svg_text',
+    methodName: 'realm2dSetSvgText',
+    doc: 'Updates the inner text content of the matching element ID in the SVG.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
+      { name: 'elementId', type: 'string', doc: 'Target element ID in the SVG DOM.' },
+      { name: 'text', type: 'string', doc: 'New inner text content.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_set_svg_transform',
+    methodName: 'realm2dSetSvgTransform',
+    doc: 'Updates the spatial transform of an existing SVG entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
+      { name: 'transform', type: { json: 'Transform2DDesc' }, doc: 'New transform.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_set_svg_transform_raw',
+    methodName: 'realm2dSetSvgTransformRaw',
+    doc: 'Updates 2D SVG transform directly from a 6-float buffer [px, py, rot, sx, sy, z_layer].',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
+      { name: 'ptr', type: 'ptr', doc: 'Pointer to 6-element float array' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_get_svg_transform',
+    methodName: 'realm2dGetSvgTransformRaw',
+    doc: 'Reads the transform of an existing SVG entity into an out 6-float buffer.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
+      { name: 'outPtr', type: 'ptr', doc: 'Pointer to write 6 consecutive f32 values.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_destroy_svg',
+    methodName: 'realm2dDestroySvg',
+    doc: 'Destroys an existing 2D SVG entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' }
     ],
     returnType: 'i32'
   }

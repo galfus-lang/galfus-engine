@@ -23,6 +23,7 @@ pub struct Realm2DContext {
     pub materials: HashMap<u32, Material2D>,
     pub lights: HashMap<u32, Light2D>,
     pub emitters: HashMap<u32, (ParticleEmitter2D, Transform2D, ParticleEmitterState2D)>,
+    pub svg_manager: crate::svg_manager::SvgManager2D,
     pub dirty: bool,
 
     pub pipeline_manager: Option<PipelineManager2D>,
@@ -45,6 +46,7 @@ impl Realm2DContext {
             materials: HashMap::new(),
             lights: HashMap::new(),
             emitters: HashMap::new(),
+            svg_manager: crate::svg_manager::SvgManager2D::new(),
             dirty: true,
             pipeline_manager: None,
             batch_builder: BatchBuilder2D::new(),
@@ -90,6 +92,7 @@ impl Realm for Realm2DContext {
         self.materials.clear();
         self.lights.clear();
         self.emitters.clear();
+        self.svg_manager.clear();
         self.material_bind_groups.clear();
         self.material_uniform_buffers.clear();
         self.dirty = true;
@@ -144,6 +147,18 @@ impl Realm for Realm2DContext {
                 self.material_bind_groups.insert(mat_id, bg);
             }
         }
+
+        // Sync SVGs
+        self.svg_manager.sync_gpu(
+            device,
+            queue,
+            &pipeline_manager.material_bind_group_layout,
+            &gpu_res.samplers,
+            &gpu_res.fallback_normal_view,
+            &gpu_res.fallback_black_view,
+            &gpu_res.fallback_material_buffer,
+            &mut self.material_bind_groups,
+        );
 
         // Collect occluders from sprites and shapes
         let mut occluders = Vec::new();
@@ -306,6 +321,8 @@ impl Realm for Realm2DContext {
                 });
             }
         }
+
+        self.svg_manager.push_batches(&mut self.batch_builder);
 
         self.batch_builder.build();
         self.dirty = false;

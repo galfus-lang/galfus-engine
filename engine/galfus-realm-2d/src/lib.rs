@@ -11,6 +11,7 @@ pub mod pipeline;
 pub mod shader;
 pub mod shadow;
 pub mod surface_effect;
+pub mod svg_manager;
 pub mod types;
 
 pub use batch::{BatchBuilder2D, PreparedItem2D};
