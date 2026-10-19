@@ -204,6 +204,78 @@ export async function runDemo3d1(): Promise<void> {
   createCube(MODEL_CUBE_WAVE_ID, MAT_CUBE_WAVE_ID, [0.2, 1.0, 0.4, 1.0], [-2.8, 1.0, 0.0]);
   createCube(MODEL_CUBE_HOLO_ID, MAT_CUBE_HOLO_ID, [0.3, 0.6, 1.0, 1.0], [2.8, 1.0, 0.0]);
 
+  // Setup Animation Transitions for the 3 Cubes via Transition API
+  console.log('==> Configuring Animation Transitions for Cubes...');
+  const qFresnelTarget = eulerToQuat(0.6, 3.14, 0.0);
+  galfus.animationCreateTransition(
+    1,
+    { type: 'transform3D', value: [0.0, 0.95, 0.0, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 2.2, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(1, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_CUBE_FRESNEL_ID
+  });
+  galfus.animationTransitionTo(1, {
+    type: 'transform3D',
+    value: [
+      0.0,
+      1.35,
+      0.0,
+      qFresnelTarget[0],
+      qFresnelTarget[1],
+      qFresnelTarget[2],
+      qFresnelTarget[3],
+      1,
+      1,
+      1
+    ]
+  });
+
+  const qWaveTarget = eulerToQuat(0.5, -2.8, 0.3);
+  galfus.animationCreateTransition(
+    2,
+    { type: 'transform3D', value: [-2.8, 0.95, 0.0, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 2.5, delay: 0.2, easing: 'easeInOutCubic', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(2, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_CUBE_WAVE_ID
+  });
+  galfus.animationTransitionTo(2, {
+    type: 'transform3D',
+    value: [
+      -2.8,
+      1.35,
+      0.0,
+      qWaveTarget[0],
+      qWaveTarget[1],
+      qWaveTarget[2],
+      qWaveTarget[3],
+      1,
+      1,
+      1
+    ]
+  });
+
+  const qHoloTarget = eulerToQuat(-0.8, 2.6, 0.0);
+  galfus.animationCreateTransition(
+    3,
+    { type: 'transform3D', value: [2.8, 0.95, 0.0, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 2.0, delay: 0.4, easing: 'easeInOutQuad', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(3, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_CUBE_HOLO_ID
+  });
+  galfus.animationTransitionTo(3, {
+    type: 'transform3D',
+    value: [2.8, 1.35, 0.0, qHoloTarget[0], qHoloTarget[1], qHoloTarget[2], qHoloTarget[3], 1, 1, 1]
+  });
+
   // Floor Plane
   galfus.realm3dCreateModel(
     REALM_3D,
@@ -465,34 +537,9 @@ export async function runDemo3d1(): Promise<void> {
 
     if (!running) break;
 
-    // 2. Animate Cube Transforms
+    // 2. Advance Animations via Transition API
     if (rotating) {
-      cubeRotY += dt * 1.5;
-      cubeRotX += dt * 0.8;
-
-      // Center Cube: Fresnel Rim Glow (Amber / Cyan)
-      const qFresnel = eulerToQuat(cubeRotX, cubeRotY, 0.0);
-      galfus.realm3dSetModelTransform(REALM_3D, MODEL_CUBE_FRESNEL_ID, {
-        position: [0.0, 1.1 + Math.sin(totalTime * 2.0) * 0.15, 0.0],
-        rotation: qFresnel,
-        scale: [1, 1, 1]
-      });
-
-      // Left Cube: World-Position Wave (Emerald / Magenta)
-      const qWave = eulerToQuat(cubeRotX * 0.7, -cubeRotY * 1.2, dt * 0.5);
-      galfus.realm3dSetModelTransform(REALM_3D, MODEL_CUBE_WAVE_ID, {
-        position: [-2.8, 1.1 + Math.sin(totalTime * 2.0 + 1.2) * 0.15, 0.0],
-        rotation: qWave,
-        scale: [1, 1, 1]
-      });
-
-      // Right Cube: Hologram Scanlines (Cyber Blue Alpha)
-      const qHolo = eulerToQuat(-cubeRotX * 1.1, cubeRotY * 0.9, 0.0);
-      galfus.realm3dSetModelTransform(REALM_3D, MODEL_CUBE_HOLO_ID, {
-        position: [2.8, 1.1 + Math.sin(totalTime * 2.0 + 2.4) * 0.15, 0.0],
-        rotation: qHolo,
-        scale: [1, 1, 1]
-      });
+      galfus.animationStep(dt);
     }
 
     // 3. Update Orbit Camera Transform

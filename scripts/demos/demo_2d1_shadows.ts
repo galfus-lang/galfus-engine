@@ -303,6 +303,38 @@ Initializing Platform & Multiverse Subsystems...`);
     { position: [0.0, 0.0], rotation: 0.785, zLayer: 2 }
   );
 
+  // Setup Animation Transitions for Crate 2 and Central Crystal via Transition API
+  console.log('==> Configuring Animation Transitions for 2D Crate & Crystal...');
+  galfus.animationCreateTransition(
+    1,
+    { type: 'transform2D', value: [3.5, -1.95, -0.45, 1, 1, 1] },
+    { duration: 2.4, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(1, {
+    kind: 'spriteTransform2D',
+    realmId: REALM_2D,
+    spriteId: SHAPE_CRATE_2
+  });
+  galfus.animationTransitionTo(1, {
+    type: 'transform2D',
+    value: [3.5, -1.65, -0.35, 1, 1, 1]
+  });
+
+  galfus.animationCreateTransition(
+    2,
+    { type: 'transform2D', value: [0.0, 0.0, 0.0, 1, 1, 2] },
+    { duration: 7.8, delay: 0.0, easing: 'linear', loopMode: 'loop' }
+  );
+  galfus.animationBindTarget(2, {
+    kind: 'shapeTransform2D',
+    realmId: REALM_2D,
+    shapeId: SHAPE_CENTER_CRYSTAL
+  });
+  galfus.animationTransitionTo(2, {
+    type: 'transform2D',
+    value: [0.0, 0.0, 6.28318, 1, 1, 2]
+  });
+
   console.log('==> Configuring 2D Dynamic Point Lights & Soft Shadows...');
   let playerPos: [number, number] = [0.0, -5.5];
   let playerZ = 3.0; // Initial elevation Z (inside Crate 1's [2.0, 4.0] range)
@@ -549,21 +581,8 @@ CONTROLS:
       zLayer: 2
     });
 
-    // Animate Crate 2 with realm2dSetSpriteTransform
-    const crateBob = Math.sin(orbitAngle * 0.8) * 0.15;
-    galfus.realm2dSetSpriteTransform(REALM_2D, SHAPE_CRATE_2, {
-      position: [3.5, -1.8 + crateBob],
-      rotation: -0.4 + Math.sin(orbitAngle * 0.5) * 0.05,
-      zLayer: 1
-    });
-
-    // Rotate central crystal with realm2dSetShapeTransform
-    crystalRot += 0.8 * dt;
-    galfus.realm2dSetShapeTransform(REALM_2D, SHAPE_CENTER_CRYSTAL, {
-      position: [0.0, 0.0],
-      rotation: crystalRot,
-      zLayer: 2
-    });
+    // Advance 2D Animations via Transition API
+    galfus.animationStep(dt);
 
     // Render frame through multiverse dispatch
     galfus.multiverseDispatch(frameCount, dt);

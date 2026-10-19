@@ -183,6 +183,24 @@ export async function runDemoMv2(): Promise<void> {
     }
   );
 
+  // Setup Animation Transition for 3D RTT Cube via Transition API
+  console.log('==> Configuring Animation Transition for 3D RTT Cube...');
+  const qCubeTarget = eulerToQuat(1.15, 1.8, 0.7);
+  galfus.animationCreateTransition(
+    1,
+    { type: 'transform3D', value: [0.0, 0.05, 0.0, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 2.8, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(1, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_CUBE_ID
+  });
+  galfus.animationTransitionTo(1, {
+    type: 'transform3D',
+    value: [0.0, 0.35, 0.0, qCubeTarget[0], qCubeTarget[1], qCubeTarget[2], qCubeTarget[3], 1, 1, 1]
+  });
+
   galfus.realm3dCreateModel(
     REALM_3D,
     MODEL_PEDESTAL_ID,
@@ -500,16 +518,8 @@ Controls:
         zLayer: 5
       });
 
-      // 2. Animate Realm 3D Cube Rotation (Roll, Pitch, Yaw)
-      const pitch = totalTime * 0.75;
-      const yaw = totalTime * 1.1;
-      const roll = totalTime * 0.45;
-      const cubeQuat = eulerToQuat(pitch, yaw, roll);
-      galfus.realm3dSetModelTransform(REALM_3D, MODEL_CUBE_ID, {
-        position: [0.0, 0.2 + 0.15 * Math.sin(totalTime * 2.0), 0.0],
-        rotation: cubeQuat,
-        scale: [1.0, 1.0, 1.0]
-      });
+      // 2. Advance 3D Animations via Transition API
+      galfus.animationStep(dt);
 
       // Animate 3D Point Light Orbit
       const lightOrbit = totalTime * 1.5;

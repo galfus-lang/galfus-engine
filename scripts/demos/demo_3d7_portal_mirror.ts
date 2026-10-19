@@ -360,6 +360,38 @@ export async function runDemo3d7(): Promise<void> {
     { position: [25.0, 2.6, -25.0] }
   );
 
+  // Setup Animation Transitions for Gem and Secret Obelisk via Transition API
+  console.log('==> Configuring Animation Transitions for Gem & Portal Obelisk...');
+  galfus.animationCreateTransition(
+    1,
+    { type: 'transform3D', value: [0, 1.62, 0, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 2.5, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(1, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_GEM_ID
+  });
+  galfus.animationTransitionTo(1, {
+    type: 'transform3D',
+    value: [0, 1.78, 0, 0, 0.707, 0, 0.707, 1, 1, 1]
+  });
+
+  galfus.animationCreateTransition(
+    2,
+    { type: 'transform3D', value: [25.0, 2.7, -25.0, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 3.0, delay: 0.1, easing: 'easeInOutCubic', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(2, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_SECRET_OBELISK_ID
+  });
+  galfus.animationTransitionTo(2, {
+    type: 'transform3D',
+    value: [25.0, 2.9, -25.0, 0, -0.6, 0, 0.8, 1, 1, 1]
+  });
+
   // 5. Lights
   galfus.realm3dCreateLight(
     REALM_3D,
@@ -622,19 +654,8 @@ export async function runDemo3d7(): Promise<void> {
       updateCamera();
     }
 
-    // Slowly rotate central gem
-    galfus.realm3dSetModelTransform(REALM_3D, MODEL_GEM_ID, {
-      position: [0, 1.7 + Math.sin(totalTime * 2.0) * 0.08, 0],
-      rotation: [0, Math.sin(totalTime * 0.8), 0, Math.cos(totalTime * 0.8)],
-      scale: [1, 1, 1]
-    });
-
-    // Rotate secret chamber obelisk
-    galfus.realm3dSetModelTransform(REALM_3D, MODEL_SECRET_OBELISK_ID, {
-      position: [25.0, 2.8 + Math.cos(totalTime * 1.5) * 0.1, -25.0],
-      rotation: [0, Math.sin(-totalTime * 0.6), 0, Math.cos(-totalTime * 0.6)],
-      scale: [1, 1, 1]
-    });
+    // Advance Animations via Transition API
+    galfus.animationStep(dt);
 
     galfus.multiverseDispatch(frameCount, dt);
     await Bun.sleep(1);

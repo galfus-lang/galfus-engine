@@ -160,6 +160,13 @@ export const animationDescriptors: DescSpec[] = [
       },
       {
         inline: {
+          kind: { type: { literal: 'light3DTransform' } },
+          realmId: { type: 'number' },
+          lightId: { type: 'number' }
+        }
+      },
+      {
+        inline: {
           kind: { type: { literal: 'spriteTransform2D' } },
           realmId: { type: 'number' },
           spriteId: { type: 'number' }

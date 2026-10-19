@@ -216,6 +216,38 @@ export async function runDemo3d3(): Promise<void> {
     { position: [0, 2.5, 0], scale: [1, 1, 1], rotation: [0, 0, 0, 1] }
   );
 
+  // Setup Animation Transitions for Light Orb & Point Light via Transition API
+  console.log('==> Configuring Animation Transitions for Orbiting Light Orb...');
+  galfus.animationCreateTransition(
+    1,
+    { type: 'transform3D', value: [-3.5, 1.4, -3.5, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 3.2, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(1, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_ORB
+  });
+  galfus.animationTransitionTo(1, {
+    type: 'transform3D',
+    value: [3.5, 2.6, 3.5, 0, 0, 0, 1, 1, 1, 1]
+  });
+
+  galfus.animationCreateTransition(
+    2,
+    { type: 'transform3D', value: [-3.5, 1.4, -3.5, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 3.2, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(2, {
+    kind: 'light3DTransform',
+    realmId: REALM_3D,
+    lightId: LIGHT_POINT
+  });
+  galfus.animationTransitionTo(2, {
+    type: 'transform3D',
+    value: [3.5, 2.6, 3.5, 0, 0, 0, 1, 1, 1, 1]
+  });
+
   // Secondary ambient directional fill
   galfus.realm3dCreateLight(
     REALM_3D,
@@ -306,21 +338,7 @@ export async function runDemo3d3(): Promise<void> {
     });
 
     if (!lightOrbitPaused) {
-      const lx = Math.cos(totalTime * 1.5) * 3.5;
-      const lz = Math.sin(totalTime * 1.5) * 3.5;
-      const ly = 2.0 + Math.sin(totalTime * 2.5) * 0.6;
-      const lightPos: [number, number, number] = [lx, ly, lz];
-
-      galfus.realm3dSetLightTransform(REALM_3D, LIGHT_POINT, {
-        position: lightPos,
-        scale: [1, 1, 1],
-        rotation: [0, 0, 0, 1]
-      });
-      galfus.realm3dSetModelTransform(REALM_3D, MODEL_ORB, {
-        position: lightPos,
-        scale: [1, 1, 1],
-        rotation: [0, 0, 0, 1]
-      });
+      galfus.animationStep(dt);
     }
 
     applyEnvironment(totalTime * 0.05);

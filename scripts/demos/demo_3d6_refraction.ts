@@ -278,6 +278,53 @@ export async function runDemo3d6(): Promise<void> {
     { position: [1.8, 1.0, 0.4], scale: [1, 1, 1] }
   );
 
+  // Setup Animation Transitions for Refractive Crystals via Transition API
+  console.log('==> Configuring Animation Transitions for Refractive Crystals...');
+  galfus.animationCreateTransition(
+    1,
+    { type: 'transform3D', value: [0, 1.72, 0, 0, 0, 0, 1, 1.1, 1.1, 1.1] },
+    { duration: 2.8, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(1, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_GLASS_SPHERE_ID
+  });
+  galfus.animationTransitionTo(1, {
+    type: 'transform3D',
+    value: [0, 1.88, 0, 0, 0.707, 0, 0.707, 1.1, 1.1, 1.1]
+  });
+
+  galfus.animationCreateTransition(
+    2,
+    { type: 'transform3D', value: [-1.8, 1.14, 0.4, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 2.2, delay: 0.2, easing: 'easeInOutCubic', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(2, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_RUBY_PYRAMID_ID
+  });
+  galfus.animationTransitionTo(2, {
+    type: 'transform3D',
+    value: [-1.8, 1.26, 0.4, 0, 0.5, 0, 0.866, 1, 1, 1]
+  });
+
+  galfus.animationCreateTransition(
+    3,
+    { type: 'transform3D', value: [1.8, 0.94, 0.4, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 2.5, delay: 0.1, easing: 'easeInOutQuad', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(3, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_EMERALD_LENS_ID
+  });
+  galfus.animationTransitionTo(3, {
+    type: 'transform3D',
+    value: [1.8, 1.06, 0.4, 0, -0.6, 0, 0.8, 1, 1, 1]
+  });
+
   // 7. Dynamic Lights
   galfus.realm3dCreateLight(
     REALM_3D,
@@ -490,24 +537,8 @@ export async function runDemo3d6(): Promise<void> {
       updateCamera();
     }
 
-    // Gently rotate the crystal objects
-    galfus.realm3dSetModelTransform(REALM_3D, MODEL_GLASS_SPHERE_ID, {
-      position: [0, 1.8 + Math.sin(totalTime * 1.5) * 0.08, 0],
-      rotation: [0, Math.sin(totalTime * 0.5), 0, Math.cos(totalTime * 0.5)],
-      scale: [1.1, 1.1, 1.1]
-    });
-
-    galfus.realm3dSetModelTransform(REALM_3D, MODEL_RUBY_PYRAMID_ID, {
-      position: [-1.8, 1.2 + Math.cos(totalTime * 1.2) * 0.06, 0.4],
-      rotation: [0, Math.sin(totalTime * 0.8), 0, Math.cos(totalTime * 0.8)],
-      scale: [1, 1, 1]
-    });
-
-    galfus.realm3dSetModelTransform(REALM_3D, MODEL_EMERALD_LENS_ID, {
-      position: [1.8, 1.0 + Math.sin(totalTime * 1.0) * 0.06, 0.4],
-      rotation: [0, Math.sin(-totalTime * 0.6), 0, Math.cos(-totalTime * 0.6)],
-      scale: [1, 1, 1]
-    });
+    // Gently rotate the crystal objects via Transition API
+    galfus.animationStep(dt);
 
     // Move back point light in a circle
     galfus.realm3dSetLightTransform(REALM_3D, LIGHT_POINT_BACK_ID, {

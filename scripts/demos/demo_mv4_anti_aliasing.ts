@@ -190,6 +190,56 @@ export async function runDemoMv4(): Promise<void> {
     { position: [2.6, 1.3, 0.0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] }
   );
 
+  // Setup Animation Transitions for the 3 Cubes via Transition API
+  console.log('==> Configuring Animation Transitions for Anti-Aliasing Cubes...');
+  const qTarget1 = eulerToQuat(1.2, 0.8, 0.0);
+  galfus.animationCreateTransition(
+    1,
+    { type: 'transform3D', value: [-2.6, 1.3, 0.0, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 2.2, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(1, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_CUBE_1
+  });
+  galfus.animationTransitionTo(1, {
+    type: 'transform3D',
+    value: [-2.6, 1.3, 0.0, qTarget1[0], qTarget1[1], qTarget1[2], qTarget1[3], 1, 1, 1]
+  });
+
+  const qTarget2 = eulerToQuat(0.5, -1.1, 0.3);
+  galfus.animationCreateTransition(
+    2,
+    { type: 'transform3D', value: [0.0, 1.8, -0.8, 0, 0, 0, 1, 1.4, 1.4, 1.4] },
+    { duration: 2.8, delay: 0.1, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(2, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_CUBE_2
+  });
+  galfus.animationTransitionTo(2, {
+    type: 'transform3D',
+    value: [0.0, 1.8, -0.8, qTarget2[0], qTarget2[1], qTarget2[2], qTarget2[3], 1.4, 1.4, 1.4]
+  });
+
+  const qTarget3 = eulerToQuat(-0.7, 1.3, 0.5);
+  galfus.animationCreateTransition(
+    3,
+    { type: 'transform3D', value: [2.6, 1.3, 0.0, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 2.5, delay: 0.2, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(3, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_CUBE_3
+  });
+  galfus.animationTransitionTo(3, {
+    type: 'transform3D',
+    value: [2.6, 1.3, 0.0, qTarget3[0], qTarget3[1], qTarget3[2], qTarget3[3], 1, 1, 1]
+  });
+
   galfus.realm3dCreateModel(
     REALM_3D,
     MODEL_GROUND,
@@ -356,26 +406,9 @@ export async function runDemoMv4(): Promise<void> {
 
     if (!running) break;
 
-    // Rotate geometry to observe dynamic diagonal anti-aliasing
+    // Advance Animations via Transition API
     if (isRotating) {
-      angle += dt * 0.9;
-      galfus.realm3dSetModelTransform(REALM_3D, MODEL_CUBE_1, {
-        position: [-2.6, 1.3, 0.0],
-        rotation: eulerToQuat(angle * 1.2, angle * 0.8, 0.0),
-        scale: [1, 1, 1]
-      });
-
-      galfus.realm3dSetModelTransform(REALM_3D, MODEL_CUBE_2, {
-        position: [0.0, 1.8, -0.8],
-        rotation: eulerToQuat(angle * 0.5, -angle * 1.1, angle * 0.3),
-        scale: [1.4, 1.4, 1.4]
-      });
-
-      galfus.realm3dSetModelTransform(REALM_3D, MODEL_CUBE_3, {
-        position: [2.6, 1.3, 0.0],
-        rotation: eulerToQuat(-angle * 0.7, angle * 1.3, angle * 0.5),
-        scale: [1, 1, 1]
-      });
+      galfus.animationStep(dt);
     }
 
     galfus.multiverseDispatch(frameCount, dt);

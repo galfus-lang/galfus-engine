@@ -230,6 +230,131 @@ Showcasing:
     );
   }
 
+  // Setup Animation Transitions for 3D Feature Models via Transition API
+  console.log('==> Configuring Animation Transitions for 3D Feature Models...');
+  const qTorusRot = quatFromEuler(1.5, 3.14, 0.0);
+  galfus.animationCreateTransition(
+    1,
+    { type: 'transform3D', value: [POS_TORUS[0], POS_TORUS[1], POS_TORUS[2], 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 3.5, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(1, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_TORUS
+  });
+  galfus.animationTransitionTo(1, {
+    type: 'transform3D',
+    value: [
+      POS_TORUS[0],
+      POS_TORUS[1],
+      POS_TORUS[2],
+      qTorusRot[0],
+      qTorusRot[1],
+      qTorusRot[2],
+      qTorusRot[3],
+      1,
+      1,
+      1
+    ]
+  });
+
+  galfus.animationCreateTransition(
+    2,
+    {
+      type: 'transform3D',
+      value: [POS_CAPSULE[0], POS_CAPSULE[1] - 0.25, POS_CAPSULE[2], 0, 0, 0, 1, 1, 1, 1]
+    },
+    { duration: 2.2, delay: 0.1, easing: 'easeInOutCubic', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(2, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_CAPSULE
+  });
+  galfus.animationTransitionTo(2, {
+    type: 'transform3D',
+    value: [POS_CAPSULE[0], POS_CAPSULE[1] + 0.35, POS_CAPSULE[2], 0, 0, 0.35, 0.936, 1, 1, 1]
+  });
+
+  const qCylRot = quatFromEuler(3.14, 0.0, 0.0);
+  galfus.animationCreateTransition(
+    3,
+    {
+      type: 'transform3D',
+      value: [POS_CYLINDER[0], POS_CYLINDER[1], POS_CYLINDER[2], 0, 0, 0, 1, 1, 1, 1]
+    },
+    { duration: 2.8, delay: 0.2, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(3, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_CYLINDER
+  });
+  galfus.animationTransitionTo(3, {
+    type: 'transform3D',
+    value: [
+      POS_CYLINDER[0],
+      POS_CYLINDER[1],
+      POS_CYLINDER[2],
+      qCylRot[0],
+      qCylRot[1],
+      qCylRot[2],
+      qCylRot[3],
+      1,
+      1,
+      1
+    ]
+  });
+
+  const qPyrRot = quatFromEuler(3.14, 0.0, 0.0);
+  galfus.animationCreateTransition(
+    4,
+    {
+      type: 'transform3D',
+      value: [POS_PYRAMID[0], POS_PYRAMID[1], POS_PYRAMID[2], 0, 0, 0, 1, 1, 1, 1]
+    },
+    { duration: 3.2, delay: 0.3, easing: 'easeInOutQuad', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(4, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_PYRAMID
+  });
+  galfus.animationTransitionTo(4, {
+    type: 'transform3D',
+    value: [
+      POS_PYRAMID[0],
+      POS_PYRAMID[1],
+      POS_PYRAMID[2],
+      qPyrRot[0],
+      qPyrRot[1],
+      qPyrRot[2],
+      qPyrRot[3],
+      1,
+      1,
+      1
+    ]
+  });
+
+  galfus.animationCreateTransition(
+    5,
+    {
+      type: 'transform3D',
+      value: [POS_CORE[0], POS_CORE[1] - 0.25, POS_CORE[2], 0, 0, 0, 1, 1, 1, 1]
+    },
+    { duration: 1.8, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(5, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_GLOW_CORE
+  });
+  galfus.animationTransitionTo(5, {
+    type: 'transform3D',
+    value: [POS_CORE[0], POS_CORE[1] + 0.35, POS_CORE[2], 0, 0, 0, 1, 1, 1, 1]
+  });
+
   console.log('==> Creating Directional Sun & 8 Orbiting Point Lights (GPU Compute Culling)...');
   galfus.realm3dCreateLight(
     REALM_3D,
@@ -343,37 +468,15 @@ CONTROLS:
       applyCamera();
     }
 
-    // Animate Models
-    galfus.realm3dSetModelTransform(REALM_3D, MODEL_TORUS, {
-      position: POS_TORUS,
-      rotation: quatFromEuler(animTime * 1.2, animTime * 0.8, 0.0),
-      scale: [1, 1, 1]
-    });
-
-    galfus.realm3dSetModelTransform(REALM_3D, MODEL_CAPSULE, {
-      position: [POS_CAPSULE[0], POS_CAPSULE[1] + Math.sin(animTime * 1.5) * 0.25, POS_CAPSULE[2]],
-      rotation: quatFromEuler(0.0, 0.0, Math.sin(animTime * 2.0) * 0.4),
-      scale: [1, 1, 1]
-    });
-
-    galfus.realm3dSetModelTransform(REALM_3D, MODEL_CYLINDER, {
-      position: POS_CYLINDER,
-      rotation: quatFromEuler(animTime * 1.5, 0.0, 0.0),
-      scale: [1, 1, 1]
-    });
-
-    galfus.realm3dSetModelTransform(REALM_3D, MODEL_PYRAMID, {
-      position: POS_PYRAMID,
-      rotation: quatFromEuler(animTime * 0.9, 0.0, 0.0),
-      scale: [1, 1, 1]
-    });
-
-    const coreBob = Math.sin(animTime * 2.5) * 0.3;
-    galfus.realm3dSetModelTransform(REALM_3D, MODEL_GLOW_CORE, {
-      position: [POS_CORE[0], POS_CORE[1] + coreBob, POS_CORE[2]],
-      rotation: [0, 0, 0, 1],
-      scale: [1, 1, 1]
-    });
+    // Advance Models via Transition API
+    if (!isPaused) {
+      galfus.animationStep(dt);
+    }
+    const coreState = galfus.animationGetState(5);
+    const coreBob =
+      coreState && 'value' in (coreState.currentValue as any)
+        ? ((coreState.currentValue as any).value[1] as number) - POS_CORE[1]
+        : 0.0;
 
     // Animate 8 Point Lights (Compute Frustum Culling)
     const lightPositions: [number, number, number][] = [];

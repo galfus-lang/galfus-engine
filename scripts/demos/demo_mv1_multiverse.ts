@@ -112,6 +112,29 @@ export async function runDemoMv1(): Promise<void> {
   galfus.multiverseRegisterShader(SHADER_CUSTOM_INVERT, INVERT_WGSL);
   console.log('✔ Custom shader registered\n');
 
+  // Setup Animation Transitions for Invocations via Transition API
+  galfus.animationCreateTransition(
+    1,
+    { type: 'vec4', value: [0.95, 0.25, 0.25, 1.0] },
+    { duration: 2.5, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(1, { kind: 'invocationClearColor', invocationId: INVOCATION_LEFT });
+  galfus.animationTransitionTo(1, {
+    type: 'vec4',
+    value: [0.2, 0.85, 0.95, 1.0]
+  });
+
+  galfus.animationCreateTransition(
+    2,
+    { type: 'vec4', value: [0.95, 0.25, 0.25, 1.0] },
+    { duration: 2.5, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(2, { kind: 'invocationClearColor', invocationId: INVOCATION_RIGHT });
+  galfus.animationTransitionTo(2, {
+    type: 'vec4',
+    value: [0.2, 0.85, 0.95, 1.0]
+  });
+
   console.log('==> Controls:');
   console.log('  - Click / Space : Cycle Color Palette in real-time');
   console.log('  - 1..5 Keys     : Direct Color selection');
@@ -230,12 +253,7 @@ export async function runDemoMv1(): Promise<void> {
       }
 
       if (animating) {
-        animTime += deltaSecs;
-        const r = 0.5 + 0.5 * Math.sin(animTime * 2.0);
-        const g = 0.5 + 0.5 * Math.sin(animTime * 2.0 + 2.094);
-        const b = 0.5 + 0.5 * Math.sin(animTime * 2.0 + 4.188);
-        galfus.multiverseSetInvocationClearColor(INVOCATION_LEFT, r, g, b, 1.0, true);
-        galfus.multiverseSetInvocationClearColor(INVOCATION_RIGHT, r, g, b, 1.0, true);
+        galfus.animationStep(deltaSecs);
       }
 
       galfus.multiverseResolve();

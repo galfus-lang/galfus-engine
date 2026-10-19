@@ -190,6 +190,23 @@ export async function runDemo3d8(): Promise<void> {
     }
   );
 
+  // Setup Animation Transition for Floating Point Light via Transition API
+  console.log('==> Configuring Animation Transition for Floating Point Light...');
+  galfus.animationCreateTransition(
+    1,
+    { type: 'transform3D', value: [-3.0, 1.5, -3.0, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 3.5, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(1, {
+    kind: 'light3DTransform',
+    realmId: REALM_3D,
+    lightId: LIGHT_POINT_ID
+  });
+  galfus.animationTransitionTo(1, {
+    type: 'transform3D',
+    value: [3.0, 4.5, 3.0, 0, 0, 0, 1, 1, 1, 1]
+  });
+
   // Ground plane
   galfus.realm3dCreateGeometry(REALM_3D, GEOM_GROUND_ID, {
     primitive: 'plane',
@@ -410,16 +427,8 @@ export async function runDemo3d8(): Promise<void> {
       galfus.realm3dSetCameraTransform(REALM_3D, CAMERA_ID, computeCameraTransform());
     }
 
-    // Animate point light bobbing
-    const lightY = 3.0 + Math.sin(now * 0.002) * 1.5;
-    const lightX = Math.cos(now * 0.0015) * 3.0;
-    const lightZ = Math.sin(now * 0.0015) * 3.0;
-    const pointPos: [number, number, number] = [lightX, lightY, lightZ];
-    galfus.realm3dSetLightTransform(REALM_3D, LIGHT_POINT_ID, {
-      position: pointPos,
-      rotation: [0.0, 0.0, 0.0, 1.0],
-      scale: [1.0, 1.0, 1.0]
-    });
+    // Animate floating light via Transition API
+    galfus.animationStep(dt);
 
     // Process platform events
     const events = galfus.platformPumpEvents();

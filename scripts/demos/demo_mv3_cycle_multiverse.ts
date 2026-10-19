@@ -304,6 +304,39 @@ export async function runDemoMv3(): Promise<void> {
     { position: [0.0, 0.0], rotation: 0.0, zLayer: 2 }
   );
 
+  // Setup Animation Transitions for Cyclic 3D Cube & 2D Portal Ring via Transition API
+  console.log('==> Configuring Animation Transitions for Cyclic Demo...');
+  const qCubeTarget = eulerToQuat(1.1, 1.8, 0.6);
+  galfus.animationCreateTransition(
+    1,
+    { type: 'transform3D', value: [0.0, -0.15, 0.0, 0, 0, 0, 1, 1, 1, 1] },
+    { duration: 2.8, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(1, {
+    kind: 'modelTransform3D',
+    realmId: REALM_3D,
+    modelId: MODEL_CUBE_ID
+  });
+  galfus.animationTransitionTo(1, {
+    type: 'transform3D',
+    value: [0.0, 0.2, 0.0, qCubeTarget[0], qCubeTarget[1], qCubeTarget[2], qCubeTarget[3], 1, 1, 1]
+  });
+
+  galfus.animationCreateTransition(
+    2,
+    { type: 'transform2D', value: [0.0, 0.0, 0.0, 0.94, 0.94, 2] },
+    { duration: 2.2, delay: 0.1, easing: 'easeInOutSine', loopMode: 'pingPong' }
+  );
+  galfus.animationBindTarget(2, {
+    kind: 'shapeTransform2D',
+    realmId: REALM_2D,
+    shapeId: SHAPE_2D_RING_ID
+  });
+  galfus.animationTransitionTo(2, {
+    type: 'transform2D',
+    value: [0.0, 0.0, 3.14159, 1.06, 1.06, 2]
+  });
+
   galfus.realm2dCreateLight(
     REALM_2D,
     LIGHT_2D_ID,
@@ -454,16 +487,8 @@ export async function runDemoMv3(): Promise<void> {
       }
     }
 
-    // Animate 3D Cube Rotation
-    const pitch = totalTime * 0.7;
-    const yaw = totalTime * 1.1;
-    const roll = totalTime * 0.4;
-    const cubeRot = eulerToQuat(pitch, yaw, roll);
-    galfus.realm3dSetModelTransform(REALM_3D, MODEL_CUBE_ID, {
-      position: [0.0, Math.sin(totalTime * 2.0) * 0.15, 0.0],
-      rotation: cubeRot,
-      scale: [1.0, 1.0, 1.0]
-    });
+    // Advance Animations via Transition API
+    galfus.animationStep(dt);
 
     // Orbit 3D Light
     const lightX = Math.cos(totalTime * 1.5) * 2.5;
@@ -472,15 +497,6 @@ export async function runDemoMv3(): Promise<void> {
       position: [lightX, 1.2, lightZ],
       rotation: [0, 0, 0, 1],
       scale: [1, 1, 1]
-    });
-
-    // Animate 2D Portal Ring Rotation & Pulsing
-    const ringScale = 1.0 + Math.sin(totalTime * 4.0) * 0.06;
-    galfus.realm2dSetShapeTransform(REALM_2D, SHAPE_2D_RING_ID, {
-      position: [0.0, 0.0],
-      rotation: totalTime * 1.8,
-      scale: [ringScale, ringScale],
-      zLayer: 2
     });
 
     // Orbit 2D Light around portal
