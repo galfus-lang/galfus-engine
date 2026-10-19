@@ -84,6 +84,7 @@ export const multiverseDescriptors: DescSpec[] = [
       { literal: 'sharpen' },
       { literal: 'fxaa' },
       { literal: 'smaa' },
+      { literal: 'taa' },
       { literal: 'ssaaDownsample' },
       {
         inline: {
@@ -103,8 +104,19 @@ export const multiverseDescriptors: DescSpec[] = [
   {
     kind: 'enum',
     name: 'AntiAliasingMode',
-    doc: 'Anti-aliasing mode: none, fxaa, smaa, ssaa2x, ssaa4x, msaa2x, msaa4x, msaa8x, msaa16x.',
-    values: ['none', 'fxaa', 'smaa', 'ssaa2x', 'ssaa4x', 'msaa2x', 'msaa4x', 'msaa8x', 'msaa16x']
+    doc: 'Anti-aliasing mode: none, fxaa, smaa, taa, ssaa2x, ssaa4x, msaa2x, msaa4x, msaa8x, msaa16x.',
+    values: [
+      'none',
+      'fxaa',
+      'smaa',
+      'taa',
+      'ssaa2x',
+      'ssaa4x',
+      'msaa2x',
+      'msaa4x',
+      'msaa8x',
+      'msaa16x'
+    ]
   },
   {
     kind: 'object',

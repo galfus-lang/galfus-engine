@@ -19,6 +19,17 @@ use crate::types::{
     TargetTextureBinding, ViewportRect,
 };
 
+#[derive(Debug)]
+pub(crate) struct TaaHistoryEntry {
+    pub tex_a: GpuTextureHandle,
+    pub view_a: GpuTextureViewHandle,
+    pub tex_b: GpuTextureHandle,
+    pub view_b: GpuTextureViewHandle,
+    pub size: UVec2,
+    pub flip: bool,
+    pub has_history: bool,
+}
+
 /// Central Multiverse Context coordinating targets, realms, and invocation scheduling.
 pub struct MultiverseContext {
     pub anti_aliasing: AntiAliasingMode,
@@ -41,6 +52,7 @@ pub struct MultiverseContext {
         GpuTextureViewHandle,
         UVec2,
     )>,
+    pub(crate) taa_history: HashMap<u32, TaaHistoryEntry>,
     pub(crate) post_processor: Option<PostProcessor>,
     pub(crate) gpu_manager: Option<GpuManager>,
 
@@ -72,6 +84,7 @@ impl MultiverseContext {
             scratch_textures: HashMap::new(),
             ping_pong_texture: None,
             smaa_intermediates: None,
+            taa_history: HashMap::new(),
             post_processor: None,
             cached_schedule: None,
             dirty: true,
@@ -290,6 +303,12 @@ impl MultiverseContext {
             {
                 let _ = gpu.textures.destroy_texture(tex_h);
             }
+            if let (Some(entry), Some(gpu)) =
+                (self.taa_history.remove(&inv_id), &mut self.gpu_manager)
+            {
+                let _ = gpu.textures.destroy_texture(entry.tex_a);
+                let _ = gpu.textures.destroy_texture(entry.tex_b);
+            }
         }
         self.bindings.retain(|b| b.source_target_id != target_id);
         self.dirty = true;
@@ -412,6 +431,13 @@ impl MultiverseContext {
             &mut self.gpu_manager,
         ) {
             let _ = gpu.textures.destroy_texture(tex_h);
+        }
+        if let (Some(entry), Some(gpu)) = (
+            self.taa_history.remove(&invocation_id),
+            &mut self.gpu_manager,
+        ) {
+            let _ = gpu.textures.destroy_texture(entry.tex_a);
+            let _ = gpu.textures.destroy_texture(entry.tex_b);
         }
         self.dirty = true;
         Ok(())

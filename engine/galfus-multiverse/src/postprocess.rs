@@ -276,6 +276,7 @@ pub(crate) struct PostProcessor {
     pipelines: HashMap<(String, wgpu::TextureFormat), wgpu::RenderPipeline>,
     custom_shaders: HashMap<u32, wgpu::ShaderModule>,
     pub(crate) smaa_pipelines: HashMap<wgpu::TextureFormat, crate::smaa::SmaaPipeline>,
+    pub(crate) taa_pipelines: HashMap<wgpu::TextureFormat, crate::taa::TaaPipeline>,
 }
 
 /// Parameters defining source texture, destination target view, and optional viewport for a filter pass.
@@ -391,6 +392,7 @@ impl PostProcessor {
             pipelines: HashMap::new(),
             custom_shaders: HashMap::new(),
             smaa_pipelines: HashMap::new(),
+            taa_pipelines: HashMap::new(),
         }
     }
 
@@ -403,6 +405,16 @@ impl PostProcessor {
         self.smaa_pipelines
             .entry(format)
             .or_insert_with(|| crate::smaa::SmaaPipeline::new(device, queue, format))
+    }
+
+    pub fn ensure_taa(
+        &mut self,
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+    ) -> &crate::taa::TaaPipeline {
+        self.taa_pipelines
+            .entry(format)
+            .or_insert_with(|| crate::taa::TaaPipeline::new(device, format))
     }
 
     /// Registers a custom shader snippet by composing it against the multiverse screen template.
@@ -534,6 +546,7 @@ impl PostProcessor {
                 ("ssaa_downsample".to_string(), &[None; 8], 0)
             }
             Some(InvocationFilter::Smaa) => ("blit".to_string(), &[None; 8], 0),
+            Some(InvocationFilter::Taa) => ("blit".to_string(), &[None; 8], 0),
             Some(InvocationFilter::Custom {
                 shader_id,
                 textures,

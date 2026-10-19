@@ -128,7 +128,12 @@ impl Realm for Realm3DContext {
         let size = UVec2::new(width, height);
         let aspect = width as f32 / height as f32;
 
-        let camera_uniform = camera.build_uniform(camera_transform, aspect);
+        let mut camera_uniform = camera.build_uniform(camera_transform, aspect);
+        if let Some(jitter) = ctx.subpixel_jitter {
+            camera_uniform.projection.w_axis.x += jitter.x;
+            camera_uniform.projection.w_axis.y += jitter.y;
+            camera_uniform.view_projection = camera_uniform.projection * camera_uniform.view;
+        }
         let scene_buffers = match &self.scene_buffers {
             Some(sb) => sb,
             None => return Ok(()),

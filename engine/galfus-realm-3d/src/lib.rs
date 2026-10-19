@@ -207,6 +207,7 @@ mod tests {
             target_id: 1,
             camera_slot: Some(1),
             viewport: UVec4::new(0, 0, 200, 200),
+            subpixel_jitter: None,
             device: &device,
             queue: &queue,
             target_view: &target_view,

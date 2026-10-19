@@ -215,12 +215,19 @@ pub(crate) fn execute_frame(
                 realm_vp.z *= ssaa_scale;
                 realm_vp.w *= ssaa_scale;
 
+                let subpixel_jitter = if effective_aa == crate::types::AntiAliasingMode::Taa {
+                    Some(crate::taa::compute_subpixel_jitter(frame_id, width, height))
+                } else {
+                    None
+                };
+
                 let inv_ctx = RealmInvocationContext {
                     frame_id,
                     invocation_id: step.invocation_id,
                     target_id: block.target_id,
                     camera_slot: step.camera_slot,
                     viewport: realm_vp,
+                    subpixel_jitter,
                     device: gpu.device(),
                     queue: gpu.queue(),
                     target_view: &scratch_view,
@@ -248,6 +255,12 @@ pub(crate) fn execute_frame(
                     .iter()
                     .any(|f| matches!(f, crate::types::InvocationFilter::Smaa));
             filters.retain(|f| !matches!(f, crate::types::InvocationFilter::Smaa));
+
+            let is_taa = effective_aa == crate::types::AntiAliasingMode::Taa
+                || filters
+                    .iter()
+                    .any(|f| matches!(f, crate::types::InvocationFilter::Taa));
+            filters.retain(|f| !matches!(f, crate::types::InvocationFilter::Taa));
 
             // Ensure SMAA intermediate textures if SMAA is active
             if is_smaa {
@@ -306,7 +319,75 @@ pub(crate) fn execute_frame(
                 }
             }
 
-            let needs_pp = filters.len() > 1 || (filters.len() == 1 && is_smaa);
+            // Ensure TAA double-buffered history textures if TAA is active
+            if is_taa {
+                let taa_size = UVec2::new(width, height);
+                let needs_taa_realloc = match ctx.taa_history.get(&step.invocation_id) {
+                    Some(entry) => entry.size != taa_size,
+                    None => true,
+                };
+                if needs_taa_realloc {
+                    if let Some(old) = ctx.taa_history.remove(&step.invocation_id) {
+                        let _ = gpu.textures.destroy_texture(old.tex_a);
+                        let _ = gpu.textures.destroy_texture(old.tex_b);
+                    }
+                    let desc_a = GpuTextureDesc {
+                        label: Some(format!("Multiverse TAA History A #{}", step.invocation_id)),
+                        width,
+                        height,
+                        depth_or_layers: 1,
+                        mip_levels: 1,
+                        sample_count: 1,
+                        dimension: TextureDimension::D2,
+                        format: NormalizedTextureFormat::Rgba8Unorm,
+                        usages: TextureUsageFlags::default(),
+                    };
+                    let desc_b = GpuTextureDesc {
+                        label: Some(format!("Multiverse TAA History B #{}", step.invocation_id)),
+                        width,
+                        height,
+                        depth_or_layers: 1,
+                        mip_levels: 1,
+                        sample_count: 1,
+                        dimension: TextureDimension::D2,
+                        format: NormalizedTextureFormat::Rgba8Unorm,
+                        usages: TextureUsageFlags::default(),
+                    };
+                    let device = gpu.context.device_arc();
+                    let t_a = gpu
+                        .textures
+                        .create_texture(&device, &desc_a)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
+                    let v_a = gpu
+                        .textures
+                        .get_texture(t_a)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
+                        .default_view();
+                    let t_b = gpu
+                        .textures
+                        .create_texture(&device, &desc_b)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
+                    let v_b = gpu
+                        .textures
+                        .get_texture(t_b)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
+                        .default_view();
+                    ctx.taa_history.insert(
+                        step.invocation_id,
+                        crate::context::TaaHistoryEntry {
+                            tex_a: t_a,
+                            view_a: v_a,
+                            tex_b: t_b,
+                            view_b: v_b,
+                            size: taa_size,
+                            flip: false,
+                            has_history: false,
+                        },
+                    );
+                }
+            }
+
+            let needs_pp = filters.len() > 1 || (filters.len() == 1 && (is_smaa || is_taa));
             if needs_pp {
                 let needs_pp_realloc = match ctx.ping_pong_texture {
                     Some((_, _, size)) => size != needed_size,
@@ -423,6 +504,84 @@ pub(crate) fn execute_frame(
                         &weight_raw,
                         Some(vp),
                     );
+                } else if is_taa {
+                    for filter in &filters {
+                        let (src, dst) = if current_is_scratch {
+                            (&scratch_view, pp_view_raw.as_ref().unwrap())
+                        } else {
+                            (pp_view_raw.as_ref().unwrap(), &scratch_view)
+                        };
+                        let pass_desc = FilterPassDesc {
+                            src_view: src,
+                            dst_view: dst,
+                            dst_format: wgpu::TextureFormat::Rgba8Unorm,
+                            dst_size: needed_size,
+                            viewport: None,
+                        };
+                        post_proc.render_filter(
+                            gpu.device(),
+                            gpu.queue(),
+                            Some(filter),
+                            &tex_resolver,
+                            &pass_desc,
+                        )?;
+                        current_is_scratch = !current_is_scratch;
+                    }
+
+                    let taa_source = if current_is_scratch {
+                        &scratch_view
+                    } else {
+                        pp_view_raw.as_ref().unwrap()
+                    };
+
+                    let entry = ctx.taa_history.get_mut(&step.invocation_id).unwrap();
+                    let (read_vh, write_vh) = if entry.flip {
+                        (entry.view_b, entry.view_a)
+                    } else {
+                        (entry.view_a, entry.view_b)
+                    };
+                    let read_view_raw = gpu
+                        .textures
+                        .get_view(read_vh)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
+                        .raw()
+                        .clone();
+                    let write_view_raw = gpu
+                        .textures
+                        .get_view(write_vh)
+                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
+                        .raw()
+                        .clone();
+
+                    let blend_factor = if entry.has_history { 0.90 } else { 0.0 };
+                    entry.has_history = true;
+                    entry.flip = !entry.flip;
+
+                    let taa = post_proc.ensure_taa(gpu.device(), wgpu::TextureFormat::Rgba8Unorm);
+                    taa.render_taa(
+                        gpu.device(),
+                        gpu.queue(),
+                        taa_source,
+                        &read_view_raw,
+                        &write_view_raw,
+                        blend_factor,
+                        None,
+                    );
+
+                    let pass_desc = FilterPassDesc {
+                        src_view: &write_view_raw,
+                        dst_view: target_v,
+                        dst_format: target_fmt,
+                        dst_size: target_size,
+                        viewport: Some(vp),
+                    };
+                    post_proc.render_filter(
+                        gpu.device(),
+                        gpu.queue(),
+                        None,
+                        &tex_resolver,
+                        &pass_desc,
+                    )?;
                 } else if filters.is_empty() {
                     let pass_desc = FilterPassDesc {
                         src_view: &scratch_view,

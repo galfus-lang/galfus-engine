@@ -66,6 +66,8 @@ pub enum InvocationFilter {
     Smaa,
     /// Super-Sample Anti-Aliasing downsample filter.
     SsaaDownsample,
+    /// Temporal Anti-Aliasing (TAA) with subpixel jitter and color clamping.
+    Taa,
     /// Custom post-processing shader module ID with optional texture slots and sampler index.
     Custom {
         shader_id: u32,
@@ -87,6 +89,8 @@ pub enum AntiAliasingMode {
     Fxaa,
     /// Subpixel Morphological Anti-Aliasing (pattern-based edge reconstruction).
     Smaa,
+    /// Temporal Anti-Aliasing (TAA with subpixel projection jitter and color-clamped history).
+    Taa,
     /// Super-Sample Anti-Aliasing 2x (renders at 2x resolution, downsamples with area filter).
     Ssaa2x,
     /// Super-Sample Anti-Aliasing 4x (renders at 4x resolution, downsamples with area filter).

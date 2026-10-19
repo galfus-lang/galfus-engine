@@ -804,6 +804,7 @@ dependencies = [
 name = "galfus-multiverse"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "galfus-core",
  "galfus-gpu-manager",
  "galfus-realm-core",

@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+bytemuck.workspace = true
 galfus-core.workspace = true
 galfus-gpu-manager.workspace = true
 galfus-realm-core.workspace = true

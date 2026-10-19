@@ -41,7 +41,7 @@ export async function runDemoMv4(): Promise<void> {
   const windowId = 1;
   const winWidth = 1024;
   const winHeight = 768;
-  const aaModes: AntiAliasingMode[] = ['none', 'fxaa', 'smaa', 'ssaa2x', 'ssaa4x'];
+  const aaModes: AntiAliasingMode[] = ['none', 'fxaa', 'smaa', 'taa', 'ssaa2x', 'ssaa4x'];
   let aaIndex = 1; // start on 'fxaa'
   let currentGlobalAa: AntiAliasingMode = aaModes[aaIndex] ?? 'fxaa';
 
@@ -240,6 +240,7 @@ export async function runDemoMv4(): Promise<void> {
       width: { vw: 50 },
       height: { vh: 100 }
     },
+    clearColor: [0.04, 0.05, 0.08, 1.0],
     filters: [],
     zIndex: 0,
     enabled: true,
@@ -259,6 +260,7 @@ export async function runDemoMv4(): Promise<void> {
       width: { vw: 50 },
       height: { vh: 100 }
     },
+    clearColor: [0.04, 0.05, 0.08, 1.0],
     filters: [],
     zIndex: 0,
     enabled: true
@@ -298,7 +300,7 @@ export async function runDemoMv4(): Promise<void> {
   console.log('\n----------------------------------------------------------------');
   console.log(' CONTROLS:');
   console.log(
-    '   [F] / [SPACE] - Cycle Global Anti-Aliasing (NONE -> FXAA -> SMAA -> SSAA 2X -> SSAA 4X)'
+    '   [F] / [SPACE] - Cycle Global Anti-Aliasing (NONE -> FXAA -> SMAA -> TAA -> SSAA 2X -> SSAA 4X)'
   );
   console.log('   [S]           - Toggle Split-Screen vs Fullscreen Mode');
   console.log('   [R]           - Pause / Resume Rotation');

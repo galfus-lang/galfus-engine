@@ -1,4 +1,4 @@
-use glam::UVec4;
+use glam::{UVec4, Vec2};
 use serde::{Deserialize, Serialize};
 
 /// High-level realm category.
@@ -39,6 +39,8 @@ pub struct RealmInvocationContext<'a> {
     pub camera_slot: Option<u32>,
     /// Resolved pixel viewport rectangle: `[x, y, width, height]`.
     pub viewport: UVec4,
+    /// Subpixel projection jitter in NDC: `[dx, dy]`, used by Temporal Anti-Aliasing (TAA).
+    pub subpixel_jitter: Option<Vec2>,
     /// Active GPU device.
     pub device: &'a wgpu::Device,
     /// Active GPU command queue.
