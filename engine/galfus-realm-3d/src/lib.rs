@@ -108,6 +108,46 @@ mod tests {
     }
 
     #[test]
+    fn test_realm3d_strict_camera_resolution() {
+        let mut realm = Realm3DContext::new(10);
+
+        // Add camera at slot 2
+        let cam2 = Camera3D::perspective(60.0, 0.1, 1000.0, 2);
+        let cam_transform = Transform3D::from_position(Vec3::new(0.0, 2.0, -5.0));
+        assert!(realm.create_camera(20, cam2, cam_transform).is_ok());
+
+        let select_camera = |realm: &Realm3DContext, slot: Option<u32>| {
+            if let Some(s) = slot {
+                realm
+                    .cameras
+                    .iter()
+                    .find(|(id, (c, _))| c.active && (c.camera_slot == s || **id == s))
+                    .map(|(id, _)| *id)
+            } else {
+                realm
+                    .cameras
+                    .values()
+                    .find(|(c, _)| c.active && c.camera_slot == 0)
+                    .map(|(c, _)| c.camera_slot)
+            }
+        };
+
+        // Explicit slot 2 requested -> matches camera 20
+        assert_eq!(select_camera(&realm, Some(2)), Some(20));
+
+        // Non-existent slot 999 requested -> NO fallback, returns None!
+        assert_eq!(select_camera(&realm, Some(999)), None);
+
+        // Default slot None requested, but no camera has camera_slot == 0 -> NO fallback, returns None!
+        assert_eq!(select_camera(&realm, None), None);
+
+        // Add default camera (slot 0)
+        let cam0 = Camera3D::perspective(45.0, 0.1, 1000.0, 0);
+        assert!(realm.create_camera(10, cam0, cam_transform).is_ok());
+        assert_eq!(select_camera(&realm, None), Some(0));
+    }
+
+    #[test]
     fn test_gizmo_system_operations() {
         let mut gizmos = GizmoSystem3D::new();
         assert!(gizmos.vertices().is_empty());

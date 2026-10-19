@@ -45,7 +45,7 @@ impl BatchBuilder2D {
             return;
         }
 
-        // Deterministic sorting: Z-layer -> surface type -> material -> geometry
+        // Deterministic sorting: Z-layer -> draw order -> surface type -> material -> geometry
         self.items.sort_by_key(|a| a.key);
 
         self.sorted_instances.reserve(self.items.len());
@@ -96,12 +96,22 @@ mod tests {
     use glam::{Mat4, Vec4};
 
     fn make_item(z_layer: i32, material_id: u32, geometry_id: u64) -> PreparedItem2D {
+        make_item_with_order(z_layer, 0, material_id, geometry_id)
+    }
+
+    fn make_item_with_order(
+        z_layer: i32,
+        draw_order: i32,
+        material_id: u32,
+        geometry_id: u64,
+    ) -> PreparedItem2D {
         PreparedItem2D {
             key: BatchKey2D {
                 z_layer,
+                draw_order,
+                surface_type: 1,
                 material_id,
                 geometry_id,
-                surface_type: 1,
             },
             instance: Item2DInstanceRaw {
                 model_matrix: Mat4::IDENTITY,
@@ -136,5 +146,23 @@ mod tests {
 
         assert_eq!(ranges[2].key.z_layer, 2);
         assert_eq!(ranges[2].count, 1);
+    }
+
+    #[test]
+    fn test_draw_order_overrides_material_sort() {
+        let mut builder = BatchBuilder2D::new();
+
+        // Even though material 20 > material 5, draw_order 0 is drawn before draw_order 1
+        builder.push(make_item_with_order(0, 1, 5, 1));
+        builder.push(make_item_with_order(0, 0, 20, 1));
+
+        builder.build();
+
+        let ranges = builder.ranges();
+        assert_eq!(ranges.len(), 2);
+        assert_eq!(ranges[0].key.draw_order, 0);
+        assert_eq!(ranges[0].key.material_id, 20);
+        assert_eq!(ranges[1].key.draw_order, 1);
+        assert_eq!(ranges[1].key.material_id, 5);
     }
 }

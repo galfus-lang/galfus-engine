@@ -141,6 +141,21 @@ pub struct Svg2DDesc {
     /// Whether this SVG entity receives 2D shadow illumination.
     #[serde(default = "default_true")]
     pub receive_shadow: bool,
+    /// Shadow projection height scalar.
+    #[serde(default = "default_shadow_height")]
+    pub shadow_height: f32,
+    /// Shadow layer filter mask.
+    #[serde(default = "default_shadow_layer_mask")]
+    pub shadow_layer_mask: u32,
+    /// Optional vertical height interval [min_z, max_z] where this occluder blocks light.
+    #[serde(default)]
+    pub height_range: Option<[f32; 2]>,
+    /// If true, the SVG is invisible and serves purely as occluder geometry.
+    #[serde(default)]
+    pub occluder_only: bool,
+    /// Optional explicit draw order override within the same Z layer.
+    #[serde(default)]
+    pub draw_order: Option<i32>,
 }
 
 fn default_scale_factor() -> f32 {
@@ -149,6 +164,14 @@ fn default_scale_factor() -> f32 {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_shadow_height() -> f32 {
+    1.0
+}
+
+fn default_shadow_layer_mask() -> u32 {
+    u32::MAX
 }
 
 /// 2D SVG vector entity with mutable DOM and GPU rasterization synchronization.
@@ -170,6 +193,16 @@ pub struct Svg2D {
     pub cast_shadow: bool,
     /// Whether this SVG receives 2D shadows.
     pub receive_shadow: bool,
+    /// Shadow projection height scalar.
+    pub shadow_height: f32,
+    /// Shadow layer filter mask.
+    pub shadow_layer_mask: u32,
+    /// Optional vertical height interval [min_z, max_z] where this occluder blocks light.
+    pub height_range: Option<[f32; 2]>,
+    /// If true, the SVG is invisible and serves purely as occluder geometry.
+    pub occluder_only: bool,
+    /// Optional explicit draw order override within the same Z layer.
+    pub draw_order: Option<i32>,
     /// Dirty flag indicating the GPU texture needs re-rasterization.
     pub dirty: bool,
 }
@@ -185,6 +218,11 @@ impl Default for Svg2D {
             material_id: None,
             cast_shadow: true,
             receive_shadow: true,
+            shadow_height: 1.0,
+            shadow_layer_mask: u32::MAX,
+            height_range: None,
+            occluder_only: false,
+            draw_order: None,
             dirty: true,
         }
     }
@@ -257,6 +295,18 @@ impl Svg2D {
         &self.source
     }
 
+    /// Computes world-space bounding corners for 2D polar shadow occlusion.
+    pub fn compute_world_corners(&self, transform: &Transform2D, fallback_size: Vec2) -> [Vec2; 4] {
+        let base_size = self.dimensions.unwrap_or(fallback_size);
+        let half = base_size * 0.5;
+        [
+            transform.transform_point(Vec2::new(-half.x, -half.y)),
+            transform.transform_point(Vec2::new(half.x, -half.y)),
+            transform.transform_point(Vec2::new(half.x, half.y)),
+            transform.transform_point(Vec2::new(-half.x, half.y)),
+        ]
+    }
+
     /// Computes the GPU model matrix transforming the [-0.5, 0.5] unit quad to the SVG's dimensions and world transform.
     pub fn compute_model_matrix(&self, transform: &Transform2D, fallback_size: Vec2) -> glam::Mat4 {
         let base_size = self.dimensions.unwrap_or(fallback_size);
@@ -289,6 +339,11 @@ impl From<Svg2DDesc> for Svg2D {
             material_id: desc.material_id,
             cast_shadow: desc.cast_shadow,
             receive_shadow: desc.receive_shadow,
+            shadow_height: desc.shadow_height,
+            shadow_layer_mask: desc.shadow_layer_mask,
+            height_range: desc.height_range,
+            occluder_only: desc.occluder_only,
+            draw_order: desc.draw_order,
             dirty: true,
         }
     }
@@ -307,6 +362,11 @@ impl Serialize for Svg2D {
             material_id: self.material_id,
             cast_shadow: self.cast_shadow,
             receive_shadow: self.receive_shadow,
+            shadow_height: self.shadow_height,
+            shadow_layer_mask: self.shadow_layer_mask,
+            height_range: self.height_range,
+            occluder_only: self.occluder_only,
+            draw_order: self.draw_order,
         }
         .serialize(serializer)
     }

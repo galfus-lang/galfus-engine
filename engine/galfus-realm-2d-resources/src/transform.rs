@@ -13,6 +13,9 @@ pub struct Transform2D {
     pub scale: Vec2,
     /// Explicit Z-layer depth for deterministic sorting.
     pub z_layer: i32,
+    /// Explicit draw order within the same Z layer (higher order drawn on top).
+    #[serde(default)]
+    pub draw_order: i32,
 }
 
 impl Default for Transform2D {
@@ -22,6 +25,7 @@ impl Default for Transform2D {
             rotation: 0.0,
             scale: Vec2::ONE,
             z_layer: 0,
+            draw_order: 0,
         }
     }
 }
@@ -51,7 +55,14 @@ impl Transform2D {
             rotation,
             scale,
             z_layer,
+            draw_order: 0,
         }
+    }
+
+    /// Sets explicit draw order on this transform.
+    pub fn with_draw_order(mut self, draw_order: i32) -> Self {
+        self.draw_order = draw_order;
+        self
     }
 
     /// Computes the 4x4 affine transformation matrix for 2D rendering and GPU shaders.

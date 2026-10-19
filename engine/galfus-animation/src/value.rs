@@ -76,6 +76,7 @@ impl AnimValue {
                 rotation: arr[2],
                 scale: Vec2::new(arr[3], arr[4]),
                 z_layer: arr[5].round() as i32,
+                draw_order: 0,
             }),
             other => Err(AnimationError::InvalidValue(format!(
                 "Expected Transform2D, found {other:?}"

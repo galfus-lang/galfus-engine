@@ -277,6 +277,7 @@ pub unsafe extern "C" fn galfus_realm_2d_set_svg_transform_raw(
         rotation: slice[2],
         scale: Vec2::new(slice[3], slice[4]),
         z_layer: slice[5].round() as i32,
+        draw_order: 0,
     };
     match with_multiverse_mut(|mv| {
         let realm = mv

@@ -30,6 +30,9 @@ pub struct Sprite2D {
     /// Optional vertical height interval [min_z, max_z] where this occluder blocks light.
     #[serde(default)]
     pub height_range: Option<[f32; 2]>,
+    /// Optional explicit draw order override within the same Z layer.
+    #[serde(default)]
+    pub draw_order: Option<i32>,
 }
 
 impl Default for Sprite2D {
@@ -46,6 +49,7 @@ impl Default for Sprite2D {
             shadow_height: 1.0,
             shadow_layer_mask: u32::MAX,
             height_range: None,
+            draw_order: None,
         }
     }
 }

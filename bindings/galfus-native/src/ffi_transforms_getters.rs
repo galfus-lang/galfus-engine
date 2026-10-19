@@ -108,6 +108,7 @@ pub unsafe extern "C" fn galfus_realm_2d_set_sprite_transform_raw(
         rotation: slice[2],
         scale: Vec2::new(slice[3], slice[4]),
         z_layer: slice[5] as i32,
+        draw_order: 0,
     };
 
     match with_multiverse_mut(|mv| {
@@ -143,6 +144,7 @@ pub unsafe extern "C" fn galfus_realm_2d_set_camera_transform_raw(
         rotation: slice[2],
         scale: Vec2::new(slice[3], slice[4]),
         z_layer: slice[5] as i32,
+        draw_order: 0,
     };
 
     match with_multiverse_mut(|mv| {

@@ -69,12 +69,14 @@ impl Default for ShadowSample2DRaw {
 pub struct BatchKey2D {
     /// Depth layer for back-to-front rendering.
     pub z_layer: i32,
+    /// Explicit draw order within the same Z layer (higher order drawn on top).
+    pub draw_order: i32,
+    /// Surface blend type (0 = Opaque, 1 = Transparent, 2 = Masked, 3 = Additive).
+    pub surface_type: u32,
     /// Material binding index.
     pub material_id: u32,
     /// Geometry mesh index (0 for quad, or packed Generational Handle).
     pub geometry_id: u64,
-    /// Surface blend type (0 = Opaque, 1 = Transparent, 2 = Masked).
-    pub surface_type: u32,
 }
 
 /// Contiguous index range sharing the same `BatchKey2D`.

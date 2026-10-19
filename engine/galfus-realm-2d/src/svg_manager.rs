@@ -263,6 +263,7 @@ impl SvgManager2D {
                 .svg
                 .compute_model_matrix(&instance.transform, geom.dimensions);
 
+            let [min_z, max_z] = instance.svg.height_range.unwrap_or([-10000.0, 10000.0]);
             let item = Item2DInstanceRaw {
                 model_matrix,
                 tint: Vec4::ONE,
@@ -274,22 +275,27 @@ impl SvgManager2D {
                         0.0
                     },
                     if instance.svg.cast_shadow { 1.0 } else { 0.0 },
-                    -10000.0,
-                    10000.0,
+                    min_z,
+                    max_z,
                 ),
             };
 
             let mat_id = instance.svg.material_id.unwrap_or(SVG_DEFAULT_MATERIAL_ID);
+            let draw_order = instance
+                .svg
+                .draw_order
+                .unwrap_or(instance.transform.draw_order);
 
             batch_builder.push(PreparedItem2D {
                 key: BatchKey2D {
                     z_layer: instance.transform.z_layer,
+                    draw_order,
+                    surface_type: 1, // Transparent
                     material_id: mat_id,
                     geometry_id: handle.to_u64(),
-                    surface_type: 1, // Transparent
                 },
                 instance: item,
-                occluder_only: false,
+                occluder_only: instance.svg.occluder_only,
             });
         }
     }

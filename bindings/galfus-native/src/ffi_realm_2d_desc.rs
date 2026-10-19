@@ -15,6 +15,8 @@ pub struct Transform2DDesc {
     pub scale: [f32; 2],
     #[serde(default)]
     pub z_layer: i32,
+    #[serde(default)]
+    pub draw_order: i32,
 }
 
 fn default_scale_2d() -> [f32; 2] {
@@ -28,6 +30,7 @@ impl From<Transform2DDesc> for Transform2D {
             rotation: d.rotation,
             scale: Vec2::new(d.scale[0], d.scale[1]),
             z_layer: d.z_layer,
+            draw_order: d.draw_order,
         }
     }
 }
@@ -160,6 +163,7 @@ pub struct Sprite2DDesc {
     pub shadow_height: Option<f32>,
     pub shadow_layer_mask: Option<u32>,
     pub height_range: Option<[f32; 2]>,
+    pub draw_order: Option<i32>,
 }
 
 impl From<Sprite2DDesc> for Sprite2D {
@@ -182,6 +186,7 @@ impl From<Sprite2DDesc> for Sprite2D {
             shadow_height: d.shadow_height.unwrap_or(1.0),
             shadow_layer_mask: d.shadow_layer_mask.unwrap_or(u32::MAX),
             height_range: d.height_range,
+            draw_order: d.draw_order,
         }
     }
 }
@@ -204,6 +209,7 @@ pub struct Shape2DDesc {
     pub shadow_height: Option<f32>,
     pub shadow_layer_mask: Option<u32>,
     pub height_range: Option<[f32; 2]>,
+    pub draw_order: Option<i32>,
 }
 
 impl From<Shape2DDesc> for Shape2D {
@@ -236,6 +242,7 @@ impl From<Shape2DDesc> for Shape2D {
             shadow_height: d.shadow_height.unwrap_or(1.0),
             shadow_layer_mask: d.shadow_layer_mask.unwrap_or(u32::MAX),
             height_range: d.height_range,
+            draw_order: d.draw_order,
         }
     }
 }

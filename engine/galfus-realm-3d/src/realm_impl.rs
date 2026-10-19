@@ -111,17 +111,19 @@ impl Realm for Realm3DContext {
         let device = ctx.device;
         let queue = ctx.queue;
 
-        // Resolve camera
-        let Some((camera, camera_transform)) = ctx
-            .camera_slot
-            .and_then(|s| {
-                self.cameras
-                    .values()
-                    .find(|(c, _)| c.camera_slot == s)
-                    .or_else(|| self.cameras.get(&s))
-            })
-            .or_else(|| self.cameras.values().next())
-        else {
+        // Resolve camera strictly by requested slot, or default slot 0 if none specified (no arbitrary fallback)
+        let selected_camera = if let Some(slot) = ctx.camera_slot {
+            self.cameras
+                .iter()
+                .find(|(id, (c, _))| c.active && (c.camera_slot == slot || **id == slot))
+                .map(|(_, pair)| pair)
+        } else {
+            self.cameras
+                .values()
+                .find(|(c, _)| c.active && c.camera_slot == 0)
+        };
+
+        let Some((camera, camera_transform)) = selected_camera else {
             return Ok(());
         };
 

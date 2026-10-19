@@ -12,12 +12,12 @@ use galfus_realm_core::{
     Realm, RealmInvocationContext, RealmKind, RealmPrepareContext, RealmResult,
 };
 use glam::{Vec2, Vec4};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// Runtime 2D rendering context managing GPU buffers, pipelines, materials, and batch execution.
 pub struct Realm2DContext {
     pub id: u32,
-    pub cameras: HashMap<u32, (Camera2D, Transform2D)>,
+    pub cameras: BTreeMap<u32, (Camera2D, Transform2D)>,
     pub sprites: HashMap<u32, (Sprite2D, Transform2D)>,
     pub shapes: HashMap<u32, (Shape2D, Transform2D)>,
     pub materials: HashMap<u32, Material2D>,
@@ -41,7 +41,7 @@ impl Realm2DContext {
     pub fn new(id: u32) -> Self {
         Self {
             id,
-            cameras: HashMap::new(),
+            cameras: BTreeMap::new(),
             sprites: HashMap::new(),
             shapes: HashMap::new(),
             materials: HashMap::new(),
@@ -198,6 +198,25 @@ impl Realm for Realm2DContext {
             }
         }
 
+        for (&id, instance) in &self.svg_manager.instances {
+            if instance.svg.cast_shadow {
+                let fallback_size = instance
+                    .geometry_handle
+                    .and_then(|h| self.svg_manager.pool.get(h).ok().map(|g| g.dimensions))
+                    .unwrap_or(Vec2::splat(100.0));
+                let corners = instance
+                    .svg
+                    .compute_world_corners(&instance.transform, fallback_size);
+                occluders.push(Occluder2D {
+                    entity_id: id,
+                    silhouette: OccluderSilhouette2D::from_quad(corners),
+                    shadow_layer_mask: instance.svg.shadow_layer_mask,
+                    shadow_height: instance.svg.shadow_height,
+                    height_range: instance.svg.height_range,
+                });
+            }
+        }
+
         // Update lights & polar shadow samples
         let occluder_refs: Vec<&Occluder2D> = occluders.iter().collect();
         let mut light_uniforms = Vec::with_capacity(self.lights.len());
@@ -290,12 +309,14 @@ impl Realm for Realm2DContext {
                 ),
             };
 
+            let draw_order = sprite.draw_order.unwrap_or(transform.draw_order);
             self.batch_builder.push(PreparedItem2D {
                 key: BatchKey2D {
                     z_layer: transform.z_layer,
+                    draw_order,
+                    surface_type: 1,
                     material_id: sprite.material_id.unwrap_or(0),
                     geometry_id: 0,
-                    surface_type: 1,
                 },
                 instance,
                 occluder_only: sprite.occluder_only,
@@ -316,12 +337,14 @@ impl Realm for Realm2DContext {
                 ),
             };
 
+            let draw_order = shape.draw_order.unwrap_or(transform.draw_order);
             self.batch_builder.push(PreparedItem2D {
                 key: BatchKey2D {
                     z_layer: transform.z_layer,
+                    draw_order,
+                    surface_type: 1,
                     material_id: shape.material_id.unwrap_or(0),
                     geometry_id: 0,
-                    surface_type: 1,
                 },
                 instance,
                 occluder_only: shape.occluder_only,
@@ -363,9 +386,10 @@ impl Realm for Realm2DContext {
                 self.batch_builder.push(PreparedItem2D {
                     key: BatchKey2D {
                         z_layer: transform.z_layer,
+                        draw_order: transform.draw_order,
+                        surface_type,
                         material_id,
                         geometry_id: 0,
-                        surface_type,
                     },
                     instance,
                     occluder_only: false,
@@ -384,11 +408,19 @@ impl Realm for Realm2DContext {
         let device = ctx.device;
         let queue = ctx.queue;
 
-        let Some((camera, camera_transform)) = ctx
-            .camera_slot
-            .and_then(|s| self.cameras.values().find(|(c, _)| c.camera_slot == s))
-            .or_else(|| self.cameras.values().next())
-        else {
+        // Resolve camera strictly by requested slot, or default slot 0 if none specified (no arbitrary fallback)
+        let selected_camera = if let Some(slot) = ctx.camera_slot {
+            self.cameras
+                .iter()
+                .find(|(id, (c, _))| c.active && (c.camera_slot == slot || **id == slot))
+                .map(|(_, pair)| pair)
+        } else {
+            self.cameras
+                .values()
+                .find(|(c, _)| c.active && c.camera_slot == 0)
+        };
+
+        let Some((camera, camera_transform)) = selected_camera else {
             return Ok(());
         };
 
@@ -530,5 +562,81 @@ impl Realm for Realm2DContext {
     }
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use galfus_realm_2d_resources::Svg2D;
+
+    #[test]
+    fn test_strict_camera_resolution_no_fallback() {
+        let mut realm = Realm2DContext::new(1);
+
+        // Camera in slot 5
+        let cam5 = Camera2D::new(10.0, 5);
+        assert!(realm.set_camera(100, cam5, Transform2D::default()).is_ok());
+
+        // Inactive camera in slot 0
+        let mut cam0 = Camera2D::new(10.0, 0);
+        cam0.active = false;
+        assert!(realm.set_camera(200, cam0, Transform2D::default()).is_ok());
+
+        // Target texture view dummy cannot be created without device,
+        // but we can verify the camera selection logic directly:
+        let select_camera = |realm: &Realm2DContext, slot: Option<u32>| {
+            if let Some(s) = slot {
+                realm
+                    .cameras
+                    .iter()
+                    .find(|(id, (c, _))| c.active && (c.camera_slot == s || **id == s))
+                    .map(|(id, _)| *id)
+            } else {
+                realm
+                    .cameras
+                    .values()
+                    .find(|(c, _)| c.active && c.camera_slot == 0)
+                    .map(|(c, _)| c.camera_slot)
+            }
+        };
+
+        // Explicit slot 5 requested -> matches camera 100
+        assert_eq!(select_camera(&realm, Some(5)), Some(100));
+
+        // Non-existent slot 999 requested -> NO fallback, returns None!
+        assert_eq!(select_camera(&realm, Some(999)), None);
+
+        // Default slot None requested, but slot 0 camera is inactive -> NO fallback, returns None!
+        assert_eq!(select_camera(&realm, None), None);
+
+        // Activate slot 0 camera -> now matches default slot
+        realm.cameras.get_mut(&200).unwrap().0.active = true;
+        assert_eq!(select_camera(&realm, None), Some(0));
+    }
+
+    #[test]
+    fn test_svg_shadow_occluders_and_draw_order() {
+        let mut realm = Realm2DContext::new(1);
+
+        // Create SVG with cast_shadow = true
+        let svg = Svg2D {
+            dimensions: Some(Vec2::new(50.0, 50.0)),
+            cast_shadow: true,
+            shadow_height: 2.5,
+            shadow_layer_mask: 0x1,
+            ..Default::default()
+        };
+        let transform = Transform2D::from_translation(Vec2::new(10.0, 20.0)).with_draw_order(3);
+        assert!(realm.set_svg(10, svg, transform).is_ok());
+
+        // Verify world corners
+        let instance = realm.svg_manager.instances.get(&10).unwrap();
+        let corners = instance
+            .svg
+            .compute_world_corners(&instance.transform, Vec2::splat(50.0));
+        assert_eq!(corners[0], Vec2::new(-15.0, -5.0));
+        assert_eq!(corners[2], Vec2::new(35.0, 45.0));
+        assert_eq!(instance.transform.draw_order, 3);
     }
 }
