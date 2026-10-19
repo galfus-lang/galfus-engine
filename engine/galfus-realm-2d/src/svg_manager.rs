@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use galfus_core::{GenerationalPool, Handle};
 use galfus_realm_2d_resources::{Material2D, SurfaceType2D, Svg2D, Transform2D};
 use glam::{Vec2, Vec4};
 use resvg::usvg::fontdb;
@@ -8,17 +9,11 @@ use resvg::usvg::fontdb;
 use crate::batch::{BatchBuilder2D, PreparedItem2D};
 use crate::types::{BatchKey2D, Item2DInstanceRaw};
 
-/// Base ID for geometry assigned to SVG meshes in the 2D batch builder.
-pub const SVG_GEOMETRY_ID_BASE: u32 = 1_000_000;
+/// Namespace constant for SVG geometries in the generational pool.
+pub const NAMESPACE_SVG_GEOMETRY: u16 = 0x20;
 
-/// Reserved logical ID base for SVG materials (within core-reserved range 4294901761..=4294967295).
-pub const SVG_MATERIAL_ID_BASE: u32 = 4294901761;
-
-/// Maps an SVG entity ID to an internal material ID within the reserved range.
-#[inline]
-pub fn svg_material_id(svg_id: u32) -> u32 {
-    SVG_MATERIAL_ID_BASE.saturating_add(svg_id % 65000)
-}
+/// Default material ID reserved for SVG vector entities without custom shader materials.
+pub const SVG_DEFAULT_MATERIAL_ID: u32 = galfus_core::id::RESERVED_RANGE_START;
 
 /// GPU-uploaded vector geometry for an SVG instance.
 pub struct SvgGeometry2D {
@@ -32,7 +27,7 @@ pub struct SvgGeometry2D {
 pub struct SvgInstance2D {
     pub svg: Svg2D,
     pub transform: Transform2D,
-    pub geometry: Option<SvgGeometry2D>,
+    pub geometry_handle: Option<Handle<SvgGeometry2D>>,
 }
 
 impl SvgInstance2D {
@@ -40,7 +35,7 @@ impl SvgInstance2D {
         Self {
             svg,
             transform,
-            geometry: None,
+            geometry_handle: None,
         }
     }
 }
@@ -48,6 +43,7 @@ impl SvgInstance2D {
 /// Manager maintaining 2D SVG vector entities, font database, and GPU geometry uploads.
 pub struct SvgManager2D {
     pub instances: HashMap<u32, SvgInstance2D>,
+    pub pool: GenerationalPool<SvgGeometry2D>,
     pub font_db: Arc<fontdb::Database>,
     pub default_font_family: String,
     material_uniform_buf: Option<wgpu::Buffer>,
@@ -73,6 +69,7 @@ impl Default for SvgManager2D {
 
         Self {
             instances: HashMap::new(),
+            pool: GenerationalPool::new(NAMESPACE_SVG_GEOMETRY),
             font_db: Arc::new(db),
             default_font_family,
             material_uniform_buf: None,
@@ -120,10 +117,22 @@ impl SvgManager2D {
     }
 
     pub fn remove(&mut self, id: u32) -> Option<SvgInstance2D> {
-        self.instances.remove(&id)
+        if let Some(inst) = self.instances.remove(&id) {
+            if let Some(h) = inst.geometry_handle {
+                let _ = self.pool.remove(h);
+            }
+            Some(inst)
+        } else {
+            None
+        }
     }
 
     pub fn clear(&mut self) {
+        for inst in self.instances.values() {
+            if let Some(h) = inst.geometry_handle {
+                let _ = self.pool.remove(h);
+            }
+        }
         self.instances.clear();
     }
 
@@ -135,16 +144,10 @@ impl SvgManager2D {
         self.instances.get_mut(&id)
     }
 
-    /// Resolves an active GPU geometry buffer by geometry ID.
-    pub fn get_geometry(&self, geometry_id: u32) -> Option<&SvgGeometry2D> {
-        if geometry_id >= SVG_GEOMETRY_ID_BASE {
-            let svg_id = geometry_id - SVG_GEOMETRY_ID_BASE;
-            self.instances
-                .get(&svg_id)
-                .and_then(|inst| inst.geometry.as_ref())
-        } else {
-            None
-        }
+    /// Resolves an active GPU geometry buffer by 64-bit packed generational handle.
+    pub fn get_geometry_by_u64(&self, raw: u64) -> Option<&SvgGeometry2D> {
+        let handle: Handle<SvgGeometry2D> = Handle::from_u64(raw)?;
+        self.pool.get(handle).ok()
     }
 
     /// Tessellates dirty SVG entities directly on GPU geometry buffers.
@@ -180,7 +183,7 @@ impl SvgManager2D {
         });
 
         for (&id, instance) in &mut self.instances {
-            if instance.svg.dirty || instance.geometry.is_none() {
+            if instance.svg.dirty || instance.geometry_handle.is_none() {
                 let xml = instance.svg.current_xml();
                 match crate::svg_tessellator::tessellate_svg(
                     xml,
@@ -188,6 +191,11 @@ impl SvgManager2D {
                     &self.default_font_family,
                 ) {
                     Ok(mesh) => {
+                        // Invalidate and remove old generational handle if any
+                        if let Some(old_h) = instance.geometry_handle.take() {
+                            let _ = self.pool.remove(old_h);
+                        }
+
                         if !mesh.indices.is_empty() && !mesh.vertices.is_empty() {
                             let vbo = crate::gpu::create_gpu_buffer(
                                 device,
@@ -205,12 +213,14 @@ impl SvgManager2D {
                             );
                             queue.write_buffer(&ibo, 0, bytemuck::cast_slice(&mesh.indices));
 
-                            instance.geometry = Some(SvgGeometry2D {
+                            if let Ok(handle) = self.pool.insert(SvgGeometry2D {
                                 vertex_buffer: vbo,
                                 index_buffer: ibo,
                                 index_count: mesh.indices.len() as u32,
                                 dimensions: mesh.dimensions,
-                            });
+                            }) {
+                                instance.geometry_handle = Some(handle);
+                            }
                         }
                         instance.svg.dirty = false;
                     }
@@ -221,10 +231,7 @@ impl SvgManager2D {
                 }
             }
 
-            let mat_id = instance
-                .svg
-                .material_id
-                .unwrap_or_else(|| svg_material_id(id));
+            let mat_id = instance.svg.material_id.unwrap_or(SVG_DEFAULT_MATERIAL_ID);
 
             material_bind_groups.entry(mat_id).or_insert_with(|| {
                 crate::gpu::create_material_bind_group_2d(
@@ -244,19 +251,17 @@ impl SvgManager2D {
 
     /// Pushes active SVG geometry into the 2D batch builder.
     pub fn push_batches(&self, batch_builder: &mut BatchBuilder2D) {
-        for (&id, instance) in &self.instances {
-            if instance.geometry.is_none() {
+        for instance in self.instances.values() {
+            let Some(handle) = instance.geometry_handle else {
                 continue;
-            }
+            };
+            let Some(geom) = self.pool.get(handle).ok() else {
+                continue;
+            };
 
-            let fallback_size = instance
-                .geometry
-                .as_ref()
-                .map(|g| g.dimensions)
-                .unwrap_or(Vec2::ONE);
             let model_matrix = instance
                 .svg
-                .compute_model_matrix(&instance.transform, fallback_size);
+                .compute_model_matrix(&instance.transform, geom.dimensions);
 
             let item = Item2DInstanceRaw {
                 model_matrix,
@@ -274,16 +279,13 @@ impl SvgManager2D {
                 ),
             };
 
-            let mat_id = instance
-                .svg
-                .material_id
-                .unwrap_or_else(|| svg_material_id(id));
+            let mat_id = instance.svg.material_id.unwrap_or(SVG_DEFAULT_MATERIAL_ID);
 
             batch_builder.push(PreparedItem2D {
                 key: BatchKey2D {
                     z_layer: instance.transform.z_layer,
                     material_id: mat_id,
-                    geometry_id: SVG_GEOMETRY_ID_BASE.saturating_add(id),
+                    geometry_id: handle.to_u64(),
                     surface_type: 1, // Transparent
                 },
                 instance: item,

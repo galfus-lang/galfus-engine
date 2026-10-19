@@ -310,6 +310,30 @@ impl PlatformContext {
         self.audio.play_sound(sound_id, config)
     }
 
+    /// Plays a sound positioned in 3D/2D relative to an emitter and a listener ear/microphone.
+    pub fn play_sound_spatial(
+        &mut self,
+        sound_id: u32,
+        emitter: crate::audio::SpatialTransform,
+        listener: crate::audio::SpatialTransform,
+        config: crate::audio::SpatialAudioConfig,
+    ) -> PlatformResult<u32> {
+        self.audio
+            .play_sound_spatial(sound_id, emitter, listener, config)
+    }
+
+    /// Updates the spatial positioning of a playing sound voice.
+    pub fn update_sound_spatial(
+        &mut self,
+        voice_id: u32,
+        emitter: crate::audio::SpatialTransform,
+        listener: crate::audio::SpatialTransform,
+        config: crate::audio::SpatialAudioConfig,
+    ) -> PlatformResult<()> {
+        self.audio
+            .update_sound_spatial(voice_id, emitter, listener, config)
+    }
+
     /// Pauses an active sound playback voice.
     pub fn pause_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
         self.audio.pause_sound(voice_id)

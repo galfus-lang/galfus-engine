@@ -410,7 +410,7 @@ impl Realm for Realm2DContext {
             rpass.set_index_buffer(quad_ibo.slice(..), wgpu::IndexFormat::Uint16);
             rpass.set_bind_group(0, global_bg, &[]);
 
-            let mut current_geo_id = 0u32;
+            let mut current_geo_id = 0u64;
             let pipeline_mgr = self.pipeline_manager.as_mut().unwrap();
             for range in ranges {
                 if range.key.geometry_id != current_geo_id {
@@ -418,7 +418,8 @@ impl Realm for Realm2DContext {
                     if current_geo_id == 0 {
                         rpass.set_vertex_buffer(0, quad_vbo.slice(..));
                         rpass.set_index_buffer(quad_ibo.slice(..), wgpu::IndexFormat::Uint16);
-                    } else if let Some(mesh) = self.svg_manager.get_geometry(current_geo_id) {
+                    } else if let Some(mesh) = self.svg_manager.get_geometry_by_u64(current_geo_id)
+                    {
                         rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                         rpass.set_index_buffer(
                             mesh.index_buffer.slice(..),
@@ -446,7 +447,7 @@ impl Realm for Realm2DContext {
 
                 if current_geo_id == 0 {
                     rpass.draw_indexed(0..6, 0, range.start..(range.start + range.count));
-                } else if let Some(mesh) = self.svg_manager.get_geometry(current_geo_id) {
+                } else if let Some(mesh) = self.svg_manager.get_geometry_by_u64(current_geo_id) {
                     rpass.draw_indexed(
                         0..mesh.index_count,
                         0,

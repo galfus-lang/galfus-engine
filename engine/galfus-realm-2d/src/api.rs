@@ -326,8 +326,6 @@ impl Realm2DContext {
         let _ = self.svg_manager.remove(svg_id).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
         })?;
-        let mat_id = crate::svg_manager::svg_material_id(svg_id);
-        self.material_bind_groups.remove(&mat_id);
         self.dirty = true;
         Ok(())
     }

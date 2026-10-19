@@ -305,7 +305,90 @@ pub extern "C" fn galfus_gamepad_set_rumble(
     }
 }
 
-/// Plays a registered sound with playback parameters. Returns 0 on success, -1 on failure.
+/// Loads raw audio data bytes (base64-encoded) under a host logical ID. Returns 0 on success, -1 on failure.
+///
+/// # Safety
+/// `payload_json` must be a valid, null-terminated UTF-8 C string pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_audio_load_sound(
+    sound_id: u32,
+    payload_json: *const c_char,
+) -> i32 {
+    let json_str = match unsafe { from_c_str(payload_json) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SoundPayload {
+        data_base64: String,
+    }
+
+    let payload: SoundPayload = match serde_json::from_str(json_str) {
+        Ok(p) => p,
+        Err(e) => {
+            set_last_error(&format!("Invalid SoundCreatePayload JSON: {e}"));
+            return -1;
+        }
+    };
+
+    let bytes = match crate::ffi_resources::decode_base64(&payload.data_base64) {
+        Ok(b) => b,
+        Err(e) => {
+            set_last_error(&format!("Base64 decoding failed: {e}"));
+            return -1;
+        }
+    };
+
+    let result = with_context_mut(|ctx| {
+        ctx.load_sound_bytes(sound_id, &bytes)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    });
+
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Loads raw audio data bytes directly from a buffer pointer. Returns 0 on success, -1 on failure.
+///
+/// # Safety
+/// `data_ptr` must be valid for reads of `data_len` bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_audio_load_sound_raw(
+    sound_id: u32,
+    data_ptr: *const u8,
+    data_len: usize,
+) -> i32 {
+    if data_ptr.is_null() || data_len == 0 {
+        set_last_error("Null or empty audio buffer");
+        return -1;
+    }
+    let slice = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
+    let result = with_context_mut(|ctx| {
+        ctx.load_sound_bytes(sound_id, slice)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    });
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Plays a registered sound with playback parameters. Returns voice instance ID (>= 0) on success, -1 on failure.
 #[unsafe(no_mangle)]
 pub extern "C" fn galfus_audio_play_sound(
     sound_id: u32,
@@ -325,7 +408,147 @@ pub extern "C" fn galfus_audio_play_sound(
         with_context_mut(|ctx| ctx.play_sound(sound_id, config).map_err(|e| e.to_string()));
 
     match result {
-        Ok(_) => 0,
+        Ok(voice_id) => voice_id as i32,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Plays a registered sound with 3D/2D spatial positioning relative to a listener ear.
+/// Returns voice instance ID (>= 0) on success, -1 on failure.
+///
+/// # Safety
+/// `emitter_json`, `listener_json`, and `config_json` must be valid null-terminated C string pointers.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_audio_play_sound_spatial(
+    sound_id: u32,
+    emitter_json: *const c_char,
+    listener_json: *const c_char,
+    config_json: *const c_char,
+) -> i32 {
+    let emitter_str = match unsafe { from_c_str(emitter_json) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+    let listener_str = match unsafe { from_c_str(listener_json) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+    let config_str = match unsafe { from_c_str(config_json) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+
+    let emitter: galfus_platform::SpatialTransform = match serde_json::from_str(emitter_str) {
+        Ok(e) => e,
+        Err(err) => {
+            set_last_error(&format!("Invalid emitter SpatialTransform: {err}"));
+            return -1;
+        }
+    };
+    let listener: galfus_platform::SpatialTransform = match serde_json::from_str(listener_str) {
+        Ok(l) => l,
+        Err(err) => {
+            set_last_error(&format!("Invalid listener SpatialTransform: {err}"));
+            return -1;
+        }
+    };
+    let config: galfus_platform::SpatialAudioConfig = match serde_json::from_str(config_str) {
+        Ok(c) => c,
+        Err(err) => {
+            set_last_error(&format!("Invalid SpatialAudioConfig: {err}"));
+            return -1;
+        }
+    };
+
+    let result = with_context_mut(|ctx| {
+        ctx.play_sound_spatial(sound_id, emitter, listener, config)
+            .map_err(|e| e.to_string())
+    });
+
+    match result {
+        Ok(voice_id) => voice_id as i32,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Updates spatial positioning of an active sound voice relative to a listener ear.
+/// Returns 0 on success, -1 on failure.
+///
+/// # Safety
+/// `emitter_json`, `listener_json`, and `config_json` must be valid null-terminated C string pointers.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_audio_update_sound_spatial(
+    voice_id: u32,
+    emitter_json: *const c_char,
+    listener_json: *const c_char,
+    config_json: *const c_char,
+) -> i32 {
+    let emitter_str = match unsafe { from_c_str(emitter_json) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+    let listener_str = match unsafe { from_c_str(listener_json) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+    let config_str = match unsafe { from_c_str(config_json) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+
+    let emitter: galfus_platform::SpatialTransform = match serde_json::from_str(emitter_str) {
+        Ok(e) => e,
+        Err(err) => {
+            set_last_error(&format!("Invalid emitter SpatialTransform: {err}"));
+            return -1;
+        }
+    };
+    let listener: galfus_platform::SpatialTransform = match serde_json::from_str(listener_str) {
+        Ok(l) => l,
+        Err(err) => {
+            set_last_error(&format!("Invalid listener SpatialTransform: {err}"));
+            return -1;
+        }
+    };
+    let config: galfus_platform::SpatialAudioConfig = match serde_json::from_str(config_str) {
+        Ok(c) => c,
+        Err(err) => {
+            set_last_error(&format!("Invalid SpatialAudioConfig: {err}"));
+            return -1;
+        }
+    };
+
+    let result = with_context_mut(|ctx| {
+        ctx.update_sound_spatial(voice_id, emitter, listener, config)
+            .map_err(|e| e.to_string())
+    });
+
+    match result {
+        Ok(()) => 0,
         Err(e) => {
             set_last_error(&e);
             -1

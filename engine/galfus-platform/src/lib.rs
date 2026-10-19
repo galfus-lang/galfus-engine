@@ -18,7 +18,10 @@ pub mod keyboard;
 pub mod pointer;
 pub mod window;
 
-pub use audio::{AudioContext, PlaybackConfig, PlaybackState, SoundInfo};
+pub use audio::{
+    AudioContext, PlaybackConfig, PlaybackState, SoundInfo, SpatialAudioConfig, SpatialTransform,
+    calculate_spatial_playback,
+};
 pub use capabilities::PlatformCapabilities;
 pub use context::PlatformContext;
 pub use error::{PlatformError, PlatformResult};

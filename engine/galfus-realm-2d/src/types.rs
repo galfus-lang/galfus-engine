@@ -71,8 +71,8 @@ pub struct BatchKey2D {
     pub z_layer: i32,
     /// Material binding index.
     pub material_id: u32,
-    /// Geometry mesh / quad index.
-    pub geometry_id: u32,
+    /// Geometry mesh index (0 for quad, or packed Generational Handle).
+    pub geometry_id: u64,
     /// Surface blend type (0 = Opaque, 1 = Transparent, 2 = Masked).
     pub surface_type: u32,
 }

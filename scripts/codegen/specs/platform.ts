@@ -161,6 +161,24 @@ export const platformFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_audio_load_sound',
+    methodName: 'audioLoadSound',
+    doc: 'Loads raw audio data bytes (base64-encoded WAV, MP3, OGG, FLAC) under a host logical ID.',
+    params: [
+      {
+        name: 'soundId',
+        type: 'u32',
+        doc: 'Host logical ID of the sound asset'
+      },
+      {
+        name: 'payload',
+        type: { json: 'SoundCreatePayload' },
+        doc: 'Sound data payload containing base64 audio bytes'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_audio_play_sound',
     methodName: 'audioPlaySound',
     doc: 'Plays a registered sound resource using playback parameters.',
@@ -189,6 +207,62 @@ export const platformFunctions: FunctionSpec[] = [
         name: 'looping',
         type: 'bool',
         doc: 'Whether the sound loops indefinitely'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_audio_play_sound_spatial',
+    methodName: 'audioPlaySoundSpatial',
+    doc: 'Plays a registered sound with 3D/2D spatial positioning relative to a listener ear.',
+    params: [
+      {
+        name: 'soundId',
+        type: 'u32',
+        doc: 'Host logical ID of the sound'
+      },
+      {
+        name: 'emitter',
+        type: { json: 'SpatialTransform' },
+        doc: 'Spatial transform of the sound emitter'
+      },
+      {
+        name: 'listener',
+        type: { json: 'SpatialTransform' },
+        doc: 'Spatial transform of the listener / microphone ear'
+      },
+      {
+        name: 'config',
+        type: { json: 'SpatialAudioConfig' },
+        doc: 'Spatial attenuation and playback configuration'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_audio_update_sound_spatial',
+    methodName: 'audioUpdateSoundSpatial',
+    doc: 'Updates spatial positioning of an active sound voice relative to a listener ear.',
+    params: [
+      {
+        name: 'voiceId',
+        type: 'u32',
+        doc: 'Voice ID to update'
+      },
+      {
+        name: 'emitter',
+        type: { json: 'SpatialTransform' },
+        doc: 'Spatial transform of the sound emitter'
+      },
+      {
+        name: 'listener',
+        type: { json: 'SpatialTransform' },
+        doc: 'Spatial transform of the listener / microphone ear'
+      },
+      {
+        name: 'config',
+        type: { json: 'SpatialAudioConfig' },
+        doc: 'Spatial attenuation and playback configuration'
       }
     ],
     returnType: 'i32'

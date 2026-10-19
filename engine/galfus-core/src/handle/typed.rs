@@ -46,6 +46,39 @@ impl<T> Handle<T> {
     pub fn cast<U>(self) -> Handle<U> {
         Handle::new(self.slot, self.generation, self.namespace)
     }
+
+    /// Encodes this handle into a 64-bit integer representation (16-bit namespace, 16-bit generation, 32-bit slot).
+    #[inline]
+    pub const fn to_u64(&self) -> u64 {
+        ((self.namespace as u64) << 48)
+            | (((self.generation.get() as u64) & 0xFFFF) << 32)
+            | (self.slot as u64)
+    }
+
+    /// Decodes a handle from its 64-bit integer representation.
+    #[inline]
+    pub fn from_u64(val: u64) -> Option<Self> {
+        let namespace = (val >> 48) as u16;
+        let gen_num = ((val >> 32) & 0xFFFF) as u32;
+        let slot = (val & 0xFFFF_FFFF) as u32;
+        let generation = NonZeroU32::new(gen_num)?;
+        Some(Self::new(slot, generation, namespace))
+    }
+
+    /// Encodes this handle into a 32-bit integer (16-bit generation, 16-bit slot) for 32-bit FFI channels.
+    #[inline]
+    pub const fn to_u32_index(&self) -> u32 {
+        ((self.generation.get() & 0xFFFF) << 16) | (self.slot & 0xFFFF)
+    }
+
+    /// Decodes a handle from a 32-bit integer with an explicit namespace.
+    #[inline]
+    pub fn from_u32_index(val: u32, namespace: u16) -> Option<Self> {
+        let gen_num = (val >> 16) & 0xFFFF;
+        let slot = val & 0xFFFF;
+        let generation = NonZeroU32::new(gen_num)?;
+        Some(Self::new(slot, generation, namespace))
+    }
 }
 
 impl<T> Copy for Handle<T> {}
@@ -125,5 +158,32 @@ mod tests {
         assert_eq!(handle2.slot(), 10);
         assert_eq!(handle2.generation().get(), 2);
         assert_eq!(handle2.namespace(), 1);
+    }
+
+    #[test]
+    fn test_handle_u64_roundtrip() {
+        let generation = NonZeroU32::new(42).unwrap();
+        let handle: Handle<DummyResource> = Handle::new(1234, generation, 0x20);
+
+        let encoded = handle.to_u64();
+        let decoded: Handle<DummyResource> = Handle::from_u64(encoded).unwrap();
+
+        assert_eq!(handle, decoded);
+        assert_eq!(decoded.slot(), 1234);
+        assert_eq!(decoded.generation().get(), 42);
+        assert_eq!(decoded.namespace(), 0x20);
+    }
+
+    #[test]
+    fn test_handle_u32_index_roundtrip() {
+        let generation = NonZeroU32::new(7).unwrap();
+        let handle: Handle<DummyResource> = Handle::new(88, generation, 0x30);
+
+        let index = handle.to_u32_index();
+        let decoded: Handle<DummyResource> = Handle::from_u32_index(index, 0x30).unwrap();
+
+        assert_eq!(decoded.slot(), 88);
+        assert_eq!(decoded.generation().get(), 7);
+        assert_eq!(decoded.namespace(), 0x30);
     }
 }

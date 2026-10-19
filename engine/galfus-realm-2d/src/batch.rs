@@ -95,7 +95,7 @@ mod tests {
     use super::*;
     use glam::{Mat4, Vec4};
 
-    fn make_item(z_layer: i32, material_id: u32, geometry_id: u32) -> PreparedItem2D {
+    fn make_item(z_layer: i32, material_id: u32, geometry_id: u64) -> PreparedItem2D {
         PreparedItem2D {
             key: BatchKey2D {
                 z_layer,

@@ -354,6 +354,36 @@ export const platformDescriptors: DescSpec[] = [
     ]
   },
   {
+    kind: 'object',
+    name: 'SpatialTransform',
+    doc: '3D/2D spatial transform for positional audio emitters and listener ears/microphones.',
+    fields: {
+      position: { type: { tuple: ['number', 'number', 'number'] } },
+      rotation: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'SpatialAudioConfig',
+    doc: 'Configuration parameters for spatial sound attenuation and stereo panning.',
+    fields: {
+      volume: { type: 'number', optional: true },
+      minDistance: { type: 'number', optional: true },
+      maxDistance: { type: 'number', optional: true },
+      rolloff: { type: 'number', optional: true },
+      speed: { type: 'number', optional: true },
+      looping: { type: 'boolean', optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'SoundCreatePayload',
+    doc: 'Payload for loading raw sound data bytes into memory under a host logical ID.',
+    fields: {
+      dataBase64: { type: 'string' }
+    }
+  },
+  {
     kind: 'union',
     name: 'PlatformEvent',
     doc: 'Root enum of all events dispatched from the platform layer.',

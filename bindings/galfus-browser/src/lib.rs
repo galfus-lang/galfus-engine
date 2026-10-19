@@ -108,6 +108,15 @@ impl GalfusBrowser {
             .map_err(|e| JsValue::from_str(&format!("Gamepad rumble failed: {e}")))
     }
 
+    /// Loads raw audio data bytes into memory under a host logical ID.
+    #[wasm_bindgen(js_name = "audioLoadSound")]
+    pub fn audio_load_sound(&mut self, sound_id: u32, bytes: &[u8]) -> Result<(), JsValue> {
+        self.context
+            .load_sound_bytes(sound_id, bytes)
+            .map(|_| ())
+            .map_err(|e| JsValue::from_str(&format!("Audio load failed: {e}")))
+    }
+
     /// Plays a sound using the provided configuration.
     #[wasm_bindgen(js_name = "audioPlaySound")]
     pub fn audio_play_sound(
@@ -128,6 +137,48 @@ impl GalfusBrowser {
         self.context
             .play_sound(sound_id, config)
             .map_err(|e| JsValue::from_str(&format!("Audio play failed: {e}")))
+    }
+
+    /// Plays a registered sound with 3D/2D spatial positioning relative to a listener ear.
+    #[wasm_bindgen(js_name = "audioPlaySoundSpatial")]
+    pub fn audio_play_sound_spatial(
+        &mut self,
+        sound_id: u32,
+        emitter_json: &str,
+        listener_json: &str,
+        config_json: &str,
+    ) -> Result<u32, JsValue> {
+        let emitter: galfus_platform::SpatialTransform = serde_json::from_str(emitter_json)
+            .map_err(|e| JsValue::from_str(&format!("Invalid emitter SpatialTransform: {e}")))?;
+        let listener: galfus_platform::SpatialTransform = serde_json::from_str(listener_json)
+            .map_err(|e| JsValue::from_str(&format!("Invalid listener SpatialTransform: {e}")))?;
+        let config: galfus_platform::SpatialAudioConfig = serde_json::from_str(config_json)
+            .map_err(|e| JsValue::from_str(&format!("Invalid SpatialAudioConfig: {e}")))?;
+
+        self.context
+            .play_sound_spatial(sound_id, emitter, listener, config)
+            .map_err(|e| JsValue::from_str(&format!("Audio spatial play failed: {e}")))
+    }
+
+    /// Updates spatial positioning of an active sound voice relative to a listener ear.
+    #[wasm_bindgen(js_name = "audioUpdateSoundSpatial")]
+    pub fn audio_update_sound_spatial(
+        &mut self,
+        voice_id: u32,
+        emitter_json: &str,
+        listener_json: &str,
+        config_json: &str,
+    ) -> Result<(), JsValue> {
+        let emitter: galfus_platform::SpatialTransform = serde_json::from_str(emitter_json)
+            .map_err(|e| JsValue::from_str(&format!("Invalid emitter SpatialTransform: {e}")))?;
+        let listener: galfus_platform::SpatialTransform = serde_json::from_str(listener_json)
+            .map_err(|e| JsValue::from_str(&format!("Invalid listener SpatialTransform: {e}")))?;
+        let config: galfus_platform::SpatialAudioConfig = serde_json::from_str(config_json)
+            .map_err(|e| JsValue::from_str(&format!("Invalid SpatialAudioConfig: {e}")))?;
+
+        self.context
+            .update_sound_spatial(voice_id, emitter, listener, config)
+            .map_err(|e| JsValue::from_str(&format!("Audio spatial update failed: {e}")))
     }
 
     /// Pauses a playing sound voice.

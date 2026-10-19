@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use galfus_core::Handle;
+use galfus_core::handle::GenerationalPool;
 use galfus_core::id::validate_host_logical_id;
 #[cfg(not(target_arch = "wasm32"))]
 use kira::{
@@ -7,8 +9,13 @@ use kira::{
     sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings},
 };
 
-use super::types::{PlaybackConfig, PlaybackState};
+use super::types::{
+    PlaybackConfig, PlaybackState, SpatialAudioConfig, SpatialTransform, calculate_spatial_playback,
+};
 use crate::error::{PlatformError, PlatformResult};
+
+/// Namespace for audio playback voices in the generational pool.
+pub const NAMESPACE_AUDIO_VOICE: u16 = 0x30;
 
 /// Helper converting linear amplitude (0.0 ..= 1.0) into Decibels.
 #[inline]
@@ -27,7 +34,7 @@ pub struct AudioContext {
     #[cfg(not(target_arch = "wasm32"))]
     sounds: HashMap<u32, StaticSoundData>,
     #[cfg(not(target_arch = "wasm32"))]
-    voices: HashMap<u32, StaticSoundHandle>,
+    voices: GenerationalPool<StaticSoundHandle>,
 }
 
 impl AudioContext {
@@ -39,7 +46,7 @@ impl AudioContext {
             Self {
                 manager,
                 sounds: HashMap::new(),
-                voices: HashMap::new(),
+                voices: GenerationalPool::new(NAMESPACE_AUDIO_VOICE),
             }
         }
 
@@ -47,6 +54,12 @@ impl AudioContext {
         {
             Self {}
         }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn parse_voice_handle(voice_id: u32) -> PlatformResult<Handle<StaticSoundHandle>> {
+        Handle::from_u32_index(voice_id, NAMESPACE_AUDIO_VOICE)
+            .ok_or(PlatformError::SoundNotFound(voice_id))
     }
 
     /// Loads raw audio data bytes (WAV, MP3, OGG, FLAC) and registers it under a host logical ID.
@@ -73,7 +86,7 @@ impl AudioContext {
     }
 
     /// Plays a sound by its logical ID using the given configuration.
-    /// Returns the voice instance ID.
+    /// Returns a versioned voice instance ID from the generational pool.
     pub fn play_sound(&mut self, sound_id: u32, config: PlaybackConfig) -> PlatformResult<u32> {
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -97,9 +110,10 @@ impl AudioContext {
                     .play(sound_data.with_settings(settings))
                     .map_err(|e| PlatformError::AudioPlaybackFailed(format!("Play failed: {e}")))?;
 
-                let voice_id = sound_id;
-                self.voices.insert(voice_id, handle);
-                Ok(voice_id)
+                let voice_handle = self.voices.insert(handle).map_err(|e| {
+                    PlatformError::AudioPlaybackFailed(format!("Failed to register voice: {e}"))
+                })?;
+                Ok(voice_handle.to_u32_index())
             } else {
                 Err(PlatformError::AudioInitializationFailed(
                     "Audio manager not available".into(),
@@ -114,16 +128,49 @@ impl AudioContext {
         }
     }
 
+    /// Plays a sound using 3D/2D spatial positioning relative to an emitter and listener ear/microphone.
+    pub fn play_sound_spatial(
+        &mut self,
+        sound_id: u32,
+        emitter: SpatialTransform,
+        listener: SpatialTransform,
+        config: SpatialAudioConfig,
+    ) -> PlatformResult<u32> {
+        let (volume, panning) = calculate_spatial_playback(&emitter, &listener, &config);
+        let playback_cfg = PlaybackConfig {
+            volume,
+            panning,
+            speed: config.speed,
+            looping: config.looping,
+        };
+        self.play_sound(sound_id, playback_cfg)
+    }
+
+    /// Dynamically updates the spatial positioning and volume of a currently playing voice.
+    pub fn update_sound_spatial(
+        &mut self,
+        voice_id: u32,
+        emitter: SpatialTransform,
+        listener: SpatialTransform,
+        config: SpatialAudioConfig,
+    ) -> PlatformResult<()> {
+        let (volume, panning) = calculate_spatial_playback(&emitter, &listener, &config);
+        self.set_sound_volume(voice_id, volume)?;
+        self.set_sound_panning(voice_id, panning)?;
+        Ok(())
+    }
+
     /// Pauses an active sound voice.
     pub fn pause_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if let Some(voice) = self.voices.get_mut(&voice_id) {
-                voice.pause(Tween::default());
-                Ok(())
-            } else {
-                Err(PlatformError::SoundNotFound(voice_id))
-            }
+            let handle = Self::parse_voice_handle(voice_id)?;
+            let voice = self
+                .voices
+                .get_mut(handle)
+                .map_err(|_| PlatformError::SoundNotFound(voice_id))?;
+            voice.pause(Tween::default());
+            Ok(())
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -137,12 +184,13 @@ impl AudioContext {
     pub fn resume_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if let Some(voice) = self.voices.get_mut(&voice_id) {
-                voice.resume(Tween::default());
-                Ok(())
-            } else {
-                Err(PlatformError::SoundNotFound(voice_id))
-            }
+            let handle = Self::parse_voice_handle(voice_id)?;
+            let voice = self
+                .voices
+                .get_mut(handle)
+                .map_err(|_| PlatformError::SoundNotFound(voice_id))?;
+            voice.resume(Tween::default());
+            Ok(())
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -156,12 +204,13 @@ impl AudioContext {
     pub fn stop_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if let Some(mut voice) = self.voices.remove(&voice_id) {
-                voice.stop(Tween::default());
-                Ok(())
-            } else {
-                Err(PlatformError::SoundNotFound(voice_id))
-            }
+            let handle = Self::parse_voice_handle(voice_id)?;
+            let mut voice = self
+                .voices
+                .remove(handle)
+                .map_err(|_| PlatformError::SoundNotFound(voice_id))?;
+            voice.stop(Tween::default());
+            Ok(())
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -175,13 +224,14 @@ impl AudioContext {
     pub fn set_sound_volume(&mut self, voice_id: u32, volume: f32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if let Some(voice) = self.voices.get_mut(&voice_id) {
-                let db = amplitude_to_decibels(volume);
-                voice.set_volume(db, Tween::default());
-                Ok(())
-            } else {
-                Err(PlatformError::SoundNotFound(voice_id))
-            }
+            let handle = Self::parse_voice_handle(voice_id)?;
+            let voice = self
+                .voices
+                .get_mut(handle)
+                .map_err(|_| PlatformError::SoundNotFound(voice_id))?;
+            let db = amplitude_to_decibels(volume);
+            voice.set_volume(db, Tween::default());
+            Ok(())
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -195,12 +245,13 @@ impl AudioContext {
     pub fn set_sound_panning(&mut self, voice_id: u32, panning: f32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if let Some(voice) = self.voices.get_mut(&voice_id) {
-                voice.set_panning(panning, Tween::default());
-                Ok(())
-            } else {
-                Err(PlatformError::SoundNotFound(voice_id))
-            }
+            let handle = Self::parse_voice_handle(voice_id)?;
+            let voice = self
+                .voices
+                .get_mut(handle)
+                .map_err(|_| PlatformError::SoundNotFound(voice_id))?;
+            voice.set_panning(panning, Tween::default());
+            Ok(())
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -214,16 +265,17 @@ impl AudioContext {
     pub fn get_sound_state(&self, voice_id: u32) -> PlaybackState {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if let Some(voice) = self.voices.get(&voice_id) {
-                match voice.state() {
+            if let Ok(handle) = Self::parse_voice_handle(voice_id)
+                && let Ok(voice) = self.voices.get(handle)
+            {
+                return match voice.state() {
                     kira::sound::PlaybackState::Playing => PlaybackState::Playing,
                     kira::sound::PlaybackState::Paused => PlaybackState::Paused,
                     kira::sound::PlaybackState::Stopped => PlaybackState::Stopped,
                     _ => PlaybackState::Playing,
-                }
-            } else {
-                PlaybackState::Stopped
+                };
             }
+            PlaybackState::Stopped
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -237,7 +289,6 @@ impl AudioContext {
     pub fn unload_sound(&mut self, id: u32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let _ = self.stop_sound(id);
             self.sounds.remove(&id);
             Ok(())
         }
@@ -253,5 +304,67 @@ impl AudioContext {
 impl Default for AudioContext {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reserved_id_rejection_for_audio_assets() {
+        let mut audio = AudioContext::new();
+        // ID in reserved range must be rejected
+        let res = audio.load_sound_bytes(galfus_core::id::RESERVED_RANGE_START, &[0u8; 10]);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_calculate_spatial_playback_left_right() {
+        let listener = SpatialTransform {
+            position: [0.0, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+        };
+        // Emitter at right side
+        let emitter_right = SpatialTransform {
+            position: [10.0, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+        };
+        let config = SpatialAudioConfig {
+            min_distance: 1.0,
+            max_distance: 50.0,
+            rolloff: 1.0,
+            volume: 1.0,
+            speed: 1.0,
+            looping: false,
+        };
+        let (vol, pan) = calculate_spatial_playback(&emitter_right, &listener, &config);
+        assert!(vol > 0.0 && vol <= 1.0);
+        assert!(pan > 0.8, "Sound to right must pan right, got {pan}");
+
+        // Emitter at left side
+        let emitter_left = SpatialTransform {
+            position: [-10.0, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+        };
+        let (_, pan_left) = calculate_spatial_playback(&emitter_left, &listener, &config);
+        assert!(
+            pan_left < -0.8,
+            "Sound to left must pan left, got {pan_left}"
+        );
+    }
+
+    #[test]
+    fn test_voice_handle_index_roundtrip() {
+        use galfus_core::Handle;
+        let dummy = Handle::<()>::new(
+            42,
+            std::num::NonZeroU32::new(7).unwrap(),
+            NAMESPACE_AUDIO_VOICE,
+        );
+        let u32_val = dummy.to_u32_index();
+        let decoded = Handle::<()>::from_u32_index(u32_val, NAMESPACE_AUDIO_VOICE).unwrap();
+        assert_eq!(decoded.slot(), 42);
+        assert_eq!(decoded.generation().get(), 7);
     }
 }

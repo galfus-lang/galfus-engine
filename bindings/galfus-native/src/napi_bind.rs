@@ -130,6 +130,25 @@ pub fn gamepad_set_rumble(
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NapiSoundPayload {
+    data_base64: String,
+}
+
+#[napi]
+pub fn audio_load_sound(env: Env, sound_id: u32, payload_val: JsUnknown) -> Result<()> {
+    let payload: NapiSoundPayload = env.from_js_value(payload_val)?;
+    let bytes = crate::ffi_resources::decode_base64(&payload.data_base64)
+        .map_err(|e| Error::new(Status::GenericFailure, e))?;
+    with_context_mut(|ctx| {
+        ctx.load_sound_bytes(sound_id, &bytes)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
 #[napi]
 pub fn audio_play_sound(
     sound_id: u32,
@@ -147,6 +166,44 @@ pub fn audio_play_sound(
 
     with_context_mut(|ctx| ctx.play_sound(sound_id, config).map_err(|e| e.to_string()))
         .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn audio_play_sound_spatial(
+    env: Env,
+    sound_id: u32,
+    emitter_val: JsUnknown,
+    listener_val: JsUnknown,
+    config_val: JsUnknown,
+) -> Result<u32> {
+    let emitter: galfus_platform::SpatialTransform = env.from_js_value(emitter_val)?;
+    let listener: galfus_platform::SpatialTransform = env.from_js_value(listener_val)?;
+    let config: galfus_platform::SpatialAudioConfig = env.from_js_value(config_val)?;
+
+    with_context_mut(|ctx| {
+        ctx.play_sound_spatial(sound_id, emitter, listener, config)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn audio_update_sound_spatial(
+    env: Env,
+    voice_id: u32,
+    emitter_val: JsUnknown,
+    listener_val: JsUnknown,
+    config_val: JsUnknown,
+) -> Result<()> {
+    let emitter: galfus_platform::SpatialTransform = env.from_js_value(emitter_val)?;
+    let listener: galfus_platform::SpatialTransform = env.from_js_value(listener_val)?;
+    let config: galfus_platform::SpatialAudioConfig = env.from_js_value(config_val)?;
+
+    with_context_mut(|ctx| {
+        ctx.update_sound_spatial(voice_id, emitter, listener, config)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
 #[napi]
