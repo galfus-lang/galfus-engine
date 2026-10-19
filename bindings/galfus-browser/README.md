@@ -1,17 +1,18 @@
 # galfus-browser
 
-WebAssembly packaging boundary and JavaScript/TypeScript integration layer for modern web browsers.
+WebAssembly packaging boundary for the platform layer in modern web browsers.
 
 ## Responsibilities
 
 - **WebAssembly Packaging**: Compiles internal engine components into a high-performance WebAssembly (`.wasm`) module via `wasm-bindgen` (`cdylib`).
 - **Zero-Copy Object Marshalling**: Marshals engine configurations, platform capabilities, and flat event queues directly to/from native JavaScript objects using `serde-wasm-bindgen` without intermediary JSON string formatting.
-- **Web Platform & Canvas Surface Integration**: Bridges browser DOM `<canvas>` elements to WebGPU rendering surfaces, handling viewport resizing, high-DPI scaling, and canvas destruction.
+- **Web Platform & Canvas Integration**: Bridges browser windows/canvas configuration through `galfus-platform`.
 - **Browser Event Normalization**: Drains and normalizes browser pointer, keyboard, and window events into Galfus platform event arrays on the JavaScript main thread.
-- **Web Audio & Autoplay Lifecycle**: Coordinates audio playback, voice management, real-time volume/panning modulation, and gracefully handles browser user-gesture activation constraints.
-- **Gamepad & Haptics Bridge**: Interfaces with the HTML5 Gamepad API, exposing connected gamepads and driving dual-motor rumble haptics.
+- **Platform API Shape**: Exposes the same platform, input, audio, and gamepad method surface as the native platform binding where supported by `galfus-platform`.
 
 ## Capabilities & Powers
+
+> The browser binding currently wraps `PlatformContext` only. It does not expose Multiverse, GPU resources, realms, or animation. Browser audio and gamepad behavior follows the wasm implementations in `galfus-platform`, which currently return placeholder/no-op results for several operations.
 
 - **GalfusBrowser Controller**:
   - `new()`: Initializes the platform context within the browser window.
@@ -30,13 +31,13 @@ WebAssembly packaging boundary and JavaScript/TypeScript integration layer for m
       | { kind: 'keyboard'; type: 'keyDown' | 'keyUp'; key: string }
       | { kind: 'gamepad'; type: 'connected' | 'disconnected'; id: number };
     ```
-- **Web Audio Engine**:
+- **Audio API forwarding**:
   - `audioPlaySound(soundId, volume, panning, speed, looping)`: Spawns an active playback voice and returns its logical `voiceId`.
   - `audioPauseSound(voiceId)` & `audioResumeSound(voiceId)`: Pauses and resumes voice playback without losing playback position.
   - `audioStopSound(voiceId)`: Immediately terminates voice playback.
   - `audioSetVolume(voiceId, volume)` & `audioSetPanning(voiceId, panning)`: Dynamic real-time spatialization adjustments.
   - `audioUnloadSound(soundId)`: Reclaims decoded audio buffer memory.
-- **Gamepad & Rumble**:
+- **Gamepad API forwarding**:
   - `gamepadGetConnected()`: Discovers all connected W3C standard gamepads.
   - `gamepadSetRumble(gamepadId, strong, weak, durationMs)`: Triggers dual-rumble vibration effects on supporting gamepads.
 

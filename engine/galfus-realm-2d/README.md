@@ -31,5 +31,4 @@ High-performance 2D rendering realm implementing the `galfus-realm-core` contrac
 ## Invariants & Design Principles
 
 - **Independent of 3D**: Completely isolated from 3D PBR meshes, skeletal rigs, and `galfus-realm-3d`.
-- **Feature-Gated**: Can be excluded at compile time for dedicated 3D headless or minimal builds.
-- **Multiverse Cooperative**: Dispatches render passes cleanly into the command encoder provided by `galfus-multiverse`.
+- **Multiverse Cooperative**: Renders into the invocation target view supplied by `galfus-multiverse`.

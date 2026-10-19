@@ -33,5 +33,4 @@ Full-featured 3D graphics realm implementing the `galfus-realm-core` contract, f
 ## Invariants & Design Principles
 
 - **Independent of 2D**: Zero dependencies on 2D sprite shaders, vector shapes, or `galfus-realm-2d`.
-- **Feature-Gated**: Can be excluded at compile time for 2D-only or lightweight embedded builds.
-- **Multiverse Cooperative**: Dispatches render passes cleanly into the command encoder provided by `galfus-multiverse`.
+- **Multiverse Cooperative**: Renders into the invocation target view supplied by `galfus-multiverse`.

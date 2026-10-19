@@ -16,6 +16,7 @@ Every Screen Effect snippet must define the `screen_effect` entrypoint function 
 struct ScreenInput {
     uv: vec2<f32>,     // Normalized viewport UV coordinates (0.0 .. 1.0)
     color: vec4<f32>,  // Sampled input color (RGBA) from the realm output
+    sampler_index: u32, // 0 = LinearRepeat, 1 = LinearClamp, 2 = NearestRepeat, 3 = NearestClamp
 };
 
 fn screen_effect(in: ScreenInput) -> vec4<f32> {
@@ -153,10 +154,11 @@ mv.create_invocation(100, InvocationDesc {
     target_id: 1,
     camera_slot: None,
     viewport: ViewportRect::default(),
-    filters: vec![InvocationFilter::Custom { shader_id: 500 }],
+    filters: vec![InvocationFilter::custom(500)],
     z_index: 0,
     enabled: true,
     clear_color: None,
+    anti_aliasing: None,
 })?;
 
 // Or mutate dynamically on an existing invocation:
@@ -187,7 +189,8 @@ galfus.multiverseSetInvocationFilters(100, ['sepia']);
 
 The Multiverse provides precompiled builtin filters:
 
-- **`InvocationFilter::Sepia`** (`'sepia'` in JSON/SDK): Classic warm sepia color grading filter.
+- **`Sepia`, `Grayscale`, `Invert`, `Vignette`, `TonemapAces`, `ChromaticAberration`, `FilmGrain`, `EdgeOutline`, `Posterize`, `Blur`, and `Sharpen`**: Built-in post-processing filters.
+- **`Fxaa`, `Smaa`, `SsaaDownsample`, and `Taa`**: Filter forms of the corresponding anti-aliasing operations. Invocation-level or global anti-aliasing can also add the appropriate pass.
 - **Empty filters (`[]`)**: Direct, efficient 1:1 blit pass without color modification.
 
 ---
@@ -195,4 +198,4 @@ The Multiverse provides precompiled builtin filters:
 ## 7. Performance & Caching
 
 1. **Compilation upon Registration**: Custom shader snippets are validated and compiled into `wgpu::ShaderModule` instances at registration time, preventing frame drops during live gameplay.
-2. **Pipeline Caching**: Render pipelines are lazily constructed once per unique `(shader_id, texture_format)` pair and cached in the internal `PostProcessor`. Subsequent frames reuse existing GPU pipeline state objects with zero CPU overhead.
+2. **Pipeline Caching**: Render pipelines are lazily constructed and cached by effect name and destination texture format in the internal `PostProcessor`. Normal command encoding and resource lookups still occur every frame.

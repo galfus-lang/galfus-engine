@@ -2,7 +2,7 @@
 
 **A host-agnostic, modular graphics foundation for native and web applications.**
 
-> **Status: Implemented & Verified.** This document describes the active architecture and runtime capabilities of the Galfus Engine ecosystem. All components, contracts, multi-language SDKs, and demos described here are fully implemented, tested, and validated.
+> **Status:** This document describes the implementation in this repository. The Rust source and tests are the authoritative definition of behavior.
 
 Galfus provides low-level graphics building blocks, resource management, platform integration, and a graph-based way to combine graphical worlds. It is not tied to a game loop, an entity-component system (ECS), or a particular host language.
 
@@ -13,14 +13,14 @@ An application owns its lifecycle and decides when to process events, update its
 ## Key Architecture & Capabilities
 
 - **Host-Owned Lifecycle:** The host initializes, drives, and shuts down Galfus. No engine-owned application loop is imposed. Supports headless execution for server/CI.
-- **Single Shared Dynamic Library:** All internal engine crates compile into a single native binary (`libgalfus_native.so`, `galfus.dll`, or `libgalfus_native.dylib`) exposing an explicitly versioned C-compatible ABI.
+- **Native Shared Library:** `galfus-native` packages the native crates as a C-compatible dynamic library (`libgalfus_native.so`, `galfus.dll`, or `libgalfus_native.dylib`). Node-API exports are available when it is built with the `napi` feature.
 - **Host-Controlled Logical IDs:** The host controls logical IDs for all entities and resources. Galfus reserves the top 65,535 IDs (`4294901761..=4294967295` for `u32`) for internal engine resources.
 - **Fast-Path Raw Float Transforms:** Hot-path spatial updates bypass JSON serialization via direct raw float buffers:
   - **3D**: 10 floats (`[px, py, pz, rx, ry, rz, rw, sx, sy, sz]`)
   - **2D**: 6 floats (`[px, py, rot, sx, sy, zLayer]`)
 - **Pure Quaternions:** Rotations in the core and SDKs use unit quaternions `[x, y, z, w]` exclusively. The engine remains lean and unopinionated; host code performs any desired Euler conversions.
 - **Multiverse Render Graph:** Coordinates execution of Realms, Invocations, and Targets with topological DAG resolution, soft-cut cycle breaking, and texture binding validation.
-- **Responsive Viewport Anchors:** Invocations support CSS responsive units (`vw`, `vh`, `px`) with convenient constructors (`ViewportRect.full()`, `ViewportRect.px()`, `ViewportRect.pip()`).
+- **Responsive Viewport Anchors:** Invocations support CSS-like units (`vw`, `vh`, `px`) and anchored rectangles through `ViewportRect::full()` and `ViewportRect::anchored(...)`.
 - **Hook-Based Shader Effects:** Custom graphics logic is authored via sandboxed WGSL hook functions injected into engine pipeline templates with deterministic 64-bit `ContentId` caching:
   - **Screen Effects**: `fn screen_effect(in: ScreenInput) -> vec4<f32>` (post-processing filters)
   - **3D Surface Effects**: `fn surface_effect(in: SurfaceInput) -> SurfaceOutput` (PBR material customization)
@@ -73,7 +73,7 @@ An application owns its lifecycle and decides when to process events, update its
 | `engine/galfus-core`               | Core types, ContentId, ShaderEffectTemplate, reserved ID policies.                                               |
 | `engine/galfus-platform`           | Cross-platform windowing (`winit`), headless mode, flat event queues.                                            |
 | `engine/galfus-gpu-manager`        | Shared `wgpu` instance, device, queue, and texture/buffer management.                                            |
-| `engine/galfus-realm-core`         | Realm lifecycle trait (`prepare`, `execute`, `clear`, `destroy`, `referenced_texture_ids`).                      |
+| `engine/galfus-realm-core`         | Realm lifecycle trait (`id`, `kind`, `prepare`, `render`, `clear`, `destroy`, `referenced_texture_ids`).         |
 | `engine/galfus-multiverse`         | Graph coordinator, target blocks, DAG topological ordering, screen effects.                                      |
 | `engine/galfus-realm-2d`           | 2D renderer, sprite batching, 2D shadows, 2D surface effects.                                                    |
 | `engine/galfus-realm-2d-resources` | 2D domain models: sprites, shapes, 2D cameras, materials, particles.                                             |
@@ -110,7 +110,7 @@ bun run codegen
 
 ### Prerequisites
 
-- **Rust**: Stable toolchain (edition 2024 / 2021)
+- **Rust**: Stable toolchain (edition 2024)
 - **Bun**: Fast JavaScript runtime and package manager
 - **Vulkan / Metal / DX12** compatible GPU driver
 
@@ -123,10 +123,7 @@ cargo build -p galfus-native
 # Run the complete workspace test suite
 cargo test --workspace
 
-# Lint and static analysis
-cargo clippy
-
-# TypeScript typecheck & engine consistency check
+# Workspace checks (Bun syntax check, Cargo check, and Clippy)
 bun run check
 
 # Comprehensive C-ABI / Bun FFI test suite

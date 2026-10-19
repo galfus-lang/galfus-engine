@@ -1,25 +1,26 @@
 # galfus-realm-core
 
-Abstract Realm execution contracts, port specifications, and graphics execution contexts.
+Abstract Realm execution contracts and graphics execution contexts.
 
 ## Responsibilities
 
-- **The `Realm` Contract**: Defines the fundamental trait implemented by any graphics-producing unit (2D, 3D, compute, or synthetic) participating in the multiverse graph.
+- **The `Realm` Contract**: Defines the fundamental trait implemented by a graphics-producing unit participating in the Multiverse graph.
 - **Two-Phase Execution Protocol**: Enforces a strict separation between resource preparation (`prepare`) and command recording (`render`).
-- **Port & Attachment Descriptors**: Declares input/output port formats, color spaces, depth attachments, and multi-sampling requirements.
-- **Reference Realm Implementations**: Provides foundational reference realms (such as `ColorRealm`) for solid fills, clear coats, and validation.
+- **Reference Realm Implementation**: Provides `ColorRealm`, a minimal realm useful for graph and invocation tests.
 
 ## Capabilities & Powers
 
 - **Universal Polymorphic Realm Trait**:
-  - `prepare(&mut self, device, queue, ...)`: Uploads buffers, compiles dirty materials, and synchronizes textures before render passes begin.
-  - `render(&self, ctx: &mut RealmContext)`: Records draw commands into the provided `wgpu::CommandEncoder` targeting the resolved viewport and output texture view.
-  - `clear(&mut self)`: Clears entity and scene state without destroying long-lived GPU pipeline caches.
-  - `destroy(&mut self)`: Releases all GPU buffers, bind groups, and pipelines associated with the realm.
-- **Structured Execution Context (`RealmContext`)**:
-  - Supplies the active `wgpu::CommandEncoder`, resolved target `wgpu::TextureView`, optional depth view, pixel viewport rect, frame index, and elapsed delta time.
+  - `id()` and `kind()`: Identify the realm and its category.
+  - `prepare(&mut self, &RealmPrepareContext)`: Runs once per dispatched frame with the device, queue, timing data, and a shared-texture resolver.
+  - `render(&mut self, &RealmInvocationContext)`: Runs for each invocation with its target texture view, viewport, camera slot, and optional TAA jitter.
+  - `clear(&mut self)`: Optional hook for clearing realm-owned scene state while retaining its registration.
+  - `destroy(&mut self)`: Optional hook for releasing realm-owned resources before unregistration.
+- **Structured execution contexts**:
+  - `RealmPrepareContext` supplies the device, queue, frame ID, delta time, and texture resolver.
+  - `RealmInvocationContext` supplies the device, queue, output texture view and format, pixel viewport, target/invocation IDs, camera slot, and optional TAA jitter.
 - **Built-in `ColorRealm`**:
-  - Extremely fast, zero-overhead realm for background fills, solid color clearing, and multiverse DAG dependency testing.
+  - A minimal test realm that records render count and last viewport. It does not issue a color draw pass.
 
 ## Invariants & Design Principles
 

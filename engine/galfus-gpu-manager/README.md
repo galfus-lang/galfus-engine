@@ -1,29 +1,27 @@
 # galfus-gpu-manager
 
-Shared GPU device lifecycle, resource allocation pools, and low-level rendering abstractions built on `wgpu`.
+Shared GPU device lifecycle, resource registries, suballocators, and low-level rendering abstractions built on `wgpu`.
 
 ## Responsibilities
 
-- **GPU Device & Queue Lifecycle**: Manages the central `wgpu::Device` and `wgpu::Queue`, adapter enumeration, feature discovery, and device-loss recovery.
-- **Resource Pooling & Recycling**: Allocates, pools, and recycles offscreen render targets, scratch depth buffers, and staging upload buffers without frame-to-frame allocation spikes.
-- **Standard Sampler & Fallback Infrastructure**: Provides immutable, engine-wide standard sampler sets and 1x1 fallback textures to guarantee safe binding across all shaders.
-- **Shader Compilation & Validation**: Validates and compiles WGSL shader modules through `naga`, surfacing line-accurate compile errors and reflection metadata.
+- **GPU Device & Queue Lifecycle**: Creates and owns a `wgpu::Instance`, adapter, device, and queue; it can reuse an existing instance for a compatible surface.
+- **Resource Registries**: Owns generational registries for buffers, textures, views, samplers, bind groups, layouts, and pipelines.
+- **Standard Sampler Infrastructure**: Provides reusable standard sampler sets.
+- **Suballocators**: Provides a growable buffer arena and a tile atlas for clients that choose to use them.
 
 ## Capabilities & Powers
 
-- **Dynamic Texture Pool**:
-  - Reuses offscreen render textures indexed by `(width, height, format, sample_count, usage)` tuples.
-  - Recycles transient invocation pass textures to eliminate VRAM fragmentation and allocation overhead during window resizes and render-to-texture passes.
+- **Texture and buffer registries**:
+  - Create, look up, write, and destroy resources by generational handle or host logical ID.
+  - Texture pooling for Multiverse scratch, history, and post-process textures is owned by `galfus-multiverse`, not this crate.
 - **Engine-Wide Standard Sampler Bundle**:
   - Instant access to preconfigured samplers: `LinearRepeat`, `LinearClamp`, `NearestRepeat`, and `NearestClamp`.
   - Reusable across 2D sprite shaders, 3D PBR materials, SSAO kernels, and multiverse post-processing screen effects.
-- **Safe Fallback Textures & Uniform Buffers**:
-  - Provides pre-allocated 1x1 fallback textures (Pure White, Neutral Normal `[128, 128, 255, 255]`, Black, and Transparent) so optional texture slots always have valid GPU views.
-- **Asynchronous Staging & Buffer Writing**:
-  - Helpers for staging buffer uploads, mesh vertex/index buffer creation, and mapped memory reads for headless image capture.
+- **Pipeline cache**:
+  - Caches derived render pipelines by shader handle, target configuration, and entrypoint names.
 
 ## Invariants & Design Principles
 
 - **Scene Agnostic**: Zero knowledge of cameras, 2D sprites, 3D meshes, lighting algorithms, or graph execution order.
-- **Single Context Ownership**: A single graphics context (`Device` and `Queue`) is shared explicitly across all realms and multiverse targets, preventing duplicate driver overhead.
+- **Explicit Context Ownership**: A `GpuManager` shares one device and queue with the clients using that manager. It does not impose a process-global GPU context.
 - **Opt-In Strategies**: Does not enforce a mandatory global texture atlas; render targets, cubemaps, and dynamic vector textures operate with native granularity.

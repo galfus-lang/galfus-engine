@@ -7,7 +7,7 @@ Environment normalization, native window lifecycle, input event processing, audi
 - **Window Lifecycle & Surface Adapters**: Desktop window creation, resize management, and surface attachment via `winit`, as well as complete headless operating modes.
 - **Unified Event Normalization**: Normalizes OS-specific input and window events into structured `PlatformEvent` types covering keyboard, mouse, pointer, touch, and gamepad inputs.
 - **Platform Capability Detection**: Queries runtime operating system features and surfaces capabilities (e.g. multi-window support, cursor locking, gamepad connectivity, audio availability).
-- **Audio Playback Engine**: Provides hardware-accelerated sound effects and music streaming using `kira` and `symphonia`.
+- **Audio Playback Engine**: Loads supported audio bytes into `kira` static sounds and controls playback, panning, volume, looping, and simple spatial attenuation on native targets.
 
 ## Capabilities & Powers
 
@@ -21,8 +21,8 @@ Environment normalization, native window lifecycle, input event processing, audi
   - Pointer & Mouse: High-precision cursor positions, deltas, wheel scrolling, button states, and touch pressure extraction.
   - Gamepad (W3C Standard): Normalizes gamepad axes and buttons to the W3C Standard Gamepad layout with configurable stick deadzones.
 - **Integrated Audio Subsystem**:
-  - Decodes and streams MP3, WAV, Ogg Vorbis, and FLAC audio formats.
-  - Positional playback, volume adjustments, and loop controls.
+  - Decodes WAV, MP3, OGG, and FLAC bytes supported by `kira`'s static-sound loader.
+  - Provides positional playback, volume adjustments, and loop controls on native targets. The wasm implementation currently supplies compatibility no-ops for audio operations.
 
 ## Invariants & Design Principles
 

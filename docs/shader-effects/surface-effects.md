@@ -10,7 +10,7 @@ Instead of defining raw vertex and fragment shaders with arbitrary `@group` or `
 fn surface_effect(in: SurfaceInput) -> SurfaceOutput
 ```
 
-The Galfus Engine validates your snippet against forbidden keywords (`@group`, `@binding`, `@vertex`, etc.), composes it with the full PBR and multi-light forward shading pipeline, derives a deterministic 64-bit `ContentId`, and caches the compiled `wgpu::RenderPipeline`.
+The engine validates the snippet against forbidden keywords (`@group`, `@binding`, `@vertex`, and others) and composes it into the 3D shader template. The composed source receives a deterministic 64-bit FNV-1a `ContentId`; this identifier is not a collision-proof digest.
 
 ---
 
@@ -21,7 +21,7 @@ The Galfus Engine validates your snippet against forbidden keywords (`@group`, `
 The engine populates and passes `SurfaceInput` to your hook:
 
 ```wgsl
-struct SurfaceParams {
+struct CustomParams {
     v0: vec4<f32>,
     v1: vec4<f32>,
     v2: vec4<f32>,
@@ -33,13 +33,18 @@ struct SurfaceInput {
     world_normal: vec3<f32>,
     view_dir: vec3<f32>,
     uv: vec2<f32>,
-    base_color: vec4<f32>,
-    metallic: f32,
-    roughness: f32,
-    reflectance: f32,
+    albedo: vec4<f32>,
     emissive: vec3<f32>,
+    roughness: f32,
+    metallic: f32,
+    reflectance: f32,
     time: f32,
-    custom: SurfaceParams,
+    sampler_index: u32,
+    custom: CustomParams,
+    instance_color: vec4<f32>,
+    instance_emissive: vec4<f32>,
+    instance_pbr: vec4<f32>,
+    instance_custom: vec4<f32>,
 }
 ```
 
@@ -47,13 +52,13 @@ struct SurfaceInput {
 - `world_normal`: Interpolated world-space normal (`vec3<f32>`).
 - `view_dir`: Normalized vector from fragment to camera (`vec3<f32>`).
 - `uv`: Texture coordinate (`vec2<f32>`).
-- `base_color`: Base material albedo (`vec4<f32>`).
-- `metallic`: Base material metallic factor (`0.0 .. 1.0`).
-- `roughness`: Base material roughness factor (`0.0 .. 1.0`).
-- `reflectance`: Base material specular reflectance (`0.0 .. 1.0`).
+- `albedo`: Base material albedo (`vec4<f32>`).
 - `emissive`: Base material emissive color (`vec3<f32>`).
+- `roughness`, `metallic`, and `reflectance`: Base material PBR factors.
 - `time`: Elapsed engine time in seconds.
+- `sampler_index`: Material sampler selection (`0` through `3`).
 - `custom`: Standardized 64-byte user parameters (`custom.v0`, `custom.v1`, `custom.v2`, `custom.v3`).
+- `instance_*`: Per-instance overrides supplied by instanced models.
 
 ### 2.2. `SurfaceOutput`
 
@@ -61,11 +66,10 @@ Your hook must return a populated `SurfaceOutput` struct:
 
 ```wgsl
 struct SurfaceOutput {
-    base_color: vec4<f32>,
-    metallic: f32,
-    roughness: f32,
-    reflectance: f32,
+    albedo: vec4<f32>,
     emissive: vec3<f32>,
+    roughness: f32,
+    metallic: f32,
     normal: vec3<f32>,
 }
 ```
@@ -83,10 +87,9 @@ Adds an illuminated outer rim when viewing the mesh from grazing angles:
 ```wgsl
 fn surface_effect(in: SurfaceInput) -> SurfaceOutput {
     var out: SurfaceOutput;
-    out.base_color = in.base_color;
+    out.albedo = in.albedo;
     out.metallic = in.metallic;
     out.roughness = in.roughness;
-    out.reflectance = in.reflectance;
     out.normal = in.world_normal;
 
     let fresnel_power = in.custom.v0.w;
@@ -113,10 +116,9 @@ fn surface_effect(in: SurfaceInput) -> SurfaceOutput {
     let col_b = in.custom.v2.rgb;
     let blend_col = mix(col_a, col_b, wave);
 
-    out.base_color = vec4<f32>(blend_col, in.base_color.a);
+    out.albedo = vec4<f32>(blend_col, in.albedo.a);
     out.metallic = in.metallic;
     out.roughness = mix(0.1, 0.9, wave);
-    out.reflectance = in.reflectance;
     out.emissive = blend_col * (wave * 0.3);
     out.normal = in.world_normal;
     return out;
@@ -134,10 +136,9 @@ fn surface_effect(in: SurfaceInput) -> SurfaceOutput {
     let glow = in.custom.v0.rgb * (scanline * 0.8 + 0.2);
 
     let alpha = clamp(in.custom.v0.a * (0.4 + scanline * 0.6), 0.1, 1.0);
-    out.base_color = vec4<f32>(glow, alpha);
+    out.albedo = vec4<f32>(glow, alpha);
     out.metallic = 0.0;
     out.roughness = 0.2;
-    out.reflectance = 0.8;
     out.emissive = glow * 1.5;
     out.normal = in.world_normal;
     return out;
@@ -148,10 +149,10 @@ fn surface_effect(in: SurfaceInput) -> SurfaceOutput {
 
 ## 4. Host Usage (TypeScript / Bun FFI)
 
-In your client code, configure the material with `shaderEffect` and `customParams`:
+In a generated host binding, configure a material with `shaderEffect` and `customParams`, then register it in an existing 3D realm:
 
 ```typescript
-realm3dCreateMaterial(ctx, 10, {
+galfus.realm3dCreateMaterial(10, 1, {
   baseColor: [0.1, 0.2, 0.3, 1.0],
   metallic: 0.1,
   roughness: 0.3,

@@ -16,7 +16,7 @@ Instead of requiring developers or host applications to rewrite standard vertex 
    - Forbidden tokens (such as `@group`, `@binding`, `@vertex`, `var<uniform>`) are rejected at validation time to preserve pipeline isolation.
 3. **Deterministic Composition & Caching**:
    - The engine validates the snippet and injects it into a canonical template.
-   - A 64-bit deterministic `ContentId` is derived from the composed source, guaranteeing pipeline deduplication across render targets.
+   - A deterministic 64-bit `ContentId` (FNV-1a) is derived from the composed source. It is an identifier for caching and comparison, not a proof that collisions are impossible.
 
 ---
 
