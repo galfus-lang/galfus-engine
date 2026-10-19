@@ -64,7 +64,7 @@ fn create_1x1_texture(
     (texture, view)
 }
 
-fn get_instance_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
+pub(crate) fn get_instance_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
     const ATTRS: &[wgpu::VertexAttribute] = &[
         // m0 (location 6)
         wgpu::VertexAttribute {

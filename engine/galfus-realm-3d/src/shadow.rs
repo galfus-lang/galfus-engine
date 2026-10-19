@@ -10,6 +10,7 @@ use galfus_realm_3d_resources::geometry::Vertex3D;
 pub const SHADOW_SHADER: &str = r#"
 struct ShadowUniform {
     view_proj: mat4x4<f32>,
+    misc: vec4<f32>,
 };
 
 struct ModelUniform {
@@ -25,8 +26,9 @@ struct ModelUniform {
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
-    @location(1) joints: vec4<u32>,
-    @location(2) weights: vec4<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) joints: vec4<u32>,
+    @location(3) weights: vec4<f32>,
 };
 
 fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
@@ -64,11 +66,48 @@ fn vs_main(in: VertexInput) -> @builtin(position) vec4<f32> {
     let world_pos = object.model * vec4<f32>(local_pos, 1.0);
     return shadow.view_proj * world_pos;
 }
+
+struct InstanceInput {
+    @location(6) m0: vec4<f32>,
+    @location(7) m1: vec4<f32>,
+    @location(8) m2: vec4<f32>,
+    @location(9) m3: vec4<f32>,
+    @location(10) color: vec4<f32>,
+    @location(11) emissive: vec4<f32>,
+    @location(12) pbr: vec4<f32>,
+    @location(13) custom: vec4<f32>,
+};
+
+@vertex
+fn vs_instanced_main(in: VertexInput, inst: InstanceInput) -> @builtin(position) vec4<f32> {
+    var local_pos = in.position;
+    let bone_offset = object.flags.y;
+    let bone_count = object.flags.z;
+    if (bone_count > 0u) {
+        local_pos = skin_position(in.position, in.joints, in.weights, bone_offset, bone_count);
+    }
+    let model = mat4x4<f32>(inst.m0, inst.m1, inst.m2, inst.m3);
+    var world_pos4 = model * vec4<f32>(local_pos, 1.0);
+
+    // Procedural wind vertex displacement if custom.x (amplitude) > 0.0
+    let wind_amp = inst.custom.x;
+    if (wind_amp > 0.0) {
+        let time = shadow.misc.z;
+        let wind_freq = max(inst.custom.y, 0.5);
+        let height_factor = pow(clamp(in.uv.y, 0.0, 1.0), 1.5);
+        let wave = sin(time * wind_freq * 3.0 + world_pos4.x * 0.4 + world_pos4.z * 0.4);
+        world_pos4.x += wave * wind_amp * height_factor;
+        world_pos4.z += cos(time * wind_freq * 2.5 + world_pos4.z * 0.3) * wind_amp * 0.5 * height_factor;
+    }
+
+    return shadow.view_proj * world_pos4;
+}
 "#;
 
 /// Dedicated depth-only pipeline for rendering shadow maps.
 pub struct ShadowPipeline3D {
     pub render_pipeline: wgpu::RenderPipeline,
+    pub instanced_render_pipeline: wgpu::RenderPipeline,
     pub vp_layout: wgpu::BindGroupLayout,
 }
 
@@ -121,16 +160,35 @@ impl ShadowPipeline3D {
                     shader_location: 0,
                 },
                 wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x2,
+                    offset: 24,
+                    shader_location: 1,
+                },
+                wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Uint32x4,
                     offset: 48,
-                    shader_location: 1,
+                    shader_location: 2,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x4,
                     offset: 64,
-                    shader_location: 2,
+                    shader_location: 3,
                 },
             ],
+        };
+
+        let depth_stencil = wgpu::DepthStencilState {
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            // Reverse-Z: greater depth is closer to the light source.
+            depth_compare: wgpu::CompareFunction::GreaterEqual,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState {
+                // Reverse-Z: negative bias pushes occluder farther (closer to 0.0)
+                constant: -2,
+                slope_scale: -2.0,
+                clamp: 0.0,
+            },
         };
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -139,7 +197,7 @@ impl ShadowPipeline3D {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[vertex_buffer_layout],
+                buffers: std::slice::from_ref(&vertex_buffer_layout),
                 compilation_options: Default::default(),
             },
             fragment: None,
@@ -152,26 +210,44 @@ impl ShadowPipeline3D {
                 unclipped_depth: false,
                 conservative: false,
             },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                // Reverse-Z: greater depth is closer to the light source.
-                depth_compare: wgpu::CompareFunction::GreaterEqual,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState {
-                    // Reverse-Z: negative bias pushes occluder farther (closer to 0.0)
-                    constant: -2,
-                    slope_scale: -2.0,
-                    clamp: 0.0,
-                },
-            }),
+            depth_stencil: Some(depth_stencil.clone()),
             multisample: wgpu::MultisampleState::default(),
             multiview_mask: None,
             cache: None,
         });
 
+        let instanced_render_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Realm3D Shadow Instanced Render Pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_instanced_main"),
+                    buffers: &[
+                        vertex_buffer_layout,
+                        crate::pipeline::get_instance_buffer_layout(),
+                    ],
+                    compilation_options: Default::default(),
+                },
+                fragment: None,
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: Some(depth_stencil),
+                multisample: wgpu::MultisampleState::default(),
+                multiview_mask: None,
+                cache: None,
+            });
+
         Self {
             render_pipeline,
+            instanced_render_pipeline,
             vp_layout,
         }
     }
@@ -253,9 +329,10 @@ impl ShadowMap3D {
         let mut vp_buffers = Vec::with_capacity(MAX_SHADOW_LIGHTS as usize);
         let mut vp_bind_groups = Vec::with_capacity(MAX_SHADOW_LIGHTS as usize);
         for i in 0..MAX_SHADOW_LIGHTS {
+            let initial_uniform = [0.0f32; 20];
             let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("Realm3D Shadow VP Buffer {i}")),
-                contents: bytes_of(&Mat4::IDENTITY),
+                contents: bytemuck::cast_slice(&initial_uniform),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
             let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -322,10 +399,12 @@ impl ShadowMap3D {
             .collect();
     }
 
-    /// Updates the shadow view-projection uniform buffer for a specific layer.
-    pub fn update_vp(&self, queue: &wgpu::Queue, layer: u32, shadow_view_proj: &Mat4) {
+    /// Updates the shadow view-projection uniform buffer and time parameter for a specific layer.
+    pub fn update_vp(&self, queue: &wgpu::Queue, layer: u32, shadow_view_proj: &Mat4, time: f32) {
         if let Some(buf) = self.vp_buffers.get(layer as usize) {
             queue.write_buffer(buf, 0, bytes_of(shadow_view_proj));
+            let misc = [0.0f32, 0.0, time, 0.0];
+            queue.write_buffer(buf, 64, bytemuck::cast_slice(&misc));
             queue.write_buffer(
                 &self.matrices_buffer,
                 layer as u64 * std::mem::size_of::<Mat4>() as u64,
@@ -343,7 +422,9 @@ fn render_single_shadow_layer(
     shadow_map: &ShadowMap3D,
     layer_idx: u32,
     shadow_view_proj: &Mat4,
+    time: f32,
     models: &std::collections::BTreeMap<u32, crate::types::GpuModelEntry>,
+    instanced_models: &std::collections::BTreeMap<u32, crate::types::GpuInstancedModelEntry>,
     geometries: &std::collections::BTreeMap<
         u32,
         (
@@ -352,7 +433,7 @@ fn render_single_shadow_layer(
         ),
     >,
 ) {
-    shadow_map.update_vp(queue, layer_idx, shadow_view_proj);
+    shadow_map.update_vp(queue, layer_idx, shadow_view_proj, time);
     let layer_view = &shadow_map.layer_views[layer_idx as usize];
     let vp_bg = &shadow_map.vp_bind_groups[layer_idx as usize];
 
@@ -396,9 +477,32 @@ fn render_single_shadow_layer(
         s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);
         s_pass.draw_indexed(0..*count, 0, 0..1);
     }
+
+    // Instanced models depth pass
+    s_pass.set_pipeline(&shadow_pipe.instanced_render_pipeline);
+    for (inst_model, instances, inst_buf_opt, _, model_bg_opt) in instanced_models.values() {
+        if !inst_model.active || !inst_model.cast_shadow || instances.is_empty() {
+            continue;
+        }
+        let Some(inst_buf) = inst_buf_opt else {
+            continue;
+        };
+        let Some(model_bg) = model_bg_opt else {
+            continue;
+        };
+        let Some((_geom, Some((v, i, count)))) = geometries.get(&inst_model.geometry_id) else {
+            continue;
+        };
+        s_pass.set_bind_group(1, model_bg, &[]);
+        s_pass.set_vertex_buffer(0, v.slice(..));
+        s_pass.set_vertex_buffer(1, inst_buf.slice(..));
+        s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);
+        s_pass.draw_indexed(0..*count, 0, 0..instances.len() as u32);
+    }
 }
 
 /// Executes depth passes for all shadow-casting lights applying frustum culling per light.
+#[allow(clippy::too_many_arguments)]
 pub fn render_shadow_depth_pass(
     encoder: &mut wgpu::CommandEncoder,
     queue: &wgpu::Queue,
@@ -412,6 +516,7 @@ pub fn render_shadow_depth_pass(
         ),
     >,
     models: &std::collections::BTreeMap<u32, crate::types::GpuModelEntry>,
+    instanced_models: &std::collections::BTreeMap<u32, crate::types::GpuInstancedModelEntry>,
     geometries: &std::collections::BTreeMap<
         u32,
         (
@@ -419,6 +524,7 @@ pub fn render_shadow_depth_pass(
             Option<crate::types::GpuMeshBuffers>,
         ),
     >,
+    time: f32,
 ) {
     let mut layer_idx = 0u32;
     for (light, light_trans) in lights.values() {
@@ -451,7 +557,9 @@ pub fn render_shadow_depth_pass(
                     shadow_map,
                     layer_idx + face_i as u32,
                     &vp,
+                    time,
                     models,
+                    instanced_models,
                     geometries,
                 );
             }
@@ -468,7 +576,9 @@ pub fn render_shadow_depth_pass(
                 shadow_map,
                 layer_idx,
                 &light_uniform.shadow_view_proj,
+                time,
                 models,
+                instanced_models,
                 geometries,
             );
             layer_idx += 1;

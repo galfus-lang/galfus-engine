@@ -206,7 +206,9 @@ impl Realm for Realm3DContext {
                 shadow_map,
                 &self.lights,
                 &self.models,
+                &self.instanced_models,
                 &self.geometries,
+                self.total_time,
             );
         }
 
