@@ -358,12 +358,17 @@ pub extern "C" fn galfus_multiverse_update_window_size(
     height: u32,
 ) -> i32 {
     let size = glam::UVec2::new(width, height);
-    with_multiverse_mut(|mv| {
+    let res = with_multiverse_mut(|mv| {
         mv.update_window_size(window_id, size);
         Ok(())
-    })
-    .unwrap_or(());
-    0
+    });
+    match res {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
 }
 
 /// Unregisters a Realm and clears associated invocations. Returns 0 on success, -1 on failure.
@@ -442,11 +447,17 @@ pub unsafe extern "C" fn galfus_multiverse_set_anti_aliasing(mode_str: *const c_
         }
     };
 
-    let _ = with_multiverse_mut(|mv| {
+    let res = with_multiverse_mut(|mv| {
         mv.set_anti_aliasing(mode);
         Ok::<(), String>(())
     });
-    0
+    match res {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
 }
 
 /// Gets the current global Anti-Aliasing mode of the Multiverse as a string pointer.

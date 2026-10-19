@@ -1,6 +1,6 @@
 //! Central animation context coordinating active transitions, step ticks, and event dispatch.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 
 use galfus_core::id::validate_host_logical_id;
 use galfus_multiverse::MultiverseContext;
@@ -14,7 +14,8 @@ use crate::value::AnimValue;
 
 /// Autonomous animation manager coordinating transitions, state queries, and event pumping.
 pub struct AnimationContext {
-    pub(crate) transitions: HashMap<u32, TransitionInstance>,
+    pub(crate) transitions: BTreeMap<u32, TransitionInstance>,
+    pub(crate) target_locks: HashMap<AnimationTarget, u32>,
     pub(crate) custom_channels: HashMap<u32, AnimValue>,
     pub(crate) event_queue: VecDeque<AnimationEvent>,
 }
@@ -29,7 +30,8 @@ impl AnimationContext {
     /// Creates a new empty `AnimationContext`.
     pub fn new() -> Self {
         Self {
-            transitions: HashMap::new(),
+            transitions: BTreeMap::new(),
+            target_locks: HashMap::new(),
             custom_channels: HashMap::new(),
             event_queue: VecDeque::new(),
         }
@@ -52,13 +54,45 @@ impl AnimationContext {
         Ok(())
     }
 
-    /// Binds an existing transition to an entity property target.
+    /// Binds an existing transition to an entity property target with conflict locking.
     pub fn bind_target(&mut self, id: u32, target: AnimationTarget) -> AnimationResult<()> {
+        // Prevent concurrent transitions from writing to the same destination property
+        if let Some(&owner_id) = self.target_locks.get(&target)
+            && owner_id != id
+        {
+            return Err(AnimationError::TargetConflict {
+                target: format!("{target:?}"),
+                owner_id,
+            });
+        }
+
         let instance = self
             .transitions
             .get_mut(&id)
             .ok_or(AnimationError::TransitionNotFound(id))?;
+
+        // Release old target lock if re-binding to a different property
+        if let Some(ref old_target) = instance.target
+            && old_target != &target
+        {
+            self.target_locks.remove(old_target);
+        }
+
+        self.target_locks.insert(target.clone(), id);
         instance.target = Some(target);
+        Ok(())
+    }
+
+    /// Unbinds a target from a transition and releases its property lock.
+    pub fn unbind_target(&mut self, id: u32) -> AnimationResult<()> {
+        let instance = self
+            .transitions
+            .get_mut(&id)
+            .ok_or(AnimationError::TransitionNotFound(id))?;
+        if let Some(ref target) = instance.target {
+            self.target_locks.remove(target);
+        }
+        instance.target = None;
         Ok(())
     }
 
@@ -87,9 +121,12 @@ impl AnimationContext {
         self.transitions.get(&id).map(|t| t.current_value.clone())
     }
 
-    /// Destroys a transition by ID.
+    /// Destroys a transition by ID and releases any associated property locks.
     pub fn destroy_transition(&mut self, id: u32) -> AnimationResult<()> {
-        if self.transitions.remove(&id).is_some() {
+        if let Some(instance) = self.transitions.remove(&id) {
+            if let Some(ref target) = instance.target {
+                self.target_locks.remove(target);
+            }
             Ok(())
         } else {
             Err(AnimationError::TransitionNotFound(id))

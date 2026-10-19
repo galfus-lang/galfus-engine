@@ -15,6 +15,9 @@ pub enum AnimationError {
     #[error("Invalid value format: {0}")]
     InvalidValue(String),
 
+    #[error("Target property '{target}' is already locked by active transition {owner_id}")]
+    TargetConflict { target: String, owner_id: u32 },
+
     #[error("Animation error: {0}")]
     General(String),
 }

@@ -430,6 +430,12 @@ fn test_target_binding_cycle_soft_cut() {
     let schedule = mv.resolve().expect("Cycle should be broken via soft cut");
     assert!(!schedule.soft_cut_edges.is_empty());
     assert_eq!(schedule.target_blocks.len(), 2);
+
+    // Frame 1: Soft-cut edge uses initial history texture fallback
+    assert!(mv.dispatch(1, 0.016).is_ok());
+
+    // Frame 2: Soft-cut edge uses previous frame N-1 texture fallback
+    assert!(mv.dispatch(2, 0.016).is_ok());
 }
 
 #[test]

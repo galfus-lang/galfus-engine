@@ -276,4 +276,42 @@ mod tests {
             "Targeting non-existent realm must return an error"
         );
     }
+
+    #[test]
+    fn test_target_conflict_locking_and_release() {
+        let mut ctx = AnimationContext::new();
+        let config = TransitionConfig {
+            duration: 1.0,
+            delay: 0.0,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
+        };
+        ctx.create_transition(71, AnimValue::Scalar(0.0), config.clone())
+            .unwrap();
+        ctx.create_transition(72, AnimValue::Scalar(0.0), config)
+            .unwrap();
+
+        let target = AnimationTarget::CustomChannel { channel_id: 42 };
+
+        // Transition 71 acquires target lock
+        assert!(ctx.bind_target(71, target.clone()).is_ok());
+
+        // Transition 72 tries to acquire the same target -> TargetConflict error!
+        let err = ctx.bind_target(72, target.clone());
+        assert!(err.is_err());
+        match err.unwrap_err() {
+            AnimationError::TargetConflict { owner_id, .. } => assert_eq!(owner_id, 71),
+            other => panic!("Expected TargetConflict, got {other:?}"),
+        }
+
+        // Transition 71 releases target
+        assert!(ctx.unbind_target(71).is_ok());
+
+        // Now transition 72 can successfully acquire the target lock!
+        assert!(ctx.bind_target(72, target.clone()).is_ok());
+
+        // Destroying transition 72 also releases the lock
+        assert!(ctx.destroy_transition(72).is_ok());
+        assert!(ctx.bind_target(71, target).is_ok());
+    }
 }

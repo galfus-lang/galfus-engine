@@ -23,6 +23,7 @@ impl Realm for Realm3DContext {
         self.materials.clear();
         self.geometries.clear();
         self.models.clear();
+        self.instanced_models.clear();
         self.lights.clear();
         self.emitters.clear();
         self.portals.clear();

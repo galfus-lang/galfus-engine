@@ -43,6 +43,8 @@ pub struct MultiverseContext {
     pub(crate) surfaces: HashMap<u32, GpuSurface>,
     pub(crate) target_textures:
         HashMap<u32, (GpuTextureHandle, GpuTextureViewHandle, wgpu::TextureFormat)>,
+    pub(crate) target_history_textures:
+        HashMap<u32, (GpuTextureHandle, GpuTextureViewHandle, wgpu::TextureFormat)>,
     pub(crate) scratch_textures: HashMap<u32, (GpuTextureHandle, GpuTextureViewHandle, UVec2)>,
     pub(crate) ping_pong_texture: Option<(GpuTextureHandle, GpuTextureViewHandle, UVec2)>,
     pub(crate) smaa_intermediates: Option<(
@@ -81,6 +83,7 @@ impl MultiverseContext {
             gpu_manager: None,
             surfaces: HashMap::new(),
             target_textures: HashMap::new(),
+            target_history_textures: HashMap::new(),
             scratch_textures: HashMap::new(),
             ping_pong_texture: None,
             smaa_intermediates: None,
@@ -258,6 +261,10 @@ impl MultiverseContext {
                 ))
             })?;
             let wgpu_format = norm_format.to_wgpu();
+            let usages = TextureUsageFlags {
+                copy_src: true,
+                ..Default::default()
+            };
             let tex_desc = GpuTextureDesc {
                 label: Some(format!("Multiverse Target {target_id}")),
                 width: *width,
@@ -267,7 +274,7 @@ impl MultiverseContext {
                 sample_count: 1,
                 dimension: TextureDimension::D2,
                 format: norm_format,
-                usages: TextureUsageFlags::default(),
+                usages,
             };
             let device = gpu.context.device_arc();
             let tex_handle = gpu
@@ -298,6 +305,12 @@ impl MultiverseContext {
             &mut self.gpu_manager,
         ) {
             let _ = gpu.textures.destroy_texture(tex_handle);
+        }
+        if let (Some((hist_handle, _, _)), Some(gpu)) = (
+            self.target_history_textures.remove(&target_id),
+            &mut self.gpu_manager,
+        ) {
+            let _ = gpu.textures.destroy_texture(hist_handle);
         }
         let removed_invs: Vec<u32> = self
             .invocations

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use galfus_gpu_manager::types::{
     GpuTextureDesc, NormalizedTextureFormat, TextureDimension, TextureUsageFlags,
@@ -20,10 +20,67 @@ pub(crate) fn execute_frame(
     let schedule = ctx.resolve()?.clone();
 
     ctx.ensure_gpu_manager()?;
+
+    let soft_cut_sources: HashSet<u32> = schedule
+        .soft_cut_edges
+        .iter()
+        .map(|(src, _)| *src)
+        .collect();
+
+    for src_id in &soft_cut_sources {
+        if !ctx.target_history_textures.contains_key(src_id)
+            && let Some(target) = ctx.targets.get(src_id)
+            && let TargetKind::Texture {
+                width,
+                height,
+                format,
+            } = &target.kind
+        {
+            let norm_format = NormalizedTextureFormat::parse_str(format).ok_or_else(|| {
+                MultiverseError::InvalidConfig(format!(
+                    "Unsupported render target texture format: '{format}'"
+                ))
+            })?;
+            let wgpu_format = norm_format.to_wgpu();
+            let tex_desc = GpuTextureDesc {
+                label: Some(format!("Multiverse Target {src_id} History Texture")),
+                width: *width,
+                height: *height,
+                depth_or_layers: 1,
+                mip_levels: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: norm_format,
+                usages: TextureUsageFlags::default(),
+            };
+            let gpu = ctx.gpu_manager.as_mut().unwrap();
+            let device = gpu.context.device_arc();
+            let tex_h = gpu
+                .textures
+                .create_texture(&device, &tex_desc)
+                .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
+            let view_h = gpu
+                .textures
+                .get_texture(tex_h)
+                .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
+                .default_view();
+            ctx.target_history_textures
+                .insert(*src_id, (tex_h, view_h, wgpu_format));
+        }
+    }
+
     let gpu = ctx.gpu_manager.as_ref().unwrap();
 
     let target_textures = &ctx.target_textures;
+    let target_history_textures = &ctx.target_history_textures;
     let tex_resolver = |id: u32| {
+        // In the prepare phase before rendering any targets, return the N-1 historical texture
+        // if this target is an unresolved dependency in a soft cut.
+        if let Some((_, view_h, _)) = target_history_textures.get(&id)
+            && let Ok(view) = gpu.textures.get_view(*view_h)
+        {
+            return Some(view.raw());
+        }
         if let Some((_, view_h, _)) = target_textures.get(&id)
             && let Ok(view) = gpu.textures.get_view(*view_h)
         {
@@ -49,6 +106,7 @@ pub(crate) fn execute_frame(
     // 2. GPU execution path
     let gpu = ctx.gpu_manager.as_mut().unwrap();
     let mut surface_textures: HashMap<u32, wgpu::SurfaceTexture> = HashMap::new();
+    let mut rendered_targets: HashSet<u32> = HashSet::new();
 
     for block in &schedule.target_blocks {
         let target = ctx.targets.get(&block.target_id);
@@ -427,7 +485,15 @@ pub(crate) fn execute_frame(
                 (&target_view, target_format, &mut ctx.post_processor)
             {
                 let target_textures = &ctx.target_textures;
+                let target_history_textures = &ctx.target_history_textures;
+                let rendered_targets_ref = &rendered_targets;
                 let tex_resolver = |id: u32| {
+                    if !rendered_targets_ref.contains(&id)
+                        && let Some((_, view_h, _)) = target_history_textures.get(&id)
+                        && let Ok(view) = gpu.textures.get_view(*view_h)
+                    {
+                        return Some(view.raw());
+                    }
                     if let Some((_, view_h, _)) = target_textures.get(&id)
                         && let Ok(view) = gpu.textures.get_view(*view_h)
                     {
@@ -661,6 +727,43 @@ pub(crate) fn execute_frame(
                     }
                 }
             }
+        }
+
+        rendered_targets.insert(block.target_id);
+
+        // If target has an allocated history texture (for cycle soft cuts), copy current rendered texture to history
+        if let (Some((target_tex_h, _, _)), Some((hist_tex_h, _, _))) = (
+            ctx.target_textures.get(&block.target_id),
+            ctx.target_history_textures.get(&block.target_id),
+        ) && let (Ok(src_entry), Ok(dst_entry)) = (
+            gpu.textures.get_texture(*target_tex_h),
+            gpu.textures.get_texture(*hist_tex_h),
+        ) {
+            let mut copy_encoder =
+                gpu.device()
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("Multiverse Target Soft-Cut History Copy"),
+                    });
+            copy_encoder.copy_texture_to_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: src_entry.raw(),
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::TexelCopyTextureInfo {
+                    texture: dst_entry.raw(),
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::Extent3d {
+                    width: target_size.x,
+                    height: target_size.y,
+                    depth_or_array_layers: 1,
+                },
+            );
+            gpu.queue().submit(Some(copy_encoder.finish()));
         }
     }
 
