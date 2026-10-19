@@ -200,12 +200,12 @@ engine.animationDestroyTransition(302);
 
 // 5. Test PathFollow System (2D & 3D Splines + OrientToPath + Locks)
 console.log('\n--> Testing PathFollow Spline Trajectory & OrientToPath...');
-const pathPoints2D = [
-  [0, 0],
-  [100, 50],
-  [200, 0]
+const pathCommands2D: any[] = [
+  { type: 'moveTo', to: [0, 0] },
+  { type: 'smoothTo', to: [100, 50] },
+  { type: 'smoothTo', to: [200, 0] }
 ];
-engine.animationCreatePathFollow(401, 'catmullRom', pathPoints2D, {
+engine.animationCreatePathFollow(401, pathCommands2D, {
   duration: 2.0,
   delay: 0.0,
   easing: 'linear',
@@ -244,10 +244,9 @@ const pathTarget: any = {
 };
 engine.animationCreatePathFollow(
   402,
-  'linear',
   [
-    [0, 0, 0],
-    [10, 20, 30]
+    { type: 'moveTo', to: [0, 0, 0] },
+    { type: 'lineTo', to: [10, 20, 30] }
   ],
   {
     duration: 1.0,

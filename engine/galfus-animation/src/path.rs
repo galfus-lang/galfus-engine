@@ -1,7 +1,9 @@
-//! Spline evaluation and path following animation curves for 2D and 3D trajectories.
+//! Spline evaluation and declarative command path following for 2D/3D trajectories.
 
 use glam::{Quat, Vec2, Vec3};
 use serde::{Deserialize, Serialize};
+
+use crate::path_math::*;
 
 use crate::easing::Easing;
 use crate::events::{AnimationEvent, AnimationEventType};
@@ -9,29 +11,90 @@ use crate::target::AnimationTarget;
 use crate::transition::{LoopMode, TransitionStatus};
 use crate::value::AnimValue;
 
-/// Mathematical curve interpolation model for path traversal.
+/// Target evaluated animation value produced by the path follower.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum CurveType {
-    /// Direct linear segments connecting control waypoints.
+pub enum PathValueType {
+    /// Full 3D Transform: [px, py, pz, rx, ry, rz, rw, sx, sy, sz]
     #[default]
-    Linear,
-    /// Smooth cubic Catmull-Rom spline passing directly through all waypoints.
-    CatmullRom,
-    /// Smooth cubic Bézier spline with explicit control handles.
-    CubicBezier,
+    Transform3D,
+    /// Pure 3D Position: [x, y, z] (ideal for camera position or camera target)
+    Position3D,
+    /// Full 2D Transform: [px, py, rot, sx, sy, z_layer]
+    Transform2D,
+    /// Pure 2D Position: [x, y]
+    Position2D,
+}
+
+/// Declarative SVG-like path motion commands with individual duration and easing.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum PathCommand {
+    /// Teleports or sets initial origin without consuming traversal duration.
+    MoveTo { to: Vec<f32> },
+
+    /// Moves in a straight linear segment to target coordinates.
+    LineTo {
+        to: Vec<f32>,
+        #[serde(default)]
+        duration: Option<f32>,
+        #[serde(default)]
+        easing: Option<Easing>,
+    },
+
+    /// Quadratic Bézier curve with 1 control point.
+    QuadTo {
+        control: Vec<f32>,
+        to: Vec<f32>,
+        #[serde(default)]
+        duration: Option<f32>,
+        #[serde(default)]
+        easing: Option<Easing>,
+    },
+
+    /// Cubic Bézier curve with 2 control points.
+    CubicTo {
+        control1: Vec<f32>,
+        control2: Vec<f32>,
+        to: Vec<f32>,
+        #[serde(default)]
+        duration: Option<f32>,
+        #[serde(default)]
+        easing: Option<Easing>,
+    },
+
+    /// Auto-smoothed Catmull-Rom curve through target coordinates without manual handles.
+    SmoothTo {
+        to: Vec<f32>,
+        #[serde(default)]
+        duration: Option<f32>,
+        #[serde(default)]
+        easing: Option<Easing>,
+    },
+
+    /// Static pause staying at current coordinate for the specified duration.
+    Pause { duration: f32 },
+
+    /// Closes path returning to the initial MoveTo origin.
+    Close {
+        #[serde(default)]
+        duration: Option<f32>,
+        #[serde(default)]
+        easing: Option<Easing>,
+    },
 }
 
 /// Configuration settings governing path traverse duration, curves, and orientation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PathFollowConfig {
-    /// Duration in seconds to traverse the entire path.
-    pub duration: f32,
+    /// Overall duration override. If omitted, duration is the sum of command durations.
+    #[serde(default)]
+    pub duration: Option<f32>,
     /// Delay in seconds before traversal begins.
     #[serde(default)]
     pub delay: f32,
-    /// Easing function applied along normalized path time t in [0, 1].
+    /// Default fallback easing for segments without explicit easing.
     #[serde(default)]
     pub easing: Easing,
     /// Traversal loop mode behavior.
@@ -40,26 +103,22 @@ pub struct PathFollowConfig {
     /// When true, automatically computes the rotation tangent to align facing direction.
     #[serde(default)]
     pub orient_to_path: bool,
+    /// Output animated value format (Transform3D, Position3D, Transform2D, Position2D).
+    #[serde(default)]
+    pub value_type: Option<PathValueType>,
 }
 
 impl Default for PathFollowConfig {
     fn default() -> Self {
         Self {
-            duration: 1.0,
+            duration: None,
             delay: 0.0,
             easing: Easing::Linear,
             loop_mode: LoopMode::Once,
             orient_to_path: false,
+            value_type: None,
         }
     }
-}
-
-/// Set of 2D or 3D coordinate points along a trajectory.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum PathPoints {
-    D2(Vec<[f32; 2]>),
-    D3(Vec<[f32; 3]>),
 }
 
 /// Runtime snapshot of a path follow instance for host queries.
@@ -73,12 +132,43 @@ pub struct PathFollowState {
     pub current_value: AnimValue,
 }
 
-/// Active path follower driving a bound target along a 2D or 3D spline.
+#[derive(Debug, Clone)]
+enum SegmentKind {
+    Line {
+        to: Vec3,
+    },
+    Quad {
+        control: Vec3,
+        to: Vec3,
+    },
+    Cubic {
+        control1: Vec3,
+        control2: Vec3,
+        to: Vec3,
+    },
+    Smooth {
+        p0: Vec3,
+        p1: Vec3,
+        p2: Vec3,
+        p3: Vec3,
+    },
+    Pause,
+}
+
+#[derive(Debug, Clone)]
+struct CompiledSegment {
+    t_start: f32,
+    t_end: f32,
+    duration: f32,
+    start_pos: Vec3,
+    easing: Option<Easing>,
+    kind: SegmentKind,
+}
+
+/// Active path follower driving a bound target along a 2D or 3D trajectory.
 #[derive(Debug, Clone)]
 pub struct PathFollowInstance {
     pub id: u32,
-    pub curve_type: CurveType,
-    pub points: PathPoints,
     pub config: PathFollowConfig,
     pub target: Option<AnimationTarget>,
     pub status: TransitionStatus,
@@ -86,17 +176,23 @@ pub struct PathFollowInstance {
     pub progress: f32,
     pub remaining_delay: f32,
     pub current_value: AnimValue,
+    pub total_duration: f32,
+    pub value_type: PathValueType,
+    segments: Vec<CompiledSegment>,
     ping_pong_forward: bool,
 }
 
 impl PathFollowInstance {
-    /// Creates a new path follow instance.
-    pub fn new(
-        id: u32,
-        curve_type: CurveType,
-        points: PathPoints,
-        config: PathFollowConfig,
-    ) -> Self {
+    /// Compiles a new path follow instance from declarative SVG-like path commands.
+    pub fn new(id: u32, commands: Vec<PathCommand>, config: PathFollowConfig) -> Self {
+        let (segments, total_dur, is_3d) = compile_commands(&commands, &config);
+
+        let value_type = config.value_type.unwrap_or(if is_3d {
+            PathValueType::Transform3D
+        } else {
+            PathValueType::Transform2D
+        });
+
         let initial_status = if config.delay > 0.0 {
             TransitionStatus::Delay
         } else {
@@ -105,8 +201,6 @@ impl PathFollowInstance {
 
         let mut instance = Self {
             id,
-            curve_type,
-            points,
             config,
             target: None,
             status: initial_status,
@@ -114,29 +208,23 @@ impl PathFollowInstance {
             progress: 0.0,
             remaining_delay: 0.0,
             current_value: AnimValue::Scalar(0.0),
+            total_duration: total_dur.max(0.0001),
+            value_type,
+            segments,
             ping_pong_forward: true,
         };
 
         instance.remaining_delay = instance.config.delay;
-        instance.current_value = instance.evaluate(0.0);
+        instance.current_value = instance.evaluate_at_time(0.0);
         instance
     }
 
-    /// Evaluates the path at normalized progression parameter `u` in [0, 1].
-    pub fn evaluate(&self, u: f32) -> AnimValue {
-        let clamped_u = u.clamp(0.0, 1.0);
-        match &self.points {
-            PathPoints::D2(pts) => {
-                let (pos, tangent) = sample_path_2d(pts, self.curve_type, clamped_u);
-                let rot = if self.config.orient_to_path && tangent.length_squared() > 1e-6 {
-                    tangent.y.atan2(tangent.x)
-                } else {
-                    0.0
-                };
-                AnimValue::Transform2D([pos.x, pos.y, rot, 1.0, 1.0, 0.0])
-            }
-            PathPoints::D3(pts) => {
-                let (pos, tangent) = sample_path_3d(pts, self.curve_type, clamped_u);
+    /// Evaluates the path at a specific elapsed time in seconds.
+    pub fn evaluate_at_time(&self, time: f32) -> AnimValue {
+        let (pos, tangent) = self.sample_at_time(time);
+        match self.value_type {
+            PathValueType::Position3D => AnimValue::Vec3(pos),
+            PathValueType::Transform3D => {
                 let rot = if self.config.orient_to_path && tangent.length_squared() > 1e-6 {
                     quat_look_at(pos, pos + tangent, Vec3::Y)
                 } else {
@@ -146,6 +234,69 @@ impl PathFollowInstance {
                     pos.x, pos.y, pos.z, rot.x, rot.y, rot.z, rot.w, 1.0, 1.0, 1.0,
                 ])
             }
+            PathValueType::Position2D => AnimValue::Vec2(Vec2::new(pos.x, pos.y)),
+            PathValueType::Transform2D => {
+                let rot = if self.config.orient_to_path && tangent.length_squared() > 1e-6 {
+                    tangent.y.atan2(tangent.x)
+                } else {
+                    0.0
+                };
+                AnimValue::Transform2D([pos.x, pos.y, rot, 1.0, 1.0, 0.0])
+            }
+        }
+    }
+
+    fn sample_at_time(&self, time: f32) -> (Vec3, Vec3) {
+        if self.segments.is_empty() {
+            return (Vec3::ZERO, Vec3::Z);
+        }
+
+        let clamped_t = time.clamp(0.0, self.total_duration);
+        let seg = self
+            .segments
+            .iter()
+            .find(|s| clamped_t >= s.t_start && clamped_t <= s.t_end)
+            .unwrap_or_else(|| self.segments.last().unwrap());
+
+        let u = if seg.duration > 0.0 {
+            ((clamped_t - seg.t_start) / seg.duration).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+
+        let easing = seg.easing.unwrap_or(self.config.easing);
+        let u_eased = easing.evaluate(u);
+
+        match &seg.kind {
+            SegmentKind::Line { to } => {
+                let pos = seg.start_pos.lerp(*to, u_eased);
+                let tangent = (*to - seg.start_pos).normalize_or_zero();
+                (pos, tangent)
+            }
+            SegmentKind::Quad { control, to } => {
+                let pos = bezier_quad_3d(seg.start_pos, *control, *to, u_eased);
+                let tangent = bezier_quad_tangent_3d(seg.start_pos, *control, *to, u_eased)
+                    .normalize_or_zero();
+                (pos, tangent)
+            }
+            SegmentKind::Cubic {
+                control1,
+                control2,
+                to,
+            } => {
+                let pos = bezier_cubic_3d(seg.start_pos, *control1, *control2, *to, u_eased);
+                let tangent =
+                    bezier_cubic_tangent_3d(seg.start_pos, *control1, *control2, *to, u_eased)
+                        .normalize_or_zero();
+                (pos, tangent)
+            }
+            SegmentKind::Smooth { p0, p1, p2, p3 } => {
+                let pos = catmull_rom_3d(*p0, *p1, *p2, *p3, u_eased);
+                let tangent =
+                    catmull_rom_tangent_3d(*p0, *p1, *p2, *p3, u_eased).normalize_or_zero();
+                (pos, tangent)
+            }
+            SegmentKind::Pause => (seg.start_pos, Vec3::ZERO),
         }
     }
 
@@ -155,13 +306,13 @@ impl PathFollowInstance {
             return None;
         }
 
-        // Handle initial start delay
         if self.status == TransitionStatus::Delay {
             self.remaining_delay -= dt;
             if self.remaining_delay <= 0.0 {
                 let leftover = -self.remaining_delay;
                 self.status = TransitionStatus::Running;
                 self.elapsed = leftover;
+                self.current_value = self.evaluate_at_time(self.elapsed);
                 return Some(AnimationEvent {
                     transition_id: self.id,
                     event_type: AnimationEventType::Started,
@@ -174,25 +325,22 @@ impl PathFollowInstance {
         }
 
         self.elapsed += dt;
-        let duration = self.config.duration.max(0.0001);
-        let raw_t = (self.elapsed / duration).clamp(0.0, 1.0);
-
-        let t = match self.config.loop_mode {
+        let effective_time = match self.config.loop_mode {
             LoopMode::PingPong => {
+                let raw = self.elapsed.clamp(0.0, self.total_duration);
                 if self.ping_pong_forward {
-                    raw_t
+                    raw
                 } else {
-                    1.0 - raw_t
+                    self.total_duration - raw
                 }
             }
-            _ => raw_t,
+            _ => self.elapsed.clamp(0.0, self.total_duration),
         };
 
-        let eased_t = self.config.easing.evaluate(t);
-        self.progress = eased_t;
-        self.current_value = self.evaluate(eased_t);
+        self.progress = (effective_time / self.total_duration).clamp(0.0, 1.0);
+        self.current_value = self.evaluate_at_time(effective_time);
 
-        if self.elapsed >= duration {
+        if self.elapsed >= self.total_duration {
             match self.config.loop_mode {
                 LoopMode::Once => {
                     self.status = TransitionStatus::Completed;
@@ -205,7 +353,7 @@ impl PathFollowInstance {
                     });
                 }
                 LoopMode::Loop => {
-                    self.elapsed -= duration;
+                    self.elapsed -= self.total_duration;
                     return Some(AnimationEvent {
                         transition_id: self.id,
                         event_type: AnimationEventType::Looped,
@@ -215,7 +363,7 @@ impl PathFollowInstance {
                     });
                 }
                 LoopMode::PingPong => {
-                    self.elapsed -= duration;
+                    self.elapsed -= self.total_duration;
                     self.ping_pong_forward = !self.ping_pong_forward;
                     return Some(AnimationEvent {
                         transition_id: self.id,
@@ -243,211 +391,202 @@ impl PathFollowInstance {
     }
 }
 
-/// Samples a 2D trajectory at parameter `t` in [0, 1], returning (position, tangent).
-fn sample_path_2d(points: &[[f32; 2]], curve: CurveType, t: f32) -> (Vec2, Vec2) {
-    if points.is_empty() {
-        return (Vec2::ZERO, Vec2::X);
+fn to_vec3_coord(slice: &[f32]) -> Vec3 {
+    match slice.len() {
+        0 => Vec3::ZERO,
+        1 => Vec3::new(slice[0], 0.0, 0.0),
+        2 => Vec3::new(slice[0], slice[1], 0.0),
+        _ => Vec3::new(slice[0], slice[1], slice[2]),
     }
-    if points.len() == 1 {
-        return (Vec2::from_array(points[0]), Vec2::X);
-    }
+}
 
-    match curve {
-        CurveType::Linear => {
-            let seg_count = points.len() - 1;
-            let s = t * seg_count as f32;
-            let idx = (s.floor() as usize).min(seg_count - 1);
-            let u = s - idx as f32;
-            let p0 = Vec2::from_array(points[idx]);
-            let p1 = Vec2::from_array(points[idx + 1]);
-            let pos = p0.lerp(p1, u);
-            let tangent = (p1 - p0).normalize_or_zero();
-            (pos, tangent)
-        }
-        CurveType::CatmullRom => {
-            let seg_count = points.len() - 1;
-            let s = t * seg_count as f32;
-            let idx = (s.floor() as usize).min(seg_count - 1);
-            let u = s - idx as f32;
-
-            let p1 = Vec2::from_array(points[idx]);
-            let p2 = Vec2::from_array(points[idx + 1]);
-            let p0 = if idx == 0 {
-                p1 * 2.0 - p2
-            } else {
-                Vec2::from_array(points[idx - 1])
-            };
-            let p3 = if idx + 2 < points.len() {
-                Vec2::from_array(points[idx + 2])
-            } else {
-                p2 * 2.0 - p1
-            };
-
-            let pos = catmull_rom_2d(p0, p1, p2, p3, u);
-            let tangent = catmull_rom_tangent_2d(p0, p1, p2, p3, u).normalize_or_zero();
-            (pos, tangent)
-        }
-        CurveType::CubicBezier => {
-            // Cubic Bezier expects sets of 4 control points (start, c1, c2, end)
-            if points.len() < 4 {
-                return sample_path_2d(points, CurveType::CatmullRom, t);
+fn compile_commands(
+    cmds: &[PathCommand],
+    config: &PathFollowConfig,
+) -> (Vec<CompiledSegment>, f32, bool) {
+    let mut is_3d = false;
+    for cmd in cmds {
+        match cmd {
+            PathCommand::MoveTo { to }
+            | PathCommand::LineTo { to, .. }
+            | PathCommand::QuadTo { to, .. }
+            | PathCommand::CubicTo { to, .. }
+            | PathCommand::SmoothTo { to, .. }
+                if to.len() >= 3 =>
+            {
+                is_3d = true;
+                break;
             }
-            let seg_count = (points.len() - 1) / 3;
-            if seg_count == 0 {
-                return sample_path_2d(points, CurveType::CatmullRom, t);
+            _ => {}
+        }
+    }
+
+    let mut segments = Vec::new();
+    let mut current_pos = Vec3::ZERO;
+    let mut origin_pos = Vec3::ZERO;
+    let mut prev_pos = Vec3::ZERO;
+    let mut current_time = 0.0;
+
+    for (i, cmd) in cmds.iter().enumerate() {
+        match cmd {
+            PathCommand::MoveTo { to } => {
+                let p = to_vec3_coord(to);
+                current_pos = p;
+                origin_pos = p;
+                prev_pos = p;
             }
-            let s = t * seg_count as f32;
-            let idx = (s.floor() as usize).min(seg_count - 1);
-            let u = s - idx as f32;
-            let base = idx * 3;
-            let p0 = Vec2::from_array(points[base]);
-            let p1 = Vec2::from_array(points[base + 1]);
-            let p2 = Vec2::from_array(points[base + 2]);
-            let p3 = Vec2::from_array(points[base + 3]);
-            let pos = bezier_cubic_2d(p0, p1, p2, p3, u);
-            let tangent = bezier_cubic_tangent_2d(p0, p1, p2, p3, u).normalize_or_zero();
-            (pos, tangent)
-        }
-    }
-}
-
-/// Samples a 3D trajectory at parameter `t` in [0, 1], returning (position, tangent).
-fn sample_path_3d(points: &[[f32; 3]], curve: CurveType, t: f32) -> (Vec3, Vec3) {
-    if points.is_empty() {
-        return (Vec3::ZERO, Vec3::Z);
-    }
-    if points.len() == 1 {
-        return (Vec3::from_array(points[0]), Vec3::Z);
-    }
-
-    match curve {
-        CurveType::Linear => {
-            let seg_count = points.len() - 1;
-            let s = t * seg_count as f32;
-            let idx = (s.floor() as usize).min(seg_count - 1);
-            let u = s - idx as f32;
-            let p0 = Vec3::from_array(points[idx]);
-            let p1 = Vec3::from_array(points[idx + 1]);
-            let pos = p0.lerp(p1, u);
-            let tangent = (p1 - p0).normalize_or_zero();
-            (pos, tangent)
-        }
-        CurveType::CatmullRom => {
-            let seg_count = points.len() - 1;
-            let s = t * seg_count as f32;
-            let idx = (s.floor() as usize).min(seg_count - 1);
-            let u = s - idx as f32;
-
-            let p1 = Vec3::from_array(points[idx]);
-            let p2 = Vec3::from_array(points[idx + 1]);
-            let p0 = if idx == 0 {
-                p1 * 2.0 - p2
-            } else {
-                Vec3::from_array(points[idx - 1])
-            };
-            let p3 = if idx + 2 < points.len() {
-                Vec3::from_array(points[idx + 2])
-            } else {
-                p2 * 2.0 - p1
-            };
-
-            let pos = catmull_rom_3d(p0, p1, p2, p3, u);
-            let tangent = catmull_rom_tangent_3d(p0, p1, p2, p3, u).normalize_or_zero();
-            (pos, tangent)
-        }
-        CurveType::CubicBezier => {
-            if points.len() < 4 {
-                return sample_path_3d(points, CurveType::CatmullRom, t);
+            PathCommand::LineTo {
+                to,
+                duration,
+                easing,
+            } => {
+                let dest = to_vec3_coord(to);
+                let dur = duration.unwrap_or(1.0).max(0.0001);
+                segments.push(CompiledSegment {
+                    t_start: current_time,
+                    t_end: current_time + dur,
+                    duration: dur,
+                    start_pos: current_pos,
+                    easing: *easing,
+                    kind: SegmentKind::Line { to: dest },
+                });
+                current_time += dur;
+                prev_pos = current_pos;
+                current_pos = dest;
             }
-            let seg_count = (points.len() - 1) / 3;
-            if seg_count == 0 {
-                return sample_path_3d(points, CurveType::CatmullRom, t);
+            PathCommand::QuadTo {
+                control,
+                to,
+                duration,
+                easing,
+            } => {
+                let ctrl = to_vec3_coord(control);
+                let dest = to_vec3_coord(to);
+                let dur = duration.unwrap_or(1.0).max(0.0001);
+                segments.push(CompiledSegment {
+                    t_start: current_time,
+                    t_end: current_time + dur,
+                    duration: dur,
+                    start_pos: current_pos,
+                    easing: *easing,
+                    kind: SegmentKind::Quad {
+                        control: ctrl,
+                        to: dest,
+                    },
+                });
+                current_time += dur;
+                prev_pos = ctrl;
+                current_pos = dest;
             }
-            let s = t * seg_count as f32;
-            let idx = (s.floor() as usize).min(seg_count - 1);
-            let u = s - idx as f32;
-            let base = idx * 3;
-            let p0 = Vec3::from_array(points[base]);
-            let p1 = Vec3::from_array(points[base + 1]);
-            let p2 = Vec3::from_array(points[base + 2]);
-            let p3 = Vec3::from_array(points[base + 3]);
-            let pos = bezier_cubic_3d(p0, p1, p2, p3, u);
-            let tangent = bezier_cubic_tangent_3d(p0, p1, p2, p3, u).normalize_or_zero();
-            (pos, tangent)
+            PathCommand::CubicTo {
+                control1,
+                control2,
+                to,
+                duration,
+                easing,
+            } => {
+                let c1 = to_vec3_coord(control1);
+                let c2 = to_vec3_coord(control2);
+                let dest = to_vec3_coord(to);
+                let dur = duration.unwrap_or(1.0).max(0.0001);
+                segments.push(CompiledSegment {
+                    t_start: current_time,
+                    t_end: current_time + dur,
+                    duration: dur,
+                    start_pos: current_pos,
+                    easing: *easing,
+                    kind: SegmentKind::Cubic {
+                        control1: c1,
+                        control2: c2,
+                        to: dest,
+                    },
+                });
+                current_time += dur;
+                prev_pos = c2;
+                current_pos = dest;
+            }
+            PathCommand::SmoothTo {
+                to,
+                duration,
+                easing,
+            } => {
+                let dest = to_vec3_coord(to);
+                let dur = duration.unwrap_or(1.0).max(0.0001);
+                let p0 = if prev_pos == current_pos {
+                    current_pos * 2.0 - dest
+                } else {
+                    prev_pos
+                };
+                let p3 = if i + 1 < cmds.len() {
+                    match &cmds[i + 1] {
+                        PathCommand::LineTo { to: nxt, .. }
+                        | PathCommand::SmoothTo { to: nxt, .. }
+                        | PathCommand::QuadTo { to: nxt, .. }
+                        | PathCommand::CubicTo { to: nxt, .. } => to_vec3_coord(nxt),
+                        _ => dest * 2.0 - current_pos,
+                    }
+                } else {
+                    dest * 2.0 - current_pos
+                };
+
+                segments.push(CompiledSegment {
+                    t_start: current_time,
+                    t_end: current_time + dur,
+                    duration: dur,
+                    start_pos: current_pos,
+                    easing: *easing,
+                    kind: SegmentKind::Smooth {
+                        p0,
+                        p1: current_pos,
+                        p2: dest,
+                        p3,
+                    },
+                });
+                current_time += dur;
+                prev_pos = current_pos;
+                current_pos = dest;
+            }
+            PathCommand::Pause { duration } => {
+                let dur = duration.max(0.0001);
+                segments.push(CompiledSegment {
+                    t_start: current_time,
+                    t_end: current_time + dur,
+                    duration: dur,
+                    start_pos: current_pos,
+                    easing: None,
+                    kind: SegmentKind::Pause,
+                });
+                current_time += dur;
+            }
+            PathCommand::Close { duration, easing } => {
+                let dest = origin_pos;
+                let dur = duration.unwrap_or(1.0).max(0.0001);
+                segments.push(CompiledSegment {
+                    t_start: current_time,
+                    t_end: current_time + dur,
+                    duration: dur,
+                    start_pos: current_pos,
+                    easing: *easing,
+                    kind: SegmentKind::Line { to: dest },
+                });
+                current_time += dur;
+                prev_pos = current_pos;
+                current_pos = dest;
+            }
         }
     }
-}
 
-// Catmull-Rom math formulas:
-// P(u) = 0.5 * (2*P1 + (-P0 + P2)*u + (2*P0 - 5*P1 + 4*P2 - P3)*u^2 + (-P0 + 3*P1 - 3*P2 + P3)*u^3)
-fn catmull_rom_2d(p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, u: f32) -> Vec2 {
-    let u2 = u * u;
-    let u3 = u2 * u;
-    0.5 * ((2.0 * p1)
-        + (-p0 + p2) * u
-        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * u2
-        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * u3)
-}
+    let natural_duration = current_time.max(0.0001);
+    let final_duration = config.duration.unwrap_or(natural_duration).max(0.0001);
 
-fn catmull_rom_tangent_2d(p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, u: f32) -> Vec2 {
-    let u2 = u * u;
-    0.5 * ((-p0 + p2)
-        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * (2.0 * u)
-        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * (3.0 * u2))
-}
-
-fn catmull_rom_3d(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, u: f32) -> Vec3 {
-    let u2 = u * u;
-    let u3 = u2 * u;
-    0.5 * ((2.0 * p1)
-        + (-p0 + p2) * u
-        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * u2
-        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * u3)
-}
-
-fn catmull_rom_tangent_3d(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, u: f32) -> Vec3 {
-    let u2 = u * u;
-    0.5 * ((-p0 + p2)
-        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * (2.0 * u)
-        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * (3.0 * u2))
-}
-
-fn bezier_cubic_2d(p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, u: f32) -> Vec2 {
-    let inv = 1.0 - u;
-    inv * inv * inv * p0 + 3.0 * inv * inv * u * p1 + 3.0 * inv * u * u * p2 + u * u * u * p3
-}
-
-fn bezier_cubic_tangent_2d(p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, u: f32) -> Vec2 {
-    let inv = 1.0 - u;
-    3.0 * inv * inv * (p1 - p0) + 6.0 * inv * u * (p2 - p1) + 3.0 * u * u * (p3 - p2)
-}
-
-fn bezier_cubic_3d(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, u: f32) -> Vec3 {
-    let inv = 1.0 - u;
-    inv * inv * inv * p0 + 3.0 * inv * inv * u * p1 + 3.0 * inv * u * u * p2 + u * u * u * p3
-}
-
-fn bezier_cubic_tangent_3d(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, u: f32) -> Vec3 {
-    let inv = 1.0 - u;
-    3.0 * inv * inv * (p1 - p0) + 6.0 * inv * u * (p2 - p1) + 3.0 * u * u * (p3 - p2)
-}
-
-/// Computes look-at quaternion looking from `eye` towards `target`.
-fn quat_look_at(eye: Vec3, target: Vec3, up: Vec3) -> Quat {
-    let f = (target - eye).normalize_or_zero();
-    if f.length_squared() < 1e-6 {
-        return Quat::IDENTITY;
+    if (final_duration - natural_duration).abs() > 1e-4 && natural_duration > 0.0 {
+        let scale = final_duration / natural_duration;
+        for s in &mut segments {
+            s.t_start *= scale;
+            s.t_end *= scale;
+            s.duration *= scale;
+        }
     }
-    let mut s = f.cross(up).normalize_or_zero();
-    if s.length_squared() < 1e-6 {
-        s = f.cross(Vec3::Z).normalize_or_zero();
-    }
-    let u = s.cross(f).normalize_or_zero();
-    let rot_mat = glam::Mat4::from_cols(
-        s.extend(0.0),
-        u.extend(0.0),
-        (-f).extend(0.0),
-        glam::Vec4::W,
-    );
-    Quat::from_mat4(&rot_mat)
+
+    (segments, final_duration, is_3d)
 }

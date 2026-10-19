@@ -497,41 +497,27 @@ pub extern "C" fn galfus_animation_get_custom_channel(channel_id: u32) -> *mut c
 
 /// Creates a new path follow instance. Returns 0 on success, -1 on failure.
 ///
+/// Creates a new path follower traversing a declarative SVG-like path. Returns 0 on success, -1 on failure.
+///
 /// # Safety
 /// Pointers must be valid, null-terminated UTF-8 C string pointers.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_animation_create_path_follow(
     path_id: u32,
-    curve_type_json: *const c_char,
-    points_json: *const c_char,
+    commands_json: *const c_char,
     config_json: *const c_char,
 ) -> i32 {
-    let curve_str = match unsafe { from_c_str(curve_type_json) } {
+    let cmds_str = match unsafe { from_c_str(commands_json) } {
         Ok(s) => s,
         Err(e) => {
             set_last_error(&e);
             return -1;
         }
     };
-    let curve_type: galfus_animation::CurveType = match serde_json::from_str(curve_str) {
+    let commands: Vec<galfus_animation::PathCommand> = match serde_json::from_str(cmds_str) {
         Ok(c) => c,
-        Err(_) => match curve_str {
-            "catmullRom" => galfus_animation::CurveType::CatmullRom,
-            "cubicBezier" => galfus_animation::CurveType::CubicBezier,
-            _ => galfus_animation::CurveType::Linear,
-        },
-    };
-    let pts_str = match unsafe { from_c_str(points_json) } {
-        Ok(s) => s,
         Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-    let points: galfus_animation::PathPoints = match serde_json::from_str(pts_str) {
-        Ok(p) => p,
-        Err(e) => {
-            set_last_error(&format!("Invalid PathPoints JSON: {e}"));
+            set_last_error(&format!("Invalid PathCommands JSON: {e}"));
             return -1;
         }
     };
@@ -555,7 +541,7 @@ pub unsafe extern "C" fn galfus_animation_create_path_follow(
     };
 
     match with_animation_mut(|anim| {
-        anim.create_path_follow(path_id, curve_type, points, config)
+        anim.create_path_follow(path_id, commands, config)
             .map_err(|e| e.to_string())
     }) {
         Ok(()) => 0,

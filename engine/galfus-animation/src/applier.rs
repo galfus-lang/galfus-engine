@@ -99,9 +99,18 @@ pub fn apply_target_value(
                 .ok_or_else(|| {
                     AnimationError::General(format!("Realm 3D #{realm_id} not found"))
                 })?;
-            let t = value.to_transform3d()?;
-            r3d.set_model_transform(*model_id, t)
-                .map_err(|e| AnimationError::General(e.to_string()))
+            if let Some(pos) = value.as_vec3() {
+                let entry = r3d.models.get_mut(model_id).ok_or_else(|| {
+                    AnimationError::General(format!("Model #{model_id} not found"))
+                })?;
+                entry.1.position = pos;
+                r3d.dirty = true;
+                Ok(())
+            } else {
+                let t = value.to_transform3d()?;
+                r3d.set_model_transform(*model_id, t)
+                    .map_err(|e| AnimationError::General(e.to_string()))
+            }
         }
         AnimationTarget::ModelTintColor { realm_id, model_id } => {
             let r3d = multiverse
@@ -128,9 +137,18 @@ pub fn apply_target_value(
                 .ok_or_else(|| {
                     AnimationError::General(format!("Realm 3D #{realm_id} not found"))
                 })?;
-            let t = value.to_transform3d()?;
-            r3d.set_camera_transform(*camera_id, t)
-                .map_err(|e| AnimationError::General(e.to_string()))
+            if let Some(pos) = value.as_vec3() {
+                let entry = r3d.cameras.get_mut(camera_id).ok_or_else(|| {
+                    AnimationError::General(format!("Camera #{camera_id} not found"))
+                })?;
+                entry.1.position = pos;
+                r3d.dirty = true;
+                Ok(())
+            } else {
+                let t = value.to_transform3d()?;
+                r3d.set_camera_transform(*camera_id, t)
+                    .map_err(|e| AnimationError::General(e.to_string()))
+            }
         }
         AnimationTarget::Camera3DFov {
             realm_id,
@@ -265,7 +283,11 @@ pub fn apply_target_value(
                 .lights
                 .get_mut(light_id)
                 .ok_or_else(|| AnimationError::General(format!("Light #{light_id} not found")))?;
-            entry.1 = value.to_transform3d()?;
+            if let Some(pos) = value.as_vec3() {
+                entry.1.position = pos;
+            } else {
+                entry.1 = value.to_transform3d()?;
+            }
             r3d.dirty = true;
             Ok(())
         }
@@ -391,7 +413,11 @@ pub fn apply_target_value(
                 .sprites
                 .get_mut(sprite_id)
                 .ok_or_else(|| AnimationError::General(format!("Sprite #{sprite_id} not found")))?;
-            entry.1 = value.to_transform2d()?;
+            if let Some(pos) = value.as_vec2() {
+                entry.1.position = pos;
+            } else {
+                entry.1 = value.to_transform2d()?;
+            }
             r2d.dirty = true;
             Ok(())
         }
@@ -454,7 +480,11 @@ pub fn apply_target_value(
                 .cameras
                 .get_mut(camera_id)
                 .ok_or_else(|| AnimationError::General(format!("Camera #{camera_id} not found")))?;
-            entry.1 = value.to_transform2d()?;
+            if let Some(pos) = value.as_vec2() {
+                entry.1.position = pos;
+            } else {
+                entry.1 = value.to_transform2d()?;
+            }
             r2d.dirty = true;
             Ok(())
         }
@@ -505,7 +535,11 @@ pub fn apply_target_value(
                 .shapes
                 .get_mut(shape_id)
                 .ok_or_else(|| AnimationError::General(format!("Shape #{shape_id} not found")))?;
-            entry.1 = value.to_transform2d()?;
+            if let Some(pos) = value.as_vec2() {
+                entry.1.position = pos;
+            } else {
+                entry.1 = value.to_transform2d()?;
+            }
             r2d.dirty = true;
             Ok(())
         }
@@ -584,8 +618,11 @@ pub fn apply_target_value(
                 .lights
                 .get_mut(light_id)
                 .ok_or_else(|| AnimationError::General(format!("Light #{light_id} not found")))?;
-            let t = value.to_transform2d()?;
-            light.position = t.position;
+            if let Some(pos) = value.as_vec2() {
+                light.position = pos;
+            } else {
+                light.position = value.to_transform2d()?.position;
+            }
             r2d.dirty = true;
             Ok(())
         }

@@ -11,6 +11,7 @@ pub mod easing;
 pub mod error;
 pub mod events;
 pub mod path;
+pub mod path_math;
 pub mod target;
 pub mod transition;
 pub mod value;
@@ -20,7 +21,7 @@ pub use context::AnimationContext;
 pub use easing::Easing;
 pub use error::{AnimationError, AnimationResult};
 pub use events::{AnimationEvent, AnimationEventType};
-pub use path::{CurveType, PathFollowConfig, PathFollowInstance, PathFollowState, PathPoints};
+pub use path::{PathCommand, PathFollowConfig, PathFollowInstance, PathFollowState, PathValueType};
 pub use target::AnimationTarget;
 pub use transition::{
     LoopMode, TransitionConfig, TransitionInstance, TransitionState, TransitionStatus,
@@ -407,15 +408,22 @@ mod tests {
 
         // 1. 2D Path Follow
         let config_2d = PathFollowConfig {
-            duration: 2.0,
+            duration: Some(2.0),
             delay: 0.0,
             easing: Easing::Linear,
             loop_mode: LoopMode::Once,
             orient_to_path: true,
+            value_type: None,
         };
-        let points_2d = PathPoints::D2(vec![[0.0, 0.0], [10.0, 0.0]]);
-        ctx.create_path_follow(1, CurveType::Linear, points_2d, config_2d)
-            .unwrap();
+        let cmds_2d = vec![
+            PathCommand::MoveTo { to: vec![0.0, 0.0] },
+            PathCommand::LineTo {
+                to: vec![10.0, 0.0],
+                duration: None,
+                easing: None,
+            },
+        ];
+        ctx.create_path_follow(1, cmds_2d, config_2d).unwrap();
 
         // Initial state at t = 0
         let v0 = ctx.get_path_follow_value(1).unwrap();
@@ -440,17 +448,31 @@ mod tests {
             _ => panic!("Expected Transform2D"),
         }
 
-        // 2. 3D Catmull-Rom Path Follow with OrientToPath
+        // 2. 3D Smooth Path Follow with OrientToPath
         let config_3d = PathFollowConfig {
-            duration: 4.0,
+            duration: Some(4.0),
             delay: 0.0,
             easing: Easing::Linear,
             loop_mode: LoopMode::Loop,
             orient_to_path: true,
+            value_type: None,
         };
-        let points_3d = PathPoints::D3(vec![[0.0, 0.0, 0.0], [5.0, 2.0, 0.0], [10.0, 0.0, 0.0]]);
-        ctx.create_path_follow(2, CurveType::CatmullRom, points_3d, config_3d)
-            .unwrap();
+        let cmds_3d = vec![
+            PathCommand::MoveTo {
+                to: vec![0.0, 0.0, 0.0],
+            },
+            PathCommand::SmoothTo {
+                to: vec![5.0, 2.0, 0.0],
+                duration: None,
+                easing: None,
+            },
+            PathCommand::SmoothTo {
+                to: vec![10.0, 0.0, 0.0],
+                duration: None,
+                easing: None,
+            },
+        ];
+        ctx.create_path_follow(2, cmds_3d, config_3d).unwrap();
 
         let target_3d = AnimationTarget::ModelTransform3D {
             realm_id: 10,
@@ -465,7 +487,7 @@ mod tests {
         };
         ctx.create_transition(3, AnimValue::Scalar(0.0), trans_config)
             .unwrap();
-        let conflict = ctx.bind_target(3, target_3d);
+        let conflict = ctx.bind_target(3, target_3d.clone());
         assert!(conflict.is_err());
         match conflict.unwrap_err() {
             AnimationError::TargetConflict { owner_id, .. } => {
@@ -487,17 +509,9 @@ mod tests {
             _ => panic!("Expected Transform3D"),
         }
 
-        // Destroy releases lock
+        // Destroy path follow releases lock
         ctx.destroy_path_follow(2).unwrap();
-        assert!(
-            ctx.bind_target(
-                3,
-                AnimationTarget::ModelTransform3D {
-                    realm_id: 10,
-                    model_id: 1,
-                }
-            )
-            .is_ok()
-        );
+        // Now transition 3 can bind successfully
+        assert!(ctx.bind_target(3, target_3d).is_ok());
     }
 }

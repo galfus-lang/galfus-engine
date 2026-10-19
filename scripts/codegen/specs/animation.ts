@@ -293,20 +293,82 @@ export const animationDescriptors: DescSpec[] = [
   },
   {
     kind: 'enum',
-    name: 'CurveType',
-    doc: 'Mathematical interpolation curve type for path traversal.',
-    values: ['linear', 'catmullRom', 'cubicBezier']
+    name: 'PathValueType',
+    doc: 'Target evaluated animation value format produced by the path follower.',
+    values: ['transform3D', 'position3D', 'transform2D', 'position2D']
+  },
+  {
+    kind: 'union',
+    name: 'PathCommand',
+    doc: 'Declarative SVG-like path motion commands with individual duration and easing.',
+    variants: [
+      {
+        inline: {
+          type: { type: { literal: 'moveTo' } },
+          to: { type: { array: 'number' } }
+        }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'lineTo' } },
+          to: { type: { array: 'number' } },
+          duration: { type: 'number', optional: true },
+          easing: { type: { ref: 'Easing' }, optional: true }
+        }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'quadTo' } },
+          control: { type: { array: 'number' } },
+          to: { type: { array: 'number' } },
+          duration: { type: 'number', optional: true },
+          easing: { type: { ref: 'Easing' }, optional: true }
+        }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'cubicTo' } },
+          control1: { type: { array: 'number' } },
+          control2: { type: { array: 'number' } },
+          to: { type: { array: 'number' } },
+          duration: { type: 'number', optional: true },
+          easing: { type: { ref: 'Easing' }, optional: true }
+        }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'smoothTo' } },
+          to: { type: { array: 'number' } },
+          duration: { type: 'number', optional: true },
+          easing: { type: { ref: 'Easing' }, optional: true }
+        }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'pause' } },
+          duration: { type: 'number' }
+        }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'close' } },
+          duration: { type: 'number', optional: true },
+          easing: { type: { ref: 'Easing' }, optional: true }
+        }
+      }
+    ]
   },
   {
     kind: 'object',
     name: 'PathFollowConfig',
     doc: 'Configuration for path follow traversal.',
     fields: {
-      duration: { type: 'number' },
+      duration: { type: 'number', optional: true },
       delay: { type: 'number', optional: true },
       easing: { type: { ref: 'Easing' }, optional: true },
       loopMode: { type: { ref: 'LoopMode' }, optional: true },
-      orientToPath: { type: 'boolean', optional: true }
+      orientToPath: { type: 'boolean', optional: true },
+      valueType: { type: { ref: 'PathValueType' }, optional: true }
     }
   },
   {
@@ -320,16 +382,6 @@ export const animationDescriptors: DescSpec[] = [
       remainingDelay: { type: 'number' },
       currentValue: { type: { ref: 'AnimValue' } }
     }
-  },
-  {
-    kind: 'union',
-    name: 'PathPoints',
-    doc: 'Path trajectory control points in 2D or 3D.',
-    variants: [
-      { array: { tuple: ['number', 'number'] } },
-      { array: { tuple: ['number', 'number', 'number'] } },
-      { array: { array: 'number' } }
-    ]
   }
 ];
 
@@ -490,11 +542,14 @@ export const animationFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_animation_create_path_follow',
     methodName: 'animationCreatePathFollow',
-    doc: 'Creates a new path follower traversing a 2D or 3D spline trajectory.',
+    doc: 'Creates a new path follower traversing a declarative SVG-like path.',
     params: [
       { name: 'pathId', type: 'u32', doc: 'Logical ID of the path follower' },
-      { name: 'curveType', type: { json: 'CurveType' }, doc: 'Curve interpolation type' },
-      { name: 'points', type: { json: 'PathPoints' }, doc: 'List of 2D or 3D control points' },
+      {
+        name: 'commands',
+        type: { jsonArray: 'PathCommand' },
+        doc: 'List of SVG-like path motion commands'
+      },
       {
         name: 'config',
         type: { json: 'PathFollowConfig' },

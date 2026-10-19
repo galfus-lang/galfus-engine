@@ -24,8 +24,8 @@ pub enum AnimationError {
     #[error("PathFollow ID {0} is reserved or already in use")]
     PathFollowAlreadyExists(u32),
 
-    #[error("Invalid path points: {0}")]
-    InvalidPathPoints(String),
+    #[error("Invalid path commands: {0}")]
+    InvalidPathCommands(String),
 
     #[error("Animation error: {0}")]
     General(String),

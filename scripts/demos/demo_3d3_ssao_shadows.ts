@@ -217,28 +217,33 @@ export async function runDemo3d3(): Promise<void> {
   );
 
   // Setup Animation PathFollow for Light Orb & Point Light (Zigzag Slalom around Pillars)
-  console.log('==> Configuring Looping Zigzag PathFollow for Light Orb & Point Light...');
+  console.log('==> Configuring Looping SVG-like PathFollow for Light Orb & Point Light...');
 
   const NUM_WAYPOINTS = 16;
-  const pathPoints: [number, number, number][] = [];
-  for (let k = 0; k <= NUM_WAYPOINTS; k++) {
+  const pathCommands: any[] = [];
+  for (let k = 0; k < NUM_WAYPOINTS; k++) {
     const angle = (k * 2.0 * Math.PI) / NUM_WAYPOINTS;
     let r = 5.3;
     if (k % 2 === 0) {
       const pillarIdx = (k / 2) % NUM_PILLARS;
       r = pillarIdx % 2 === 0 ? 3.0 : 7.6;
     }
-    const x = Math.cos(angle) * r;
-    const z = Math.sin(angle) * r;
-    const y = 2.1 + 0.8 * Math.sin(angle * 2.0);
-    pathPoints.push([Number(x.toFixed(3)), Number(y.toFixed(3)), Number(z.toFixed(3))]);
+    const x = Number((Math.cos(angle) * r).toFixed(3));
+    const z = Number((Math.sin(angle) * r).toFixed(3));
+    const y = Number((2.1 + 0.8 * Math.sin(angle * 2.0)).toFixed(3));
+    if (k === 0) {
+      pathCommands.push({ type: 'moveTo', to: [x, y, z] });
+    } else {
+      pathCommands.push({ type: 'smoothTo', to: [x, y, z] });
+    }
   }
+  pathCommands.push({ type: 'close' });
 
   const PATH_ORB = 1;
   const PATH_LIGHT = 2;
   const PATH_DURATION = 14.0;
 
-  galfus.animationCreatePathFollow(PATH_ORB, 'catmullRom', pathPoints, {
+  galfus.animationCreatePathFollow(PATH_ORB, pathCommands, {
     duration: PATH_DURATION,
     delay: 0.0,
     easing: 'linear',
@@ -250,7 +255,7 @@ export async function runDemo3d3(): Promise<void> {
     modelId: MODEL_ORB
   });
 
-  galfus.animationCreatePathFollow(PATH_LIGHT, 'catmullRom', pathPoints, {
+  galfus.animationCreatePathFollow(PATH_LIGHT, pathCommands, {
     duration: PATH_DURATION,
     delay: 0.0,
     easing: 'linear',

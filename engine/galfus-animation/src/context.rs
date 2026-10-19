@@ -8,7 +8,7 @@ use galfus_multiverse::MultiverseContext;
 use crate::applier::apply_target_value;
 use crate::error::{AnimationError, AnimationResult};
 use crate::events::AnimationEvent;
-use crate::path::{CurveType, PathFollowConfig, PathFollowInstance, PathFollowState, PathPoints};
+use crate::path::{PathCommand, PathFollowConfig, PathFollowInstance, PathFollowState};
 use crate::target::AnimationTarget;
 use crate::transition::{TransitionConfig, TransitionInstance, TransitionState};
 use crate::value::AnimValue;
@@ -180,34 +180,25 @@ impl AnimationContext {
 
     // === Path Follow Operations ===
 
-    /// Registers a new path follower traversing a 2D or 3D spline.
+    /// Registers a new path follower traversing a declarative SVG-like path command sequence.
     pub fn create_path_follow(
         &mut self,
         id: u32,
-        curve_type: CurveType,
-        points: PathPoints,
+        commands: Vec<PathCommand>,
         config: PathFollowConfig,
     ) -> AnimationResult<()> {
         validate_host_logical_id(id).map_err(|e| AnimationError::General(e.to_string()))?;
         if self.path_follows.contains_key(&id) {
             return Err(AnimationError::PathFollowAlreadyExists(id));
         }
-        match &points {
-            PathPoints::D2(pts) if pts.is_empty() => {
-                return Err(AnimationError::InvalidPathPoints(
-                    "empty 2D path points".into(),
-                ));
-            }
-            PathPoints::D3(pts) if pts.is_empty() => {
-                return Err(AnimationError::InvalidPathPoints(
-                    "empty 3D path points".into(),
-                ));
-            }
-            _ => {}
+        if commands.is_empty() {
+            return Err(AnimationError::InvalidPathCommands(
+                "empty path commands list".into(),
+            ));
         }
 
         self.path_follows
-            .insert(id, PathFollowInstance::new(id, curve_type, points, config));
+            .insert(id, PathFollowInstance::new(id, commands, config));
         Ok(())
     }
 

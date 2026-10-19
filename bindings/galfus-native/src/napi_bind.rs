@@ -9,7 +9,7 @@ use crate::state::{
     with_animation, with_animation_mut, with_context, with_context_mut, with_multiverse_mut,
 };
 use galfus_animation::{
-    AnimValue, AnimationTarget, CurveType, LoopMode, PathFollowConfig, PathPoints, TransitionConfig,
+    AnimValue, AnimationTarget, LoopMode, PathCommand, PathFollowConfig, TransitionConfig,
 };
 
 #[napi]
@@ -822,19 +822,17 @@ pub fn animation_get_custom_channel(env: Env, channel_id: u32) -> Result<JsUnkno
 pub fn animation_create_path_follow(
     env: Env,
     path_id: u32,
-    curve_type_val: JsUnknown,
-    points_val: JsUnknown,
+    commands_val: JsUnknown,
     config_val: Option<JsUnknown>,
 ) -> Result<()> {
-    let curve_type: CurveType = env.from_js_value(curve_type_val)?;
-    let points: PathPoints = env.from_js_value(points_val)?;
+    let commands: Vec<PathCommand> = env.from_js_value(commands_val)?;
     let config: PathFollowConfig = if let Some(cfg_val) = config_val {
         env.from_js_value(cfg_val)?
     } else {
         PathFollowConfig::default()
     };
     with_animation_mut(|anim| {
-        anim.create_path_follow(path_id, curve_type, points, config)
+        anim.create_path_follow(path_id, commands, config)
             .map_err(|e| e.to_string())
     })
     .map_err(|e| Error::new(Status::GenericFailure, e))
