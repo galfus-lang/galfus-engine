@@ -404,14 +404,14 @@ pub extern "C" fn galfus_animation_step(dt: f32) -> i32 {
         return -1;
     }
 
-    // Apply values to multiverse if initialized
-    let _ = with_multiverse_mut(|mv| {
-        let _ = with_animation_mut(|anim| {
-            anim.apply_to_multiverse(mv);
-            Ok(())
-        });
-        Ok(())
+    // Apply values to multiverse
+    let apply_res = with_multiverse_mut(|mv| {
+        with_animation_mut(|anim| anim.apply_to_multiverse(mv).map_err(|e| e.to_string()))
     });
+    if let Err(e) = apply_res {
+        set_last_error(&e);
+        return -1;
+    }
 
     0
 }

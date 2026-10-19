@@ -493,3 +493,50 @@ fn test_multiverse_anti_aliasing_global_and_override() {
     assert_eq!(inv1.anti_aliasing, None); // Inherits global Fxaa at execution
     assert_eq!(inv2.anti_aliasing, Some(AntiAliasingMode::None)); // Explicit override
 }
+
+#[test]
+fn test_create_target_texture_format_support() {
+    let mut mv = MultiverseContext::new();
+
+    // 1. Valid HDR / float format
+    let res_hdr = mv.create_target(
+        50,
+        TargetDesc {
+            kind: TargetKind::Texture {
+                width: 128,
+                height: 128,
+                format: "rgba16float".into(),
+            },
+            size: None,
+        },
+    );
+    assert!(res_hdr.is_ok());
+
+    // 2. Valid sRGB format
+    let res_srgb = mv.create_target(
+        51,
+        TargetDesc {
+            kind: TargetKind::Texture {
+                width: 128,
+                height: 128,
+                format: "rgba8unormsrgb".into(),
+            },
+            size: None,
+        },
+    );
+    assert!(res_srgb.is_ok());
+
+    // 3. Invalid format should fail
+    let res_invalid = mv.create_target(
+        52,
+        TargetDesc {
+            kind: TargetKind::Texture {
+                width: 128,
+                height: 128,
+                format: "non_existent_unsupported_format".into(),
+            },
+            size: None,
+        },
+    );
+    assert!(res_invalid.is_err());
+}

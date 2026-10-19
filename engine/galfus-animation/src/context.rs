@@ -106,17 +106,21 @@ impl AnimationContext {
     }
 
     /// Applies evaluated animated values to bound targets inside Multiverse.
-    pub fn apply_to_multiverse(&mut self, multiverse: &mut MultiverseContext) {
+    pub fn apply_to_multiverse(
+        &mut self,
+        multiverse: &mut MultiverseContext,
+    ) -> AnimationResult<()> {
         for instance in self.transitions.values() {
             if let Some(ref target) = instance.target {
-                let _ = apply_target_value(
+                apply_target_value(
                     target,
                     &instance.current_value,
                     multiverse,
                     &mut self.custom_channels,
-                );
+                )?;
             }
         }
+        Ok(())
     }
 
     /// Drains and returns all queued animation lifecycle events.

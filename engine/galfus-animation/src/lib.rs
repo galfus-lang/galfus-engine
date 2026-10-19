@@ -247,4 +247,33 @@ mod tests {
         let val = ctx.get_value(50).unwrap().as_scalar().unwrap();
         assert!((val - 5.0).abs() < 1e-4);
     }
+
+    #[test]
+    fn test_apply_to_multiverse_error_propagation() {
+        let mut ctx = AnimationContext::new();
+        let config = TransitionConfig {
+            duration: 1.0,
+            delay: 0.0,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
+        };
+        ctx.create_transition(60, AnimValue::Vec4(glam::Vec4::ZERO), config)
+            .unwrap();
+        // Bind to non-existent realm
+        ctx.bind_target(
+            60,
+            AnimationTarget::Material2DColor {
+                realm_id: 999,
+                material_id: 1,
+            },
+        )
+        .unwrap();
+
+        let mut mv = galfus_multiverse::MultiverseContext::new();
+        let res = ctx.apply_to_multiverse(&mut mv);
+        assert!(
+            res.is_err(),
+            "Targeting non-existent realm must return an error"
+        );
+    }
 }

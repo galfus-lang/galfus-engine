@@ -770,13 +770,11 @@ pub fn animation_step(dt: f64) -> Result<()> {
     })
     .map_err(|e| Error::new(Status::GenericFailure, e))?;
 
-    let _ = with_multiverse_mut(|mv| {
-        let _ = with_animation_mut(|anim| {
-            anim.apply_to_multiverse(mv);
-            Ok(())
-        });
-        Ok(())
-    });
+    with_multiverse_mut(|mv| {
+        with_animation_mut(|anim| anim.apply_to_multiverse(mv).map_err(|e| e.to_string()))
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))?;
+
     Ok(())
 }
 

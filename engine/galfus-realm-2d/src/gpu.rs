@@ -31,7 +31,7 @@ pub struct GpuResources2D {
     pub light_buffer: wgpu::Buffer,
     pub shadow_sample_buffer: wgpu::Buffer,
 
-    pub _point_sampler: wgpu::Sampler,
+    pub point_sampler: wgpu::Sampler,
     pub linear_sampler: wgpu::Sampler,
     pub samplers: galfus_gpu_manager::StandardSamplers,
     pub fallback_texture_view: wgpu::TextureView,
@@ -295,7 +295,7 @@ impl GpuResources2D {
             instance_buffer,
             light_buffer,
             shadow_sample_buffer,
-            _point_sampler: point_sampler,
+            point_sampler,
             linear_sampler,
             samplers,
             fallback_texture_view,

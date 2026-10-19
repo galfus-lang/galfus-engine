@@ -3,9 +3,9 @@ use crate::gpu::GpuResources2D;
 use crate::pipeline::{PipelineKey2D, PipelineManager2D};
 use crate::shadow::{ShadowManager2D, rasterize_shadow_samples_for_light};
 use crate::types::{
-    BatchKey2D, Camera2D, Item2DInstanceRaw, Light2D, Material2D, Material2DUniform, Occluder2D,
-    OccluderSilhouette2D, ParticleEmitter2D, ParticleEmitterState2D, Shape2D, Sprite2D,
-    Transform2D,
+    BatchKey2D, Camera2D, Item2DInstanceRaw, Light2D, Light2DUniform, Material2D,
+    Material2DUniform, Occluder2D, OccluderSilhouette2D, ParticleEmitter2D, ParticleEmitterState2D,
+    ShadowSample2DRaw, Shape2D, Sprite2D, Transform2D,
 };
 use bytemuck::cast_slice;
 use galfus_realm_core::{
@@ -34,6 +34,7 @@ pub struct Realm2DContext {
     pub(crate) total_time: f32,
     pub(crate) material_bind_groups: HashMap<u32, wgpu::BindGroup>,
     pub(crate) material_uniform_buffers: HashMap<u32, wgpu::Buffer>,
+    pub(crate) material_texture_slots: HashMap<u32, [Option<u32>; 8]>,
 }
 
 impl Realm2DContext {
@@ -55,6 +56,7 @@ impl Realm2DContext {
             total_time: 0.0,
             material_bind_groups: HashMap::new(),
             material_uniform_buffers: HashMap::new(),
+            material_texture_slots: HashMap::new(),
         }
     }
 
@@ -95,6 +97,7 @@ impl Realm for Realm2DContext {
         self.svg_manager.clear();
         self.material_bind_groups.clear();
         self.material_uniform_buffers.clear();
+        self.material_texture_slots.clear();
         self.dirty = true;
         Ok(())
     }
@@ -120,17 +123,23 @@ impl Realm for Realm2DContext {
         let gpu_res = self.gpu_res.as_ref().unwrap();
 
         for (&mat_id, mat) in &self.materials {
-            if !self.material_bind_groups.contains_key(&mat_id) {
-                let uniform = mat.build_uniform();
-                let buf = crate::gpu::create_gpu_buffer(
-                    device,
-                    &format!("galfus_2d_mat_buf_{mat_id}"),
-                    std::mem::size_of::<Material2DUniform>() as u64,
-                    wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                );
-                queue.write_buffer(&buf, 0, bytemuck::bytes_of(&uniform));
+            let uniform = mat.build_uniform();
+            let buf = self
+                .material_uniform_buffers
+                .entry(mat_id)
+                .or_insert_with(|| {
+                    crate::gpu::create_gpu_buffer(
+                        device,
+                        &format!("galfus_2d_mat_buf_{mat_id}"),
+                        std::mem::size_of::<Material2DUniform>() as u64,
+                        wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    )
+                });
+            queue.write_buffer(buf, 0, bytemuck::bytes_of(&uniform));
 
-                let resolved_slots = mat.resolved_texture_slots();
+            let resolved_slots = mat.resolved_texture_slots();
+            let slots_changed = self.material_texture_slots.get(&mat_id) != Some(&resolved_slots);
+            if slots_changed || !self.material_bind_groups.contains_key(&mat_id) {
                 let bg = crate::gpu::create_material_bind_group_2d(
                     device,
                     &pipeline_manager.material_bind_group_layout,
@@ -138,13 +147,12 @@ impl Realm for Realm2DContext {
                     &gpu_res.fallback_texture_view,
                     &gpu_res.fallback_normal_view,
                     &gpu_res.fallback_black_view,
-                    &buf,
+                    buf,
                     &resolved_slots,
                     ctx.textures,
                 );
-
-                self.material_uniform_buffers.insert(mat_id, buf);
                 self.material_bind_groups.insert(mat_id, bg);
+                self.material_texture_slots.insert(mat_id, resolved_slots);
             }
         }
 
@@ -212,7 +220,49 @@ impl Realm for Realm2DContext {
             }
         }
 
-        let gpu = self.gpu_res.as_ref().unwrap();
+        let gpu = self.gpu_res.as_mut().unwrap();
+
+        let mut bind_group_dirty = false;
+        let required_light_bytes =
+            (std::mem::size_of::<Light2DUniform>() * light_uniforms.len().max(1)) as u64;
+        if gpu.light_buffer.size() < required_light_bytes {
+            let new_size =
+                required_light_bytes.max(64 * std::mem::size_of::<Light2DUniform>() as u64);
+            gpu.light_buffer = crate::gpu::create_gpu_buffer(
+                device,
+                "galfus_2d_light_buffer",
+                new_size,
+                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            );
+            bind_group_dirty = true;
+        }
+
+        let required_shadow_bytes =
+            (std::mem::size_of::<ShadowSample2DRaw>() * all_shadow_samples.len().max(1)) as u64;
+        if gpu.shadow_sample_buffer.size() < required_shadow_bytes {
+            let new_size =
+                required_shadow_bytes.max(512 * std::mem::size_of::<ShadowSample2DRaw>() as u64);
+            gpu.shadow_sample_buffer = crate::gpu::create_gpu_buffer(
+                device,
+                "galfus_2d_shadow_sample_buffer",
+                new_size,
+                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            );
+            bind_group_dirty = true;
+        }
+
+        if bind_group_dirty {
+            gpu.global_bind_group = crate::gpu::GpuResources2D::build_global_bind_group(
+                device,
+                pipeline_manager,
+                &gpu.camera_buffer,
+                &gpu.point_sampler,
+                &gpu.linear_sampler,
+                &gpu.light_buffer,
+                &gpu.shadow_sample_buffer,
+            );
+        }
+
         if !light_uniforms.is_empty() {
             queue.write_buffer(&gpu.light_buffer, 0, cast_slice(&light_uniforms));
         }

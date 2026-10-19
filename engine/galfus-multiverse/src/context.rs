@@ -245,8 +245,19 @@ impl MultiverseContext {
             return Err(MultiverseError::TargetAlreadyExists(target_id));
         }
 
-        if let TargetKind::Texture { width, height, .. } = &desc.kind {
+        if let TargetKind::Texture {
+            width,
+            height,
+            format,
+        } = &desc.kind
+        {
             let gpu = self.ensure_gpu_manager()?;
+            let norm_format = NormalizedTextureFormat::parse_str(format).ok_or_else(|| {
+                MultiverseError::InvalidConfig(format!(
+                    "Unsupported render target texture format: '{format}'"
+                ))
+            })?;
+            let wgpu_format = norm_format.to_wgpu();
             let tex_desc = GpuTextureDesc {
                 label: Some(format!("Multiverse Target {target_id}")),
                 width: *width,
@@ -255,7 +266,7 @@ impl MultiverseContext {
                 mip_levels: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D2,
-                format: NormalizedTextureFormat::Rgba8Unorm,
+                format: norm_format,
                 usages: TextureUsageFlags::default(),
             };
             let device = gpu.context.device_arc();
@@ -268,10 +279,8 @@ impl MultiverseContext {
                 .get_texture(tex_handle)
                 .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
                 .default_view();
-            self.target_textures.insert(
-                target_id,
-                (tex_handle, view_handle, wgpu::TextureFormat::Rgba8Unorm),
-            );
+            self.target_textures
+                .insert(target_id, (tex_handle, view_handle, wgpu_format));
         }
 
         self.targets.insert(target_id, desc);
