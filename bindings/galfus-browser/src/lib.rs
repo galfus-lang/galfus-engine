@@ -5,7 +5,7 @@
 
 use wasm_bindgen::prelude::*;
 
-use galfus_platform::{PlatformContext, WindowConfig};
+use galfus_platform::{CursorGrabMode, CursorIcon, PlatformContext, WindowConfig};
 
 /// WebAssembly-exported coordinator for Galfus platform operations on the web.
 #[wasm_bindgen]
@@ -67,6 +67,55 @@ impl GalfusBrowser {
             .map_err(|e| JsValue::from_str(&format!("Window not found: {e}")))?;
         win.set_title(&title);
         Ok(())
+    }
+
+    /// Updates the cursor grab mode (0: None, 1: Confined, 2: Locked).
+    #[wasm_bindgen(js_name = "windowSetCursorGrab")]
+    pub fn window_set_cursor_grab(&mut self, window_id: u32, mode: u32) -> Result<(), JsValue> {
+        let grab_mode = match mode {
+            1 => CursorGrabMode::Confined,
+            2 => CursorGrabMode::Locked,
+            _ => CursorGrabMode::None,
+        };
+        let win = self
+            .context
+            .get_window_mut(window_id)
+            .map_err(|e| JsValue::from_str(&format!("Window not found: {e}")))?;
+        win.set_cursor_grab(grab_mode)
+            .map_err(|e| JsValue::from_str(&format!("Set cursor grab failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Updates the visual appearance icon of the cursor.
+    #[wasm_bindgen(js_name = "windowSetCursorIcon")]
+    pub fn window_set_cursor_icon(&mut self, window_id: u32, icon: u32) -> Result<(), JsValue> {
+        let cursor_icon = match icon {
+            1 => CursorIcon::Pointer,
+            2 => CursorIcon::Grab,
+            3 => CursorIcon::Grabbing,
+            4 => CursorIcon::Crosshair,
+            5 => CursorIcon::Text,
+            6 => CursorIcon::Move,
+            7 => CursorIcon::Wait,
+            _ => CursorIcon::Default,
+        };
+        let win = self
+            .context
+            .get_window_mut(window_id)
+            .map_err(|e| JsValue::from_str(&format!("Window not found: {e}")))?;
+        win.set_cursor_icon(cursor_icon);
+        Ok(())
+    }
+
+    /// Returns the inner pixel dimensions [width, height] of the window or canvas.
+    #[wasm_bindgen(js_name = "windowGetSize")]
+    pub fn window_get_size(&self, window_id: u32) -> Result<Vec<u32>, JsValue> {
+        let win = self
+            .context
+            .get_window(window_id)
+            .map_err(|e| JsValue::from_str(&format!("Window not found: {e}")))?;
+        let size = win.inner_size();
+        Ok(vec![size.x, size.y])
     }
 
     /// Drains and returns collected platform events as a direct JavaScript array of objects.

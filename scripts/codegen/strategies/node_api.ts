@@ -189,6 +189,19 @@ export class NodeApiStrategy implements CodegenStrategy {
       lines.push('  }');
     }
 
+    lines.push(
+      '',
+      '  /** Reads the inner physical size [width, height] of a Platform window. */',
+      '  windowGetSize(windowId: number): [number, number] {',
+      '    return this._addon.windowGetSize(windowId);',
+      '  }',
+      '',
+      '  /** Reads the inner physical size [width, height] of a Platform window (alias for windowGetSize). */',
+      '  platformGetWindowSize(windowId: number): [number, number] {',
+      '    return this.windowGetSize(windowId);',
+      '  }'
+    );
+
     lines.push('}');
     lines.push('');
 

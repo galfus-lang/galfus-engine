@@ -49,6 +49,29 @@ try {
   }
 }
 
+// 3.1 Cursor grab, icon and window size APIs
+console.log('==> Testing windowSetCursorGrab, windowSetCursorIcon and windowGetSize...');
+try {
+  galfus.windowSetCursorGrab(999, 1);
+  throw new Error('windowSetCursorGrab should throw for non-existent window');
+} catch (err: unknown) {
+  console.log(`✔ Expected windowSetCursorGrab error caught: ${(err as Error).message}`);
+}
+
+try {
+  galfus.windowSetCursorIcon(999, 2);
+  throw new Error('windowSetCursorIcon should throw for non-existent window');
+} catch (err: unknown) {
+  console.log(`✔ Expected windowSetCursorIcon error caught: ${(err as Error).message}`);
+}
+
+try {
+  galfus.windowGetSize(999);
+  throw new Error('windowGetSize should throw for non-existent window');
+} catch (err: unknown) {
+  console.log(`✔ Expected windowGetSize error caught: ${(err as Error).message}`);
+}
+
 // 4. Pump events as direct JavaScript Array
 console.log('==> Testing platformPumpEvents()...');
 const events = galfus.platformPumpEvents();

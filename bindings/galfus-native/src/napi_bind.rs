@@ -96,6 +96,16 @@ pub fn window_set_cursor_icon(window_id: u32, icon: u32) -> Result<()> {
 }
 
 #[napi]
+pub fn window_get_size(window_id: u32) -> Result<Vec<u32>> {
+    with_context(|ctx| {
+        let win = ctx.get_window(window_id).map_err(|e| e.to_string())?;
+        let size = win.inner_size();
+        Ok(vec![size.x, size.y])
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
 pub fn platform_pump_events(env: Env) -> Result<JsUnknown> {
     let events = with_context_mut(|ctx| ctx.pump_events().map_err(|e| e.to_string()))
         .map_err(|e| Error::new(Status::GenericFailure, e))?;
