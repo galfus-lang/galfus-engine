@@ -139,6 +139,18 @@ pub unsafe extern "C" fn galfus_animation_bind_target(
     }
 }
 
+/// Unbinds a target from a transition and releases its property lock. Returns 0 on success, -1 on failure.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_animation_unbind_target(transition_id: u32) -> i32 {
+    match with_animation_mut(|anim| anim.unbind_target(transition_id).map_err(|e| e.to_string())) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
 /// Triggers a smooth transition towards a new target value. Returns 0 on success, -1 on failure.
 ///
 /// # Safety

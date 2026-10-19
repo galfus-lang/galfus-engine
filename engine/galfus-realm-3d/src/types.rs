@@ -239,8 +239,10 @@ pub fn create_material_bind_group<'tex>(
 }
 
 /// Synchronizes dirty CPU mesh geometries, material uniforms, and model matrix uniforms with the GPU.
+#[allow(clippy::too_many_arguments)]
 pub fn sync_realm_resources<'a>(
     device: &wgpu::Device,
+    queue: &wgpu::Queue,
     pipeline: &mut crate::pipeline::Pipeline3D,
     textures: &dyn Fn(u32) -> Option<&'a wgpu::TextureView>,
     geometries: &mut std::collections::BTreeMap<
@@ -280,18 +282,25 @@ pub fn sync_realm_resources<'a>(
 
     // 2. Sync Materials and pre-compile custom surface pipelines
     for (mat, buf_opt, bg_opt) in materials.values_mut() {
-        if buf_opt.is_none() || bg_opt.is_none() {
-            let buf = buf_opt.get_or_insert_with(|| {
-                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Mat Uniform Buffer"),
-                    contents: bytemuck::bytes_of(&mat.build_uniform()),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                })
+        let uniform = mat.build_uniform();
+        if let Some(buf) = buf_opt {
+            queue.write_buffer(buf, 0, bytemuck::bytes_of(&uniform));
+        } else {
+            let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Mat Uniform Buffer"),
+                contents: bytemuck::bytes_of(&uniform),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
+            *buf_opt = Some(buf);
+        }
+
+        if bg_opt.is_none() {
+            let buf = buf_opt.as_ref().unwrap();
             let resolved_slots = mat.resolved_texture_slots();
             let bg = create_material_bind_group(device, pipeline, buf, &resolved_slots, textures);
             *bg_opt = Some(bg);
         }
+
         pipeline.ensure_pipeline(
             device,
             mat.shader_effect.as_deref(),
@@ -301,12 +310,15 @@ pub fn sync_realm_resources<'a>(
 
     // 3. Sync Models
     for (model, transform, buf_opt, bg_opt) in models.values_mut() {
-        if buf_opt.is_none() {
+        let uniform = model.build_uniform(transform);
+        if let Some(buf) = buf_opt {
+            queue.write_buffer(buf, 0, bytemuck::bytes_of(&uniform));
+        } else {
             let (buf, bg) = create_uniform_bg(
                 device,
                 "Model",
                 &pipeline.model_layout,
-                bytemuck::bytes_of(&model.build_uniform(transform)),
+                bytemuck::bytes_of(&uniform),
             );
             *buf_opt = Some(buf);
             *bg_opt = Some(bg);
@@ -338,13 +350,22 @@ pub fn sync_realm_resources<'a>(
             *model_bg_opt = Some(bg);
         }
 
-        if inst_buf_opt.is_none() && !instances.is_empty() {
-            let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Instanced Vertex Buffer"),
-                contents: bytemuck::cast_slice(instances),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            });
-            *inst_buf_opt = Some(buf);
+        if !instances.is_empty() {
+            let required_bytes = std::mem::size_of_val(&instances[..]) as u64;
+            let needs_alloc = match inst_buf_opt {
+                Some(buf) => buf.size() < required_bytes,
+                None => true,
+            };
+            if needs_alloc {
+                let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Instanced Vertex Buffer"),
+                    contents: bytemuck::cast_slice(instances),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                });
+                *inst_buf_opt = Some(buf);
+            } else if let Some(buf) = inst_buf_opt {
+                queue.write_buffer(buf, 0, bytemuck::cast_slice(instances));
+            }
         }
     }
 }

@@ -44,7 +44,7 @@ impl Realm for Realm3DContext {
         self.light_cull_pipeline = None;
         self.particle_renderer = None;
         self.refraction_pipeline = None;
-        self.portal_pipeline = None;
+        self.portal_pipelines.clear();
         self.scene_buffers = None;
         self.depth_texture = None;
         Ok(())
@@ -78,6 +78,7 @@ impl Realm for Realm3DContext {
         // 1-3. Sync Geometries, Materials, and Models
         crate::types::sync_realm_resources(
             device,
+            queue,
             pipeline,
             ctx.textures,
             &mut self.geometries,
@@ -250,114 +251,118 @@ impl Realm for Realm3DContext {
             particle_renderer.upload(device, queue, &alpha_instances, &additive_instances);
         }
 
-        // 0. Render offscreen mirror / optical portal pass if mirrors exist
+        // 0. Render offscreen mirror / optical portal passes for all visible mirrors reached by the camera
         let has_mirrors = !collector.mirrors.is_empty();
         if has_mirrors {
-            let portal_pipe = self.portal_pipeline.get_or_insert_with(|| {
-                crate::portal::PortalPipeline3D::new(
+            for mirror_item in &collector.mirrors {
+                let portal_pipe = self
+                    .portal_pipelines
+                    .entry(mirror_item.model_id)
+                    .or_insert_with(|| {
+                        crate::portal::PortalPipeline3D::new(
+                            device,
+                            ctx.target_format,
+                            &pipeline.refraction_layout,
+                            width,
+                            height,
+                        )
+                    });
+                portal_pipe.resize(
                     device,
-                    ctx.target_format,
                     &pipeline.refraction_layout,
+                    ctx.target_format,
                     width,
                     height,
-                )
-            });
-            portal_pipe.resize(
-                device,
-                &pipeline.refraction_layout,
-                ctx.target_format,
-                width,
-                height,
-            );
+                );
 
-            let primary_item = collector.mirrors[0];
-            let primary_portal = self
-                .portals
-                .values()
-                .find(|p| p.model_id == primary_item.model_id && p.active);
-            let mirror_transform = self
-                .models
-                .get(&primary_item.model_id)
-                .map(|m| m.1)
-                .unwrap_or_default();
-            let is_horizontal = self
-                .geometries
-                .get(&primary_item.geometry_id)
-                .and_then(|g| g.0.label.as_deref())
-                .map(|l| l == "Plane3D")
-                .unwrap_or(false);
+                let mirror_portal = self
+                    .portals
+                    .values()
+                    .find(|p| p.model_id == mirror_item.model_id && p.active);
+                let mirror_transform = self
+                    .models
+                    .get(&mirror_item.model_id)
+                    .map(|m| m.1)
+                    .unwrap_or_default();
+                let is_horizontal = self
+                    .geometries
+                    .get(&mirror_item.geometry_id)
+                    .and_then(|g| g.0.label.as_deref())
+                    .map(|l| l == "Plane3D")
+                    .unwrap_or(false);
 
-            let is_portal = primary_portal
-                .and_then(|p| p.exit_transform.as_ref())
-                .is_some();
-            let mirror_normal = if is_portal {
-                None
-            } else if is_horizontal {
-                Some(mirror_transform.rotation * glam::Vec3::Y)
-            } else {
-                Some(mirror_transform.rotation * glam::Vec3::Z)
-            };
+                let is_portal = mirror_portal
+                    .and_then(|p| p.exit_transform.as_ref())
+                    .is_some();
+                let mirror_normal = if is_portal {
+                    None
+                } else if is_horizontal {
+                    Some(mirror_transform.rotation * glam::Vec3::Y)
+                } else {
+                    Some(mirror_transform.rotation * glam::Vec3::Z)
+                };
 
-            let v_cam = if let Some(p) = primary_portal
-                && let Some(exit) = &p.exit_transform
-            {
-                crate::portal::PortalPipeline3D::compute_portal_camera(
-                    &camera_uniform,
-                    &mirror_transform,
-                    exit,
-                )
-            } else {
-                crate::portal::PortalPipeline3D::compute_mirror_camera(
-                    &camera_uniform,
-                    &mirror_transform,
-                    is_horizontal,
-                )
-            };
+                let v_cam = if let Some(p) = mirror_portal
+                    && let Some(exit) = &p.exit_transform
+                {
+                    crate::portal::PortalPipeline3D::compute_portal_camera(
+                        &camera_uniform,
+                        &mirror_transform,
+                        exit,
+                    )
+                } else {
+                    crate::portal::PortalPipeline3D::compute_mirror_camera(
+                        &camera_uniform,
+                        &mirror_transform,
+                        is_horizontal,
+                    )
+                };
 
-            queue.write_buffer(
-                &portal_pipe.virtual_camera_buf,
-                0,
-                bytemuck::bytes_of(&v_cam),
-            );
-
-            if let Some(shadow_map) = &self.shadow_map {
-                let v_bg = scene_buffers.create_camera_bind_group(
-                    device,
-                    pipeline,
-                    shadow_map,
+                queue.write_buffer(
                     &portal_pipe.virtual_camera_buf,
+                    0,
+                    bytemuck::bytes_of(&v_cam),
                 );
-                let v_collector = crate::portal::PortalPipeline3D::collect_virtual_items(
-                    &self.models,
-                    &self.instanced_models,
-                    &self.geometries,
-                    &self.materials,
-                    &v_cam,
-                    primary_item.model_id,
-                    mirror_transform.position,
-                    mirror_normal,
-                );
-                let opaque_draws = v_collector
-                    .opaque
-                    .iter()
-                    .chain(v_collector.masked.iter())
-                    .map(|i| (i, false));
-                let particle_draw = self
-                    .particle_renderer
-                    .as_ref()
-                    .filter(|_| alpha_count > 0 || additive_count > 0)
-                    .map(|p| (p, alpha_count, additive_count));
-                portal_pipe.render_portal_pass(
-                    crate::portal::PortalPassDesc {
-                        encoder: &mut encoder,
+
+                if let Some(shadow_map) = &self.shadow_map {
+                    let v_bg = scene_buffers.create_camera_bind_group(
+                        device,
                         pipeline,
-                        virtual_scene_bg: &v_bg,
-                        sky_pipe: self.skybox_pipeline.as_ref(),
-                        sky_mode: self.environment.skybox.mode,
-                        particles: particle_draw,
-                    },
-                    opaque_draws,
-                );
+                        shadow_map,
+                        &portal_pipe.virtual_camera_buf,
+                    );
+                    let v_collector = crate::portal::PortalPipeline3D::collect_virtual_items(
+                        &self.models,
+                        &self.instanced_models,
+                        &self.geometries,
+                        &self.materials,
+                        &v_cam,
+                        mirror_item.model_id,
+                        mirror_transform.position,
+                        mirror_normal,
+                    );
+                    let opaque_draws = v_collector
+                        .opaque
+                        .iter()
+                        .chain(v_collector.masked.iter())
+                        .map(|i| (i, false));
+                    let particle_draw = self
+                        .particle_renderer
+                        .as_ref()
+                        .filter(|_| alpha_count > 0 || additive_count > 0)
+                        .map(|p| (p, alpha_count, additive_count));
+                    portal_pipe.render_portal_pass(
+                        crate::portal::PortalPassDesc {
+                            encoder: &mut encoder,
+                            pipeline,
+                            virtual_scene_bg: &v_bg,
+                            sky_pipe: self.skybox_pipeline.as_ref(),
+                            sky_mode: self.environment.skybox.mode,
+                            particles: particle_draw,
+                        },
+                        opaque_draws,
+                    );
+                }
             }
         }
 
@@ -465,17 +470,19 @@ impl Realm for Realm3DContext {
             pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
 
             if has_mirrors {
-                let portal_bg = self
-                    .portal_pipeline
-                    .as_ref()
-                    .map(|p| p.bind_group())
-                    .unwrap_or(&pipeline.dummy_refraction_bg);
-                render_draw_items(
-                    &mut pass,
-                    pipeline,
-                    collector.mirrors.iter().map(|i| (i, false)),
-                    portal_bg,
-                );
+                for item in &collector.mirrors {
+                    let portal_bg = self
+                        .portal_pipelines
+                        .get(&item.model_id)
+                        .map(|p| p.bind_group())
+                        .unwrap_or(&pipeline.dummy_refraction_bg);
+                    render_draw_items(
+                        &mut pass,
+                        pipeline,
+                        std::iter::once((item, false)),
+                        portal_bg,
+                    );
+                }
             }
             if has_refr {
                 let refr_bg = self

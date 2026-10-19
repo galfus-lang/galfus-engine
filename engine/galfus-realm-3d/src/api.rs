@@ -87,7 +87,6 @@ impl Realm3DContext {
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "InstancedModel", id))?;
         entry.1 = instances;
-        entry.2 = None;
         self.dirty = true;
         Ok(())
     }
@@ -99,8 +98,6 @@ impl Realm3DContext {
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "Model", id))?;
         entry.1 = transform;
-        entry.2 = None;
-        entry.3 = None;
         self.dirty = true;
         Ok(())
     }

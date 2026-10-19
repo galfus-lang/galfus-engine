@@ -145,5 +145,58 @@ if ((channelVal as any).value !== 42.0) {
   throw new Error(`Expected custom channel value 42.0`);
 }
 
+// 4. Test Target Conflict Locking & Interruption Policy
+console.log('\n--> Testing Target Conflict Locking & Seamless Interruption...');
+engine.animationCreateScalarTransition(301, 0.0, 2.0, 0.0, 0);
+engine.animationCreateScalarTransition(302, 0.0, 2.0, 0.0, 0);
+
+const targetChannel = { kind: 'customChannel' as const, channelId: 999 };
+
+// Transition 301 binds and locks custom channel 999
+engine.animationBindTarget(301, targetChannel);
+engine.animationTransitionToScalar(301, 100.0, 2.0, 0.0, 0);
+
+// Advance 0.5s -> transition 301 is mid-flight at value 25.0
+engine.animationStep(0.5);
+const val301 = (engine.animationGetValue(301) as any).value;
+console.log(`Transition 301 mid-flight value: ${val301.toFixed(1)} (expected ~25.0)`);
+if (Math.abs(val301 - 25.0) > 0.1) {
+  throw new Error(`Expected ~25.0, got ${val301}`);
+}
+
+// Transition 302 tries to bind to the SAME occupied property -> MUST FAIL!
+let conflictFailed = false;
+try {
+  engine.animationBindTarget(302, targetChannel);
+} catch (err: any) {
+  conflictFailed = true;
+  console.log(`✔ Expected target conflict caught: ${err.message}`);
+}
+if (!conflictFailed) {
+  throw new Error('Expected animationBindTarget(302) to fail with TargetConflict!');
+}
+
+// Same transition 301 is modified mid-flight: it smoothly stops and starts new animation from current state (25.0)
+console.log('--> Modifying same transition 301 to retarget towards 225.0...');
+engine.animationTransitionToScalar(301, 225.0, 2.0, 0.0, 0);
+const state301 = engine.animationGetState(301);
+const capturedStart = (state301.startValue as any).value;
+console.log(`✔ Seamlessly retargeted from current state: ${capturedStart.toFixed(1)}`);
+if (Math.abs(capturedStart - 25.0) > 0.1) {
+  throw new Error(`Expected new startValue ~25.0, got ${capturedStart}`);
+}
+
+// Transition 301 unbinds target, releasing the lock
+console.log('--> Transition 301 unbinds target...');
+engine.animationUnbindTarget(301);
+
+// Now transition 302 can successfully acquire the target
+engine.animationBindTarget(302, targetChannel);
+console.log('✔ Transition 302 successfully acquired target after lock release!');
+
+// Cleanup
+engine.animationDestroyTransition(301);
+engine.animationDestroyTransition(302);
+
 engine.platformShutdown();
 console.log('\n✔ Galfus Animation integration test passed successfully!');

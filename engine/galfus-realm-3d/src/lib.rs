@@ -258,7 +258,7 @@ mod tests {
         });
         let target_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // 3. Render invocation
+        // 3. Render invocation frame 1
         let inv = RealmInvocationContext {
             frame_id: 1,
             invocation_id: 100,
@@ -272,5 +272,45 @@ mod tests {
             target_format: wgpu::TextureFormat::Rgba8Unorm,
         };
         assert!(realm.render(&inv).is_ok());
+
+        // Verify buffers are allocated
+        assert!(realm.models.get(&1).unwrap().2.is_some());
+        assert!(realm.models.get(&1).unwrap().3.is_some());
+        assert!(realm.materials.get(&1).unwrap().1.is_some());
+
+        // Frame 2: Update model transform and material in-place (must stay persistent)
+        realm
+            .set_model_transform(1, Transform3D::from_position(Vec3::new(5.0, 0.0, 0.0)))
+            .unwrap();
+        // Model GPU buffer and bind group remain persistent (not dropped to None)
+        assert!(realm.models.get(&1).unwrap().2.is_some());
+        assert!(realm.models.get(&1).unwrap().3.is_some());
+
+        // Modify material property dynamically
+        realm.materials.get_mut(&1).unwrap().0.base_color = Vec4::new(0.9, 0.1, 0.1, 1.0);
+
+        // Frame 2 prepare updates buffers in-place via queue.write_buffer
+        let prep2 = RealmPrepareContext {
+            frame_id: 2,
+            delta_time: 0.016,
+            device: &device,
+            queue: &queue,
+            textures: &|_| None,
+        };
+        assert!(realm.prepare(&prep2).is_ok());
+
+        let inv2 = RealmInvocationContext {
+            frame_id: 2,
+            invocation_id: 100,
+            target_id: 1,
+            camera_slot: Some(1),
+            viewport: UVec4::new(0, 0, 200, 200),
+            subpixel_jitter: None,
+            device: &device,
+            queue: &queue,
+            target_view: &target_view,
+            target_format: wgpu::TextureFormat::Rgba8Unorm,
+        };
+        assert!(realm.render(&inv2).is_ok());
     }
 }

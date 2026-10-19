@@ -314,6 +314,13 @@ export const animationFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_animation_unbind_target',
+    methodName: 'animationUnbindTarget',
+    doc: 'Unbinds a target from a transition and releases its property lock.',
+    params: [{ name: 'transitionId', type: 'u32', doc: 'Logical ID of the transition' }],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_animation_transition_to',
     methodName: 'animationTransitionTo',
     doc: 'Triggers a smooth transition from the live value towards a new target value.',
