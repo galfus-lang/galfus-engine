@@ -169,6 +169,28 @@ pub extern "C" fn galfus_realm_3d_destroy_model(realm_id: u32, model_id: u32) ->
     }
 }
 
+/// Destroys an instanced model in the 3D Realm.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_destroy_instanced_model(
+    realm_id: u32,
+    instanced_model_id: u32,
+) -> i32 {
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D #{realm_id} not found"))?;
+        realm
+            .destroy_instanced_model(instanced_model_id)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
 /// Destroys a light in the 3D Realm.
 #[unsafe(no_mangle)]
 pub extern "C" fn galfus_realm_3d_destroy_light(realm_id: u32, light_id: u32) -> i32 {

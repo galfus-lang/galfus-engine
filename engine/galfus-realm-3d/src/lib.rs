@@ -167,6 +167,24 @@ mod tests {
             )
             .unwrap();
 
+        // Setup instanced model with 10 instances
+        realm
+            .create_instanced_model(
+                2,
+                galfus_realm_3d_resources::model::InstancedModel3D::new(1, 1, 10),
+            )
+            .unwrap();
+        let instances: Vec<galfus_realm_3d_resources::model::InstanceData3D> = (0..10)
+            .map(|i| galfus_realm_3d_resources::model::InstanceData3D {
+                transform: glam::Mat4::from_translation(glam::Vec3::new(i as f32, 0.0, 0.0)),
+                color: glam::Vec4::new(1.0, 0.5, 0.2, 1.0),
+                emissive: glam::Vec4::new(0.1, 0.1, 0.1, 1.0),
+                pbr: glam::Vec4::new(0.0, 0.5, 0.5, 1.0),
+                custom: glam::Vec4::new(1.0, 2.0, 0.0, 0.0),
+            })
+            .collect();
+        realm.set_instanced_model_data(2, instances).unwrap();
+
         // Enable Bloom and queue Gizmo
         let mut env = EnvironmentRealm3D::default();
         env.bloom.enabled = true;

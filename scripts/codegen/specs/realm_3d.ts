@@ -85,6 +85,51 @@ export const realm3dFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_realm_3d_create_instanced_model',
+    methodName: 'realm3dCreateInstancedModel',
+    doc: 'Registers or updates an Instanced 3D Model in the 3D Realm.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'instancedModelId', type: 'u32', doc: 'Logical ID of the Instanced Model.' },
+      {
+        name: 'model',
+        type: { json: 'InstancedModel3DDesc' },
+        doc: 'Instanced model configuration.'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_set_instanced_model_data',
+    methodName: 'realm3dSetInstancedModelData',
+    doc: 'Uploads instance data (transforms, colors, emissives, PBR, custom params) for an Instanced Model.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'instancedModelId', type: 'u32', doc: 'Logical ID of the Instanced Model.' },
+      {
+        name: 'instances',
+        type: { jsonArray: 'InstanceData3DDesc' },
+        doc: 'Array of instance descriptions.'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_set_instanced_model_raw_data',
+    methodName: 'realm3dSetInstancedModelRawData',
+    doc: 'Uploads raw flat floats (32 floats per instance: 16 transform, 4 color, 4 emissive, 4 pbr, 4 custom) for high performance.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'instancedModelId', type: 'u32', doc: 'Logical ID of the Instanced Model.' },
+      {
+        name: 'data',
+        type: { jsonArray: 'number' },
+        doc: 'Flat array of float values (multiples of 32).'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_realm_3d_create_light',
     methodName: 'realm3dCreateLight',
     doc: 'Registers or updates a 3D Light in the 3D Realm.',
@@ -294,6 +339,16 @@ export const realm3dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'modelId', type: 'u32', doc: 'Logical ID of the Model.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_destroy_instanced_model',
+    methodName: 'realm3dDestroyInstancedModel',
+    doc: 'Destroys an existing 3D instanced model entity.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'instancedModelId', type: 'u32', doc: 'Logical ID of the Instanced Model.' }
     ],
     returnType: 'i32'
   },

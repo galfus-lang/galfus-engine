@@ -10,7 +10,7 @@ use galfus_realm_3d_resources::transform::Transform3D;
 use glam::{Mat4, Quat, Vec3};
 
 use crate::collector::DrawCollector;
-use crate::types::{GpuMeshBuffers, GpuModelEntry};
+use crate::types::{GpuInstancedModelEntry, GpuMeshBuffers, GpuModelEntry};
 
 /// GPU pipeline managing offscreen render-to-texture passes for mirrors and portals.
 pub struct PortalPipeline3D {
@@ -318,8 +318,10 @@ impl PortalPipeline3D {
 
     /// Collects and culls objects for the virtual camera pass, filtering out the mirror surface itself
     /// and any objects behind the mirror plane for planar reflections.
+    #[allow(clippy::too_many_arguments)]
     pub fn collect_virtual_items<'a>(
         models: &'a BTreeMap<u32, GpuModelEntry>,
+        instanced_models: &'a BTreeMap<u32, GpuInstancedModelEntry>,
         geometries: &'a BTreeMap<u32, (Geometry3D, Option<GpuMeshBuffers>)>,
         materials: &'a BTreeMap<u32, (Material3D, Option<wgpu::Buffer>, Option<wgpu::BindGroup>)>,
         v_cam: &Camera3DUniform,
@@ -330,6 +332,7 @@ impl PortalPipeline3D {
         let v_frustum = Frustum::from_view_projection(v_cam.view_projection);
         let mut collector = DrawCollector::collect(
             models,
+            instanced_models,
             geometries,
             materials,
             Some(&v_frustum),

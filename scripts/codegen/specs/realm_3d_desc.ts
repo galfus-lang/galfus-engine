@@ -257,5 +257,30 @@ export const realm3dDescriptors: DescSpec[] = [
       emissionShape: { type: { ref: 'EmissionShape3DDesc' }, optional: true },
       active: { type: 'boolean', optional: true }
     }
+  },
+  {
+    kind: 'object',
+    name: 'InstanceData3DDesc',
+    doc: 'Per-instance data for 3D GPU mesh instancing (transform, color, emissive, PBR, custom).',
+    fields: {
+      transform: { type: { array: 'number' }, optional: true },
+      color: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      emissive: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      pbr: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      custom: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'InstancedModel3DDesc',
+    doc: 'Instanced 3D model configuration linking a geometry and material to an instanced GPU collection.',
+    fields: {
+      geometryId: { type: 'number' },
+      materialId: { type: 'number' },
+      capacity: { type: 'number', optional: true },
+      castShadow: { type: 'boolean', optional: true },
+      receiveShadow: { type: 'boolean', optional: true },
+      active: { type: 'boolean', optional: true }
+    }
   }
 ];

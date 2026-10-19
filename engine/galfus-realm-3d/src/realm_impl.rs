@@ -82,6 +82,7 @@ impl Realm for Realm3DContext {
             &mut self.geometries,
             &mut self.materials,
             &mut self.models,
+            &mut self.instanced_models,
         );
 
         // 4. Sync Scene Buffers (Environment, Lights, Shadows)
@@ -189,6 +190,7 @@ impl Realm for Realm3DContext {
 
         let collector = DrawCollector::collect(
             &self.models,
+            &self.instanced_models,
             &self.geometries,
             &self.materials,
             Some(&cam_frustum),
@@ -322,6 +324,7 @@ impl Realm for Realm3DContext {
                 );
                 let v_collector = crate::portal::PortalPipeline3D::collect_virtual_items(
                     &self.models,
+                    &self.instanced_models,
                     &self.geometries,
                     &self.materials,
                     &v_cam,

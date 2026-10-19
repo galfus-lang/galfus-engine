@@ -14,7 +14,7 @@ use glam::UVec2;
 
 use crate::pipeline::Pipeline3D;
 use crate::shadow::{ShadowMap3D, ShadowPipeline3D};
-use crate::types::{GpuMeshBuffers, GpuModelEntry, SceneGpuBuffers};
+use crate::types::{GpuInstancedModelEntry, GpuMeshBuffers, GpuModelEntry, SceneGpuBuffers};
 
 #[inline]
 pub(crate) fn not_found(realm_id: u32, kind: &str, id: u32) -> RealmError {
@@ -28,6 +28,7 @@ pub struct Realm3DContext {
     pub materials: BTreeMap<u32, (Material3D, Option<wgpu::Buffer>, Option<wgpu::BindGroup>)>,
     pub geometries: BTreeMap<u32, (Geometry3D, Option<GpuMeshBuffers>)>,
     pub models: BTreeMap<u32, GpuModelEntry>,
+    pub instanced_models: BTreeMap<u32, GpuInstancedModelEntry>,
     pub lights: BTreeMap<u32, (Light3D, Transform3D)>,
     pub environment: EnvironmentRealm3D,
 
@@ -60,6 +61,7 @@ impl Realm3DContext {
             materials: BTreeMap::new(),
             geometries: BTreeMap::new(),
             models: BTreeMap::new(),
+            instanced_models: BTreeMap::new(),
             lights: BTreeMap::new(),
             environment: EnvironmentRealm3D::default(),
             pipeline: None,

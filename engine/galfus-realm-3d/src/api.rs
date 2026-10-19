@@ -5,7 +5,7 @@ use galfus_realm_3d_resources::environment::EnvironmentRealm3D;
 use galfus_realm_3d_resources::geometry::Geometry3D;
 use galfus_realm_3d_resources::light::Light3D;
 use galfus_realm_3d_resources::material::Material3D;
-use galfus_realm_3d_resources::model::Model3D;
+use galfus_realm_3d_resources::model::{InstanceData3D, InstancedModel3D, Model3D};
 use galfus_realm_3d_resources::particle::{ParticleEmitter3D, ParticleEmitterState3D};
 use galfus_realm_3d_resources::portal::Portal3D;
 use galfus_realm_3d_resources::transform::Transform3D;
@@ -63,6 +63,31 @@ impl Realm3DContext {
     ) -> RealmResult<()> {
         validate_id(id)?;
         self.models.insert(id, (model, transform, None, None));
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Registers or updates an `InstancedModel3D`.
+    pub fn create_instanced_model(&mut self, id: u32, model: InstancedModel3D) -> RealmResult<()> {
+        validate_id(id)?;
+        self.instanced_models
+            .insert(id, (model, Vec::new(), None, None, None));
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Sets or updates the instance collection data for an existing `InstancedModel3D`.
+    pub fn set_instanced_model_data(
+        &mut self,
+        id: u32,
+        instances: Vec<InstanceData3D>,
+    ) -> RealmResult<()> {
+        let entry = self
+            .instanced_models
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "InstancedModel", id))?;
+        entry.1 = instances;
+        entry.2 = None;
         self.dirty = true;
         Ok(())
     }
@@ -182,6 +207,17 @@ impl Realm3DContext {
                 self.dirty = true;
             })
             .ok_or_else(|| not_found(self.id, "Model", id))
+    }
+
+    /// Destroys an existing `InstancedModel3D`.
+    pub fn destroy_instanced_model(&mut self, id: u32) -> RealmResult<()> {
+        validate_id(id)?;
+        self.instanced_models
+            .remove(&id)
+            .map(|_| {
+                self.dirty = true;
+            })
+            .ok_or_else(|| not_found(self.id, "InstancedModel", id))
     }
 
     /// Destroys an existing `Light3D`.

@@ -116,6 +116,10 @@ struct VertexOutput {
     @location(0) world_pos: vec3<f32>,
     @location(1) world_normal: vec3<f32>,
     @location(2) uv: vec2<f32>,
+    @location(3) instance_color: vec4<f32>,
+    @location(4) instance_emissive: vec4<f32>,
+    @location(5) instance_pbr: vec4<f32>,
+    @location(6) instance_custom: vec4<f32>,
 };
 
 fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
@@ -172,6 +176,54 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.clip_position = camera.view_projection * world_pos4;
     out.world_normal = normalize((object.normal_matrix * vec4<f32>(local_norm, 0.0)).xyz);
     out.uv = in.uv;
+    out.instance_color = vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    out.instance_emissive = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    out.instance_pbr = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    out.instance_custom = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    return out;
+}
+
+struct InstanceInput {
+    @location(6) m0: vec4<f32>,
+    @location(7) m1: vec4<f32>,
+    @location(8) m2: vec4<f32>,
+    @location(9) m3: vec4<f32>,
+    @location(10) color: vec4<f32>,
+    @location(11) emissive: vec4<f32>,
+    @location(12) pbr: vec4<f32>,
+    @location(13) custom: vec4<f32>,
+};
+
+@vertex
+fn vs_instanced_main(in: VertexInput, inst: InstanceInput) -> VertexOutput {
+    var out: VertexOutput;
+
+    let model = mat4x4<f32>(inst.m0, inst.m1, inst.m2, inst.m3);
+    var world_pos4 = model * vec4<f32>(in.position, 1.0);
+
+    // Procedural wind vertex displacement if custom.x (amplitude) > 0.0
+    let wind_amp = inst.custom.x;
+    if (wind_amp > 0.0) {
+        let time = env.misc_params.z;
+        let wind_freq = max(inst.custom.y, 0.5);
+        let height_factor = pow(clamp(in.uv.y, 0.0, 1.0), 1.5);
+        let wave = sin(time * wind_freq * 3.0 + world_pos4.x * 0.4 + world_pos4.z * 0.4);
+        world_pos4.x = world_pos4.x + wave * wind_amp * height_factor;
+        world_pos4.z = world_pos4.z + cos(time * wind_freq * 2.0 + world_pos4.x * 0.3) * wind_amp * 0.5 * height_factor;
+    }
+
+    out.world_pos = world_pos4.xyz;
+    out.clip_position = camera.view_projection * world_pos4;
+
+    // Normal transform via 3x3 rotational submatrix
+    let normal_mat = mat3x3<f32>(inst.m0.xyz, inst.m1.xyz, inst.m2.xyz);
+    out.world_normal = normalize(normal_mat * in.normal);
+
+    out.uv = in.uv;
+    out.instance_color = inst.color;
+    out.instance_emissive = inst.emissive;
+    out.instance_pbr = inst.pbr;
+    out.instance_custom = inst.custom;
     return out;
 }
 
@@ -195,6 +247,10 @@ struct SurfaceInput {
     time: f32,
     sampler_index: u32,
     custom: CustomParams,
+    instance_color: vec4<f32>,
+    instance_emissive: vec4<f32>,
+    instance_pbr: vec4<f32>,
+    instance_custom: vec4<f32>,
 };
 
 struct SurfaceOutput {
@@ -289,10 +345,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     s_in.world_normal = normalize(in.world_normal);
     s_in.view_dir = normalize(camera.position.xyz - in.world_pos);
     s_in.uv = in.uv;
-    s_in.albedo = material.base_color * tex_albedo;
-    s_in.emissive = material.emissive_color.rgb + tex_emissive.rgb;
-    s_in.roughness = clamp(material.pbr_params.x * tex_mr.g, 0.04, 1.0);
-    s_in.metallic = clamp(material.pbr_params.y * tex_mr.b, 0.0, 1.0);
+    s_in.albedo = material.base_color * tex_albedo * in.instance_color;
+    s_in.emissive = material.emissive_color.rgb + tex_emissive.rgb + in.instance_emissive.rgb * in.instance_emissive.w;
+    s_in.roughness = clamp((material.pbr_params.x + in.instance_pbr.y) * tex_mr.g, 0.04, 1.0);
+    s_in.metallic = clamp(material.pbr_params.y * tex_mr.b + in.instance_pbr.x, 0.0, 1.0);
     s_in.reflectance = material.pbr_params.z;
     s_in.time = env.misc_params.z;
     s_in.sampler_index = mat_sampler_idx;
@@ -300,6 +356,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     s_in.custom.v1 = material.custom_v1;
     s_in.custom.v2 = material.custom_v2;
     s_in.custom.v3 = material.custom_v3;
+    s_in.instance_color = in.instance_color;
+    s_in.instance_emissive = in.instance_emissive;
+    s_in.instance_pbr = in.instance_pbr;
+    s_in.instance_custom = in.instance_custom;
 
     let s_out = surface_effect(s_in);
 
@@ -403,7 +463,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
-    let ambient = albedo.rgb * env.ambient_color.rgb * env.ambient_color.a * tex_ao.r;
+    let ambient = albedo.rgb * env.ambient_color.rgb * env.ambient_color.a * tex_ao.r * in.instance_pbr.w;
     var final_color = ambient + direct_light + s_out.emissive;
 
     // Refraction transmission for glass, water, crystals

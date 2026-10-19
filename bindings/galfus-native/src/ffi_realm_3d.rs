@@ -309,6 +309,160 @@ pub unsafe extern "C" fn galfus_realm_3d_set_model_transform(
     }
 }
 
+/// Registers or updates an Instanced Model in the 3D Realm.
+///
+/// # Safety
+/// `model_json` must be a valid, null-terminated UTF-8 string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_3d_create_instanced_model(
+    realm_id: u32,
+    instanced_model_id: u32,
+    model_json: *const c_char,
+) -> i32 {
+    let model_desc: InstancedModel3DDesc =
+        match serde_json::from_str(match unsafe { from_c_str(model_json) } {
+            Ok(s) => s,
+            Err(e) => {
+                set_last_error(&e);
+                return -1;
+            }
+        }) {
+            Ok(d) => d,
+            Err(e) => {
+                set_last_error(&format!("Invalid InstancedModel3DDesc: {e}"));
+                return -1;
+            }
+        };
+
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm
+            .create_instanced_model(instanced_model_id, model_desc.into())
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Uploads instance descriptions for an existing Instanced Model in the 3D Realm.
+///
+/// # Safety
+/// `instances_json` must be a valid, null-terminated UTF-8 string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_3d_set_instanced_model_data(
+    realm_id: u32,
+    instanced_model_id: u32,
+    instances_json: *const c_char,
+) -> i32 {
+    let desc_list: Vec<InstanceData3DDesc> =
+        match serde_json::from_str(match unsafe { from_c_str(instances_json) } {
+            Ok(s) => s,
+            Err(e) => {
+                set_last_error(&e);
+                return -1;
+            }
+        }) {
+            Ok(d) => d,
+            Err(e) => {
+                set_last_error(&format!("Invalid InstanceData3DDesc list: {e}"));
+                return -1;
+            }
+        };
+
+    let instances: Vec<galfus_realm_3d_resources::model::InstanceData3D> =
+        desc_list.into_iter().map(Into::into).collect();
+
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm
+            .set_instanced_model_data(instanced_model_id, instances)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Uploads raw flat floats (32 floats per instance) for an existing Instanced Model in the 3D Realm.
+///
+/// # Safety
+/// `data_json` must be a valid, null-terminated UTF-8 string representing `number[]`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_3d_set_instanced_model_raw_data(
+    realm_id: u32,
+    instanced_model_id: u32,
+    data_json: *const c_char,
+) -> i32 {
+    let floats: Vec<f32> = match serde_json::from_str(match unsafe { from_c_str(data_json) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    }) {
+        Ok(f) => f,
+        Err(e) => {
+            set_last_error(&format!("Invalid raw data JSON: {e}"));
+            return -1;
+        }
+    };
+
+    if !floats.len().is_multiple_of(32) {
+        set_last_error("Instanced raw data length must be a multiple of 32");
+        return -1;
+    }
+
+    let instances: Vec<galfus_realm_3d_resources::model::InstanceData3D> = floats
+        .as_chunks::<32>()
+        .0
+        .iter()
+        .map(|chunk| {
+            let transform = glam::Mat4::from_cols_array(&[
+                chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
+                chunk[8], chunk[9], chunk[10], chunk[11], chunk[12], chunk[13], chunk[14],
+                chunk[15],
+            ]);
+            let color = glam::Vec4::new(chunk[16], chunk[17], chunk[18], chunk[19]);
+            let emissive = glam::Vec4::new(chunk[20], chunk[21], chunk[22], chunk[23]);
+            let pbr = glam::Vec4::new(chunk[24], chunk[25], chunk[26], chunk[27]);
+            let custom = glam::Vec4::new(chunk[28], chunk[29], chunk[30], chunk[31]);
+            galfus_realm_3d_resources::model::InstanceData3D {
+                transform,
+                color,
+                emissive,
+                pbr,
+                custom,
+            }
+        })
+        .collect();
+
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm
+            .set_instanced_model_data(instanced_model_id, instances)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
 /// Registers or updates a 3D Light in the 3D Realm.
 ///
 /// # Safety

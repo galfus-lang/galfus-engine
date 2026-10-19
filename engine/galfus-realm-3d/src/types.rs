@@ -151,6 +151,15 @@ pub type GpuModelEntry = (
     Option<wgpu::BindGroup>,
 );
 
+/// Instanced model entity state tuple: instanced_model, instances, gpu_instance_buffer, uniform_buffer, bind_group.
+pub type GpuInstancedModelEntry = (
+    galfus_realm_3d_resources::model::InstancedModel3D,
+    Vec<galfus_realm_3d_resources::model::InstanceData3D>,
+    Option<wgpu::Buffer>,
+    Option<wgpu::Buffer>,
+    Option<wgpu::BindGroup>,
+);
+
 /// Creates a material bind group with uniform buffer, 8 texture slots, and 4 standard samplers.
 pub fn create_material_bind_group<'tex>(
     device: &wgpu::Device,
@@ -250,6 +259,7 @@ pub fn sync_realm_resources<'a>(
         ),
     >,
     models: &mut std::collections::BTreeMap<u32, GpuModelEntry>,
+    instanced_models: &mut std::collections::BTreeMap<u32, GpuInstancedModelEntry>,
 ) {
     // 1. Sync Geometries
     for (geom, gpu_buffers) in geometries.values_mut() {
@@ -300,6 +310,41 @@ pub fn sync_realm_resources<'a>(
             );
             *buf_opt = Some(buf);
             *bg_opt = Some(bg);
+        }
+    }
+
+    // 4. Sync Instanced Models
+    for (inst_model, instances, inst_buf_opt, model_buf_opt, model_bg_opt) in
+        instanced_models.values_mut()
+    {
+        if model_buf_opt.is_none() || model_bg_opt.is_none() {
+            let mut flags = 0u32;
+            if inst_model.receive_shadow {
+                flags |= 1 << 0;
+            }
+            let uniform = galfus_realm_3d_resources::model::Model3DUniform {
+                model: glam::Mat4::IDENTITY,
+                normal_matrix: glam::Mat4::IDENTITY,
+                outline_color: glam::Vec4::ZERO,
+                flags: glam::UVec4::new(flags, 0, 0, 0),
+            };
+            let (buf, bg) = create_uniform_bg(
+                device,
+                "Instanced Model",
+                &pipeline.model_layout,
+                bytemuck::bytes_of(&uniform),
+            );
+            *model_buf_opt = Some(buf);
+            *model_bg_opt = Some(bg);
+        }
+
+        if inst_buf_opt.is_none() && !instances.is_empty() {
+            let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Instanced Vertex Buffer"),
+                contents: bytemuck::cast_slice(instances),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            });
+            *inst_buf_opt = Some(buf);
         }
     }
 }

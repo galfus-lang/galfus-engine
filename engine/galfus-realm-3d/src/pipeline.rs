@@ -7,6 +7,8 @@ use std::collections::HashMap;
 pub struct Pipeline3D {
     pub render_pipeline: wgpu::RenderPipeline,
     pub transparent_pipeline: wgpu::RenderPipeline,
+    pub instanced_render_pipeline: wgpu::RenderPipeline,
+    pub instanced_transparent_pipeline: wgpu::RenderPipeline,
     pub pipeline_layout: wgpu::PipelineLayout,
     pub scene_layout: wgpu::BindGroupLayout,
     pub material_layout: wgpu::BindGroupLayout,
@@ -19,7 +21,7 @@ pub struct Pipeline3D {
     pub fallback_black_view: wgpu::TextureView,
     _fallback_textures: (wgpu::Texture, wgpu::Texture, wgpu::Texture),
     pub target_format: wgpu::TextureFormat,
-    custom_pipelines: HashMap<(u64, bool), wgpu::RenderPipeline>,
+    custom_pipelines: HashMap<(u64, bool, bool), wgpu::RenderPipeline>,
 }
 
 fn create_1x1_texture(
@@ -62,12 +64,73 @@ fn create_1x1_texture(
     (texture, view)
 }
 
+fn get_instance_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
+    const ATTRS: &[wgpu::VertexAttribute] = &[
+        // m0 (location 6)
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: 0,
+            shader_location: 6,
+        },
+        // m1 (location 7)
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: 16,
+            shader_location: 7,
+        },
+        // m2 (location 8)
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: 32,
+            shader_location: 8,
+        },
+        // m3 (location 9)
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: 48,
+            shader_location: 9,
+        },
+        // color (location 10)
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: 64,
+            shader_location: 10,
+        },
+        // emissive (location 11)
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: 80,
+            shader_location: 11,
+        },
+        // pbr (location 12)
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: 96,
+            shader_location: 12,
+        },
+        // custom (location 13)
+        wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x4,
+            offset: 112,
+            shader_location: 13,
+        },
+    ];
+
+    wgpu::VertexBufferLayout {
+        array_stride: std::mem::size_of::<galfus_realm_3d_resources::model::InstanceData3D>()
+            as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes: ATTRS,
+    }
+}
+
 fn create_3d_render_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
     shader: &wgpu::ShaderModule,
     target_format: wgpu::TextureFormat,
     depth_write_enabled: bool,
+    instanced: bool,
 ) -> wgpu::RenderPipeline {
     let vertex_buffer_layout = wgpu::VertexBufferLayout {
         array_stride: std::mem::size_of::<Vertex3D>() as wgpu::BufferAddress,
@@ -106,13 +169,29 @@ fn create_3d_render_pipeline(
         ],
     };
 
+    let instance_layout = get_instance_buffer_layout();
+    let buffers: &[wgpu::VertexBufferLayout] = if instanced {
+        &[vertex_buffer_layout, instance_layout]
+    } else {
+        std::slice::from_ref(&vertex_buffer_layout)
+    };
+    let entry_point = if instanced {
+        "vs_instanced_main"
+    } else {
+        "vs_main"
+    };
+
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("Realm3D Render Pipeline"),
+        label: Some(if instanced {
+            "Realm3D Instanced Pipeline"
+        } else {
+            "Realm3D Render Pipeline"
+        }),
         layout: Some(layout),
         vertex: wgpu::VertexState {
             module: shader,
-            entry_point: Some("vs_main"),
-            buffers: &[vertex_buffer_layout],
+            entry_point: Some(entry_point),
+            buffers,
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
@@ -183,7 +262,7 @@ impl Pipeline3D {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -371,14 +450,38 @@ impl Pipeline3D {
             immediate_size: 0,
         });
 
-        let render_pipeline =
-            create_3d_render_pipeline(device, &pipeline_layout, &shader, target_format, true);
-        let transparent_pipeline =
-            create_3d_render_pipeline(device, &pipeline_layout, &shader, target_format, false);
+        let render_pipeline = create_3d_render_pipeline(
+            device,
+            &pipeline_layout,
+            &shader,
+            target_format,
+            true,
+            false,
+        );
+        let transparent_pipeline = create_3d_render_pipeline(
+            device,
+            &pipeline_layout,
+            &shader,
+            target_format,
+            false,
+            false,
+        );
+        let instanced_render_pipeline =
+            create_3d_render_pipeline(device, &pipeline_layout, &shader, target_format, true, true);
+        let instanced_transparent_pipeline = create_3d_render_pipeline(
+            device,
+            &pipeline_layout,
+            &shader,
+            target_format,
+            false,
+            true,
+        );
 
         Self {
             render_pipeline,
             transparent_pipeline,
+            instanced_render_pipeline,
+            instanced_transparent_pipeline,
             pipeline_layout,
             scene_layout,
             material_layout,
@@ -395,7 +498,7 @@ impl Pipeline3D {
         }
     }
 
-    /// Pre-compiles and caches a custom surface shader pipeline.
+    /// Pre-compiles and caches custom surface shader pipelines (both standard and instanced).
     pub fn ensure_pipeline(
         &mut self,
         device: &wgpu::Device,
@@ -410,28 +513,37 @@ impl Pipeline3D {
             return;
         };
         let hash = composed.content_id.as_u64();
-        let key = (hash, transparent);
-        self.custom_pipelines.entry(key).or_insert_with(|| {
-            let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("Realm3D Custom Surface Shader"),
-                source: wgpu::ShaderSource::Wgsl(composed.source.into()),
+        for &instanced in &[false, true] {
+            let key = (hash, transparent, instanced);
+            self.custom_pipelines.entry(key).or_insert_with(|| {
+                let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("Realm3D Custom Surface Shader"),
+                    source: wgpu::ShaderSource::Wgsl(composed.source.clone().into()),
+                });
+                create_3d_render_pipeline(
+                    device,
+                    &self.pipeline_layout,
+                    &shader,
+                    self.target_format,
+                    !transparent,
+                    instanced,
+                )
             });
-            create_3d_render_pipeline(
-                device,
-                &self.pipeline_layout,
-                &shader,
-                self.target_format,
-                !transparent,
-            )
-        });
+        }
     }
 
     /// Retrieves an existing custom surface pipeline or falls back to the default pipeline.
-    pub fn get_pipeline(&self, snippet: Option<&str>, transparent: bool) -> &wgpu::RenderPipeline {
-        let fallback = if transparent {
-            &self.transparent_pipeline
-        } else {
-            &self.render_pipeline
+    pub fn get_pipeline(
+        &self,
+        snippet: Option<&str>,
+        transparent: bool,
+        instanced: bool,
+    ) -> &wgpu::RenderPipeline {
+        let fallback = match (transparent, instanced) {
+            (false, false) => &self.render_pipeline,
+            (true, false) => &self.transparent_pipeline,
+            (false, true) => &self.instanced_render_pipeline,
+            (true, true) => &self.instanced_transparent_pipeline,
         };
         let Some(snippet) = snippet else {
             return fallback;
@@ -443,7 +555,7 @@ impl Pipeline3D {
             return fallback;
         };
         self.custom_pipelines
-            .get(&(composed.content_id.as_u64(), transparent))
+            .get(&(composed.content_id.as_u64(), transparent, instanced))
             .unwrap_or(fallback)
     }
 }

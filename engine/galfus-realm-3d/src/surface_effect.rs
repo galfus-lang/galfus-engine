@@ -24,6 +24,10 @@ struct SurfaceInput {
     time: f32,
     sampler_index: u32,
     custom: CustomParams,
+    instance_color: vec4<f32>,
+    instance_emissive: vec4<f32>,
+    instance_pbr: vec4<f32>,
+    instance_custom: vec4<f32>,
 };
 
 struct SurfaceOutput {
