@@ -33,7 +33,7 @@ export async function runDemo3d3(): Promise<void> {
   console.log('  [O]      : Toggle camera auto-orbit');
   console.log('  [S]      : Toggle SSAO on/off');
   console.log('  [1] / [2]: Decrease / Increase SSAO intensity');
-  console.log('  [Space]  : Pause/Resume Point Light orbit');
+  console.log('  [Space]  : Pause/Resume Point Light zigzag path');
   console.log('  [Escape] : Exit\n');
 
   const galfus = new GalfusBun();
@@ -216,36 +216,50 @@ export async function runDemo3d3(): Promise<void> {
     { position: [0, 2.5, 0], scale: [1, 1, 1], rotation: [0, 0, 0, 1] }
   );
 
-  // Setup Animation Transitions for Light Orb & Point Light via Transition API
-  console.log('==> Configuring Animation Transitions for Orbiting Light Orb...');
-  galfus.animationCreateTransition(
-    1,
-    { type: 'transform3D', value: [-3.5, 1.4, -3.5, 0, 0, 0, 1, 1, 1, 1] },
-    { duration: 3.2, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
-  );
-  galfus.animationBindTarget(1, {
+  // Setup Animation PathFollow for Light Orb & Point Light (Zigzag Slalom around Pillars)
+  console.log('==> Configuring Looping Zigzag PathFollow for Light Orb & Point Light...');
+
+  const NUM_WAYPOINTS = 16;
+  const pathPoints: [number, number, number][] = [];
+  for (let k = 0; k <= NUM_WAYPOINTS; k++) {
+    const angle = (k * 2.0 * Math.PI) / NUM_WAYPOINTS;
+    let r = 5.3;
+    if (k % 2 === 0) {
+      const pillarIdx = (k / 2) % NUM_PILLARS;
+      r = pillarIdx % 2 === 0 ? 3.0 : 7.6;
+    }
+    const x = Math.cos(angle) * r;
+    const z = Math.sin(angle) * r;
+    const y = 2.1 + 0.8 * Math.sin(angle * 2.0);
+    pathPoints.push([Number(x.toFixed(3)), Number(y.toFixed(3)), Number(z.toFixed(3))]);
+  }
+
+  const PATH_ORB = 1;
+  const PATH_LIGHT = 2;
+  const PATH_DURATION = 14.0;
+
+  galfus.animationCreatePathFollow(PATH_ORB, 'catmullRom', pathPoints, {
+    duration: PATH_DURATION,
+    delay: 0.0,
+    easing: 'linear',
+    loopMode: 'loop'
+  });
+  galfus.animationBindPathFollowTarget(PATH_ORB, {
     kind: 'modelTransform3D',
     realmId: REALM_3D,
     modelId: MODEL_ORB
   });
-  galfus.animationTransitionTo(1, {
-    type: 'transform3D',
-    value: [3.5, 2.6, 3.5, 0, 0, 0, 1, 1, 1, 1]
-  });
 
-  galfus.animationCreateTransition(
-    2,
-    { type: 'transform3D', value: [-3.5, 1.4, -3.5, 0, 0, 0, 1, 1, 1, 1] },
-    { duration: 3.2, delay: 0.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
-  );
-  galfus.animationBindTarget(2, {
+  galfus.animationCreatePathFollow(PATH_LIGHT, 'catmullRom', pathPoints, {
+    duration: PATH_DURATION,
+    delay: 0.0,
+    easing: 'linear',
+    loopMode: 'loop'
+  });
+  galfus.animationBindPathFollowTarget(PATH_LIGHT, {
     kind: 'light3DTransform',
     realmId: REALM_3D,
     lightId: LIGHT_POINT
-  });
-  galfus.animationTransitionTo(2, {
-    type: 'transform3D',
-    value: [3.5, 2.6, 3.5, 0, 0, 0, 1, 1, 1, 1]
   });
 
   // Secondary ambient directional fill
@@ -314,7 +328,7 @@ export async function runDemo3d3(): Promise<void> {
             applyEnvironment(totalTime * 0.1);
           } else if (key === ' ' || key === 'space') {
             lightOrbitPaused = !lightOrbitPaused;
-            console.log(`[Demo 3D-3] Light orbit: ${lightOrbitPaused ? 'PAUSED' : 'ACTIVE'}`);
+            console.log(`[Demo 3D-3] Light zigzag path: ${lightOrbitPaused ? 'PAUSED' : 'ACTIVE'}`);
           } else if (key === 'o') {
             autoOrbit = !autoOrbit;
             console.log(`[Demo 3D-3] Auto-orbit: ${autoOrbit ? 'ON' : 'OFF'}`);

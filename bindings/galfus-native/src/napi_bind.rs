@@ -8,7 +8,9 @@ use crate::state::{
     attach_window_to_multiverse, init_context, init_context_headless, shutdown_context,
     with_animation, with_animation_mut, with_context, with_context_mut, with_multiverse_mut,
 };
-use galfus_animation::{AnimValue, AnimationTarget, LoopMode, TransitionConfig};
+use galfus_animation::{
+    AnimValue, AnimationTarget, CurveType, LoopMode, PathFollowConfig, PathPoints, TransitionConfig,
+};
 
 #[napi]
 pub fn platform_init() -> Result<()> {
@@ -814,4 +816,65 @@ pub fn animation_get_custom_channel(env: Env, channel_id: u32) -> Result<JsUnkno
     })
     .map_err(|e| Error::new(Status::GenericFailure, e))?;
     env.to_js_value(&val)
+}
+
+#[napi]
+pub fn animation_create_path_follow(
+    env: Env,
+    path_id: u32,
+    curve_type_val: JsUnknown,
+    points_val: JsUnknown,
+    config_val: Option<JsUnknown>,
+) -> Result<()> {
+    let curve_type: CurveType = env.from_js_value(curve_type_val)?;
+    let points: PathPoints = env.from_js_value(points_val)?;
+    let config: PathFollowConfig = if let Some(cfg_val) = config_val {
+        env.from_js_value(cfg_val)?
+    } else {
+        PathFollowConfig::default()
+    };
+    with_animation_mut(|anim| {
+        anim.create_path_follow(path_id, curve_type, points, config)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn animation_bind_path_follow_target(
+    env: Env,
+    path_id: u32,
+    target_val: JsUnknown,
+) -> Result<()> {
+    let target: AnimationTarget = env.from_js_value(target_val)?;
+    with_animation_mut(|anim| {
+        anim.bind_path_follow_target(path_id, target)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn animation_unbind_path_follow_target(path_id: u32) -> Result<()> {
+    with_animation_mut(|anim| {
+        anim.unbind_path_follow_target(path_id)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn animation_destroy_path_follow(path_id: u32) -> Result<()> {
+    with_animation_mut(|anim| anim.destroy_path_follow(path_id).map_err(|e| e.to_string()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn animation_get_path_follow_state(env: Env, path_id: u32) -> Result<JsUnknown> {
+    let state = with_animation(|anim| {
+        anim.get_path_follow_state(path_id)
+            .ok_or_else(|| format!("PathFollow {path_id} not found"))
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))?;
+    env.to_js_value(&state)
 }

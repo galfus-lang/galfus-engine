@@ -15,8 +15,17 @@ pub enum AnimationError {
     #[error("Invalid value format: {0}")]
     InvalidValue(String),
 
-    #[error("Target property '{target}' is already locked by active transition {owner_id}")]
+    #[error("Target property '{target}' is already locked by active animation owner {owner_id}")]
     TargetConflict { target: String, owner_id: u32 },
+
+    #[error("PathFollow ID {0} not found")]
+    PathFollowNotFound(u32),
+
+    #[error("PathFollow ID {0} is reserved or already in use")]
+    PathFollowAlreadyExists(u32),
+
+    #[error("Invalid path points: {0}")]
+    InvalidPathPoints(String),
 
     #[error("Animation error: {0}")]
     General(String),

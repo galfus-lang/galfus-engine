@@ -198,5 +198,85 @@ console.log('✔ Transition 302 successfully acquired target after lock release!
 engine.animationDestroyTransition(301);
 engine.animationDestroyTransition(302);
 
+// 5. Test PathFollow System (2D & 3D Splines + OrientToPath + Locks)
+console.log('\n--> Testing PathFollow Spline Trajectory & OrientToPath...');
+const pathPoints2D = [
+  [0, 0],
+  [100, 50],
+  [200, 0]
+];
+engine.animationCreatePathFollow(401, 'catmullRom', pathPoints2D, {
+  duration: 2.0,
+  delay: 0.0,
+  easing: 'linear',
+  loopMode: 'once',
+  orientToPath: true
+});
+
+let pathState = engine.animationGetPathFollowState(401);
+console.log(`Path 401 initial progress: ${pathState.progress}, status: ${pathState.status}`);
+if (pathState.status !== 'running') {
+  throw new Error(`Expected running status, got ${pathState.status}`);
+}
+
+// Advance 1s (50% progress)
+engine.animationStep(1.0);
+pathState = engine.animationGetPathFollowState(401);
+console.log(`Path 401 halfway progress: ${pathState.progress.toFixed(2)}`);
+if (Math.abs(pathState.progress - 0.5) > 0.05) {
+  throw new Error(`Expected ~0.5 progress, got ${pathState.progress}`);
+}
+
+// Check evaluated Transform2D (x ~ 100, orientToPath calculated rotation angle)
+const curVal2D = (pathState.currentValue as any).value;
+console.log(
+  `Path 401 halfway transform2D: [x: ${curVal2D[0].toFixed(1)}, y: ${curVal2D[1].toFixed(1)}, rot: ${curVal2D[2].toFixed(2)} rad]`
+);
+if (Math.abs(curVal2D[0] - 100.0) > 10.0) {
+  throw new Error(`Expected x ~ 100, got ${curVal2D[0]}`);
+}
+
+// Test PathFollow Target Lock
+const pathTarget: any = {
+  kind: 'modelTransform3D',
+  realmId: 1,
+  modelId: 777
+};
+engine.animationCreatePathFollow(
+  402,
+  'linear',
+  [
+    [0, 0, 0],
+    [10, 20, 30]
+  ],
+  {
+    duration: 1.0,
+    orientToPath: true
+  }
+);
+engine.animationBindPathFollowTarget(402, pathTarget);
+
+// Transition tries to bind to the same target: must fail!
+engine.animationCreateScalarTransition(403, 0.0, 1.0, 0.0, 0);
+let pathLockFailed = false;
+try {
+  engine.animationBindTarget(403, pathTarget);
+} catch (err: any) {
+  pathLockFailed = true;
+  console.log(`✔ Expected path conflict caught: ${err.message}`);
+}
+if (!pathLockFailed) {
+  throw new Error('Expected animationBindTarget(403) to fail due to PathFollow lock!');
+}
+
+// Destroy path follower 402 releases lock
+engine.animationDestroyPathFollow(402);
+engine.animationBindTarget(403, pathTarget);
+console.log('✔ Transition 403 acquired target after PathFollow destruction!');
+
+// Cleanup
+engine.animationDestroyPathFollow(401);
+engine.animationDestroyTransition(403);
+
 engine.platformShutdown();
 console.log('\n✔ Galfus Animation integration test passed successfully!');

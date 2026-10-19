@@ -8,6 +8,7 @@ use galfus_multiverse::MultiverseContext;
 use crate::applier::apply_target_value;
 use crate::error::{AnimationError, AnimationResult};
 use crate::events::AnimationEvent;
+use crate::path::{CurveType, PathFollowConfig, PathFollowInstance, PathFollowState, PathPoints};
 use crate::target::AnimationTarget;
 use crate::transition::{TransitionConfig, TransitionInstance, TransitionState};
 use crate::value::AnimValue;
@@ -15,6 +16,7 @@ use crate::value::AnimValue;
 /// Autonomous animation manager coordinating transitions, state queries, and event pumping.
 pub struct AnimationContext {
     pub(crate) transitions: BTreeMap<u32, TransitionInstance>,
+    pub(crate) path_follows: BTreeMap<u32, PathFollowInstance>,
     pub(crate) target_locks: HashMap<AnimationTarget, u32>,
     pub(crate) custom_channels: HashMap<u32, AnimValue>,
     pub(crate) event_queue: VecDeque<AnimationEvent>,
@@ -31,6 +33,7 @@ impl AnimationContext {
     pub fn new() -> Self {
         Self {
             transitions: BTreeMap::new(),
+            path_follows: BTreeMap::new(),
             target_locks: HashMap::new(),
             custom_channels: HashMap::new(),
             event_queue: VecDeque::new(),
@@ -133,9 +136,14 @@ impl AnimationContext {
         }
     }
 
-    /// Advances all transitions by delta time `dt` seconds and collects triggered events.
+    /// Advances all transitions and path followers by delta time `dt` seconds and collects triggered events.
     pub fn step(&mut self, dt: f32) {
         for instance in self.transitions.values_mut() {
+            if let Some(event) = instance.step(dt) {
+                self.event_queue.push_back(event);
+            }
+        }
+        for instance in self.path_follows.values_mut() {
             if let Some(event) = instance.step(dt) {
                 self.event_queue.push_back(event);
             }
@@ -157,7 +165,116 @@ impl AnimationContext {
                 )?;
             }
         }
+        for instance in self.path_follows.values() {
+            if let Some(ref target) = instance.target {
+                apply_target_value(
+                    target,
+                    &instance.current_value,
+                    multiverse,
+                    &mut self.custom_channels,
+                )?;
+            }
+        }
         Ok(())
+    }
+
+    // === Path Follow Operations ===
+
+    /// Registers a new path follower traversing a 2D or 3D spline.
+    pub fn create_path_follow(
+        &mut self,
+        id: u32,
+        curve_type: CurveType,
+        points: PathPoints,
+        config: PathFollowConfig,
+    ) -> AnimationResult<()> {
+        validate_host_logical_id(id).map_err(|e| AnimationError::General(e.to_string()))?;
+        if self.path_follows.contains_key(&id) {
+            return Err(AnimationError::PathFollowAlreadyExists(id));
+        }
+        match &points {
+            PathPoints::D2(pts) if pts.is_empty() => {
+                return Err(AnimationError::InvalidPathPoints(
+                    "empty 2D path points".into(),
+                ));
+            }
+            PathPoints::D3(pts) if pts.is_empty() => {
+                return Err(AnimationError::InvalidPathPoints(
+                    "empty 3D path points".into(),
+                ));
+            }
+            _ => {}
+        }
+
+        self.path_follows
+            .insert(id, PathFollowInstance::new(id, curve_type, points, config));
+        Ok(())
+    }
+
+    /// Binds a path follower to an entity property target with conflict locking.
+    pub fn bind_path_follow_target(
+        &mut self,
+        id: u32,
+        target: AnimationTarget,
+    ) -> AnimationResult<()> {
+        if let Some(&owner_id) = self.target_locks.get(&target)
+            && owner_id != id
+        {
+            return Err(AnimationError::TargetConflict {
+                target: format!("{target:?}"),
+                owner_id,
+            });
+        }
+
+        let instance = self
+            .path_follows
+            .get_mut(&id)
+            .ok_or(AnimationError::PathFollowNotFound(id))?;
+
+        if let Some(ref old_target) = instance.target
+            && old_target != &target
+        {
+            self.target_locks.remove(old_target);
+        }
+
+        self.target_locks.insert(target.clone(), id);
+        instance.target = Some(target);
+        Ok(())
+    }
+
+    /// Unbinds a target from a path follower and releases its property lock.
+    pub fn unbind_path_follow_target(&mut self, id: u32) -> AnimationResult<()> {
+        let instance = self
+            .path_follows
+            .get_mut(&id)
+            .ok_or(AnimationError::PathFollowNotFound(id))?;
+        if let Some(ref target) = instance.target {
+            self.target_locks.remove(target);
+        }
+        instance.target = None;
+        Ok(())
+    }
+
+    /// Queries the current runtime state of a path follower.
+    pub fn get_path_follow_state(&self, id: u32) -> Option<PathFollowState> {
+        self.path_follows.get(&id).map(|p| p.state())
+    }
+
+    /// Queries the current evaluated value of a path follower.
+    pub fn get_path_follow_value(&self, id: u32) -> Option<AnimValue> {
+        self.path_follows.get(&id).map(|p| p.current_value.clone())
+    }
+
+    /// Destroys a path follower by ID and releases any associated property locks.
+    pub fn destroy_path_follow(&mut self, id: u32) -> AnimationResult<()> {
+        if let Some(instance) = self.path_follows.remove(&id) {
+            if let Some(ref target) = instance.target {
+                self.target_locks.remove(target);
+            }
+            Ok(())
+        } else {
+            Err(AnimationError::PathFollowNotFound(id))
+        }
     }
 
     /// Drains and returns all queued animation lifecycle events.

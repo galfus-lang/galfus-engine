@@ -10,6 +10,7 @@ pub mod context;
 pub mod easing;
 pub mod error;
 pub mod events;
+pub mod path;
 pub mod target;
 pub mod transition;
 pub mod value;
@@ -19,6 +20,7 @@ pub use context::AnimationContext;
 pub use easing::Easing;
 pub use error::{AnimationError, AnimationResult};
 pub use events::{AnimationEvent, AnimationEventType};
+pub use path::{CurveType, PathFollowConfig, PathFollowInstance, PathFollowState, PathPoints};
 pub use target::AnimationTarget;
 pub use transition::{
     LoopMode, TransitionConfig, TransitionInstance, TransitionState, TransitionStatus,
@@ -397,5 +399,105 @@ mod tests {
 
         // Now target_a is freed and transition 81 can acquire it!
         assert!(ctx.bind_target(81, target_a).is_ok());
+    }
+
+    #[test]
+    fn test_path_follow_2d_and_3d_evaluation() {
+        let mut ctx = AnimationContext::new();
+
+        // 1. 2D Path Follow
+        let config_2d = PathFollowConfig {
+            duration: 2.0,
+            delay: 0.0,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
+            orient_to_path: true,
+        };
+        let points_2d = PathPoints::D2(vec![[0.0, 0.0], [10.0, 0.0]]);
+        ctx.create_path_follow(1, CurveType::Linear, points_2d, config_2d)
+            .unwrap();
+
+        // Initial state at t = 0
+        let v0 = ctx.get_path_follow_value(1).unwrap();
+        match v0 {
+            AnimValue::Transform2D([x, y, rot, _, _, _]) => {
+                assert_eq!(x, 0.0);
+                assert_eq!(y, 0.0);
+                assert!((rot - 0.0).abs() < 1e-4);
+            }
+            _ => panic!("Expected Transform2D"),
+        }
+
+        // Halfway at t = 1.0s (50%)
+        ctx.step(1.0);
+        let v1 = ctx.get_path_follow_value(1).unwrap();
+        match v1 {
+            AnimValue::Transform2D([x, y, rot, _, _, _]) => {
+                assert!((x - 5.0).abs() < 1e-4);
+                assert_eq!(y, 0.0);
+                assert!((rot - 0.0).abs() < 1e-4);
+            }
+            _ => panic!("Expected Transform2D"),
+        }
+
+        // 2. 3D Catmull-Rom Path Follow with OrientToPath
+        let config_3d = PathFollowConfig {
+            duration: 4.0,
+            delay: 0.0,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Loop,
+            orient_to_path: true,
+        };
+        let points_3d = PathPoints::D3(vec![[0.0, 0.0, 0.0], [5.0, 2.0, 0.0], [10.0, 0.0, 0.0]]);
+        ctx.create_path_follow(2, CurveType::CatmullRom, points_3d, config_3d)
+            .unwrap();
+
+        let target_3d = AnimationTarget::ModelTransform3D {
+            realm_id: 10,
+            model_id: 1,
+        };
+        ctx.bind_path_follow_target(2, target_3d.clone()).unwrap();
+
+        // Ensure transition cannot bind to the same target locked by path follow!
+        let trans_config = TransitionConfig {
+            duration: 1.0,
+            ..Default::default()
+        };
+        ctx.create_transition(3, AnimValue::Scalar(0.0), trans_config)
+            .unwrap();
+        let conflict = ctx.bind_target(3, target_3d);
+        assert!(conflict.is_err());
+        match conflict.unwrap_err() {
+            AnimationError::TargetConflict { owner_id, .. } => {
+                assert_eq!(owner_id, 2);
+            }
+            other => panic!("Expected TargetConflict, got {other:?}"),
+        }
+
+        // Advance 3D path
+        ctx.step(2.0); // 50%
+        let v_mid = ctx.get_path_follow_value(2).unwrap();
+        match v_mid {
+            AnimValue::Transform3D([x, y, _, qx, qy, qz, qw, ..]) => {
+                assert!((x - 5.0).abs() < 0.5);
+                assert!((y - 2.0).abs() < 0.5);
+                let q_len = (qx * qx + qy * qy + qz * qz + qw * qw).sqrt();
+                assert!((q_len - 1.0).abs() < 1e-3);
+            }
+            _ => panic!("Expected Transform3D"),
+        }
+
+        // Destroy releases lock
+        ctx.destroy_path_follow(2).unwrap();
+        assert!(
+            ctx.bind_target(
+                3,
+                AnimationTarget::ModelTransform3D {
+                    realm_id: 10,
+                    model_id: 1,
+                }
+            )
+            .is_ok()
+        );
     }
 }

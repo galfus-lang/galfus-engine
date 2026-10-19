@@ -290,6 +290,46 @@ export const animationDescriptors: DescSpec[] = [
       value: { type: { ref: 'AnimValue' } },
       elapsed: { type: 'number' }
     }
+  },
+  {
+    kind: 'enum',
+    name: 'CurveType',
+    doc: 'Mathematical interpolation curve type for path traversal.',
+    values: ['linear', 'catmullRom', 'cubicBezier']
+  },
+  {
+    kind: 'object',
+    name: 'PathFollowConfig',
+    doc: 'Configuration for path follow traversal.',
+    fields: {
+      duration: { type: 'number' },
+      delay: { type: 'number', optional: true },
+      easing: { type: { ref: 'Easing' }, optional: true },
+      loopMode: { type: { ref: 'LoopMode' }, optional: true },
+      orientToPath: { type: 'boolean', optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'PathFollowState',
+    doc: 'Snapshot query state of an active path follower.',
+    fields: {
+      status: { type: { ref: 'TransitionStatus' } },
+      progress: { type: 'number' },
+      elapsed: { type: 'number' },
+      remainingDelay: { type: 'number' },
+      currentValue: { type: { ref: 'AnimValue' } }
+    }
+  },
+  {
+    kind: 'union',
+    name: 'PathPoints',
+    doc: 'Path trajectory control points in 2D or 3D.',
+    variants: [
+      { array: { tuple: ['number', 'number'] } },
+      { array: { tuple: ['number', 'number', 'number'] } },
+      { array: { array: 'number' } }
+    ]
   }
 ];
 
@@ -446,5 +486,53 @@ export const animationFunctions: FunctionSpec[] = [
     doc: 'Reads directly from a custom animation channel.',
     params: [{ name: 'channelId', type: 'u32', doc: 'Channel logical ID' }],
     returnType: { json: 'AnimValue' }
+  },
+  {
+    cName: 'galfus_animation_create_path_follow',
+    methodName: 'animationCreatePathFollow',
+    doc: 'Creates a new path follower traversing a 2D or 3D spline trajectory.',
+    params: [
+      { name: 'pathId', type: 'u32', doc: 'Logical ID of the path follower' },
+      { name: 'curveType', type: { json: 'CurveType' }, doc: 'Curve interpolation type' },
+      { name: 'points', type: { json: 'PathPoints' }, doc: 'List of 2D or 3D control points' },
+      {
+        name: 'config',
+        type: { json: 'PathFollowConfig' },
+        doc: 'Path follow configuration',
+        optional: true
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_animation_bind_path_follow_target',
+    methodName: 'animationBindPathFollowTarget',
+    doc: 'Binds a path follower to an entity property target with conflict locking.',
+    params: [
+      { name: 'pathId', type: 'u32', doc: 'Logical ID of the path follower' },
+      { name: 'target', type: { json: 'AnimationTarget' }, doc: 'Target property identifier' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_animation_unbind_path_follow_target',
+    methodName: 'animationUnbindPathFollowTarget',
+    doc: 'Unbinds a target from a path follower and releases its property lock.',
+    params: [{ name: 'pathId', type: 'u32', doc: 'Logical ID of the path follower' }],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_animation_destroy_path_follow',
+    methodName: 'animationDestroyPathFollow',
+    doc: 'Destroys a path follower by ID.',
+    params: [{ name: 'pathId', type: 'u32', doc: 'Logical ID of the path follower' }],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_animation_get_path_follow_state',
+    methodName: 'animationGetPathFollowState',
+    doc: 'Queries the current playback status and progress of a path follower.',
+    params: [{ name: 'pathId', type: 'u32', doc: 'Logical ID of the path follower' }],
+    returnType: { json: 'PathFollowState' }
   }
 ];
