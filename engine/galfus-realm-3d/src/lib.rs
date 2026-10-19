@@ -313,4 +313,63 @@ mod tests {
         };
         assert!(realm.render(&inv2).is_ok());
     }
+
+    #[test]
+    fn test_realm3d_clear_clears_models_and_instanced_models() {
+        let mut realm = Realm3DContext::new(10);
+        realm.create_geometry(1, Geometry3D::cube(1.0)).unwrap();
+        realm
+            .create_material(1, Material3D::solid_color(Vec4::ONE))
+            .unwrap();
+
+        // 1. Create standard model
+        realm
+            .create_model(10, Model3D::new(1, 1), Transform3D::default())
+            .unwrap();
+
+        // 2. Create instanced model
+        realm
+            .create_instanced_model(
+                20,
+                galfus_realm_3d_resources::model::InstancedModel3D::new(1, 1, 5),
+            )
+            .unwrap();
+
+        assert_eq!(realm.models.len(), 1);
+        assert_eq!(realm.instanced_models.len(), 1);
+
+        // 3. Clear realm -> BOTH models and instanced_models must be cleared
+        assert!(realm.clear().is_ok());
+        assert!(
+            realm.models.is_empty(),
+            "models must be empty after clear()"
+        );
+        assert!(
+            realm.instanced_models.is_empty(),
+            "instanced_models must be empty after clear()"
+        );
+    }
+
+    #[test]
+    fn test_realm3d_entity_not_found_errors() {
+        let mut realm = Realm3DContext::new(10);
+
+        // Accessing non-existent entities returns appropriate errors
+        assert!(
+            realm
+                .set_model_transform(999, Transform3D::default())
+                .is_err()
+        );
+        assert!(realm.get_model_aabb(999).is_err());
+        assert!(
+            realm
+                .set_camera_transform(999, Transform3D::default())
+                .is_err()
+        );
+        assert!(realm.destroy_model(999).is_err());
+        assert!(realm.destroy_camera(999).is_err());
+        assert!(realm.destroy_light(999).is_err());
+        assert!(realm.destroy_geometry(999).is_err());
+        assert!(realm.destroy_material(999).is_err());
+    }
 }

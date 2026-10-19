@@ -639,4 +639,29 @@ mod tests {
         assert_eq!(corners[2], Vec2::new(35.0, 45.0));
         assert_eq!(instance.transform.draw_order, 3);
     }
+
+    #[test]
+    fn test_realm2d_crud_and_not_found_errors() {
+        let mut realm = Realm2DContext::new(1);
+
+        // 1. Not found errors for non-existent entities
+        assert!(realm.destroy_sprite(999).is_err());
+        assert!(realm.destroy_shape(999).is_err());
+        assert!(realm.destroy_light(999).is_err());
+        assert!(realm.destroy_camera(999).is_err());
+        assert!(realm.destroy_svg(999).is_err());
+        assert!(realm.destroy_material(999).is_err());
+
+        // 2. Capacity scaling: 128 dynamic lights (exceeding initial 64)
+        for i in 1..=128 {
+            let light = Light2D::point(Vec2::new(i as f32, 0.0), glam::Vec3::ONE, 1.0, 10.0);
+            assert!(realm.set_light(i, light).is_ok());
+        }
+        assert_eq!(realm.lights.len(), 128);
+
+        // 3. Clear empties all lights and sprites
+        assert!(realm.clear().is_ok());
+        assert!(realm.lights.is_empty());
+        assert!(realm.sprites.is_empty());
+    }
 }

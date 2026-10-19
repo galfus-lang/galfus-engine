@@ -649,6 +649,7 @@ pub extern "C" fn galfus_audio_unload_sound(sound_id: u32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ffi_transforms_getters::galfus_platform_get_window_size;
 
     #[test]
     fn test_c_api_lifecycle_and_json_exchange() {
@@ -692,6 +693,23 @@ mod tests {
         let events_json = unsafe { from_c_str(events_ptr) }.unwrap();
         assert_eq!(events_json, "[]");
         unsafe { galfus_string_free(events_ptr) };
+
+        // 4.1 Window & Audio error paths on non-existent IDs
+        assert_eq!(galfus_window_close(999), -1);
+        let title = CString::new("New Title").unwrap();
+        assert_eq!(unsafe { galfus_window_set_title(999, title.as_ptr()) }, -1);
+        assert_eq!(galfus_window_set_cursor_grab(999, 1), -1);
+        assert_eq!(galfus_window_set_cursor_icon(999, 1), -1);
+
+        let mut w: u32 = 0;
+        let mut h: u32 = 0;
+        assert_eq!(
+            unsafe { galfus_platform_get_window_size(999, &mut w, &mut h) },
+            -1
+        );
+
+        assert_eq!(galfus_audio_play_sound(999, 1.0, 0.0, 1.0, false), -1);
+        assert_eq!(galfus_audio_unload_sound(999), -1);
 
         // 5. Shutdown
         assert_eq!(galfus_platform_shutdown(), 0);

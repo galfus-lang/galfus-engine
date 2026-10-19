@@ -289,8 +289,11 @@ impl AudioContext {
     pub fn unload_sound(&mut self, id: u32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.sounds.remove(&id);
-            Ok(())
+            if self.sounds.remove(&id).is_some() {
+                Ok(())
+            } else {
+                Err(PlatformError::SoundNotFound(id))
+            }
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -366,5 +369,39 @@ mod tests {
         let decoded = Handle::<()>::from_u32_index(u32_val, NAMESPACE_AUDIO_VOICE).unwrap();
         assert_eq!(decoded.slot(), 42);
         assert_eq!(decoded.generation().get(), 7);
+    }
+
+    #[test]
+    fn test_audio_voice_not_found_errors() {
+        let mut audio = AudioContext::new();
+
+        assert!(audio.pause_sound(999).is_err());
+        assert!(audio.resume_sound(999).is_err());
+        assert!(audio.stop_sound(999).is_err());
+        assert!(audio.set_sound_volume(999, 0.5).is_err());
+        assert!(audio.set_sound_panning(999, -0.2).is_err());
+    }
+
+    #[test]
+    fn test_audio_sound_not_found_and_corrupt_bytes() {
+        let mut audio = AudioContext::new();
+
+        // 1. Play and unload on non-existent sound asset
+        let config = PlaybackConfig {
+            volume: 1.0,
+            panning: 0.0,
+            speed: 1.0,
+            looping: false,
+        };
+        assert!(audio.play_sound(999, config).is_err());
+        assert!(audio.unload_sound(999).is_err());
+
+        // 2. Corrupted audio bytes rejection
+        let corrupt_data = b"not a real audio file header or stream";
+        let res = audio.load_sound_bytes(10, corrupt_data);
+        assert!(
+            res.is_err(),
+            "Loading corrupt audio data must return AudioLoadFailed"
+        );
     }
 }

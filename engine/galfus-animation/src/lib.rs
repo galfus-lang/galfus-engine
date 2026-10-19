@@ -314,4 +314,88 @@ mod tests {
         assert!(ctx.destroy_transition(72).is_ok());
         assert!(ctx.bind_target(71, target).is_ok());
     }
+
+    #[test]
+    fn test_anim_value_interpolation_and_type_mismatch() {
+        // 1. Vec4 (Color) interpolation
+        let c1 = AnimValue::Vec4(glam::Vec4::new(0.0, 0.0, 0.0, 1.0));
+        let c2 = AnimValue::Vec4(glam::Vec4::new(1.0, 1.0, 1.0, 1.0));
+        let mid_c = c1.interpolate(&c2, 0.5).unwrap();
+        match mid_c {
+            AnimValue::Vec4(c) => {
+                assert!((c.x - 0.5).abs() < 1e-4);
+                assert!((c.y - 0.5).abs() < 1e-4);
+                assert!((c.z - 0.5).abs() < 1e-4);
+                assert!((c.w - 1.0).abs() < 1e-4);
+            }
+            _ => panic!("Expected AnimValue::Vec4"),
+        }
+
+        // 2. Vec3 interpolation
+        let v1 = AnimValue::Vec3(glam::Vec3::new(0.0, 0.0, 0.0));
+        let v2 = AnimValue::Vec3(glam::Vec3::new(10.0, 20.0, 30.0));
+        let mid_v = v1.interpolate(&v2, 0.5).unwrap();
+        match mid_v {
+            AnimValue::Vec3(v) => {
+                assert!((v.x - 5.0).abs() < 1e-4);
+                assert!((v.y - 10.0).abs() < 1e-4);
+                assert!((v.z - 15.0).abs() < 1e-4);
+            }
+            _ => panic!("Expected AnimValue::Vec3"),
+        }
+
+        // 3. Type mismatch: Scalar cannot interpolate into Vec4
+        let s = AnimValue::Scalar(42.0);
+        let mismatch_err = s.interpolate(&c1, 0.5);
+        assert!(mismatch_err.is_err());
+        match mismatch_err.unwrap_err() {
+            AnimationError::TypeMismatch { from, to } => {
+                assert!(from.contains("Scalar"));
+                assert!(to.contains("Vec4"));
+            }
+            other => panic!("Expected TypeMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_transition_not_found_and_rebind_lock_transfer() {
+        let mut ctx = AnimationContext::new();
+
+        // 1. Operations on non-existent transition return TransitionNotFound
+        assert!(
+            ctx.transition_to(999, AnimValue::Scalar(1.0), None)
+                .is_err()
+        );
+        assert!(
+            ctx.bind_target(999, AnimationTarget::CustomChannel { channel_id: 1 })
+                .is_err()
+        );
+        assert!(ctx.unbind_target(999).is_err());
+        assert!(ctx.destroy_transition(999).is_err());
+
+        // 2. Re-binding target transfers property lock seamlessly
+        let config = TransitionConfig {
+            duration: 1.0,
+            delay: 0.0,
+            easing: Easing::Linear,
+            loop_mode: LoopMode::Once,
+        };
+        ctx.create_transition(80, AnimValue::Scalar(0.0), config.clone())
+            .unwrap();
+        ctx.create_transition(81, AnimValue::Scalar(0.0), config)
+            .unwrap();
+
+        let target_a = AnimationTarget::CustomChannel { channel_id: 100 };
+        let target_b = AnimationTarget::CustomChannel { channel_id: 200 };
+
+        ctx.bind_target(80, target_a.clone()).unwrap();
+        // Transition 81 cannot bind to target_a
+        assert!(ctx.bind_target(81, target_a.clone()).is_err());
+
+        // Transition 80 switches target to target_b
+        ctx.bind_target(80, target_b).unwrap();
+
+        // Now target_a is freed and transition 81 can acquire it!
+        assert!(ctx.bind_target(81, target_a).is_ok());
+    }
 }
