@@ -184,9 +184,12 @@ impl TransitionInstance {
                         });
                     }
                     LoopMode::PingPong => {
+                        let num_flips = (self.elapsed / duration) as usize;
                         self.elapsed %= duration;
-                        self.ping_pong_forward = !self.ping_pong_forward;
-                        std::mem::swap(&mut self.start_value, &mut self.target_value);
+                        if !num_flips.is_multiple_of(2) {
+                            self.ping_pong_forward = !self.ping_pong_forward;
+                            std::mem::swap(&mut self.start_value, &mut self.target_value);
+                        }
 
                         let ping_t = self.elapsed / duration;
                         let eased_t = self.config.easing.evaluate(ping_t);

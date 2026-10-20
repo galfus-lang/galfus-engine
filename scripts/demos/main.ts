@@ -14,6 +14,7 @@ import { runDemo2d1 } from './demo_2d1_shadows.ts';
 import { runDemo2d2 } from './demo_2d2_effects_particles.ts';
 import { runDemo2d3 } from './demo_2d3_svg.ts';
 import { runDemoAnim1 } from './demo_anim1_transitions.ts';
+import { runDemoTour } from './demo_tour_feature_path.ts';
 
 function printHelp(): void {
   console.log('=== Galfus Engine - TypeScript / Bun Demos ===');
@@ -41,8 +42,10 @@ function printHelp(): void {
   console.log('    2d1   - Orthographic Reverse-Z, Point Lights, and Polar Soft Shadows');
   console.log('    2d2   - Material Custom Shader Effects & 2D Particle Emitters');
   console.log(
-    '    2d3   - Reactive Vector SVG (Cyberpunk HUD, Dynamic Attributes, <use> States & Text)\n'
+    '    2d3   - Reactive Vector SVG (Cyberpunk HUD, Dynamic Attributes, <use> States & Text)'
   );
+  console.log('\n  [Feature Tour]');
+  console.log('    tour  - Guided Split-Screen Multiverse Feature Tour (3D & 2D Companion)\n');
 }
 
 async function main(): Promise<void> {
@@ -125,6 +128,11 @@ async function main(): Promise<void> {
     case 'anim1':
     case 'anim':
       await runDemoAnim1();
+      break;
+
+    case 'tour':
+    case 'featuretour':
+      await runDemoTour();
       break;
 
     case 'help':

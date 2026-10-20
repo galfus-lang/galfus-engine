@@ -378,7 +378,7 @@ pub extern "C" fn galfus_audio_play_sound(
         with_context_mut(|ctx| ctx.play_sound(sound_id, config).map_err(|e| e.to_string()));
 
     match result {
-        Ok(voice_id) => voice_id as i32,
+        Ok(_) => 0,
         Err(e) => {
             set_last_error(&e);
             -1
@@ -387,7 +387,7 @@ pub extern "C" fn galfus_audio_play_sound(
 }
 
 /// Plays a registered sound with 3D/2D spatial positioning relative to a listener ear.
-/// Returns voice instance ID (>= 0) on success, -1 on failure.
+/// Returns 0 on success, -1 on failure.
 ///
 /// # Safety
 /// `emitter_json`, `listener_json`, and `config_json` must be valid null-terminated C string pointers.
@@ -409,7 +409,7 @@ pub unsafe extern "C" fn galfus_audio_play_sound_spatial(
     });
 
     match result {
-        Ok(voice_id) => voice_id as i32,
+        Ok(_) => 0,
         Err(e) => {
             set_last_error(&e);
             -1
