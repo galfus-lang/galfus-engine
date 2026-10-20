@@ -35,7 +35,44 @@ export const realm3dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' },
-      { name: 'transform', type: { json: 'Transform3DDesc' }, doc: 'New camera transform' }
+      { name: 'transform', type: { nativeStruct: 'Transform3D' }, doc: 'New camera transform.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_set_camera_look_at',
+    methodName: 'realm3dSetCameraLookAt',
+    doc: 'Sets the optional world-space look-at point and up direction of an existing 3D Camera.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' },
+      { name: 'lookAt', type: { nativeStruct: 'CameraLookAt3D' }, doc: 'Look-at configuration.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_get_camera_look_at',
+    methodName: 'realm3dGetCameraLookAt',
+    doc: 'Gets the current optional look-at configuration of an existing 3D Camera.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' },
+      {
+        name: 'outLookAt',
+        type: { nativeStruct: 'CameraLookAt3D' },
+        doc: 'Output look-at state.',
+        out: true
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_clear_camera_look_at',
+    methodName: 'realm3dClearCameraLookAt',
+    doc: 'Clears the optional look-at configuration of an existing 3D Camera.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' }
     ],
     returnType: 'i32'
   },
@@ -94,7 +131,7 @@ export const realm3dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'modelId', type: 'u32', doc: 'Logical ID of the Model.' },
-      { name: 'transform', type: { json: 'Transform3DDesc' }, doc: 'New model transform' }
+      { name: 'transform', type: { nativeStruct: 'Transform3D' }, doc: 'New model transform.' }
     ],
     returnType: 'i32'
   },
@@ -152,7 +189,7 @@ export const realm3dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'lightId', type: 'u32', doc: 'Logical ID of the Light.' },
-      { name: 'transform', type: { json: 'Transform3DDesc' }, doc: 'New light transform' }
+      { name: 'transform', type: { nativeStruct: 'Transform3D' }, doc: 'New light transform.' }
     ],
     returnType: 'i32'
   },
@@ -254,7 +291,7 @@ export const realm3dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'emitterId', type: 'u32', doc: 'Logical ID of the Particle Emitter.' },
-      { name: 'transform', type: { json: 'Transform3DDesc' }, doc: 'New transform.' }
+      { name: 'transform', type: { nativeStruct: 'Transform3D' }, doc: 'New transform.' }
     ],
     returnType: 'i32'
   },
@@ -372,46 +409,34 @@ export const realm3dFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
-    cName: 'galfus_realm_3d_set_model_transform_raw',
-    methodName: 'realm3dSetModelTransformRaw',
-    doc: 'Updates 3D model transform directly from a 10-float buffer [px, py, pz, rx, ry, rz, rw, sx, sy, sz].',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
-      { name: 'modelId', type: 'u32', doc: 'Logical ID of the Model.' },
-      { name: 'ptr', type: 'ptr', doc: 'Pointer to 10-element float array' }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_3d_set_camera_transform_raw',
-    methodName: 'realm3dSetCameraTransformRaw',
-    doc: 'Updates 3D camera transform directly from a 10-float buffer [px, py, pz, rx, ry, rz, rw, sx, sy, sz].',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
-      { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' },
-      { name: 'ptr', type: 'ptr', doc: 'Pointer to 10-element float array' }
-    ],
-    returnType: 'i32'
-  },
-  {
     cName: 'galfus_realm_3d_get_model_transform',
-    methodName: 'realm3dGetModelTransformRaw',
-    doc: 'Reads the transform of an existing Model instance into an out 10-float buffer.',
+    methodName: 'realm3dGetModelTransform',
+    doc: 'Reads the transform of an existing Model instance.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'modelId', type: 'u32', doc: 'Logical ID of the Model.' },
-      { name: 'outPtr', type: 'ptr', doc: 'Pointer to out 10-element float array' }
+      {
+        name: 'outTransform',
+        type: { nativeStruct: 'Transform3D' },
+        doc: 'Output transform.',
+        out: true
+      }
     ],
     returnType: 'i32'
   },
   {
     cName: 'galfus_realm_3d_get_camera_transform',
-    methodName: 'realm3dGetCameraTransformRaw',
-    doc: 'Reads the transform of an existing Camera instance into an out 10-float buffer.',
+    methodName: 'realm3dGetCameraTransform',
+    doc: 'Reads the transform of an existing Camera instance.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' },
-      { name: 'outPtr', type: 'ptr', doc: 'Pointer to out 10-element float array' }
+      {
+        name: 'outTransform',
+        type: { nativeStruct: 'Transform3D' },
+        doc: 'Output transform.',
+        out: true
+      }
     ],
     returnType: 'i32'
   },

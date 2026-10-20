@@ -370,53 +370,14 @@ pub extern "C" fn galfus_audio_play_sound(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_audio_play_sound_spatial(
     sound_id: u32,
-    emitter_json: *const c_char,
-    listener_json: *const c_char,
-    config_json: *const c_char,
+    spatial: *const crate::ffi_native_structs::GalfusSpatialAudio,
 ) -> i32 {
-    let emitter_str = match unsafe { from_c_str(emitter_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-    let listener_str = match unsafe { from_c_str(listener_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-    let config_str = match unsafe { from_c_str(config_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    let emitter: galfus_platform::SpatialTransform = match serde_json::from_str(emitter_str) {
-        Ok(e) => e,
-        Err(err) => {
-            set_last_error(&format!("Invalid emitter SpatialTransform: {err}"));
-            return -1;
-        }
-    };
-    let listener: galfus_platform::SpatialTransform = match serde_json::from_str(listener_str) {
-        Ok(l) => l,
-        Err(err) => {
-            set_last_error(&format!("Invalid listener SpatialTransform: {err}"));
-            return -1;
-        }
-    };
-    let config: galfus_platform::SpatialAudioConfig = match serde_json::from_str(config_str) {
-        Ok(c) => c,
-        Err(err) => {
-            set_last_error(&format!("Invalid SpatialAudioConfig: {err}"));
-            return -1;
-        }
-    };
+    if spatial.is_null() {
+        set_last_error("Null pointer passed to play_sound_spatial");
+        return -1;
+    }
+    // SAFETY: The pointer was checked above and copied before this function returns.
+    let (emitter, listener, config) = unsafe { (*spatial).into_parts() };
 
     let result = with_context_mut(|ctx| {
         ctx.play_sound_spatial(sound_id, emitter, listener, config)
@@ -440,53 +401,14 @@ pub unsafe extern "C" fn galfus_audio_play_sound_spatial(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_audio_update_sound_spatial(
     voice_id: u32,
-    emitter_json: *const c_char,
-    listener_json: *const c_char,
-    config_json: *const c_char,
+    spatial: *const crate::ffi_native_structs::GalfusSpatialAudio,
 ) -> i32 {
-    let emitter_str = match unsafe { from_c_str(emitter_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-    let listener_str = match unsafe { from_c_str(listener_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-    let config_str = match unsafe { from_c_str(config_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    let emitter: galfus_platform::SpatialTransform = match serde_json::from_str(emitter_str) {
-        Ok(e) => e,
-        Err(err) => {
-            set_last_error(&format!("Invalid emitter SpatialTransform: {err}"));
-            return -1;
-        }
-    };
-    let listener: galfus_platform::SpatialTransform = match serde_json::from_str(listener_str) {
-        Ok(l) => l,
-        Err(err) => {
-            set_last_error(&format!("Invalid listener SpatialTransform: {err}"));
-            return -1;
-        }
-    };
-    let config: galfus_platform::SpatialAudioConfig = match serde_json::from_str(config_str) {
-        Ok(c) => c,
-        Err(err) => {
-            set_last_error(&format!("Invalid SpatialAudioConfig: {err}"));
-            return -1;
-        }
-    };
+    if spatial.is_null() {
+        set_last_error("Null pointer passed to update_sound_spatial");
+        return -1;
+    }
+    // SAFETY: The pointer was checked above and copied before this function returns.
+    let (emitter, listener, config) = unsafe { (*spatial).into_parts() };
 
     let result = with_context_mut(|ctx| {
         ctx.update_sound_spatial(voice_id, emitter, listener, config)

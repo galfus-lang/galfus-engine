@@ -1,7 +1,10 @@
 import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-import { type DataType, isBuffer, isJson, isJsonArray } from '../spec.ts';
+import { type DataType, isBuffer, isJson, isJsonArray, isNativeStruct } from '../spec.ts';
 
 function mapParamTsType(type: DataType): string {
+  if (isNativeStruct(type)) {
+    return type.nativeStruct === 'SpatialAudio' ? 'SpatialAudio' : type.nativeStruct;
+  }
   if (isBuffer(type)) {
     return type.buffer === 'u8'
       ? 'Uint8Array'
@@ -10,12 +13,6 @@ function mapParamTsType(type: DataType): string {
         : 'Float32Array';
   }
   if (isJson(type)) {
-    if (type.json === 'Transform3DDesc') {
-      return `Transform3DDesc | Float32Array | number[] | string`;
-    }
-    if (type.json === 'Transform2DDesc') {
-      return `Transform2DDesc | Float32Array | number[] | string`;
-    }
     return `${type.json} | string`;
   }
   if (isJsonArray(type)) {
@@ -91,6 +88,10 @@ export class NodeApiStrategy implements CodegenStrategy {
       for (const p of fn.params) {
         if (isJson(p.type)) addType(p.type.json);
         if (isJsonArray(p.type)) addType(p.type.jsonArray);
+        if (isNativeStruct(p.type))
+          addType(p.type.nativeStruct === 'SpatialAudio' ? 'SpatialAudio' : p.type.nativeStruct);
+        if (p.out && isNativeStruct(p.type) && p.type.nativeStruct === 'CameraLookAt3D')
+          addType('CameraLookAt3DStateDesc');
       }
     }
 
@@ -164,10 +165,18 @@ export class NodeApiStrategy implements CodegenStrategy {
     for (const fn of context.functions) {
       if (fn.methodName === 'getLastError') continue;
 
+      const outParam = fn.params.find((p) => p.out && isNativeStruct(p.type));
+      const outStruct =
+        outParam && isNativeStruct(outParam.type) ? outParam.type.nativeStruct : undefined;
       const params = fn.params
+        .filter((p) => !p.out)
         .map((p) => `${p.name}${p.optional ? '?' : ''}: ${mapParamTsType(p.type)}`)
         .join(', ');
-      const retType = mapReturnTsType(fn.returnType, !!fn.returnsParamField);
+      const retType = outStruct
+        ? outStruct === 'CameraLookAt3D'
+          ? 'CameraLookAt3DStateDesc'
+          : outStruct
+        : mapReturnTsType(fn.returnType, !!fn.returnsParamField);
 
       lines.push('');
       lines.push(`  /** ${fn.doc} */`);
@@ -180,6 +189,7 @@ export class NodeApiStrategy implements CodegenStrategy {
 
       // Prepare call args, parsing JSON strings to objects if passed as string
       const callArgs = fn.params
+        .filter((p) => !p.out)
         .map((p) => {
           if (isJson(p.type) || isJsonArray(p.type)) {
             return `typeof ${p.name} === 'string' ? JSON.parse(${p.name}) : ${p.name}`;

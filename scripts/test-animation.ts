@@ -78,6 +78,12 @@ if (events.length !== 1 || events[0]!.eventType !== 'completed') {
 // 2. Test binding to a Realm 3D model transform
 console.log('\n--> Testing Realm 3D entity transform animation binding...');
 engine.realm3dCreate(1);
+engine.realm3dCreateCamera(
+  1,
+  1,
+  { fovY: 60, near: 0.1, far: 1000 },
+  { position: [0, 0, 5], rotation: [0, 0, 0, 1] }
+);
 engine.realm3dCreateModel(
   1,
   10,
@@ -126,14 +132,14 @@ engine.animationTransitionTo(200, {
 engine.animationStep(0.5);
 const modelT = engine.realm3dGetModelTransform(1, 10);
 console.log(
-  `Model position halfway: [${modelT[0]!.toFixed(1)}, ${modelT[1]!.toFixed(1)}, ${modelT[2]!.toFixed(1)}]`
+  `Model position halfway: [${modelT.position[0].toFixed(1)}, ${modelT.position[1].toFixed(1)}, ${modelT.position[2].toFixed(1)}]`
 );
 if (
-  Math.abs(modelT[0]! - 5.0) > 0.1 ||
-  Math.abs(modelT[1]! - 10.0) > 0.1 ||
-  Math.abs(modelT[2]! - 15.0) > 0.1
+  Math.abs(modelT.position[0] - 5.0) > 0.1 ||
+  Math.abs(modelT.position[1] - 10.0) > 0.1 ||
+  Math.abs(modelT.position[2] - 15.0) > 0.1
 ) {
-  throw new Error(`Expected model pos [5, 10, 15], got [${modelT.slice(0, 3)}]`);
+  throw new Error(`Expected model pos [5, 10, 15], got [${modelT.position}]`);
 }
 
 // 3. Test Custom Channels
@@ -238,9 +244,8 @@ if (Math.abs(curVal2D[0] - 100.0) > 10.0) {
 
 // Test PathFollow Target Lock
 const pathTarget: any = {
-  kind: 'modelTransform3D',
-  realmId: 1,
-  modelId: 777
+  kind: 'customChannel',
+  channelId: 777
 };
 engine.animationCreatePathFollow(
   402,
@@ -254,6 +259,34 @@ engine.animationCreatePathFollow(
   }
 );
 engine.animationBindPathFollowTarget(402, pathTarget);
+
+// A 3D path may independently animate the optional camera look-at target.
+engine.animationCreatePathFollow(
+  404,
+  [
+    { type: 'moveTo', to: [0, 0, 0] },
+    { type: 'lineTo', to: [4, 2, -3] }
+  ],
+  { duration: 1.0, valueType: 'position3D' }
+);
+engine.animationBindPathFollowTarget(404, {
+  kind: 'camera3DLookAt',
+  realmId: 1,
+  cameraId: 1
+});
+engine.animationStep(0.5);
+const animatedLookAt = engine.realm3dGetCameraLookAt(1, 1);
+if (
+  !animatedLookAt.enabled ||
+  !animatedLookAt.target ||
+  Math.abs(animatedLookAt.target[0]! - 2.0) > 0.1 ||
+  Math.abs(animatedLookAt.target[1]! - 1.0) > 0.1 ||
+  Math.abs(animatedLookAt.target[2]! - -1.5) > 0.1
+) {
+  throw new Error(
+    `Expected camera lookAt to follow path 404, got ${JSON.stringify(animatedLookAt)}`
+  );
+}
 
 // Transition tries to bind to the same target: must fail!
 engine.animationCreateScalarTransition(403, 0.0, 1.0, 0.0, 0);
@@ -275,6 +308,7 @@ console.log('✔ Transition 403 acquired target after PathFollow destruction!');
 
 // Cleanup
 engine.animationDestroyPathFollow(401);
+engine.animationDestroyPathFollow(404);
 engine.animationDestroyTransition(403);
 
 engine.platformShutdown();

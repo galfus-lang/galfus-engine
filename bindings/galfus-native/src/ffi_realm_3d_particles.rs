@@ -3,6 +3,7 @@ use std::os::raw::c_char;
 use galfus_realm_3d::Realm3DContext;
 
 use crate::ffi::{from_c_str, set_last_error};
+use crate::ffi_native_structs::GalfusTransform3D;
 use crate::ffi_realm_3d_desc::{ParticleEmitter3DDesc, Transform3DDesc};
 use crate::state::with_multiverse_mut;
 
@@ -71,29 +72,21 @@ pub unsafe extern "C" fn galfus_realm_3d_create_particle_emitter(
 pub unsafe extern "C" fn galfus_realm_3d_set_particle_emitter_transform(
     realm_id: u32,
     emitter_id: u32,
-    transform_json: *const c_char,
+    transform: *const GalfusTransform3D,
 ) -> i32 {
-    let transform_desc: Transform3DDesc =
-        match serde_json::from_str(match unsafe { from_c_str(transform_json) } {
-            Ok(s) => s,
-            Err(e) => {
-                set_last_error(&e);
-                return -1;
-            }
-        }) {
-            Ok(d) => d,
-            Err(e) => {
-                set_last_error(&format!("Invalid Transform3DDesc: {e}"));
-                return -1;
-            }
-        };
+    if transform.is_null() {
+        set_last_error("Null pointer passed to set_particle_emitter_transform");
+        return -1;
+    }
+    // SAFETY: The pointer was checked above and copied before this function returns.
+    let transform = unsafe { (*transform).into() };
 
     match with_multiverse_mut(|mv| {
         let realm = mv
             .get_realm_mut::<Realm3DContext>(realm_id)
             .ok_or_else(|| format!("Realm3D #{realm_id} not found"))?;
         realm
-            .set_particle_emitter_transform(emitter_id, transform_desc.into())
+            .set_particle_emitter_transform(emitter_id, transform)
             .map_err(|e| e.to_string())
     }) {
         Ok(()) => 0,

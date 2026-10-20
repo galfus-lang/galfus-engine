@@ -3,14 +3,23 @@ export type PrimitiveType =
 
 export type BufferElementType = 'u8' | 'u32' | 'f32';
 
+/** Fixed C-layout values passed by pointer for hot-path APIs. */
+export type NativeStructName = 'Transform2D' | 'Transform3D' | 'CameraLookAt3D' | 'SpatialAudio';
+
 export type DataType =
-  PrimitiveType | { json: string } | { jsonArray: string } | { buffer: BufferElementType };
+  | PrimitiveType
+  | { json: string }
+  | { jsonArray: string }
+  | { buffer: BufferElementType }
+  | { nativeStruct: NativeStructName };
 
 export interface ParamSpec {
   name: string;
   type: DataType;
   doc: string;
   optional?: boolean;
+  /** The native callee writes this caller-owned struct. */
+  out?: boolean;
 }
 
 export interface FunctionSpec {
@@ -38,6 +47,11 @@ export function isJsonArray(type: DataType): type is { jsonArray: string } {
 /** A contiguous native-endian typed buffer passed without JSON serialization. */
 export function isBuffer(type: DataType): type is { buffer: BufferElementType } {
   return typeof type === 'object' && 'buffer' in type;
+}
+
+/** A fixed-layout C value passed through a pointer, never serialized as JSON. */
+export function isNativeStruct(type: DataType): type is { nativeStruct: NativeStructName } {
+  return typeof type === 'object' && 'nativeStruct' in type;
 }
 
 /** Field type representation for schema descriptors. */

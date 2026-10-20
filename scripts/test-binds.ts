@@ -77,6 +77,10 @@ assert (w.value, h.value) == (640, 480), f"Expected (640, 480), got {(w.value, h
 
 # 4. Realm Lifecycle
 galfus.realm3d_create(10)
+galfus.realm3d_create_camera(10, 1, {"fovY": 60, "near": 0.1, "far": 1000}, {"position": [0, 0, 0]})
+galfus.realm3d_set_camera_transform(10, 1, {"position": [4, 5, 6], "rotation": [0, 0, 0, 1], "scale": [1, 1, 1]})
+transform = galfus.realm3d_get_camera_transform(10, 1)
+assert transform["position"] == [4.0, 5.0, 6.0], f"Unexpected native transform: {transform}"
 galfus.realm2d_create(20)
 galfus.realm_destroy(10)
 galfus.realm_destroy(20)
@@ -115,6 +119,10 @@ galfus.multiverse_create_target(1, '{"kind":{"type":"texture","width":640,"heigh
 
 -- 4. Realm Lifecycle
 galfus.realm3d_create(10)
+galfus.realm3d_create_camera(10, 1, '{"fovY":60,"near":0.1,"far":1000}', '{"position":[0,0,0]}')
+galfus.realm3d_set_camera_transform(10, 1, { position = {4, 5, 6}, rotation = {0, 0, 0, 1}, scale = {1, 1, 1} })
+local transform = galfus.realm3d_get_camera_transform(10, 1)
+assert(transform.position[1] == 4 and transform.position[2] == 5 and transform.position[3] == 6, "Unexpected native transform")
 galfus.realm2d_create(20)
 galfus.realm_destroy(10)
 galfus.realm_destroy(20)
@@ -169,6 +177,14 @@ int main() {
 
     res = galfus_realm_3d_create(10);
     assert(res == 0);
+    res = galfus_realm_3d_create_camera(10, 1, "{\\"fovY\\":60,\\"near\\":0.1,\\"far\\":1000}", "{\\"position\\":[0,0,0]}");
+    assert(res == 0);
+    GalfusTransform3D transform = {4, 5, 6, 0, 0, 0, 1, 1, 1, 1};
+    res = galfus_realm_3d_set_camera_transform(10, 1, &transform);
+    assert(res == 0);
+    GalfusTransform3D readback = {0};
+    res = galfus_realm_3d_get_camera_transform(10, 1, &readback);
+    assert(res == 0 && readback.position_x == 4 && readback.position_y == 5 && readback.position_z == 6);
     res = galfus_realm_destroy(10);
     assert(res == 0);
 
@@ -229,6 +245,12 @@ runStep('C# SDK (sdk/csharp/Galfus.cs)', () => {
   const content = Bun.file(csharpFile);
   if (content.size < 1000) {
     throw new Error(`Generated Galfus.cs file is suspiciously small (${content.size} bytes)`);
+  }
+  const text = spawnSync('grep', ['-q', 'struct GalfusTransform3D', csharpFile], {
+    encoding: 'utf-8'
+  });
+  if (text.status !== 0) {
+    throw new Error('C# SDK is missing fixed-layout transform structs');
   }
 });
 

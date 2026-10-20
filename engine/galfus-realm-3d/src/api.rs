@@ -1,6 +1,6 @@
 //! Entity management and scene configuration API for `Realm3DContext`.
 
-use galfus_realm_3d_resources::camera::Camera3D;
+use galfus_realm_3d_resources::camera::{Camera3D, CameraLookAt3D};
 use galfus_realm_3d_resources::environment::EnvironmentRealm3D;
 use galfus_realm_3d_resources::geometry::Geometry3D;
 use galfus_realm_3d_resources::light::Light3D;
@@ -34,6 +34,58 @@ impl Realm3DContext {
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "Camera", id))?
             .1 = transform;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Sets the optional world-space look-at point and up direction of an existing camera.
+    pub fn set_camera_look_at(
+        &mut self,
+        id: u32,
+        target: glam::Vec3,
+        up: glam::Vec3,
+    ) -> RealmResult<()> {
+        let camera = &mut self
+            .cameras
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "Camera", id))?
+            .0;
+        camera
+            .set_look_at(target, up)
+            .map_err(galfus_realm_core::error::RealmError::Internal)?;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates only the look-at target, preserving the existing up vector or using world up.
+    pub fn set_camera_look_at_target(&mut self, id: u32, target: glam::Vec3) -> RealmResult<()> {
+        let up = self
+            .cameras
+            .get(&id)
+            .ok_or_else(|| not_found(self.id, "Camera", id))?
+            .0
+            .look_at
+            .map(|look_at| look_at.up)
+            .unwrap_or(glam::Vec3::Y);
+        self.set_camera_look_at(id, target, up)
+    }
+
+    /// Returns the optional look-at configuration of an existing camera.
+    pub fn get_camera_look_at(&self, id: u32) -> RealmResult<Option<CameraLookAt3D>> {
+        self.cameras
+            .get(&id)
+            .map(|entry| entry.0.look_at)
+            .ok_or_else(|| not_found(self.id, "Camera", id))
+    }
+
+    /// Clears the optional look-at configuration of an existing camera.
+    pub fn clear_camera_look_at(&mut self, id: u32) -> RealmResult<()> {
+        let camera = &mut self
+            .cameras
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "Camera", id))?
+            .0;
+        camera.clear_look_at();
         self.dirty = true;
         Ok(())
     }

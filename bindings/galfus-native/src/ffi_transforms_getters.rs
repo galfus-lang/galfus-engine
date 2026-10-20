@@ -1,180 +1,112 @@
-//! Direct float array transforms and query getters for Galfus Engine.
+//! Fixed-layout transform and state query functions for Galfus Engine.
 #![allow(clippy::missing_safety_doc)]
 
 use galfus_realm_2d::Realm2DContext;
-use galfus_realm_2d_resources::transform::Transform2D;
 use galfus_realm_3d::Realm3DContext;
-use galfus_realm_3d_resources::transform::Transform3D;
-use glam::{Quat, Vec2, Vec3};
+use glam::Vec3;
 
 use crate::ffi::set_last_error;
+use crate::ffi_native_structs::{GalfusCameraLookAt3D, GalfusTransform2D, GalfusTransform3D};
 use crate::state::{with_context, with_multiverse, with_multiverse_mut};
 
-// ============================================================================
-// Direct Float Array Fast-Path Transforms (3D)
-// 10 floats: [px, py, pz, rx, ry, rz, rw, sx, sy, sz]
-// ============================================================================
+// State & transform query getters.
 
-/// Sets the transform of a 3D model directly from a 10-float buffer.
-/// Layout: `[px, py, pz, rx, ry, rz, rw, sx, sy, sz]`
+/// Sets or clears a camera look-at state from a fixed C-layout value.
+///
+/// `look_at` is copied during this call. Set `enabled` to zero to clear the look-at state.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_3d_set_model_transform_raw(
+pub unsafe extern "C" fn galfus_realm_3d_set_camera_look_at(
     realm_id: u32,
-    model_id: u32,
-    ptr: *const f32,
+    camera_id: u32,
+    look_at: *const GalfusCameraLookAt3D,
 ) -> i32 {
-    if ptr.is_null() {
-        set_last_error("Null pointer passed to set_model_transform_raw");
+    if look_at.is_null() {
+        set_last_error("Null pointer passed to set_camera_look_at");
         return -1;
     }
-    let slice = unsafe { std::slice::from_raw_parts(ptr, 10) };
-    let transform = Transform3D {
-        position: Vec3::new(slice[0], slice[1], slice[2]),
-        rotation: Quat::from_xyzw(slice[3], slice[4], slice[5], slice[6]),
-        scale: Vec3::new(slice[7], slice[8], slice[9]),
-    };
-
+    // SAFETY: The pointer was checked above and the input is copied before this function returns.
+    let look_at = unsafe { *look_at };
     match with_multiverse_mut(|mv| {
         let realm = mv
             .get_realm_mut::<Realm3DContext>(realm_id)
             .ok_or_else(|| format!("Realm3D #{realm_id} not found"))?;
-        realm
-            .set_model_transform(model_id, transform)
-            .map_err(|e| e.to_string())
+        if look_at.enabled == 0 {
+            realm.clear_camera_look_at(camera_id)
+        } else {
+            realm.set_camera_look_at(
+                camera_id,
+                Vec3::new(look_at.target_x, look_at.target_y, look_at.target_z),
+                Vec3::new(look_at.up_x, look_at.up_y, look_at.up_z),
+            )
+        }
+        .map_err(|error| error.to_string())
     }) {
         Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
+        Err(error) => {
+            set_last_error(&error);
             -1
         }
     }
 }
 
-/// Sets the transform of a 3D camera directly from a 10-float buffer.
-/// Layout: `[px, py, pz, rx, ry, rz, rw, sx, sy, sz]`
+/// Reads a camera look-at state into a host-owned fixed C-layout value.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_3d_set_camera_transform_raw(
+pub unsafe extern "C" fn galfus_realm_3d_get_camera_look_at(
     realm_id: u32,
     camera_id: u32,
-    ptr: *const f32,
+    out_look_at: *mut GalfusCameraLookAt3D,
 ) -> i32 {
-    if ptr.is_null() {
-        set_last_error("Null pointer passed to set_camera_transform_raw");
+    if out_look_at.is_null() {
+        set_last_error("Null pointer passed to get_camera_look_at");
         return -1;
     }
-    let slice = unsafe { std::slice::from_raw_parts(ptr, 10) };
-    let transform = Transform3D {
-        position: Vec3::new(slice[0], slice[1], slice[2]),
-        rotation: Quat::from_xyzw(slice[3], slice[4], slice[5], slice[6]),
-        scale: Vec3::new(slice[7], slice[8], slice[9]),
-    };
-
-    match with_multiverse_mut(|mv| {
+    match with_multiverse(|mv| {
         let realm = mv
-            .get_realm_mut::<Realm3DContext>(realm_id)
+            .get_realm::<Realm3DContext>(realm_id)
             .ok_or_else(|| format!("Realm3D #{realm_id} not found"))?;
-        realm
-            .set_camera_transform(camera_id, transform)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-// ============================================================================
-// Direct Float Array Fast-Path Transforms (2D)
-// 6 floats: [px, py, rot, sx, sy, z_layer]
-// ============================================================================
-
-/// Sets the transform of a 2D sprite directly from a 6-float buffer.
-/// Layout: `[px, py, rot, sx, sy, z_layer]`
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_2d_set_sprite_transform_raw(
-    realm_id: u32,
-    sprite_id: u32,
-    ptr: *const f32,
-) -> i32 {
-    if ptr.is_null() {
-        set_last_error("Null pointer passed to set_sprite_transform_raw");
-        return -1;
-    }
-    let slice = unsafe { std::slice::from_raw_parts(ptr, 6) };
-    let transform = Transform2D {
-        position: Vec2::new(slice[0], slice[1]),
-        rotation: slice[2],
-        scale: Vec2::new(slice[3], slice[4]),
-        z_layer: slice[5] as i32,
-        draw_order: 0,
-    };
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm.set_sprite_transform(sprite_id, transform);
+        let look_at = realm
+            .get_camera_look_at(camera_id)
+            .map_err(|error| error.to_string())?;
+        let value = look_at.map_or(
+            GalfusCameraLookAt3D {
+                enabled: 0,
+                target_x: 0.0,
+                target_y: 0.0,
+                target_z: 0.0,
+                up_x: 0.0,
+                up_y: 0.0,
+                up_z: 0.0,
+            },
+            |look_at| GalfusCameraLookAt3D {
+                enabled: 1,
+                target_x: look_at.target.x,
+                target_y: look_at.target.y,
+                target_z: look_at.target.z,
+                up_x: look_at.up.x,
+                up_y: look_at.up.y,
+                up_z: look_at.up.z,
+            },
+        );
+        // SAFETY: The pointer was checked above and points to one caller-owned output struct.
+        unsafe { *out_look_at = value };
         Ok(())
     }) {
         Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
+        Err(error) => {
+            set_last_error(&error);
             -1
         }
     }
 }
 
-/// Sets the transform of a 2D camera directly from a 6-float buffer.
-/// Layout: `[px, py, rot, sx, sy, z_layer]`
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_2d_set_camera_transform_raw(
-    realm_id: u32,
-    camera_id: u32,
-    ptr: *const f32,
-) -> i32 {
-    if ptr.is_null() {
-        set_last_error("Null pointer passed to set_camera_transform_raw");
-        return -1;
-    }
-    let slice = unsafe { std::slice::from_raw_parts(ptr, 6) };
-    let transform = Transform2D {
-        position: Vec2::new(slice[0], slice[1]),
-        rotation: slice[2],
-        scale: Vec2::new(slice[3], slice[4]),
-        z_layer: slice[5] as i32,
-        draw_order: 0,
-    };
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm.set_camera_transform(camera_id, transform);
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-// ============================================================================
-// State & Transform Query Getters
-// ============================================================================
-
-/// Reads the transform of a 3D model into an out 10-float buffer.
-/// Layout: `[px, py, pz, rx, ry, rz, rw, sx, sy, sz]`
+/// Reads the transform of a 3D model into a caller-owned fixed-layout value.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_3d_get_model_transform(
     realm_id: u32,
     model_id: u32,
-    out_ptr: *mut f32,
+    out_transform: *mut GalfusTransform3D,
 ) -> i32 {
-    if out_ptr.is_null() {
+    if out_transform.is_null() {
         set_last_error("Null pointer passed to get_model_transform");
         return -1;
     }
@@ -185,17 +117,8 @@ pub unsafe extern "C" fn galfus_realm_3d_get_model_transform(
         let t = realm
             .get_model_transform(model_id)
             .map_err(|e| e.to_string())?;
-        let slice = unsafe { std::slice::from_raw_parts_mut(out_ptr, 10) };
-        slice[0] = t.position.x;
-        slice[1] = t.position.y;
-        slice[2] = t.position.z;
-        slice[3] = t.rotation.x;
-        slice[4] = t.rotation.y;
-        slice[5] = t.rotation.z;
-        slice[6] = t.rotation.w;
-        slice[7] = t.scale.x;
-        slice[8] = t.scale.y;
-        slice[9] = t.scale.z;
+        // SAFETY: The pointer was checked above and points to one caller-owned output struct.
+        unsafe { *out_transform = t.into() };
         Ok(())
     }) {
         Ok(()) => 0,
@@ -206,15 +129,14 @@ pub unsafe extern "C" fn galfus_realm_3d_get_model_transform(
     }
 }
 
-/// Reads the transform of a 3D camera into an out 10-float buffer.
-/// Layout: `[px, py, pz, rx, ry, rz, rw, sx, sy, sz]`
+/// Reads the transform of a 3D camera into a caller-owned fixed-layout value.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_3d_get_camera_transform(
     realm_id: u32,
     camera_id: u32,
-    out_ptr: *mut f32,
+    out_transform: *mut GalfusTransform3D,
 ) -> i32 {
-    if out_ptr.is_null() {
+    if out_transform.is_null() {
         set_last_error("Null pointer passed to get_camera_transform");
         return -1;
     }
@@ -225,17 +147,8 @@ pub unsafe extern "C" fn galfus_realm_3d_get_camera_transform(
         let t = realm
             .get_camera_transform(camera_id)
             .map_err(|e| e.to_string())?;
-        let slice = unsafe { std::slice::from_raw_parts_mut(out_ptr, 10) };
-        slice[0] = t.position.x;
-        slice[1] = t.position.y;
-        slice[2] = t.position.z;
-        slice[3] = t.rotation.x;
-        slice[4] = t.rotation.y;
-        slice[5] = t.rotation.z;
-        slice[6] = t.rotation.w;
-        slice[7] = t.scale.x;
-        slice[8] = t.scale.y;
-        slice[9] = t.scale.z;
+        // SAFETY: The pointer was checked above and points to one caller-owned output struct.
+        unsafe { *out_transform = t.into() };
         Ok(())
     }) {
         Ok(()) => 0,
@@ -281,15 +194,14 @@ pub unsafe extern "C" fn galfus_realm_3d_get_model_aabb(
     }
 }
 
-/// Reads the transform of a 2D sprite into an out 6-float buffer.
-/// Layout: `[px, py, rot, sx, sy, z_layer]`
+/// Reads the transform of a 2D sprite into a caller-owned fixed-layout value.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_get_sprite_transform(
     realm_id: u32,
     sprite_id: u32,
-    out_ptr: *mut f32,
+    out_transform: *mut GalfusTransform2D,
 ) -> i32 {
-    if out_ptr.is_null() {
+    if out_transform.is_null() {
         set_last_error("Null pointer passed to get_sprite_transform");
         return -1;
     }
@@ -300,13 +212,8 @@ pub unsafe extern "C" fn galfus_realm_2d_get_sprite_transform(
         let t = realm
             .get_sprite_transform(sprite_id)
             .ok_or_else(|| format!("Sprite #{sprite_id} not found in Realm2D #{realm_id}"))?;
-        let slice = unsafe { std::slice::from_raw_parts_mut(out_ptr, 6) };
-        slice[0] = t.position.x;
-        slice[1] = t.position.y;
-        slice[2] = t.rotation;
-        slice[3] = t.scale.x;
-        slice[4] = t.scale.y;
-        slice[5] = t.z_layer as f32;
+        // SAFETY: The pointer was checked above and points to one caller-owned output struct.
+        unsafe { *out_transform = t.into() };
         Ok(())
     }) {
         Ok(()) => 0,
@@ -317,15 +224,14 @@ pub unsafe extern "C" fn galfus_realm_2d_get_sprite_transform(
     }
 }
 
-/// Reads the transform of a 2D camera into an out 6-float buffer.
-/// Layout: `[px, py, rot, sx, sy, z_layer]`
+/// Reads the transform of a 2D camera into a caller-owned fixed-layout value.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_get_camera_transform(
     realm_id: u32,
     camera_id: u32,
-    out_ptr: *mut f32,
+    out_transform: *mut GalfusTransform2D,
 ) -> i32 {
-    if out_ptr.is_null() {
+    if out_transform.is_null() {
         set_last_error("Null pointer passed to get_camera_transform");
         return -1;
     }
@@ -336,13 +242,8 @@ pub unsafe extern "C" fn galfus_realm_2d_get_camera_transform(
         let t = realm
             .get_camera_transform(camera_id)
             .ok_or_else(|| format!("Camera #{camera_id} not found in Realm2D #{realm_id}"))?;
-        let slice = unsafe { std::slice::from_raw_parts_mut(out_ptr, 6) };
-        slice[0] = t.position.x;
-        slice[1] = t.position.y;
-        slice[2] = t.rotation;
-        slice[3] = t.scale.x;
-        slice[4] = t.scale.y;
-        slice[5] = t.z_layer as f32;
+        // SAFETY: The pointer was checked above and points to one caller-owned output struct.
+        unsafe { *out_transform = t.into() };
         Ok(())
     }) {
         Ok(()) => 0,

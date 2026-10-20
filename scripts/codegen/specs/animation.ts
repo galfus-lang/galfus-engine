@@ -146,6 +146,13 @@ export const animationDescriptors: DescSpec[] = [
       },
       {
         inline: {
+          kind: { type: { literal: 'camera3DLookAt' } },
+          realmId: { type: 'number' },
+          cameraId: { type: 'number' }
+        }
+      },
+      {
+        inline: {
           kind: { type: { literal: 'material3DBaseColor' } },
           realmId: { type: 'number' },
           materialId: { type: 'number' }

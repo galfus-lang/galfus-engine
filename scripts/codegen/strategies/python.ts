@@ -1,11 +1,14 @@
 import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-import { type DataType, isBuffer, isJson, isJsonArray } from '../spec.ts';
+import { type DataType, isBuffer, isJson, isJsonArray, isNativeStruct } from '../spec.ts';
 
 function toSnakeCase(str: string): string {
   return str.replace(/([A-Z])/g, '_$1').toLowerCase();
 }
 
 function mapPythonCType(type: DataType, isParam: boolean): string {
+  if (isNativeStruct(type)) {
+    return `ctypes.POINTER(Galfus${type.nativeStruct})`;
+  }
   if (isBuffer(type)) {
     const element =
       type.buffer === 'u8'
@@ -95,6 +98,44 @@ export class PythonStrategy implements CodegenStrategy {
       'class GalfusError(Exception):',
       '    """Exception raised when a Galfus engine call fails."""',
       '    pass',
+      '',
+      'class GalfusTransform3D(ctypes.Structure):',
+      '    _fields_ = [("position_x", ctypes.c_float), ("position_y", ctypes.c_float), ("position_z", ctypes.c_float), ("rotation_x", ctypes.c_float), ("rotation_y", ctypes.c_float), ("rotation_z", ctypes.c_float), ("rotation_w", ctypes.c_float), ("scale_x", ctypes.c_float), ("scale_y", ctypes.c_float), ("scale_z", ctypes.c_float)]',
+      '',
+      'class GalfusTransform2D(ctypes.Structure):',
+      '    _fields_ = [("position_x", ctypes.c_float), ("position_y", ctypes.c_float), ("rotation", ctypes.c_float), ("scale_x", ctypes.c_float), ("scale_y", ctypes.c_float), ("z_layer", ctypes.c_int32), ("draw_order", ctypes.c_int32)]',
+      '',
+      'class GalfusCameraLookAt3D(ctypes.Structure):',
+      '    _fields_ = [("enabled", ctypes.c_uint32), ("target_x", ctypes.c_float), ("target_y", ctypes.c_float), ("target_z", ctypes.c_float), ("up_x", ctypes.c_float), ("up_y", ctypes.c_float), ("up_z", ctypes.c_float)]',
+      '',
+      'class GalfusSpatialAudio(ctypes.Structure):',
+      '    _fields_ = [("emitter_x", ctypes.c_float), ("emitter_y", ctypes.c_float), ("emitter_z", ctypes.c_float), ("emitter_rotation_x", ctypes.c_float), ("emitter_rotation_y", ctypes.c_float), ("emitter_rotation_z", ctypes.c_float), ("emitter_rotation_w", ctypes.c_float), ("listener_x", ctypes.c_float), ("listener_y", ctypes.c_float), ("listener_z", ctypes.c_float), ("listener_rotation_x", ctypes.c_float), ("listener_rotation_y", ctypes.c_float), ("listener_rotation_z", ctypes.c_float), ("listener_rotation_w", ctypes.c_float), ("volume", ctypes.c_float), ("min_distance", ctypes.c_float), ("max_distance", ctypes.c_float), ("rolloff", ctypes.c_float), ("speed", ctypes.c_float), ("looping", ctypes.c_uint32)]',
+      '',
+      'def _encode_transform_3d(value: Dict[str, Any]) -> GalfusTransform3D:',
+      '    position, rotation, scale = value.get("position", [0, 0, 0]), value.get("rotation", [0, 0, 0, 1]), value.get("scale", [1, 1, 1])',
+      '    return GalfusTransform3D(*position, *rotation, *scale)',
+      '',
+      'def _decode_transform_3d(value: GalfusTransform3D) -> Dict[str, Any]:',
+      '    return {"position": [value.position_x, value.position_y, value.position_z], "rotation": [value.rotation_x, value.rotation_y, value.rotation_z, value.rotation_w], "scale": [value.scale_x, value.scale_y, value.scale_z]}',
+      '',
+      'def _encode_transform_2d(value: Dict[str, Any]) -> GalfusTransform2D:',
+      '    position, scale = value.get("position", [0, 0]), value.get("scale", [1, 1])',
+      '    return GalfusTransform2D(position[0], position[1], value.get("rotation", 0), scale[0], scale[1], value.get("zLayer", 0), value.get("drawOrder", 0))',
+      '',
+      'def _decode_transform_2d(value: GalfusTransform2D) -> Dict[str, Any]:',
+      '    return {"position": [value.position_x, value.position_y], "rotation": value.rotation, "scale": [value.scale_x, value.scale_y], "zLayer": value.z_layer, "drawOrder": value.draw_order}',
+      '',
+      'def _encode_camera_look_at_3d(value: Dict[str, Any]) -> GalfusCameraLookAt3D:',
+      '    target, up = value["target"], value.get("up", [0, 1, 0])',
+      '    return GalfusCameraLookAt3D(1, *target, *up)',
+      '',
+      'def _decode_camera_look_at_3d(value: GalfusCameraLookAt3D) -> Dict[str, Any]:',
+      '    return {"enabled": bool(value.enabled), **({"target": [value.target_x, value.target_y, value.target_z], "up": [value.up_x, value.up_y, value.up_z]} if value.enabled else {})}',
+      '',
+      'def _encode_spatial_audio(value: Dict[str, Any]) -> GalfusSpatialAudio:',
+      '    emitter, listener, config = value["emitter"], value["listener"], value["config"]',
+      '    emitter_rotation, listener_rotation = emitter.get("rotation", [0, 0, 0, 1]), listener.get("rotation", [0, 0, 0, 1])',
+      '    return GalfusSpatialAudio(*emitter["position"], *emitter_rotation, *listener["position"], *listener_rotation, config.get("volume", 1), config.get("minDistance", 1), config.get("maxDistance", 100), config.get("rolloff", 1), config.get("speed", 1), int(config.get("looping", False)))',
       ''
     ];
 
@@ -131,9 +172,11 @@ export class PythonStrategy implements CodegenStrategy {
 
       // Python function signature
       const typedParams: string[] = [];
-      for (const p of fn.params) {
+      for (const p of fn.params.filter((param) => !param.out)) {
         const pName = toSnakeCase(p.name);
-        if (isJson(p.type) || isJsonArray(p.type)) {
+        if (isNativeStruct(p.type)) {
+          typedParams.push(`${pName}: Dict[str, Any]`);
+        } else if (isJson(p.type) || isJsonArray(p.type)) {
           typedParams.push(`${pName}: Union[Dict[str, Any], List[Any], str]`);
         } else if (p.type === 'string') {
           typedParams.push(`${pName}: str`);
@@ -148,8 +191,11 @@ export class PythonStrategy implements CodegenStrategy {
         }
       }
 
-      let returnAnnotation = 'None';
-      if (isJson(fn.returnType)) {
+      const outParam = fn.params.find((p) => p.out && isNativeStruct(p.type));
+      const outStruct =
+        outParam && isNativeStruct(outParam.type) ? outParam.type.nativeStruct : undefined;
+      let returnAnnotation = outParam ? 'Dict[str, Any]' : 'None';
+      if (!outParam && isJson(fn.returnType)) {
         returnAnnotation = 'Dict[str, Any]';
       } else if (isJsonArray(fn.returnType)) {
         returnAnnotation = 'List[Any]';
@@ -165,7 +211,21 @@ export class PythonStrategy implements CodegenStrategy {
       const callArgs: string[] = [];
       for (const p of fn.params) {
         const pName = toSnakeCase(p.name);
-        if (isJson(p.type) || isJsonArray(p.type)) {
+        if (p.out && isNativeStruct(p.type)) {
+          lines.push(`    _${pName} = Galfus${p.type.nativeStruct}()`);
+          callArgs.push(`ctypes.byref(_${pName})`);
+        } else if (isNativeStruct(p.type)) {
+          const encoder =
+            p.type.nativeStruct === 'Transform3D'
+              ? '_encode_transform_3d'
+              : p.type.nativeStruct === 'Transform2D'
+                ? '_encode_transform_2d'
+                : p.type.nativeStruct === 'CameraLookAt3D'
+                  ? '_encode_camera_look_at_3d'
+                  : '_encode_spatial_audio';
+          lines.push(`    _${pName} = ${encoder}(${pName})`);
+          callArgs.push(`ctypes.byref(_${pName})`);
+        } else if (isJson(p.type) || isJsonArray(p.type)) {
           lines.push(
             `    _${pName}_raw = ${pName} if isinstance(${pName}, str) else json.dumps(${pName})`
           );
@@ -179,7 +239,18 @@ export class PythonStrategy implements CodegenStrategy {
         }
       }
 
-      if (isJson(fn.returnType) || isJsonArray(fn.returnType)) {
+      if (outParam) {
+        lines.push(`    res = _lib.${fn.cName}(${callArgs.join(', ')})`);
+        lines.push(`    if res != 0:`);
+        lines.push(`        raise GalfusError(f"${fn.methodName} failed: {get_last_error()}")`);
+        const decoder =
+          outStruct === 'Transform3D'
+            ? '_decode_transform_3d'
+            : outStruct === 'Transform2D'
+              ? '_decode_transform_2d'
+              : '_decode_camera_look_at_3d';
+        lines.push(`    return ${decoder}(_${toSnakeCase(outParam.name)})`);
+      } else if (isJson(fn.returnType) || isJsonArray(fn.returnType)) {
         lines.push(`    json_str = _consume_string(_lib.${fn.cName}(${callArgs.join(', ')}))`);
         lines.push(`    if not json_str:`);
         lines.push(`        return ${isJsonArray(fn.returnType) ? '[]' : '{}'}`);

@@ -148,6 +148,22 @@ mod tests {
     }
 
     #[test]
+    fn test_camera_look_at_lifecycle() {
+        let mut realm = Realm3DContext::new(10);
+        realm
+            .create_camera(1, Camera3D::default(), Transform3D::default())
+            .unwrap();
+
+        realm.set_camera_look_at(1, Vec3::NEG_Z, Vec3::Y).unwrap();
+        let look_at = realm.get_camera_look_at(1).unwrap().unwrap();
+        assert_eq!(look_at.target, Vec3::NEG_Z);
+        assert_eq!(look_at.up, Vec3::Y);
+
+        realm.clear_camera_look_at(1).unwrap();
+        assert!(realm.get_camera_look_at(1).unwrap().is_none());
+    }
+
+    #[test]
     fn test_gizmo_system_operations() {
         let mut gizmos = GizmoSystem3D::new();
         assert!(gizmos.vertices().is_empty());

@@ -6,6 +6,7 @@ use galfus_realm_2d::Realm2DContext;
 use galfus_realm_2d_resources::{Light2D, Transform2D};
 
 use crate::ffi::{from_c_str, set_last_error};
+use crate::ffi_native_structs::GalfusTransform2D;
 use crate::ffi_realm_2d_desc::*;
 use crate::state::with_multiverse_mut;
 
@@ -96,15 +97,14 @@ pub unsafe extern "C" fn galfus_realm_2d_create_camera(
 pub unsafe extern "C" fn galfus_realm_2d_set_camera_transform(
     realm_id: u32,
     camera_id: u32,
-    transform_json: *const c_char,
+    transform: *const GalfusTransform2D,
 ) -> i32 {
-    let trans = match unsafe { parse_transform_2d(transform_json) } {
-        Ok(t) => t,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
+    if transform.is_null() {
+        set_last_error("Null pointer passed to set_camera_transform");
+        return -1;
+    }
+    // SAFETY: The pointer was checked above and copied before this function returns.
+    let trans = unsafe { (*transform).into() };
     match with_multiverse_mut(|mv| {
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
@@ -211,15 +211,14 @@ pub unsafe extern "C" fn galfus_realm_2d_create_sprite(
 pub unsafe extern "C" fn galfus_realm_2d_set_sprite_transform(
     realm_id: u32,
     sprite_id: u32,
-    transform_json: *const c_char,
+    transform: *const GalfusTransform2D,
 ) -> i32 {
-    let trans = match unsafe { parse_transform_2d(transform_json) } {
-        Ok(t) => t,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
+    if transform.is_null() {
+        set_last_error("Null pointer passed to set_sprite_transform");
+        return -1;
+    }
+    // SAFETY: The pointer was checked above and copied before this function returns.
+    let trans = unsafe { (*transform).into() };
     match with_multiverse_mut(|mv| {
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
@@ -287,15 +286,14 @@ pub unsafe extern "C" fn galfus_realm_2d_create_shape(
 pub unsafe extern "C" fn galfus_realm_2d_set_shape_transform(
     realm_id: u32,
     shape_id: u32,
-    transform_json: *const c_char,
+    transform: *const GalfusTransform2D,
 ) -> i32 {
-    let trans = match unsafe { parse_transform_2d(transform_json) } {
-        Ok(t) => t,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
+    if transform.is_null() {
+        set_last_error("Null pointer passed to set_shape_transform");
+        return -1;
+    }
+    // SAFETY: The pointer was checked above and copied before this function returns.
+    let trans = unsafe { (*transform).into() };
     match with_multiverse_mut(|mv| {
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
@@ -361,15 +359,14 @@ pub unsafe extern "C" fn galfus_realm_2d_create_light(
 pub unsafe extern "C" fn galfus_realm_2d_set_light_transform(
     realm_id: u32,
     light_id: u32,
-    transform_json: *const c_char,
+    transform: *const GalfusTransform2D,
 ) -> i32 {
-    let trans = match unsafe { parse_transform_2d(transform_json) } {
-        Ok(t) => t,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
+    if transform.is_null() {
+        set_last_error("Null pointer passed to set_light_transform");
+        return -1;
+    }
+    // SAFETY: The pointer was checked above and copied before this function returns.
+    let trans = unsafe { (*transform).into() };
     match with_multiverse_mut(|mv| {
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
@@ -483,15 +480,14 @@ pub unsafe extern "C" fn galfus_realm_2d_create_particle_emitter(
 pub unsafe extern "C" fn galfus_realm_2d_set_particle_emitter_transform(
     realm_id: u32,
     emitter_id: u32,
-    transform_json: *const c_char,
+    transform: *const GalfusTransform2D,
 ) -> i32 {
-    let transform = match unsafe { parse_transform_2d(transform_json) } {
-        Ok(t) => t,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
+    if transform.is_null() {
+        set_last_error("Null pointer passed to set_particle_emitter_transform");
+        return -1;
+    }
+    // SAFETY: The pointer was checked above and copied before this function returns.
+    let transform = unsafe { (*transform).into() };
 
     match with_multiverse_mut(|mv| {
         let realm = mv

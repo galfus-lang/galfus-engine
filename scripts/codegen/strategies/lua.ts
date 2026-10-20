@@ -1,5 +1,12 @@
 import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-import { type DataType, isBuffer, isJson, isJsonArray, type ParamSpec } from '../spec.ts';
+import {
+  type DataType,
+  isBuffer,
+  isJson,
+  isJsonArray,
+  isNativeStruct,
+  type ParamSpec
+} from '../spec.ts';
 
 function toSnakeCase(str: string): string {
   return str.replace(/([A-Z])/g, '_$1').toLowerCase();
@@ -7,6 +14,9 @@ function toSnakeCase(str: string): string {
 
 function mapLuaCParam(p: ParamSpec): string {
   const pName = toSnakeCase(p.name);
+  if (isNativeStruct(p.type)) {
+    return `${p.out ? '' : 'const '}Galfus${p.type.nativeStruct}* ${pName}`;
+  }
   if (isBuffer(p.type)) {
     const element =
       p.type.buffer === 'u8' ? 'uint8_t' : p.type.buffer === 'u32' ? 'uint32_t' : 'float';
@@ -73,6 +83,10 @@ export class LuaStrategy implements CodegenStrategy {
       'local ffi = require("ffi")',
       '',
       'ffi.cdef[[',
+      '    typedef struct { float position_x, position_y, position_z, rotation_x, rotation_y, rotation_z, rotation_w, scale_x, scale_y, scale_z; } GalfusTransform3D;',
+      '    typedef struct { float position_x, position_y, rotation, scale_x, scale_y; int32_t z_layer, draw_order; } GalfusTransform2D;',
+      '    typedef struct { uint32_t enabled; float target_x, target_y, target_z, up_x, up_y, up_z; } GalfusCameraLookAt3D;',
+      '    typedef struct { float emitter_x, emitter_y, emitter_z, emitter_rotation_x, emitter_rotation_y, emitter_rotation_z, emitter_rotation_w, listener_x, listener_y, listener_z, listener_rotation_x, listener_rotation_y, listener_rotation_z, listener_rotation_w, volume, min_distance, max_distance, rolloff, speed; uint32_t looping; } GalfusSpatialAudio;',
       '    void galfus_string_free(char* ptr);'
     ];
 
@@ -111,19 +125,98 @@ export class LuaStrategy implements CodegenStrategy {
       '    clib.galfus_string_free(c_str)',
       '    return str',
       'end',
+      '',
+      'local function encode_transform_3d(value)',
+      '    local position, rotation, scale = value.position or {0, 0, 0}, value.rotation or {0, 0, 0, 1}, value.scale or {1, 1, 1}',
+      '    return ffi.new("GalfusTransform3D", { position_x = position[1], position_y = position[2], position_z = position[3], rotation_x = rotation[1], rotation_y = rotation[2], rotation_z = rotation[3], rotation_w = rotation[4], scale_x = scale[1], scale_y = scale[2], scale_z = scale[3] })',
+      'end',
+      '',
+      'local function decode_transform_3d(value)',
+      '    return { position = {value.position_x, value.position_y, value.position_z}, rotation = {value.rotation_x, value.rotation_y, value.rotation_z, value.rotation_w}, scale = {value.scale_x, value.scale_y, value.scale_z} }',
+      'end',
+      '',
+      'local function encode_transform_2d(value)',
+      '    local position, scale = value.position or {0, 0}, value.scale or {1, 1}',
+      '    return ffi.new("GalfusTransform2D", { position_x = position[1], position_y = position[2], rotation = value.rotation or 0, scale_x = scale[1], scale_y = scale[2], z_layer = value.zLayer or 0, draw_order = value.drawOrder or 0 })',
+      'end',
+      '',
+      'local function decode_transform_2d(value)',
+      '    return { position = {value.position_x, value.position_y}, rotation = value.rotation, scale = {value.scale_x, value.scale_y}, zLayer = value.z_layer, drawOrder = value.draw_order }',
+      'end',
+      '',
+      'local function encode_camera_look_at_3d(value)',
+      '    local up = value.up or {0, 1, 0}',
+      '    return ffi.new("GalfusCameraLookAt3D", { enabled = 1, target_x = value.target[1], target_y = value.target[2], target_z = value.target[3], up_x = up[1], up_y = up[2], up_z = up[3] })',
+      'end',
+      '',
+      'local function decode_camera_look_at_3d(value)',
+      '    if value.enabled == 0 then return { enabled = false } end',
+      '    return { enabled = true, target = {value.target_x, value.target_y, value.target_z}, up = {value.up_x, value.up_y, value.up_z} }',
+      'end',
+      '',
+      'local function encode_spatial_audio(value)',
+      '    local emitter, listener, config = value.emitter, value.listener, value.config',
+      '    local er, lr = emitter.rotation or {0, 0, 0, 1}, listener.rotation or {0, 0, 0, 1}',
+      '    return ffi.new("GalfusSpatialAudio", { emitter_x = emitter.position[1], emitter_y = emitter.position[2], emitter_z = emitter.position[3], emitter_rotation_x = er[1], emitter_rotation_y = er[2], emitter_rotation_z = er[3], emitter_rotation_w = er[4], listener_x = listener.position[1], listener_y = listener.position[2], listener_z = listener.position[3], listener_rotation_x = lr[1], listener_rotation_y = lr[2], listener_rotation_z = lr[3], listener_rotation_w = lr[4], volume = config.volume or 1, min_distance = config.minDistance or 1, max_distance = config.maxDistance or 100, rolloff = config.rolloff or 1, speed = config.speed or 1, looping = config.looping and 1 or 0 })',
+      'end',
       ''
     );
 
     for (const fn of context.functions) {
       const luaFuncName = toSnakeCase(fn.methodName);
-      const paramNames = fn.params.map((p) => toSnakeCase(p.name)).join(', ');
+      const outParam = fn.params.find((p) => p.out && isNativeStruct(p.type));
+      const outStruct =
+        outParam && isNativeStruct(outParam.type) ? outParam.type.nativeStruct : undefined;
+      const paramNames = fn.params
+        .filter((p) => !p.out)
+        .map((p) => toSnakeCase(p.name))
+        .join(', ');
 
       lines.push(`--- ${fn.doc}`);
       lines.push(`function M.${luaFuncName}(${paramNames})`);
 
-      const callArgs = fn.params.map((p) => toSnakeCase(p.name)).join(', ');
+      const callArgParts: string[] = [];
+      for (const p of fn.params) {
+        const name = toSnakeCase(p.name);
+        if (p.out && isNativeStruct(p.type)) {
+          lines.push(`    local ${name} = ffi.new("Galfus${p.type.nativeStruct}")`);
+          callArgParts.push(name);
+        } else if (isNativeStruct(p.type)) {
+          const encoder =
+            p.type.nativeStruct === 'Transform3D'
+              ? 'encode_transform_3d'
+              : p.type.nativeStruct === 'Transform2D'
+                ? 'encode_transform_2d'
+                : p.type.nativeStruct === 'CameraLookAt3D'
+                  ? 'encode_camera_look_at_3d'
+                  : 'encode_spatial_audio';
+          lines.push(`    local _${name} = ${encoder}(${name})`);
+          callArgParts.push(`_${name}`);
+        } else {
+          callArgParts.push(name);
+        }
+      }
+      const callArgs = callArgParts.join(', ');
 
-      if (isJson(fn.returnType) || isJsonArray(fn.returnType) || fn.returnType === 'string') {
+      if (outParam) {
+        lines.push(`    local res = clib.${fn.cName}(${callArgs})`);
+        lines.push(`    if res ~= 0 then`);
+        lines.push(
+          `        error("${fn.methodName} failed: " .. (M.get_last_error() or "unknown"))`
+        );
+        lines.push(`    end`);
+        const decoder =
+          outStruct === 'Transform3D'
+            ? 'decode_transform_3d'
+            : outStruct === 'Transform2D'
+              ? 'decode_transform_2d'
+              : 'decode_camera_look_at_3d';
+        lines.push(`    return ${decoder}(${toSnakeCase(outParam.name)})`);
+      } else if (
+        isJson(fn.returnType) ||
+        isJsonArray(fn.returnType) ||
+        fn.returnType === 'string'
+      ) {
         lines.push(`    return consume_string(clib.${fn.cName}(${callArgs}))`);
       } else if (fn.returnType === 'i32') {
         lines.push(`    local res = clib.${fn.cName}(${callArgs})`);

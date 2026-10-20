@@ -87,18 +87,41 @@ galfus.realm3dCreateCamera(
 );
 const cam3dTf = galfus.realm3dGetCameraTransform(20, 1);
 if (
-  Math.abs(cam3dTf[0]! - 0) > 0.001 ||
-  Math.abs(cam3dTf[1]! - 5) > 0.001 ||
-  Math.abs(cam3dTf[2]! - -10) > 0.001
+  Math.abs(cam3dTf.position[0] - 0) > 0.001 ||
+  Math.abs(cam3dTf.position[1] - 5) > 0.001 ||
+  Math.abs(cam3dTf.position[2] - -10) > 0.001
 ) {
   throw new Error(`Realm3D Camera transform readback failed: ${cam3dTf}`);
 }
 
-// Set Camera Transform via Float32Array direct buffer
-galfus.realm3dSetCameraTransform(20, 1, new Float32Array([1.5, 2.5, 3.5, 0, 0, 0, 1, 1, 1, 1]));
+// Set Camera Transform through the rich object API; Bun packs its private native struct.
+galfus.realm3dSetCameraTransform(20, 1, {
+  position: [1.5, 2.5, 3.5],
+  rotation: [0, 0, 0, 1],
+  scale: [1, 1, 1]
+});
 const cam3dTfUpdated = galfus.realm3dGetCameraTransform(20, 1);
-if (Math.abs(cam3dTfUpdated[0]! - 1.5) > 0.001 || Math.abs(cam3dTfUpdated[1]! - 2.5) > 0.001) {
-  throw new Error(`Realm3D Camera raw array transform failed: ${cam3dTfUpdated}`);
+if (
+  Math.abs(cam3dTfUpdated.position[0] - 1.5) > 0.001 ||
+  Math.abs(cam3dTfUpdated.position[1] - 2.5) > 0.001
+) {
+  throw new Error(`Realm3D Camera transform update failed: ${JSON.stringify(cam3dTfUpdated)}`);
+}
+
+console.log('==> Testing Realm3D camera lookAt set, get, and clear...');
+galfus.realm3dSetCameraLookAt(20, 1, { target: [4, 5, 6], up: [0, 1, 0] });
+const cameraLookAt = galfus.realm3dGetCameraLookAt(20, 1);
+if (
+  !cameraLookAt.enabled ||
+  cameraLookAt.target?.some((value, index) => Math.abs(value - [4, 5, 6][index]!) > 0.001) ||
+  cameraLookAt.up?.some((value, index) => Math.abs(value - [0, 1, 0][index]!) > 0.001)
+) {
+  throw new Error(`Realm3D camera lookAt readback failed: ${JSON.stringify(cameraLookAt)}`);
+}
+galfus.realm3dClearCameraLookAt(20, 1);
+const clearedCameraLookAt = galfus.realm3dGetCameraLookAt(20, 1);
+if (clearedCameraLookAt.enabled || clearedCameraLookAt.target || clearedCameraLookAt.up) {
+  throw new Error(`Realm3D camera lookAt clear failed: ${JSON.stringify(clearedCameraLookAt)}`);
 }
 
 // Create Cube Geometry (size: 2.0 -> half-extent 1.0 -> min: [-1, -1, -1], max: [1, 1, 1])
@@ -166,7 +189,7 @@ instanceData.set([0, 0, 0, 0], 28);
 galfus.realm3dSetInstancedModelData(20, 1, instanceData, instanceData.length);
 console.log('✔ Uploaded instancing and bone buffers without JSON serialization');
 const modelTf = galfus.realm3dGetModelTransform(20, 1);
-if (Math.abs(modelTf[0]! - 10) > 0.001 || Math.abs(modelTf[7]! - 2) > 0.001) {
+if (Math.abs(modelTf.position[0] - 10) > 0.001 || Math.abs(modelTf.scale?.[0]! - 2) > 0.001) {
   throw new Error(`Realm3D Model transform readback failed: ${modelTf}`);
 }
 
@@ -182,11 +205,15 @@ console.log('==> Testing Multiverse warning for unbound target texture...');
 galfus.multiverseResolve();
 console.log('✔ Multiverse resolve executed with binding validation');
 
-// Update Model Transform via number[] raw fast-path
-galfus.realm3dSetModelTransform(20, 1, [0, 0, 0, 0, 0, 0, 1, 1, 1, 1]);
+// Update Model Transform through the rich object API.
+galfus.realm3dSetModelTransform(20, 1, {
+  position: [0, 0, 0],
+  rotation: [0, 0, 0, 1],
+  scale: [1, 1, 1]
+});
 const modelTf2 = galfus.realm3dGetModelTransform(20, 1);
-if (Math.abs(modelTf2[0]!) > 0.001 || Math.abs(modelTf2[7]! - 1) > 0.001) {
-  throw new Error(`Realm3D Model raw array update failed: ${modelTf2}`);
+if (Math.abs(modelTf2.position[0]) > 0.001 || Math.abs(modelTf2.scale?.[0]! - 1) > 0.001) {
+  throw new Error(`Realm3D Model transform update failed: ${JSON.stringify(modelTf2)}`);
 }
 
 // 7. Realm 2D: Fast-path transforms & Getters
@@ -194,14 +221,14 @@ console.log('==> Testing Realm 2D fast-path transforms and getters...');
 galfus.realm2dCreate(30);
 galfus.realm2dCreateCamera(30, 1, { orthoScale: 1.0 }, { position: [50, 100], rotation: 0.25 });
 const cam2dTf = galfus.realm2dGetCameraTransform(30, 1);
-if (Math.abs(cam2dTf[0]! - 50) > 0.01 || Math.abs(cam2dTf[1]! - 100) > 0.01) {
+if (Math.abs(cam2dTf.position[0] - 50) > 0.01 || Math.abs(cam2dTf.position[1] - 100) > 0.01) {
   throw new Error(`Realm2D Camera transform readback failed: ${cam2dTf}`);
 }
 // Update 2D camera transform raw
-galfus.realm2dSetCameraTransform(30, 1, new Float32Array([200, 300, 0, 2, 2, 0]));
+galfus.realm2dSetCameraTransform(30, 1, { position: [200, 300], scale: [2, 2] });
 const cam2dTf2 = galfus.realm2dGetCameraTransform(30, 1);
-if (Math.abs(cam2dTf2[0]! - 200) > 0.01 || Math.abs(cam2dTf2[1]! - 300) > 0.01) {
-  throw new Error(`Realm2D Camera raw update failed: ${cam2dTf2}`);
+if (Math.abs(cam2dTf2.position[0] - 200) > 0.01 || Math.abs(cam2dTf2.position[1] - 300) > 0.01) {
+  throw new Error(`Realm2D Camera transform update failed: ${JSON.stringify(cam2dTf2)}`);
 }
 
 // Create Sprite
@@ -213,14 +240,19 @@ galfus.realm2dCreateSprite(
   { position: [40, 80], rotation: 0, scale: [1, 1], zLayer: 3 }
 );
 const spriteTf = galfus.realm2dGetSpriteTransform(30, 1);
-if (Math.abs(spriteTf[0]! - 40) > 0.01 || Math.abs(spriteTf[5]! - 3) > 0.01) {
+if (Math.abs(spriteTf.position[0] - 40) > 0.01 || spriteTf.zLayer !== 3) {
   throw new Error(`Realm2D Sprite transform readback failed: ${spriteTf}`);
 }
-// Update Sprite transform raw
-galfus.realm2dSetSpriteTransform(30, 1, [150, 250, 1.0, 2, 2, 10]);
+// Update Sprite transform through the rich object API.
+galfus.realm2dSetSpriteTransform(30, 1, {
+  position: [150, 250],
+  rotation: 1.0,
+  scale: [2, 2],
+  zLayer: 10
+});
 const spriteTf2 = galfus.realm2dGetSpriteTransform(30, 1);
-if (Math.abs(spriteTf2[0]! - 150) > 0.01 || Math.abs(spriteTf2[5]! - 10) > 0.01) {
-  throw new Error(`Realm2D Sprite raw update failed: ${spriteTf2}`);
+if (Math.abs(spriteTf2.position[0] - 150) > 0.01 || spriteTf2.zLayer !== 10) {
+  throw new Error(`Realm2D Sprite transform update failed: ${JSON.stringify(spriteTf2)}`);
 }
 
 // Create SVG entity
@@ -243,9 +275,9 @@ galfus.realm2dCreateSvg(
 );
 const svgTf = galfus.realm2dGetSvgTransform(30, 10);
 if (
-  Math.abs(svgTf[0]! - 100) > 0.01 ||
-  Math.abs(svgTf[1]! - 200) > 0.01 ||
-  Math.abs(svgTf[5]! - 2) > 0.01
+  Math.abs(svgTf.position[0] - 100) > 0.01 ||
+  Math.abs(svgTf.position[1] - 200) > 0.01 ||
+  svgTf.zLayer !== 2
 ) {
   throw new Error(`Realm2D SVG transform readback failed: ${svgTf}`);
 }
@@ -257,17 +289,22 @@ galfus.realm2dRemoveSvgAttribute(30, 10, 'bg', 'fill');
 galfus.realm2dSetSvgText(30, 10, 'label', 'Updated Svg Text');
 console.log('✔ Mutated SVG element attributes and text content');
 
-// Update SVG transform via fast-path Float32Array
-galfus.realm2dSetSvgTransform(30, 10, new Float32Array([120, 220, 0.5, 2, 2, 5]));
+// Update SVG transform through the rich object API.
+galfus.realm2dSetSvgTransform(30, 10, {
+  position: [120, 220],
+  rotation: 0.5,
+  scale: [2, 2],
+  zLayer: 5
+});
 const svgTf2 = galfus.realm2dGetSvgTransform(30, 10);
 if (
-  Math.abs(svgTf2[0]! - 120) > 0.01 ||
-  Math.abs(svgTf2[1]! - 220) > 0.01 ||
-  Math.abs(svgTf2[5]! - 5) > 0.01
+  Math.abs(svgTf2.position[0] - 120) > 0.01 ||
+  Math.abs(svgTf2.position[1] - 220) > 0.01 ||
+  svgTf2.zLayer !== 5
 ) {
-  throw new Error(`Realm2D SVG transform raw update failed: ${svgTf2}`);
+  throw new Error(`Realm2D SVG transform update failed: ${JSON.stringify(svgTf2)}`);
 }
-console.log('✔ SVG transform updated via fast-path Float32Array');
+console.log('✔ SVG transform updated through the native struct path');
 
 // Destroy SVG
 galfus.realm2dDestroySvg(30, 10);

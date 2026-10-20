@@ -5,9 +5,9 @@ use std::ffi::c_char;
 use galfus_realm_2d::Realm2DContext;
 use galfus_realm_2d_resources::svg::Svg2DDesc;
 use galfus_realm_2d_resources::transform::Transform2D;
-use glam::Vec2;
 
 use crate::ffi::{from_c_str, set_last_error, to_c_string};
+use crate::ffi_native_structs::GalfusTransform2D;
 use crate::ffi_realm_2d_desc::Transform2DDesc;
 use crate::state::{with_multiverse, with_multiverse_mut};
 
@@ -232,15 +232,14 @@ pub unsafe extern "C" fn galfus_realm_2d_set_svg_text(
 pub unsafe extern "C" fn galfus_realm_2d_set_svg_transform(
     realm_id: u32,
     svg_id: u32,
-    transform_json: *const c_char,
+    transform: *const GalfusTransform2D,
 ) -> i32 {
-    let trans = match unsafe { parse_transform_2d(transform_json) } {
-        Ok(t) => t,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
+    if transform.is_null() {
+        set_last_error("Null pointer passed to set_svg_transform");
+        return -1;
+    }
+    // SAFETY: The pointer was checked above and copied before this function returns.
+    let trans = unsafe { (*transform).into() };
 
     match with_multiverse_mut(|mv| {
         let realm = mv
@@ -259,52 +258,14 @@ pub unsafe extern "C" fn galfus_realm_2d_set_svg_transform(
     }
 }
 
-/// Updates 2D SVG transform directly from a 6-float buffer.
-/// Layout: `[px, py, rot, sx, sy, z_layer]`
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_2d_set_svg_transform_raw(
-    realm_id: u32,
-    svg_id: u32,
-    ptr: *const f32,
-) -> i32 {
-    if ptr.is_null() {
-        set_last_error("Null pointer passed to set_svg_transform_raw");
-        return -1;
-    }
-    let slice = unsafe { std::slice::from_raw_parts(ptr, 6) };
-    let transform = Transform2D {
-        position: Vec2::new(slice[0], slice[1]),
-        rotation: slice[2],
-        scale: Vec2::new(slice[3], slice[4]),
-        z_layer: slice[5].round() as i32,
-        draw_order: 0,
-    };
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm
-            .set_svg_transform(svg_id, transform)
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Reads the transform of a 2D SVG entity into an out 6-float buffer.
-/// Layout: `[px, py, rot, sx, sy, z_layer]`
+/// Reads the transform of a 2D SVG entity into a caller-owned fixed-layout value.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_get_svg_transform(
     realm_id: u32,
     svg_id: u32,
-    out_ptr: *mut f32,
+    out_transform: *mut GalfusTransform2D,
 ) -> i32 {
-    if out_ptr.is_null() {
+    if out_transform.is_null() {
         set_last_error("Null pointer passed to get_svg_transform");
         return -1;
     }
@@ -315,13 +276,8 @@ pub unsafe extern "C" fn galfus_realm_2d_get_svg_transform(
         let t = realm
             .get_svg_transform(svg_id)
             .ok_or_else(|| format!("SVG #{svg_id} not found in Realm2D #{realm_id}"))?;
-        let slice = unsafe { std::slice::from_raw_parts_mut(out_ptr, 6) };
-        slice[0] = t.position.x;
-        slice[1] = t.position.y;
-        slice[2] = t.rotation;
-        slice[3] = t.scale.x;
-        slice[4] = t.scale.y;
-        slice[5] = t.z_layer as f32;
+        // SAFETY: The pointer was checked above and points to one caller-owned output struct.
+        unsafe { *out_transform = t.into() };
         Ok(())
     }) {
         Ok(()) => 0,

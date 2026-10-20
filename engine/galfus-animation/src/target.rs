@@ -23,6 +23,10 @@ pub enum AnimationTarget {
         realm_id: u32,
         camera_id: u32,
     },
+    Camera3DLookAt {
+        realm_id: u32,
+        camera_id: u32,
+    },
     Camera3DFov {
         realm_id: u32,
         camera_id: u32,

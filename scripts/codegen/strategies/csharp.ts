@@ -5,6 +5,7 @@ import {
   type FieldType,
   isJson,
   isJsonArray,
+  isNativeStruct,
   type ParamSpec
 } from '../spec.ts';
 
@@ -103,6 +104,9 @@ function toCamelCase(str: string): string {
 }
 
 function mapNativeType(type: DataType, isParam: boolean): string {
+  if (isNativeStruct(type)) {
+    return `Galfus${type.nativeStruct}`;
+  }
   if (typeof type === 'object') {
     return 'IntPtr';
   }
@@ -256,6 +260,13 @@ export class CSharpStrategy implements CodegenStrategy {
       '        public GalfusError(string message) : base(message) { }',
       '    }',
       '',
+      '    #region Native Value Types',
+      '    [StructLayout(LayoutKind.Sequential, Pack = 4)] public struct GalfusTransform3D { public float position_x, position_y, position_z, rotation_x, rotation_y, rotation_z, rotation_w, scale_x, scale_y, scale_z; }',
+      '    [StructLayout(LayoutKind.Sequential, Pack = 4)] public struct GalfusTransform2D { public float position_x, position_y, rotation, scale_x, scale_y; public int z_layer, draw_order; }',
+      '    [StructLayout(LayoutKind.Sequential, Pack = 4)] public struct GalfusCameraLookAt3D { public uint enabled; public float target_x, target_y, target_z, up_x, up_y, up_z; }',
+      '    [StructLayout(LayoutKind.Sequential, Pack = 4)] public struct GalfusSpatialAudio { public float emitter_x, emitter_y, emitter_z, emitter_rotation_x, emitter_rotation_y, emitter_rotation_z, emitter_rotation_w, listener_x, listener_y, listener_z, listener_rotation_x, listener_rotation_y, listener_rotation_z, listener_rotation_w, volume, min_distance, max_distance, rolloff, speed; public uint looping; }',
+      '    #endregion',
+      '',
       '    #region Native P/Invoke Declarations',
       '    internal static class Native',
       '    {',
@@ -274,7 +285,11 @@ export class CSharpStrategy implements CodegenStrategy {
 
       const ret = mapNativeType(fn.returnType, false);
       const params = fn.params
-        .map((p) => `${mapNativeType(p.type, true)} ${escapeIdent(p.name)}`)
+        .map((p) =>
+          isNativeStruct(p.type)
+            ? `${p.out ? 'out' : 'ref'} Galfus${p.type.nativeStruct} ${escapeIdent(p.name)}`
+            : `${mapNativeType(p.type, true)} ${escapeIdent(p.name)}`
+        )
         .join(', ');
 
       lines.push(`        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]`);
@@ -342,6 +357,9 @@ export class CSharpStrategy implements CodegenStrategy {
 
       const methodName = toPascalCase(fn.methodName);
       const hasJsonParam = fn.params.some((p) => isJson(p.type) || isJsonArray(p.type));
+      const outParam = fn.params.find((p) => p.out && isNativeStruct(p.type));
+      const outStruct =
+        outParam && isNativeStruct(outParam.type) ? outParam.type.nativeStruct : undefined;
       const isReturnI32 = fn.returnType === 'i32';
       const isReturnString =
         fn.returnType === 'string' || isJson(fn.returnType) || isJsonArray(fn.returnType);
@@ -349,12 +367,15 @@ export class CSharpStrategy implements CodegenStrategy {
 
       // Determine C# method return type
       let returnTypeStr = 'void';
-      if (isReturnString) returnTypeStr = 'string';
+      if (outStruct) returnTypeStr = `Galfus${outStruct}`;
+      else if (isReturnString) returnTypeStr = 'string';
       else if (isReturnBool) returnTypeStr = 'bool';
 
       // 1. Primitive / Raw JSON string method
       const stringParamSig = fn.params
+        .filter((p) => !p.out)
         .map((p) => {
+          if (isNativeStruct(p.type)) return `Galfus${p.type.nativeStruct} ${escapeIdent(p.name)}`;
           if (isJson(p.type) || isJsonArray(p.type) || p.type === 'string') {
             return `string ${escapeIdent(p.name)}`;
           }
@@ -384,8 +405,13 @@ export class CSharpStrategy implements CodegenStrategy {
       lines.push('            try');
       lines.push('            {');
 
+      if (outParam && outStruct) {
+        lines.push(`                Galfus${outStruct} ${escapeIdent(outParam.name)};`);
+      }
       const nativeArgs = fn.params
         .map((p) => {
+          if (p.out && isNativeStruct(p.type)) return `out ${escapeIdent(p.name)}`;
+          if (isNativeStruct(p.type)) return `ref ${escapeIdent(p.name)}`;
           if (isJson(p.type) || isJsonArray(p.type) || p.type === 'string') {
             return `p_${p.name}`;
           }
@@ -398,6 +424,7 @@ export class CSharpStrategy implements CodegenStrategy {
         lines.push(
           `                if (res != 0) throw new GalfusError("${fn.methodName} failed: " + GetLastError());`
         );
+        if (outParam) lines.push(`                return ${escapeIdent(outParam.name)};`);
       } else if (isReturnString) {
         lines.push(`                IntPtr res = Native.${fn.cName}(${nativeArgs});`);
         lines.push(`                return PtrToStringUtf8AndFree(res);`);
@@ -420,7 +447,10 @@ export class CSharpStrategy implements CodegenStrategy {
       // 2. Strongly-typed descriptor overload if JSON params exist
       if (hasJsonParam) {
         const typedParamSig = fn.params
+          .filter((p) => !p.out)
           .map((p) => {
+            if (isNativeStruct(p.type))
+              return `Galfus${p.type.nativeStruct} ${escapeIdent(p.name)}`;
             if (isJson(p.type)) return `${p.type.json} ${escapeIdent(p.name)}`;
             if (isJsonArray(p.type)) return `${p.type.jsonArray}[] ${escapeIdent(p.name)}`;
             if (p.type === 'string') return `string ${escapeIdent(p.name)}`;
@@ -435,6 +465,7 @@ export class CSharpStrategy implements CodegenStrategy {
           .join(', ');
 
         const callArgs = fn.params
+          .filter((p) => !p.out)
           .map((p) => {
             if (isJson(p.type) || isJsonArray(p.type)) {
               return `GalfusJson.Serialize(${escapeIdent(p.name)})`;
@@ -456,73 +487,7 @@ export class CSharpStrategy implements CodegenStrategy {
         lines.push('');
       }
 
-      // 3. Fast-Path raw float[] overloads for Set transform methods
-      if (
-        fn.methodName.endsWith('SetModelTransformRaw') ||
-        fn.methodName.endsWith('SetCameraTransformRaw') ||
-        fn.methodName.endsWith('SetSpriteTransformRaw') ||
-        fn.methodName.endsWith('SetSvgTransformRaw')
-      ) {
-        const idParams = fn.params.filter((p) => p.type === 'u32');
-        const sig =
-          idParams.map((p) => `uint ${escapeIdent(p.name)}`).join(', ') + ', float[] transform';
-        const callArgs =
-          idParams.map((p) => escapeIdent(p.name)).join(', ') + ', handle.AddrOfPinnedObject()';
-
-        lines.push(`        /// <summary>${fn.doc} (Direct float[] fast-path overload)</summary>`);
-        lines.push(`        public void ${methodName}(${sig})`);
-        lines.push('        {');
-        lines.push(
-          '            if (transform == null) throw new ArgumentNullException(nameof(transform));'
-        );
-        lines.push('            GCHandle handle = GCHandle.Alloc(transform, GCHandleType.Pinned);');
-        lines.push('            try');
-        lines.push('            {');
-        lines.push(`                ${methodName}(${callArgs});`);
-        lines.push('            }');
-        lines.push('            finally');
-        lines.push('            {');
-        lines.push('                handle.Free();');
-        lines.push('            }');
-        lines.push('        }');
-        lines.push('');
-      }
-
-      // 4. Fast-Path raw float[] overloads for Get transform methods
-      if (
-        fn.methodName.endsWith('GetModelTransformRaw') ||
-        fn.methodName.endsWith('GetCameraTransformRaw') ||
-        fn.methodName.endsWith('GetSpriteTransformRaw') ||
-        fn.methodName.endsWith('GetSvgTransformRaw')
-      ) {
-        const idParams = fn.params.filter((p) => p.type === 'u32');
-        const sig =
-          idParams.map((p) => `uint ${escapeIdent(p.name)}`).join(', ') + ', float[] outTransform';
-        const callArgs =
-          idParams.map((p) => escapeIdent(p.name)).join(', ') + ', handle.AddrOfPinnedObject()';
-
-        lines.push(`        /// <summary>${fn.doc} (Direct float[] fast-path overload)</summary>`);
-        lines.push(`        public void ${methodName}(${sig})`);
-        lines.push('        {');
-        lines.push(
-          '            if (outTransform == null) throw new ArgumentNullException(nameof(outTransform));'
-        );
-        lines.push(
-          '            GCHandle handle = GCHandle.Alloc(outTransform, GCHandleType.Pinned);'
-        );
-        lines.push('            try');
-        lines.push('            {');
-        lines.push(`                ${methodName}(${callArgs});`);
-        lines.push('            }');
-        lines.push('            finally');
-        lines.push('            {');
-        lines.push('                handle.Free();');
-        lines.push('            }');
-        lines.push('        }');
-        lines.push('');
-      }
-
-      // 5. Out uint overloads for size functions
+      // 3. Out uint overloads for size functions
       if (
         fn.methodName === 'platformGetWindowSizeRaw' ||
         fn.methodName === 'multiverseGetTargetSizeRaw'

@@ -226,21 +226,7 @@ export const platformFunctions: FunctionSpec[] = [
         type: 'u32',
         doc: 'Host logical ID of the sound'
       },
-      {
-        name: 'emitter',
-        type: { json: 'SpatialTransform' },
-        doc: 'Spatial transform of the sound emitter'
-      },
-      {
-        name: 'listener',
-        type: { json: 'SpatialTransform' },
-        doc: 'Spatial transform of the listener / microphone ear'
-      },
-      {
-        name: 'config',
-        type: { json: 'SpatialAudioConfig' },
-        doc: 'Spatial attenuation and playback configuration'
-      }
+      { name: 'spatial', type: { nativeStruct: 'SpatialAudio' }, doc: 'Spatial playback state.' }
     ],
     returnType: 'i32'
   },
@@ -254,21 +240,7 @@ export const platformFunctions: FunctionSpec[] = [
         type: 'u32',
         doc: 'Voice ID to update'
       },
-      {
-        name: 'emitter',
-        type: { json: 'SpatialTransform' },
-        doc: 'Spatial transform of the sound emitter'
-      },
-      {
-        name: 'listener',
-        type: { json: 'SpatialTransform' },
-        doc: 'Spatial transform of the listener / microphone ear'
-      },
-      {
-        name: 'config',
-        type: { json: 'SpatialAudioConfig' },
-        doc: 'Spatial attenuation and playback configuration'
-      }
+      { name: 'spatial', type: { nativeStruct: 'SpatialAudio' }, doc: 'Spatial playback state.' }
     ],
     returnType: 'i32'
   },

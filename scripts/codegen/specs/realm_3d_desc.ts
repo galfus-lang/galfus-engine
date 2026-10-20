@@ -3,6 +3,25 @@ import type { DescSpec } from './types';
 export const realm3dDescriptors: DescSpec[] = [
   {
     kind: 'object',
+    name: 'CameraLookAt3DDesc',
+    doc: 'World-space target and preferred up direction used to derive a 3D camera view.',
+    fields: {
+      target: { type: { tuple: ['number', 'number', 'number'] } },
+      up: { type: { tuple: ['number', 'number', 'number'] }, optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'CameraLookAt3DStateDesc',
+    doc: 'Current optional look-at configuration of a 3D camera.',
+    fields: {
+      enabled: { type: 'boolean' },
+      target: { type: { tuple: ['number', 'number', 'number'] }, optional: true },
+      up: { type: { tuple: ['number', 'number', 'number'] }, optional: true }
+    }
+  },
+  {
+    kind: 'object',
     name: 'Transform3DDesc',
     doc: '3D spatial transform containing position, rotation quaternion, and scale.',
     fields: {
@@ -21,7 +40,8 @@ export const realm3dDescriptors: DescSpec[] = [
       near: { type: 'number', optional: true },
       far: { type: 'number', optional: true },
       orthoScale: { type: 'number', optional: true },
-      cameraSlot: { type: 'number', optional: true }
+      cameraSlot: { type: 'number', optional: true },
+      lookAt: { type: { ref: 'CameraLookAt3DDesc' }, optional: true }
     }
   },
   {

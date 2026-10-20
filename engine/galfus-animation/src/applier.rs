@@ -150,6 +150,21 @@ pub fn apply_target_value(
                     .map_err(|e| AnimationError::General(e.to_string()))
             }
         }
+        AnimationTarget::Camera3DLookAt {
+            realm_id,
+            camera_id,
+        } => {
+            let target = value.as_vec3().ok_or_else(|| {
+                AnimationError::InvalidValue("Expected Vec3 for Camera3DLookAt".into())
+            })?;
+            let r3d = multiverse
+                .get_realm_mut::<Realm3DContext>(*realm_id)
+                .ok_or_else(|| {
+                    AnimationError::General(format!("Realm 3D #{realm_id} not found"))
+                })?;
+            r3d.set_camera_look_at_target(*camera_id, target)
+                .map_err(|e| AnimationError::General(e.to_string()))
+        }
         AnimationTarget::Camera3DFov {
             realm_id,
             camera_id,

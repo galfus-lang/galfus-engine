@@ -1,5 +1,5 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
-import type { Transform3DDesc } from '../../sdk/typescript/galfus.ts';
+import type { Transform3D } from '../../sdk/typescript/galfus.ts';
 import { extractKey, eulerToQuat, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
@@ -129,7 +129,7 @@ export async function runDemo3d8(): Promise<void> {
   let camPhi = 0.45;
   const camTarget: [number, number, number] = [0.0, 1.5, 0.0];
 
-  function computeCameraTransform(): Transform3DDesc {
+  function computeCameraTransform(): Transform3D {
     const eyeX = camTarget[0] + camRadius * Math.sin(camTheta) * Math.cos(camPhi);
     const eyeY = camTarget[1] + camRadius * Math.sin(camPhi);
     const eyeZ = camTarget[2] + camRadius * Math.cos(camTheta) * Math.cos(camPhi);

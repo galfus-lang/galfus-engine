@@ -1,6 +1,6 @@
 use std::f32::consts::FRAC_PI_4;
 
-use galfus_realm_3d_resources::camera::{Camera3D, CameraKind3D};
+use galfus_realm_3d_resources::camera::{Camera3D, CameraKind3D, CameraLookAt3D};
 use galfus_realm_3d_resources::environment::{
     BloomConfig3D, EnvironmentRealm3D, FogMode3D, OutlineConfig3D, SkyboxConfig3D, SkyboxMode3D,
     SsaoConfig3D,
@@ -12,7 +12,7 @@ use galfus_realm_3d_resources::model::{InstancedModel3D, Model3D};
 use galfus_realm_3d_resources::particle::{EmissionShape3D, ParticleEmitter3D};
 use galfus_realm_3d_resources::transform::Transform3D;
 use glam::{Quat, Vec3, Vec4};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,6 +49,59 @@ pub struct Camera3DDesc {
     pub far: Option<f32>,
     pub ortho_scale: Option<f32>,
     pub camera_slot: Option<u32>,
+    pub look_at: Option<CameraLookAt3DDesc>,
+}
+
+/// Host descriptor for an optional camera look-at point and preferred up direction.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CameraLookAt3DDesc {
+    pub target: [f32; 3],
+    pub up: Option<[f32; 3]>,
+}
+
+impl CameraLookAt3DDesc {
+    pub fn into_vectors(self) -> (Vec3, Vec3) {
+        (
+            Vec3::from_array(self.target),
+            self.up.map(Vec3::from_array).unwrap_or(Vec3::Y),
+        )
+    }
+}
+
+impl From<CameraLookAt3D> for CameraLookAt3DDesc {
+    fn from(value: CameraLookAt3D) -> Self {
+        Self {
+            target: value.target.to_array(),
+            up: Some(value.up.to_array()),
+        }
+    }
+}
+
+/// Host response for the current optional camera look-at configuration.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CameraLookAt3DStateDesc {
+    pub enabled: bool,
+    pub target: Option<[f32; 3]>,
+    pub up: Option<[f32; 3]>,
+}
+
+impl From<Option<CameraLookAt3D>> for CameraLookAt3DStateDesc {
+    fn from(value: Option<CameraLookAt3D>) -> Self {
+        match value {
+            Some(look_at) => Self {
+                enabled: true,
+                target: Some(look_at.target.to_array()),
+                up: Some(look_at.up.to_array()),
+            },
+            None => Self {
+                enabled: false,
+                target: None,
+                up: None,
+            },
+        }
+    }
 }
 
 impl From<Camera3DDesc> for Camera3D {
@@ -65,6 +118,7 @@ impl From<Camera3DDesc> for Camera3D {
             ortho_scale: d.ortho_scale.unwrap_or(10.0),
             camera_slot: d.camera_slot.unwrap_or(0),
             active: true,
+            look_at: None,
         }
     }
 }

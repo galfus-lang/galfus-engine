@@ -515,29 +515,28 @@ Initializing Platform & Multiverse Subsystems...`);
     if (keysDown.has('q')) hudScale = Math.max(0.6, hudScale - 0.015);
     if (keysDown.has('e')) hudScale = Math.min(1.8, hudScale + 0.015);
 
-    // Apply Fast-Path Transform on HUD Card
-    galfus.realm2dSetSvgTransform(
-      REALM_2D,
-      SVG_HUD_CARD_ID,
-      new Float32Array([hudPos.x, hudPos.y, 0.0, hudScale, hudScale, 10])
-    );
+    // Apply the rich transform API; the Bun binding packs a private native struct.
+    galfus.realm2dSetSvgTransform(REALM_2D, SVG_HUD_CARD_ID, {
+      position: [hudPos.x, hudPos.y],
+      scale: [hudScale, hudScale],
+      zLayer: 10
+    });
 
     // Dynamic Animations
     frame++;
     compassAngle -= 0.02;
-    galfus.realm2dSetSvgTransform(
-      REALM_2D,
-      SVG_COMPASS_ID,
-      new Float32Array([5.8, 3.2, compassAngle, 1.0, 1.0, 5])
-    );
+    galfus.realm2dSetSvgTransform(REALM_2D, SVG_COMPASS_ID, {
+      position: [5.8, 3.2],
+      rotation: compassAngle,
+      zLayer: 5
+    });
 
     // Bobbing Mascot with gentle floating scale
     const mascotBob = Math.sin(frame * 0.06) * 0.35;
-    galfus.realm2dSetSvgTransform(
-      REALM_2D,
-      SVG_MASCOT_ID,
-      new Float32Array([5.8, -3.2 + mascotBob, 0.0, 1.0, 1.0, 8])
-    );
+    galfus.realm2dSetSvgTransform(REALM_2D, SVG_MASCOT_ID, {
+      position: [5.8, -3.2 + mascotBob],
+      zLayer: 8
+    });
 
     // Orbit dynamic light around the HUD card
     const lightAngle = frame * 0.03;

@@ -1,11 +1,14 @@
 import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-import { type DataType, isBuffer } from '../spec.ts';
+import { type DataType, isBuffer, isNativeStruct } from '../spec.ts';
 
 function toSnakeCase(str: string): string {
   return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
 }
 
 function mapCType(type: DataType, isParam: boolean): string {
+  if (isNativeStruct(type)) {
+    return isParam ? `const Galfus${type.nativeStruct}*` : `Galfus${type.nativeStruct}*`;
+  }
   if (isBuffer(type)) {
     const element = type.buffer === 'u8' ? 'uint8_t' : type.buffer === 'u32' ? 'uint32_t' : 'float';
     return isParam ? `const ${element}*` : `${element}*`;
@@ -68,6 +71,33 @@ export class CHeaderStrategy implements CodegenStrategy {
       '  #define GALFUS_API __attribute__((visibility("default")))',
       '#endif',
       '',
+      '/* Fixed-layout values used by hot-path APIs. Pass them by pointer; Galfus copies inputs synchronously. */',
+      'typedef struct {',
+      '  float position_x, position_y, position_z;',
+      '  float rotation_x, rotation_y, rotation_z, rotation_w;',
+      '  float scale_x, scale_y, scale_z;',
+      '} GalfusTransform3D;',
+      '',
+      'typedef struct {',
+      '  float position_x, position_y, rotation, scale_x, scale_y;',
+      '  int32_t z_layer, draw_order;',
+      '} GalfusTransform2D;',
+      '',
+      'typedef struct {',
+      '  uint32_t enabled;',
+      '  float target_x, target_y, target_z;',
+      '  float up_x, up_y, up_z;',
+      '} GalfusCameraLookAt3D;',
+      '',
+      'typedef struct {',
+      '  float emitter_x, emitter_y, emitter_z;',
+      '  float emitter_rotation_x, emitter_rotation_y, emitter_rotation_z, emitter_rotation_w;',
+      '  float listener_x, listener_y, listener_z;',
+      '  float listener_rotation_x, listener_rotation_y, listener_rotation_z, listener_rotation_w;',
+      '  float volume, min_distance, max_distance, rolloff, speed;',
+      '  uint32_t looping;',
+      '} GalfusSpatialAudio;',
+      '',
       '/** Frees a string pointer allocated across the FFI boundary by Galfus. */',
       'GALFUS_API void galfus_string_free(char* ptr);',
       ''
@@ -79,7 +109,7 @@ export class CHeaderStrategy implements CodegenStrategy {
       const params =
         fn.params.length === 0
           ? 'void'
-          : fn.params.map((p) => `${mapCType(p.type, true)} ${toSnakeCase(p.name)}`).join(', ');
+          : fn.params.map((p) => `${mapCType(p.type, !p.out)} ${toSnakeCase(p.name)}`).join(', ');
 
       lines.push(`GALFUS_API ${retType} ${fn.cName}(${params});`);
       lines.push('');

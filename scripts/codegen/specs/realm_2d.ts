@@ -209,7 +209,7 @@ export const realm2dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
       { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' },
-      { name: 'transform', type: { json: 'Transform2DDesc' }, doc: 'New transform.' }
+      { name: 'transform', type: { nativeStruct: 'Transform2D' }, doc: 'New transform.' }
     ],
     returnType: 'i32'
   },
@@ -243,7 +243,7 @@ export const realm2dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
       { name: 'spriteId', type: 'u32', doc: 'Logical ID of the Sprite.' },
-      { name: 'transform', type: { json: 'Transform2DDesc' }, doc: 'New transform.' }
+      { name: 'transform', type: { nativeStruct: 'Transform2D' }, doc: 'New transform.' }
     ],
     returnType: 'i32'
   },
@@ -266,7 +266,7 @@ export const realm2dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
       { name: 'shapeId', type: 'u32', doc: 'Logical ID of the Shape.' },
-      { name: 'transform', type: { json: 'Transform2DDesc' }, doc: 'New transform.' }
+      { name: 'transform', type: { nativeStruct: 'Transform2D' }, doc: 'New transform.' }
     ],
     returnType: 'i32'
   },
@@ -289,7 +289,7 @@ export const realm2dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
       { name: 'lightId', type: 'u32', doc: 'Logical ID of the Light.' },
-      { name: 'transform', type: { json: 'Transform2DDesc' }, doc: 'New transform.' }
+      { name: 'transform', type: { nativeStruct: 'Transform2D' }, doc: 'New transform.' }
     ],
     returnType: 'i32'
   },
@@ -322,7 +322,7 @@ export const realm2dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
       { name: 'emitterId', type: 'u32', doc: 'Logical ID of the Particle Emitter.' },
-      { name: 'transform', type: { json: 'Transform2DDesc' }, doc: 'New transform.' }
+      { name: 'transform', type: { nativeStruct: 'Transform2D' }, doc: 'New transform.' }
     ],
     returnType: 'i32'
   },
@@ -398,46 +398,34 @@ export const realm2dFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
-    cName: 'galfus_realm_2d_set_sprite_transform_raw',
-    methodName: 'realm2dSetSpriteTransformRaw',
-    doc: 'Updates 2D sprite transform directly from a 6-float buffer [px, py, rot, sx, sy, z_layer].',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'spriteId', type: 'u32', doc: 'Logical ID of the Sprite.' },
-      { name: 'ptr', type: 'ptr', doc: 'Pointer to 6-element float array' }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_2d_set_camera_transform_raw',
-    methodName: 'realm2dSetCameraTransformRaw',
-    doc: 'Updates 2D camera transform directly from a 6-float buffer [px, py, rot, sx, sy, z_layer].',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' },
-      { name: 'ptr', type: 'ptr', doc: 'Pointer to 6-element float array' }
-    ],
-    returnType: 'i32'
-  },
-  {
     cName: 'galfus_realm_2d_get_sprite_transform',
-    methodName: 'realm2dGetSpriteTransformRaw',
-    doc: 'Reads the transform of an existing Sprite instance into an out 6-float buffer.',
+    methodName: 'realm2dGetSpriteTransform',
+    doc: 'Reads the transform of an existing Sprite instance.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
       { name: 'spriteId', type: 'u32', doc: 'Logical ID of the Sprite.' },
-      { name: 'outPtr', type: 'ptr', doc: 'Pointer to out 6-element float array' }
+      {
+        name: 'outTransform',
+        type: { nativeStruct: 'Transform2D' },
+        doc: 'Output transform.',
+        out: true
+      }
     ],
     returnType: 'i32'
   },
   {
     cName: 'galfus_realm_2d_get_camera_transform',
-    methodName: 'realm2dGetCameraTransformRaw',
-    doc: 'Reads the transform of an existing Camera instance into an out 6-float buffer.',
+    methodName: 'realm2dGetCameraTransform',
+    doc: 'Reads the transform of an existing Camera instance.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
       { name: 'cameraId', type: 'u32', doc: 'Logical ID of the Camera.' },
-      { name: 'outPtr', type: 'ptr', doc: 'Pointer to out 6-element float array' }
+      {
+        name: 'outTransform',
+        type: { nativeStruct: 'Transform2D' },
+        doc: 'Output transform.',
+        out: true
+      }
     ],
     returnType: 'i32'
   },
@@ -508,29 +496,23 @@ export const realm2dFunctions: FunctionSpec[] = [
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
       { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
-      { name: 'transform', type: { json: 'Transform2DDesc' }, doc: 'New transform.' }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_2d_set_svg_transform_raw',
-    methodName: 'realm2dSetSvgTransformRaw',
-    doc: 'Updates 2D SVG transform directly from a 6-float buffer [px, py, rot, sx, sy, z_layer].',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
-      { name: 'ptr', type: 'ptr', doc: 'Pointer to 6-element float array' }
+      { name: 'transform', type: { nativeStruct: 'Transform2D' }, doc: 'New transform.' }
     ],
     returnType: 'i32'
   },
   {
     cName: 'galfus_realm_2d_get_svg_transform',
-    methodName: 'realm2dGetSvgTransformRaw',
-    doc: 'Reads the transform of an existing SVG entity into an out 6-float buffer.',
+    methodName: 'realm2dGetSvgTransform',
+    doc: 'Reads the transform of an existing SVG entity.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
       { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
-      { name: 'outPtr', type: 'ptr', doc: 'Pointer to write 6 consecutive f32 values.' }
+      {
+        name: 'outTransform',
+        type: { nativeStruct: 'Transform2D' },
+        doc: 'Output transform.',
+        out: true
+      }
     ],
     returnType: 'i32'
   },

@@ -3,7 +3,9 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
 use galfus_platform::{CursorGrabMode, CursorIcon, WindowConfig};
+use galfus_realm_3d::Realm3DContext;
 
+use crate::ffi_realm_3d_desc::{CameraLookAt3DDesc, CameraLookAt3DStateDesc};
 use crate::state::{
     attach_window_to_multiverse, init_context, init_context_headless, shutdown_context,
     with_animation, with_animation_mut, with_context, with_context_mut, with_multiverse_mut,
@@ -288,6 +290,54 @@ pub fn multiverse_register_color_realm(
 pub fn multiverse_unregister_realm(realm_id: u32) -> Result<()> {
     with_multiverse_mut(|mv| mv.unregister_realm(realm_id).map_err(|e| e.to_string()))
         .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn realm3d_set_camera_look_at(
+    env: Env,
+    realm_id: u32,
+    camera_id: u32,
+    look_at_val: JsUnknown,
+) -> Result<()> {
+    let look_at: CameraLookAt3DDesc = env.from_js_value(look_at_val)?;
+    let (target, up) = look_at.into_vectors();
+    with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm
+            .set_camera_look_at(camera_id, target, up)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn realm3d_get_camera_look_at(env: Env, realm_id: u32, camera_id: u32) -> Result<JsUnknown> {
+    let state = with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm
+            .get_camera_look_at(camera_id)
+            .map(CameraLookAt3DStateDesc::from)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))?;
+    env.to_js_value(&state)
+}
+
+#[napi]
+pub fn realm3d_clear_camera_look_at(realm_id: u32, camera_id: u32) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm
+            .clear_camera_look_at(camera_id)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
 #[napi]

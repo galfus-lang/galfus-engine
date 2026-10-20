@@ -1,5 +1,5 @@
 import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-import { type DataType, isBuffer, isJson, isJsonArray } from '../spec.ts';
+import { type DataType, isBuffer, isJson, isJsonArray, isNativeStruct } from '../spec.ts';
 
 function mapFFIType(type: DataType): string {
   if (typeof type === 'object') {
@@ -28,6 +28,9 @@ function mapFFIType(type: DataType): string {
 }
 
 function mapParamTsType(type: DataType): string {
+  if (isNativeStruct(type)) {
+    return type.nativeStruct === 'SpatialAudio' ? 'SpatialAudio' : type.nativeStruct;
+  }
   if (isBuffer(type)) {
     return type.buffer === 'u8'
       ? 'Uint8Array'
@@ -37,10 +40,10 @@ function mapParamTsType(type: DataType): string {
   }
   if (isJson(type)) {
     if (type.json === 'Transform3DDesc') {
-      return `Transform3DDesc | Float32Array | number[] | string`;
+      return 'Transform3DDesc';
     }
     if (type.json === 'Transform2DDesc') {
-      return `Transform2DDesc | Float32Array | number[] | string`;
+      return 'Transform2DDesc';
     }
     return `${type.json} | string`;
   }
@@ -96,6 +99,14 @@ function mapReturnTsType(fnReturnType: DataType, hasParamFieldReturn: boolean): 
   }
 }
 
+function nativeOutputTsType(name: string): string {
+  return name === 'CameraLookAt3D'
+    ? 'CameraLookAt3DStateDesc'
+    : name === 'SpatialAudio'
+      ? 'SpatialAudio'
+      : name;
+}
+
 export class BunFfiStrategy implements CodegenStrategy {
   readonly id = 'bun_ffi';
   readonly name = 'Bun FFI Wrapper';
@@ -117,6 +128,10 @@ export class BunFfiStrategy implements CodegenStrategy {
       for (const p of fn.params) {
         if (isJson(p.type)) addType(p.type.json);
         if (isJsonArray(p.type)) addType(p.type.jsonArray);
+        if (isNativeStruct(p.type))
+          addType(p.type.nativeStruct === 'SpatialAudio' ? 'SpatialAudio' : p.type.nativeStruct);
+        if (p.out && isNativeStruct(p.type) && p.type.nativeStruct === 'CameraLookAt3D')
+          addType('CameraLookAt3DStateDesc');
       }
     }
 
@@ -211,63 +226,122 @@ export class BunFfiStrategy implements CodegenStrategy {
       "    const str = val === undefined || val === null ? '' : typeof val === 'string' ? val : (JSON.stringify(val) ?? '');",
       "    return Buffer.from(str + '\\0', 'utf-8');",
       '  }',
+      '',
+      '  private encodeCameraLookAt(value: CameraLookAt3D): Uint8Array {',
+      '    const source = value;',
+      '    const target = source.target;',
+      '    const up = source.up ?? [0, 1, 0];',
+      '    if (!Array.isArray(target) || target.length !== 3 || !Array.isArray(up) || up.length !== 3) {',
+      "      throw new GalfusError('Camera look-at requires target and up 3D tuples');",
+      '    }',
+      '    const memory = new ArrayBuffer(28);',
+      '    const view = new DataView(memory);',
+      '    view.setUint32(0, 1, true);',
+      '    view.setFloat32(4, target[0]!, true);',
+      '    view.setFloat32(8, target[1]!, true);',
+      '    view.setFloat32(12, target[2]!, true);',
+      '    view.setFloat32(16, up[0]!, true);',
+      '    view.setFloat32(20, up[1]!, true);',
+      '    view.setFloat32(24, up[2]!, true);',
+      '    return new Uint8Array(memory);',
+      '  }',
+      '',
+      '  private decodeCameraLookAt(memory: Uint8Array): CameraLookAt3DStateDesc {',
+      '    const view = new DataView(memory.buffer, memory.byteOffset, memory.byteLength);',
+      '    if (view.getUint32(0, true) === 0) return { enabled: false };',
+      '    return {',
+      '      enabled: true,',
+      '      target: [view.getFloat32(4, true), view.getFloat32(8, true), view.getFloat32(12, true)],',
+      '      up: [view.getFloat32(16, true), view.getFloat32(20, true), view.getFloat32(24, true)]',
+      '    };',
+      '  }',
+      '',
+      '  private encodeTransform3D(value: Transform3D): Uint8Array {',
+      '    const position = value.position ?? [0, 0, 0];',
+      '    const rotation = value.rotation ?? [0, 0, 0, 1];',
+      '    const scale = value.scale ?? [1, 1, 1];',
+      '    const memory = new ArrayBuffer(40);',
+      '    const view = new DataView(memory);',
+      '    [...position, ...rotation, ...scale].forEach((component, index) => view.setFloat32(index * 4, component, true));',
+      '    return new Uint8Array(memory);',
+      '  }',
+      '',
+      '  private encodeTransform2D(value: Transform2D): Uint8Array {',
+      '    const position = value.position ?? [0, 0];',
+      '    const scale = value.scale ?? [1, 1];',
+      '    const memory = new ArrayBuffer(28);',
+      '    const view = new DataView(memory);',
+      '    view.setFloat32(0, position[0], true);',
+      '    view.setFloat32(4, position[1], true);',
+      '    view.setFloat32(8, value.rotation ?? 0, true);',
+      '    view.setFloat32(12, scale[0], true);',
+      '    view.setFloat32(16, scale[1], true);',
+      '    view.setInt32(20, value.zLayer ?? 0, true);',
+      '    view.setInt32(24, value.drawOrder ?? 0, true);',
+      '    return new Uint8Array(memory);',
+      '  }',
+      '',
+      '  private decodeTransform3D(memory: Uint8Array): Transform3D {',
+      '    const view = new DataView(memory.buffer, memory.byteOffset, memory.byteLength);',
+      '    return { position: [view.getFloat32(0, true), view.getFloat32(4, true), view.getFloat32(8, true)], rotation: [view.getFloat32(12, true), view.getFloat32(16, true), view.getFloat32(20, true), view.getFloat32(24, true)], scale: [view.getFloat32(28, true), view.getFloat32(32, true), view.getFloat32(36, true)] };',
+      '  }',
+      '',
+      '  private decodeTransform2D(memory: Uint8Array): Transform2D {',
+      '    const view = new DataView(memory.buffer, memory.byteOffset, memory.byteLength);',
+      '    return { position: [view.getFloat32(0, true), view.getFloat32(4, true)], rotation: view.getFloat32(8, true), scale: [view.getFloat32(12, true), view.getFloat32(16, true)], zLayer: view.getInt32(20, true), drawOrder: view.getInt32(24, true) };',
+      '  }',
+      '',
+      '  private encodeSpatialAudio(value: SpatialAudio): Uint8Array {',
+      '    const emitterRotation = value.emitter.rotation ?? [0, 0, 0, 1];',
+      '    const listenerRotation = value.listener.rotation ?? [0, 0, 0, 1];',
+      '    const config = value.config;',
+      '    const memory = new ArrayBuffer(80);',
+      '    const view = new DataView(memory);',
+      '    [...value.emitter.position, ...emitterRotation, ...value.listener.position, ...listenerRotation, config.volume ?? 1, config.minDistance ?? 1, config.maxDistance ?? 100, config.rolloff ?? 1, config.speed ?? 1].forEach((component, index) => view.setFloat32(index * 4, component, true));',
+      '    view.setUint32(76, config.looping ? 1 : 0, true);',
+      '    return new Uint8Array(memory);',
+      '  }',
       ''
     );
 
     for (const fn of context.functions) {
+      const outParam = fn.params.find((p) => p.out && isNativeStruct(p.type));
+      const outStruct =
+        outParam && isNativeStruct(outParam.type) ? outParam.type.nativeStruct : undefined;
       const params = fn.params
+        .filter((p) => !p.out)
         .map((p) => `${p.name}${p.optional ? '?' : ''}: ${mapParamTsType(p.type)}`)
         .join(', ');
-      const retType = mapReturnTsType(fn.returnType, Boolean(fn.returnsParamField));
+      const retType = outStruct
+        ? nativeOutputTsType(outStruct)
+        : mapReturnTsType(fn.returnType, Boolean(fn.returnsParamField));
 
       lines.push(`  /** ${fn.doc} */`);
       lines.push(`  ${fn.methodName}(${params}): ${retType} {`);
 
-      if (fn.methodName === 'realm3dSetModelTransform') {
-        lines.push(`    if (Array.isArray(transform) || ArrayBuffer.isView(transform)) {`);
-        lines.push(
-          `      const _arr = ArrayBuffer.isView(transform) ? (transform as Float32Array) : new Float32Array(transform);`
-        );
-        lines.push(`      this.realm3dSetModelTransformRaw(realmId, modelId, _arr);`);
-        lines.push(`      return;`);
-        lines.push(`    }`);
-      } else if (fn.methodName === 'realm3dSetCameraTransform') {
-        lines.push(`    if (Array.isArray(transform) || ArrayBuffer.isView(transform)) {`);
-        lines.push(
-          `      const _arr = ArrayBuffer.isView(transform) ? (transform as Float32Array) : new Float32Array(transform);`
-        );
-        lines.push(`      this.realm3dSetCameraTransformRaw(realmId, cameraId, _arr);`);
-        lines.push(`      return;`);
-        lines.push(`    }`);
-      } else if (fn.methodName === 'realm2dSetSpriteTransform') {
-        lines.push(`    if (Array.isArray(transform) || ArrayBuffer.isView(transform)) {`);
-        lines.push(
-          `      const _arr = ArrayBuffer.isView(transform) ? (transform as Float32Array) : new Float32Array(transform);`
-        );
-        lines.push(`      this.realm2dSetSpriteTransformRaw(realmId, spriteId, _arr);`);
-        lines.push(`      return;`);
-        lines.push(`    }`);
-      } else if (fn.methodName === 'realm2dSetCameraTransform') {
-        lines.push(`    if (Array.isArray(transform) || ArrayBuffer.isView(transform)) {`);
-        lines.push(
-          `      const _arr = ArrayBuffer.isView(transform) ? (transform as Float32Array) : new Float32Array(transform);`
-        );
-        lines.push(`      this.realm2dSetCameraTransformRaw(realmId, cameraId, _arr);`);
-        lines.push(`      return;`);
-        lines.push(`    }`);
-      } else if (fn.methodName === 'realm2dSetSvgTransform') {
-        lines.push(`    if (Array.isArray(transform) || ArrayBuffer.isView(transform)) {`);
-        lines.push(
-          `      const _arr = ArrayBuffer.isView(transform) ? (transform as Float32Array) : new Float32Array(transform);`
-        );
-        lines.push(`      this.realm2dSetSvgTransformRaw(realmId, svgId, _arr);`);
-        lines.push(`      return;`);
-        lines.push(`    }`);
-      }
-
       const ffiArgs: string[] = [];
       for (const p of fn.params) {
-        if (isJson(p.type) || isJsonArray(p.type)) {
+        if (p.out && isNativeStruct(p.type)) {
+          const size =
+            p.type.nativeStruct === 'Transform3D'
+              ? 40
+              : p.type.nativeStruct === 'Transform2D' || p.type.nativeStruct === 'CameraLookAt3D'
+                ? 28
+                : 80;
+          lines.push(`    const _${p.name} = new Uint8Array(${size});`);
+          ffiArgs.push(`bunPtr(_${p.name})`);
+        } else if (isNativeStruct(p.type)) {
+          const encoder =
+            p.type.nativeStruct === 'Transform3D'
+              ? 'encodeTransform3D'
+              : p.type.nativeStruct === 'Transform2D'
+                ? 'encodeTransform2D'
+                : p.type.nativeStruct === 'CameraLookAt3D'
+                  ? 'encodeCameraLookAt'
+                  : 'encodeSpatialAudio';
+          lines.push(`    const _${p.name} = this.${encoder}(${p.name});`);
+          ffiArgs.push(`bunPtr(_${p.name})`);
+        } else if (isJson(p.type) || isJsonArray(p.type)) {
           lines.push(`    const _${p.name}_buf = this.toCJsonOrString(${p.name});`);
           ffiArgs.push(`bunPtr(_${p.name}_buf)`);
         } else if (p.type === 'string') {
@@ -285,7 +359,21 @@ export class BunFfiStrategy implements CodegenStrategy {
 
       const callExpr = `this._lib.symbols.${fn.cName}(${ffiArgs.join(', ')})`;
 
-      if (isJson(fn.returnType) || isJsonArray(fn.returnType)) {
+      if (outParam && outStruct) {
+        lines.push(`    const res = ${callExpr};`);
+        lines.push(`    if (res !== 0) {`);
+        lines.push(
+          `      throw new GalfusError(\`${fn.methodName} failed: \${this.getLastError()}\`);`
+        );
+        lines.push(`    }`);
+        const decoder =
+          outStruct === 'Transform3D'
+            ? 'decodeTransform3D'
+            : outStruct === 'Transform2D'
+              ? 'decodeTransform2D'
+              : 'decodeCameraLookAt';
+        lines.push(`    return this.${decoder}(_${outParam.name});`);
+      } else if (isJson(fn.returnType) || isJsonArray(fn.returnType)) {
         lines.push(`    const rawPtr = ${callExpr};`);
         lines.push(`    const jsonStr = this.consumeString(rawPtr);`);
         lines.push(`    if (!jsonStr) {`);
@@ -345,20 +433,6 @@ export class BunFfiStrategy implements CodegenStrategy {
       '    return this.platformGetWindowSize(windowId);',
       '  }',
       '',
-      '  /** Reads the 10-float transform array [px, py, pz, rx, ry, rz, rw, sx, sy, sz] of a 3D model. */',
-      '  realm3dGetModelTransform(realmId: number, modelId: number): Float32Array {',
-      '    const buf = new Float32Array(10);',
-      '    this.realm3dGetModelTransformRaw(realmId, modelId, buf);',
-      '    return buf;',
-      '  }',
-      '',
-      '  /** Reads the 10-float transform array [px, py, pz, rx, ry, rz, rw, sx, sy, sz] of a 3D camera. */',
-      '  realm3dGetCameraTransform(realmId: number, cameraId: number): Float32Array {',
-      '    const buf = new Float32Array(10);',
-      '    this.realm3dGetCameraTransformRaw(realmId, cameraId, buf);',
-      '    return buf;',
-      '  }',
-      '',
       '  /** Reads the world-space bounding box { min: [x,y,z], max: [x,y,z] } of a 3D model. */',
       '  realm3dGetModelAabb(realmId: number, modelId: number): { min: [number, number, number]; max: [number, number, number] } {',
       '    const minBuf = new Float32Array(3);',
@@ -370,26 +444,6 @@ export class BunFfiStrategy implements CodegenStrategy {
       '    };',
       '  }',
       '',
-      '  /** Reads the 6-float transform array [px, py, rot, sx, sy, zLayer] of a 2D sprite. */',
-      '  realm2dGetSpriteTransform(realmId: number, spriteId: number): Float32Array {',
-      '    const buf = new Float32Array(6);',
-      '    this.realm2dGetSpriteTransformRaw(realmId, spriteId, buf);',
-      '    return buf;',
-      '  }',
-      '',
-      '  /** Reads the 6-float transform array [px, py, rot, sx, sy, zLayer] of a 2D camera. */',
-      '  realm2dGetCameraTransform(realmId: number, cameraId: number): Float32Array {',
-      '    const buf = new Float32Array(6);',
-      '    this.realm2dGetCameraTransformRaw(realmId, cameraId, buf);',
-      '    return buf;',
-      '  }',
-      '',
-      '  /** Reads the 6-float transform array [px, py, rot, sx, sy, zLayer] of a 2D SVG element. */',
-      '  realm2dGetSvgTransform(realmId: number, svgId: number): Float32Array {',
-      '    const buf = new Float32Array(6);',
-      '    this.realm2dGetSvgTransformRaw(realmId, svgId, buf);',
-      '    return buf;',
-      '  }',
       ''
     );
 

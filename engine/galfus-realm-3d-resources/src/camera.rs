@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, Vec2, Vec4};
+use glam::{Mat4, Vec2, Vec3, Vec4};
 use serde::{Deserialize, Serialize};
 
 use crate::transform::Transform3D;
@@ -13,6 +13,32 @@ pub enum CameraKind3D {
     Perspective,
     /// Parallel orthographic projection preserving scale regardless of distance.
     Orthographic,
+}
+
+/// Optional world-space point and up direction used to derive a camera view.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CameraLookAt3D {
+    /// World-space point the camera observes.
+    pub target: Vec3,
+    /// Preferred world-space up direction.
+    pub up: Vec3,
+}
+
+impl CameraLookAt3D {
+    /// Creates a validated look-at configuration.
+    pub fn new(target: Vec3, up: Vec3) -> Result<Self, String> {
+        if !target.is_finite() {
+            return Err("Camera look-at target must contain finite values".into());
+        }
+        if !up.is_finite() || up.length_squared() <= 1e-8 {
+            return Err("Camera look-at up vector must be finite and non-zero".into());
+        }
+        Ok(Self {
+            target,
+            up: up.normalize(),
+        })
+    }
 }
 
 /// 3D Camera component defining view frustum, projection characteristics, and slot binding.
@@ -33,6 +59,8 @@ pub struct Camera3D {
     pub camera_slot: u32,
     /// Whether the camera is active.
     pub active: bool,
+    /// Optional point and up direction used to derive the view orientation.
+    pub look_at: Option<CameraLookAt3D>,
 }
 
 impl Default for Camera3D {
@@ -45,6 +73,7 @@ impl Default for Camera3D {
             ortho_scale: 10.0,
             camera_slot: 0,
             active: true,
+            look_at: None,
         }
     }
 }
@@ -72,6 +101,17 @@ impl Camera3D {
             camera_slot,
             ..Default::default()
         }
+    }
+
+    /// Sets the optional world-space point this camera observes.
+    pub fn set_look_at(&mut self, target: Vec3, up: Vec3) -> Result<(), String> {
+        self.look_at = Some(CameraLookAt3D::new(target, up)?);
+        Ok(())
+    }
+
+    /// Clears the optional look-at configuration and restores transform rotation as the view source.
+    pub fn clear_look_at(&mut self) {
+        self.look_at = None;
     }
 
     /// Computes the Reverse-Z projection matrix for this camera given an aspect ratio.
@@ -108,8 +148,7 @@ impl Camera3D {
     /// Builds the GPU-ready `Camera3DUniform` struct from this camera and a transform.
     pub fn build_uniform(&self, transform: &Transform3D, aspect_ratio: f32) -> Camera3DUniform {
         let position = transform.position;
-        let direction = transform.forward();
-        let up = transform.up();
+        let (direction, up) = self.view_vectors(transform);
 
         let view = Mat4::look_to_rh(position, direction, up);
         let projection = self.projection_matrix(aspect_ratio);
@@ -125,6 +164,29 @@ impl Camera3D {
             near_far: Vec2::new(self.near, self.far),
             _padding: [0.0; 2],
         }
+    }
+
+    fn view_vectors(&self, transform: &Transform3D) -> (Vec3, Vec3) {
+        let Some(look_at) = self.look_at else {
+            return (transform.forward(), transform.up());
+        };
+
+        let direction = look_at.target - transform.position;
+        if !direction.is_finite() || direction.length_squared() <= 1e-8 {
+            return (transform.forward(), transform.up());
+        }
+
+        let direction = direction.normalize();
+        let up = if direction.cross(look_at.up).length_squared() <= 1e-8 {
+            if direction.y.abs() < 0.99 {
+                Vec3::Y
+            } else {
+                Vec3::Z
+            }
+        } else {
+            look_at.up
+        };
+        (direction, up)
     }
 }
 
@@ -191,5 +253,25 @@ mod tests {
         let uniform = Camera3DUniform::zeroed();
         let bytes = bytemuck::bytes_of(&uniform);
         assert_eq!(bytes.len(), std::mem::size_of::<Camera3DUniform>());
+    }
+
+    #[test]
+    fn test_look_at_overrides_view_direction() {
+        let mut camera = Camera3D::default();
+        camera
+            .set_look_at(Vec3::new(0.0, 0.0, -5.0), Vec3::Y)
+            .unwrap();
+        let uniform = camera.build_uniform(&Transform3D::default(), 1.0);
+        assert!((uniform.direction.truncate() - Vec3::NEG_Z).length() < 1e-5);
+        assert!((uniform.up.truncate() - Vec3::Y).length() < 1e-5);
+    }
+
+    #[test]
+    fn test_look_at_at_camera_position_preserves_manual_view() {
+        let mut camera = Camera3D::default();
+        camera.set_look_at(Vec3::ZERO, Vec3::Y).unwrap();
+        let transform = Transform3D::look_at(Vec3::ZERO, Vec3::X, Vec3::Y);
+        let uniform = camera.build_uniform(&transform, 1.0);
+        assert!((uniform.direction.truncate() - Vec3::X).length() < 1e-5);
     }
 }

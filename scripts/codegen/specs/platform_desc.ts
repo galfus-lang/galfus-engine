@@ -376,6 +376,16 @@ export const platformDescriptors: DescSpec[] = [
     }
   },
   {
+    kind: 'object',
+    name: 'SpatialAudio',
+    doc: 'Complete spatial playback state used for frequent voice updates.',
+    fields: {
+      emitter: { type: { ref: 'SpatialTransform' } },
+      listener: { type: { ref: 'SpatialTransform' } },
+      config: { type: { ref: 'SpatialAudioConfig' } }
+    }
+  },
+  {
     kind: 'union',
     name: 'PlatformEvent',
     doc: 'Root enum of all events dispatched from the platform layer.',
