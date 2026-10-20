@@ -3,6 +3,7 @@ import { type DataType, isBuffer, isJson, isJsonArray, isNativeStruct } from '..
 
 function mapParamTsType(type: DataType): string {
   if (isNativeStruct(type)) {
+    if (type.nativeStruct === 'EventBatch') return 'never';
     return type.nativeStruct === 'SpatialAudio' ? 'SpatialAudio' : type.nativeStruct;
   }
   if (isBuffer(type)) {
@@ -88,8 +89,10 @@ export class NodeApiStrategy implements CodegenStrategy {
       for (const p of fn.params) {
         if (isJson(p.type)) addType(p.type.json);
         if (isJsonArray(p.type)) addType(p.type.jsonArray);
-        if (isNativeStruct(p.type))
+        if (isNativeStruct(p.type) && p.type.nativeStruct !== 'EventBatch')
           addType(p.type.nativeStruct === 'SpatialAudio' ? 'SpatialAudio' : p.type.nativeStruct);
+        if (p.out && isNativeStruct(p.type) && p.type.nativeStruct === 'EventBatch')
+          addType('PlatformEvent');
         if (p.out && isNativeStruct(p.type) && p.type.nativeStruct === 'CameraLookAt3D')
           addType('CameraLookAt3DStateDesc');
       }
@@ -173,9 +176,11 @@ export class NodeApiStrategy implements CodegenStrategy {
         .map((p) => `${p.name}${p.optional ? '?' : ''}: ${mapParamTsType(p.type)}`)
         .join(', ');
       const retType = outStruct
-        ? outStruct === 'CameraLookAt3D'
-          ? 'CameraLookAt3DStateDesc'
-          : outStruct
+        ? outStruct === 'EventBatch'
+          ? 'PlatformEvent[]'
+          : outStruct === 'CameraLookAt3D'
+            ? 'CameraLookAt3DStateDesc'
+            : outStruct
         : mapReturnTsType(fn.returnType, !!fn.returnsParamField);
 
       lines.push('');

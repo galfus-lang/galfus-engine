@@ -121,9 +121,29 @@ export const platformFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_platform_pump_events',
     methodName: 'platformPumpEvents',
-    doc: 'Pumps and collects pending platform input events.',
-    params: [],
-    returnType: { jsonArray: 'PlatformEvent' }
+    doc: 'Pumps and collects pending platform input events through a fixed-layout batch.',
+    params: [
+      {
+        name: 'outBatch',
+        type: { nativeStruct: 'EventBatch' },
+        doc: 'Caller-owned output event batch.',
+        out: true
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_platform_release_event_batch',
+    methodName: 'platformReleaseEventBatch',
+    doc: 'Releases an event batch and invalidates its native pointer ranges.',
+    params: [
+      {
+        name: 'batchId',
+        type: 'u64',
+        doc: 'Batch identifier returned by platformPumpEvents.'
+      }
+    ],
+    returnType: 'i32'
   },
   {
     cName: 'galfus_gamepad_get_connected',

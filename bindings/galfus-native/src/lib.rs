@@ -1,5 +1,6 @@
 pub mod ffi;
 pub mod ffi_animation;
+pub mod ffi_event_batch;
 pub mod ffi_multiverse;
 pub mod ffi_native_structs;
 pub mod ffi_realm_2d;

@@ -117,6 +117,18 @@ pub fn platform_pump_events(env: Env) -> Result<JsUnknown> {
     env.to_js_value(&events)
 }
 
+/// Releases a native event batch created through the C ABI.
+///
+/// Node-API event pumping returns JavaScript values directly, so normal Node callers never need
+/// this. It remains exported to keep the generated API surface aligned with the C bindings.
+#[napi]
+pub fn platform_release_event_batch(batch_id: i64) -> Result<()> {
+    let batch_id = u64::try_from(batch_id)
+        .map_err(|_| Error::new(Status::InvalidArg, "batchId must be a non-negative u64"))?;
+    crate::ffi_event_batch::release_event_batch(batch_id)
+        .map_err(|error| Error::new(Status::GenericFailure, error))
+}
+
 #[napi]
 pub fn gamepad_get_connected(env: Env) -> Result<JsUnknown> {
     let gamepads = with_context(|ctx| Ok(ctx.connected_gamepads()))

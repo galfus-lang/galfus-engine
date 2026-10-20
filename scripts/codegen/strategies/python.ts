@@ -111,6 +111,12 @@ export class PythonStrategy implements CodegenStrategy {
       'class GalfusSpatialAudio(ctypes.Structure):',
       '    _fields_ = [("emitter_x", ctypes.c_float), ("emitter_y", ctypes.c_float), ("emitter_z", ctypes.c_float), ("emitter_rotation_x", ctypes.c_float), ("emitter_rotation_y", ctypes.c_float), ("emitter_rotation_z", ctypes.c_float), ("emitter_rotation_w", ctypes.c_float), ("listener_x", ctypes.c_float), ("listener_y", ctypes.c_float), ("listener_z", ctypes.c_float), ("listener_rotation_x", ctypes.c_float), ("listener_rotation_y", ctypes.c_float), ("listener_rotation_z", ctypes.c_float), ("listener_rotation_w", ctypes.c_float), ("volume", ctypes.c_float), ("min_distance", ctypes.c_float), ("max_distance", ctypes.c_float), ("rolloff", ctypes.c_float), ("speed", ctypes.c_float), ("looping", ctypes.c_uint32)]',
       '',
+      'class GalfusPlatformEvent(ctypes.Structure):',
+      '    _fields_ = [("kind", ctypes.c_uint16), ("event_type", ctypes.c_uint16), ("flags", ctypes.c_uint32), ("window_id", ctypes.c_uint32), ("subject_id", ctypes.c_uint32), ("id", ctypes.c_uint64), ("values", ctypes.c_float * 5), ("text0_offset", ctypes.c_uint32), ("text0_length", ctypes.c_uint32), ("text1_offset", ctypes.c_uint32), ("text1_length", ctypes.c_uint32), ("text2_offset", ctypes.c_uint32), ("text2_length", ctypes.c_uint32)]',
+      '',
+      'class GalfusEventBatch(ctypes.Structure):',
+      '    _fields_ = [("batch_id", ctypes.c_uint64), ("events", ctypes.POINTER(GalfusPlatformEvent)), ("event_count", ctypes.c_uint32), ("text_data", ctypes.POINTER(ctypes.c_uint8)), ("text_length", ctypes.c_uint32)]',
+      '',
       'def _encode_transform_3d(value: Dict[str, Any]) -> GalfusTransform3D:',
       '    position, rotation, scale = value.get("position", [0, 0, 0]), value.get("rotation", [0, 0, 0, 1]), value.get("scale", [1, 1, 1])',
       '    return GalfusTransform3D(*position, *rotation, *scale)',
@@ -136,6 +142,52 @@ export class PythonStrategy implements CodegenStrategy {
       '    emitter, listener, config = value["emitter"], value["listener"], value["config"]',
       '    emitter_rotation, listener_rotation = emitter.get("rotation", [0, 0, 0, 1]), listener.get("rotation", [0, 0, 0, 1])',
       '    return GalfusSpatialAudio(*emitter["position"], *emitter_rotation, *listener["position"], *listener_rotation, config.get("volume", 1), config.get("minDistance", 1), config.get("maxDistance", 100), config.get("rolloff", 1), config.get("speed", 1), int(config.get("looping", False)))',
+      '',
+      'def _event_enum(value: str) -> Any:',
+      '    if value.startswith("Other(") and value.endswith(")"):',
+      '        return {"other": int(value[6:-1])}',
+      '    return value[:1].lower() + value[1:] if value else value',
+      '',
+      'def _decode_event_batch(batch: GalfusEventBatch) -> List[Any]:',
+      '    try:',
+      '        text = ctypes.string_at(batch.text_data, batch.text_length) if batch.text_length else b""',
+      '        def event_text(offset: int, length: int) -> str:',
+      '            return text[offset:offset + length].decode("utf-8") if length else ""',
+      '        events: List[Any] = []',
+      '        for index in range(batch.event_count):',
+      '            event = batch.events[index]',
+      '            flags, values = event.flags, event.values',
+      '            text0, text1, text2 = event_text(event.text0_offset, event.text0_length), event_text(event.text1_offset, event.text1_length), event_text(event.text2_offset, event.text2_length)',
+      '            modifiers = {"shift": bool(flags & 2), "ctrl": bool(flags & 4), "alt": bool(flags & 8), "superKey": bool(flags & 16)}',
+      '            if event.kind == 1:',
+      '                names = ["resized", "moved", "closeRequested", "focusChanged", "occluded", "scaleFactorChanged", "redrawRequested"]',
+      '                value: Any = {"kind": "window", "type": names[event.event_type - 1], "windowId": event.window_id}',
+      '                if event.event_type == 1: value.update(width=values[0], height=values[1], scaleFactor=values[2])',
+      '                elif event.event_type == 2: value.update(x=values[0], y=values[1])',
+      '                elif event.event_type == 4: value["focused"] = bool(flags & 1)',
+      '                elif event.event_type == 5: value["occluded"] = bool(flags & 1)',
+      '                elif event.event_type == 6: value["scaleFactor"] = values[0]',
+      '            elif event.kind == 2:',
+      '                names = ["move", "button", "enter", "leave", "cancel", "scroll"]',
+      '                value = {"kind": "pointer", "type": names[event.event_type - 1], "windowId": event.window_id, "pointerId": event.id, "pointerType": ["mouse", "touch", "pen"][event.subject_id - 1], "position": [values[0], values[1]]}',
+      '                if event.event_type == 1: value.update(delta=[values[2], values[3]], pressure=values[4])',
+      '                elif event.event_type == 2: value.update(button=_event_enum(text0), state="pressed" if flags & 1 else "released", pressure=values[2])',
+      '                elif event.event_type == 6: value["delta"] = {"pixels" if flags & 64 else "lines": [values[2], values[3]]}',
+      '            elif event.kind == 3:',
+      '                value = {"kind": "keyboard", "type": "input" if event.event_type == 1 else "modifiersChanged", "windowId": event.window_id, "modifiers": modifiers}',
+      '                if event.event_type == 1: value.update(physicalKey=_event_enum(text0), logicalKey={"named": _event_enum(text1)} if flags & 128 else text1, state="pressed" if flags & 1 else "released", repeat=bool(flags & 32))',
+      '                if flags & 256: value["text"] = text2',
+      '            else:',
+      '                names = ["connected", "disconnected", "button", "axis"]',
+      '                value = {"kind": "gamepad", "type": names[event.event_type - 1], "gamepadId": event.subject_id}',
+      '                if event.event_type == 1: value["name"] = text0',
+      '                elif event.event_type == 3: value.update(button=_event_enum(text0), state="pressed" if flags & 1 else "released")',
+      '                elif event.event_type == 4: value.update(axis=_event_enum(text0), value=values[0])',
+      '            events.append(value)',
+      '        return events',
+      '    finally:',
+      '        if _lib.galfus_platform_release_event_batch(batch.batch_id) != 0:',
+      '            raise GalfusError("platformReleaseEventBatch failed: " + get_last_error())',
       ''
     ];
 
@@ -194,7 +246,8 @@ export class PythonStrategy implements CodegenStrategy {
       const outParam = fn.params.find((p) => p.out && isNativeStruct(p.type));
       const outStruct =
         outParam && isNativeStruct(outParam.type) ? outParam.type.nativeStruct : undefined;
-      let returnAnnotation = outParam ? 'Dict[str, Any]' : 'None';
+      let returnAnnotation =
+        outStruct === 'EventBatch' ? 'List[Any]' : outParam ? 'Dict[str, Any]' : 'None';
       if (!outParam && isJson(fn.returnType)) {
         returnAnnotation = 'Dict[str, Any]';
       } else if (isJsonArray(fn.returnType)) {
@@ -248,7 +301,9 @@ export class PythonStrategy implements CodegenStrategy {
             ? '_decode_transform_3d'
             : outStruct === 'Transform2D'
               ? '_decode_transform_2d'
-              : '_decode_camera_look_at_3d';
+              : outStruct === 'EventBatch'
+                ? '_decode_event_batch'
+                : '_decode_camera_look_at_3d';
         lines.push(`    return ${decoder}(_${toSnakeCase(outParam.name)})`);
       } else if (isJson(fn.returnType) || isJsonArray(fn.returnType)) {
         lines.push(`    json_str = _consume_string(_lib.${fn.cName}(${callArgs.join(', ')}))`);

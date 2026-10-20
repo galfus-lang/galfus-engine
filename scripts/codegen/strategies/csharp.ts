@@ -265,6 +265,8 @@ export class CSharpStrategy implements CodegenStrategy {
       '    [StructLayout(LayoutKind.Sequential, Pack = 4)] public struct GalfusTransform2D { public float position_x, position_y, rotation, scale_x, scale_y; public int z_layer, draw_order; }',
       '    [StructLayout(LayoutKind.Sequential, Pack = 4)] public struct GalfusCameraLookAt3D { public uint enabled; public float target_x, target_y, target_z, up_x, up_y, up_z; }',
       '    [StructLayout(LayoutKind.Sequential, Pack = 4)] public struct GalfusSpatialAudio { public float emitter_x, emitter_y, emitter_z, emitter_rotation_x, emitter_rotation_y, emitter_rotation_z, emitter_rotation_w, listener_x, listener_y, listener_z, listener_rotation_x, listener_rotation_y, listener_rotation_z, listener_rotation_w, volume, min_distance, max_distance, rolloff, speed; public uint looping; }',
+      '    [StructLayout(LayoutKind.Sequential)] public struct GalfusPlatformEvent { public ushort kind, event_type; public uint flags, window_id, subject_id; public ulong id; public float value0, value1, value2, value3, value4; public uint text0_offset, text0_length, text1_offset, text1_length, text2_offset, text2_length; }',
+      '    [StructLayout(LayoutKind.Sequential)] public struct GalfusEventBatch { public ulong batch_id; public IntPtr events; public uint event_count; public IntPtr text_data; public uint text_length; }',
       '    #endregion',
       '',
       '    #region Native P/Invoke Declarations',
@@ -344,6 +346,78 @@ export class CSharpStrategy implements CodegenStrategy {
     lines.push('        }');
     lines.push('        #endregion', '');
 
+    lines.push('        #region Platform Event Decoding');
+    lines.push('        private static object EventEnum(string value)');
+    lines.push('        {');
+    lines.push(
+      '            if (value.StartsWith("Other(") && value.EndsWith(")")) return new Dictionary<string, object> { { "other", int.Parse(value.Substring(6, value.Length - 7)) } };'
+    );
+    lines.push(
+      '            return string.IsNullOrEmpty(value) ? value : char.ToLowerInvariant(value[0]) + value.Substring(1);'
+    );
+    lines.push('        }');
+    lines.push('');
+    lines.push(
+      '        private static List<Dictionary<string, object>> DecodeEventBatch(GalfusEventBatch batch)'
+    );
+    lines.push('        {');
+    lines.push('            try');
+    lines.push('            {');
+    lines.push('                byte[] text = new byte[batch.text_length];');
+    lines.push(
+      '                if (batch.text_length > 0) Marshal.Copy(batch.text_data, text, 0, (int)batch.text_length);'
+    );
+    lines.push(
+      '                Func<uint, uint, string> readText = (offset, length) => length == 0 ? "" : Encoding.UTF8.GetString(text, (int)offset, (int)length);'
+    );
+    lines.push('                var result = new List<Dictionary<string, object>>();');
+    lines.push(
+      '                string[] windowTypes = { "resized", "moved", "closeRequested", "focusChanged", "occluded", "scaleFactorChanged", "redrawRequested" };'
+    );
+    lines.push(
+      '                string[] pointerTypes = { "move", "button", "enter", "leave", "cancel", "scroll" };'
+    );
+    lines.push(
+      '                string[] gamepadTypes = { "connected", "disconnected", "button", "axis" };'
+    );
+    lines.push('                string[] pointerKinds = { "mouse", "touch", "pen" };');
+    lines.push('                for (int index = 0; index < batch.event_count; index++)');
+    lines.push('                {');
+    lines.push(
+      '                    var item = Marshal.PtrToStructure<GalfusPlatformEvent>(IntPtr.Add(batch.events, index * 72));'
+    );
+    lines.push(
+      '                    uint flags = item.flags; string text0 = readText(item.text0_offset, item.text0_length), text1 = readText(item.text1_offset, item.text1_length), text2 = readText(item.text2_offset, item.text2_length);'
+    );
+    lines.push(
+      '                    var modifiers = new Dictionary<string, object> { { "shift", (flags & 2) != 0 }, { "ctrl", (flags & 4) != 0 }, { "alt", (flags & 8) != 0 }, { "superKey", (flags & 16) != 0 } };'
+    );
+    lines.push('                    var value = new Dictionary<string, object>();');
+    lines.push(
+      '                    if (item.kind == 1) { value["kind"] = "window"; value["type"] = windowTypes[item.event_type - 1]; value["windowId"] = item.window_id; if (item.event_type == 1) { value["width"] = item.value0; value["height"] = item.value1; value["scaleFactor"] = item.value2; } else if (item.event_type == 2) { value["x"] = item.value0; value["y"] = item.value1; } else if (item.event_type == 4) value["focused"] = (flags & 1) != 0; else if (item.event_type == 5) value["occluded"] = (flags & 1) != 0; else if (item.event_type == 6) value["scaleFactor"] = item.value0; }'
+    );
+    lines.push(
+      '                    else if (item.kind == 2) { value["kind"] = "pointer"; value["type"] = pointerTypes[item.event_type - 1]; value["windowId"] = item.window_id; value["pointerId"] = item.id; value["pointerType"] = pointerKinds[item.subject_id - 1]; value["position"] = new float[] { item.value0, item.value1 }; if (item.event_type == 1) { value["delta"] = new float[] { item.value2, item.value3 }; value["pressure"] = item.value4; } else if (item.event_type == 2) { value["button"] = EventEnum(text0); value["state"] = (flags & 1) != 0 ? "pressed" : "released"; value["pressure"] = item.value2; } else if (item.event_type == 6) value["delta"] = new Dictionary<string, object> { { (flags & 64) != 0 ? "pixels" : "lines", new float[] { item.value2, item.value3 } } }; }'
+    );
+    lines.push(
+      '                    else if (item.kind == 3) { value["kind"] = "keyboard"; value["type"] = item.event_type == 1 ? "input" : "modifiersChanged"; value["windowId"] = item.window_id; value["modifiers"] = modifiers; if (item.event_type == 1) { value["physicalKey"] = EventEnum(text0); value["logicalKey"] = (flags & 128) != 0 ? (object)new Dictionary<string, object> { { "named", EventEnum(text1) } } : text1; value["state"] = (flags & 1) != 0 ? "pressed" : "released"; value["repeat"] = (flags & 32) != 0; } if ((flags & 256) != 0) value["text"] = text2; }'
+    );
+    lines.push(
+      '                    else { value["kind"] = "gamepad"; value["type"] = gamepadTypes[item.event_type - 1]; value["gamepadId"] = item.subject_id; if (item.event_type == 1) value["name"] = text0; else if (item.event_type == 3) { value["button"] = EventEnum(text0); value["state"] = (flags & 1) != 0 ? "pressed" : "released"; } else if (item.event_type == 4) { value["axis"] = EventEnum(text0); value["value"] = item.value0; } }'
+    );
+    lines.push('                    result.Add(value);');
+    lines.push('                }');
+    lines.push('                return result;');
+    lines.push('            }');
+    lines.push('            finally');
+    lines.push('            {');
+    lines.push(
+      '                if (Native.galfus_platform_release_event_batch(batch.batch_id) != 0) throw new GalfusError("platformReleaseEventBatch failed: " + GetLastError());'
+    );
+    lines.push('            }');
+    lines.push('        }');
+    lines.push('        #endregion', '');
+
     lines.push('        /// <summary>Retrieves the last recorded error message.</summary>');
     lines.push('        public string GetLastError()');
     lines.push('        {');
@@ -367,7 +441,8 @@ export class CSharpStrategy implements CodegenStrategy {
 
       // Determine C# method return type
       let returnTypeStr = 'void';
-      if (outStruct) returnTypeStr = `Galfus${outStruct}`;
+      if (outStruct === 'EventBatch') returnTypeStr = 'List<Dictionary<string, object>>';
+      else if (outStruct) returnTypeStr = `Galfus${outStruct}`;
       else if (isReturnString) returnTypeStr = 'string';
       else if (isReturnBool) returnTypeStr = 'bool';
 
@@ -424,7 +499,9 @@ export class CSharpStrategy implements CodegenStrategy {
         lines.push(
           `                if (res != 0) throw new GalfusError("${fn.methodName} failed: " + GetLastError());`
         );
-        if (outParam) lines.push(`                return ${escapeIdent(outParam.name)};`);
+        if (outStruct === 'EventBatch' && outParam)
+          lines.push(`                return DecodeEventBatch(${escapeIdent(outParam.name)});`);
+        else if (outParam) lines.push(`                return ${escapeIdent(outParam.name)};`);
       } else if (isReturnString) {
         lines.push(`                IntPtr res = Native.${fn.cName}(${nativeArgs});`);
         lines.push(`                return PtrToStringUtf8AndFree(res);`);

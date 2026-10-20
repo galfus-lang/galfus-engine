@@ -249,19 +249,43 @@ pub extern "C" fn galfus_window_set_cursor_icon(window_id: u32, icon: u32) -> i3
     }
 }
 
-/// Drains and pumps pending platform events, returning them as a JSON array string.
+/// Pumps pending platform events into a stable fixed-layout batch.
+///
+/// The returned pointers remain valid until `galfus_platform_release_event_batch` is called.
+///
+/// # Safety
+///
+/// `out_batch` must be a non-null, valid pointer to writable `GalfusEventBatch` storage.
 #[unsafe(no_mangle)]
-pub extern "C" fn galfus_platform_pump_events() -> *mut c_char {
-    let result = with_context_mut(|ctx| {
-        let events = ctx.pump_events().map_err(|e| e.to_string())?;
-        serde_json::to_string(&events).map_err(|e| e.to_string())
-    });
+pub unsafe extern "C" fn galfus_platform_pump_events(
+    out_batch: *mut crate::ffi_event_batch::GalfusEventBatch,
+) -> i32 {
+    if out_batch.is_null() {
+        set_last_error("Null pointer passed to platform_pump_events");
+        return -1;
+    }
+    match with_context_mut(|ctx| ctx.pump_events().map_err(|error| error.to_string())) {
+        Ok(events) => {
+            let batch = crate::ffi_event_batch::store_event_batch(events);
+            // SAFETY: The pointer was checked above and points to one caller-owned output struct.
+            unsafe { *out_batch = batch };
+            0
+        }
+        Err(error) => {
+            set_last_error(&error);
+            -1
+        }
+    }
+}
 
-    match result {
-        Ok(json) => to_c_string(&json),
-        Err(e) => {
-            set_last_error(&e);
-            std::ptr::null_mut()
+/// Releases a platform event batch and invalidates all pointers in its view.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_platform_release_event_batch(batch_id: u64) -> i32 {
+    match crate::ffi_event_batch::release_event_batch(batch_id) {
+        Ok(()) => 0,
+        Err(error) => {
+            set_last_error(&error);
+            -1
         }
     }
 }
@@ -556,11 +580,16 @@ mod tests {
         unsafe { galfus_string_free(err_ptr) };
 
         // 4. Pump events
-        let events_ptr = galfus_platform_pump_events();
-        assert!(!events_ptr.is_null());
-        let events_json = unsafe { from_c_str(events_ptr) }.unwrap();
-        assert_eq!(events_json, "[]");
-        unsafe { galfus_string_free(events_ptr) };
+        let mut event_batch = crate::ffi_event_batch::GalfusEventBatch {
+            batch_id: 0,
+            events: std::ptr::null(),
+            event_count: 0,
+            text_data: std::ptr::null(),
+            text_length: 0,
+        };
+        assert_eq!(unsafe { galfus_platform_pump_events(&mut event_batch) }, 0);
+        assert_eq!(event_batch.event_count, 0);
+        assert_eq!(galfus_platform_release_event_batch(event_batch.batch_id), 0);
 
         // 4.1 Window & Audio error paths on non-existent IDs
         assert_eq!(galfus_window_close(999), -1);

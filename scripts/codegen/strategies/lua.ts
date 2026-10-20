@@ -87,6 +87,8 @@ export class LuaStrategy implements CodegenStrategy {
       '    typedef struct { float position_x, position_y, rotation, scale_x, scale_y; int32_t z_layer, draw_order; } GalfusTransform2D;',
       '    typedef struct { uint32_t enabled; float target_x, target_y, target_z, up_x, up_y, up_z; } GalfusCameraLookAt3D;',
       '    typedef struct { float emitter_x, emitter_y, emitter_z, emitter_rotation_x, emitter_rotation_y, emitter_rotation_z, emitter_rotation_w, listener_x, listener_y, listener_z, listener_rotation_x, listener_rotation_y, listener_rotation_z, listener_rotation_w, volume, min_distance, max_distance, rolloff, speed; uint32_t looping; } GalfusSpatialAudio;',
+      '    typedef struct { uint16_t kind, event_type; uint32_t flags, window_id, subject_id; uint64_t id; float values[5]; uint32_t text0_offset, text0_length, text1_offset, text1_length, text2_offset, text2_length; } GalfusPlatformEvent;',
+      '    typedef struct { uint64_t batch_id; const GalfusPlatformEvent* events; uint32_t event_count; const uint8_t* text_data; uint32_t text_length; } GalfusEventBatch;',
       '    void galfus_string_free(char* ptr);'
     ];
 
@@ -159,6 +161,62 @@ export class LuaStrategy implements CodegenStrategy {
       '    local er, lr = emitter.rotation or {0, 0, 0, 1}, listener.rotation or {0, 0, 0, 1}',
       '    return ffi.new("GalfusSpatialAudio", { emitter_x = emitter.position[1], emitter_y = emitter.position[2], emitter_z = emitter.position[3], emitter_rotation_x = er[1], emitter_rotation_y = er[2], emitter_rotation_z = er[3], emitter_rotation_w = er[4], listener_x = listener.position[1], listener_y = listener.position[2], listener_z = listener.position[3], listener_rotation_x = lr[1], listener_rotation_y = lr[2], listener_rotation_z = lr[3], listener_rotation_w = lr[4], volume = config.volume or 1, min_distance = config.minDistance or 1, max_distance = config.maxDistance or 100, rolloff = config.rolloff or 1, speed = config.speed or 1, looping = config.looping and 1 or 0 })',
       'end',
+      '',
+      'local function event_enum(value)',
+      '    local other = value:match("^Other%((%d+)%)$")',
+      '    if other then return { other = tonumber(other) } end',
+      '    return value:sub(1, 1):lower() .. value:sub(2)',
+      'end',
+      '',
+      'local function decode_event_batch(batch)',
+      '    local function event_text(offset, length)',
+      '        if length == 0 then return "" end',
+      '        return ffi.string(batch.text_data + offset, length)',
+      '    end',
+      '    local ok, events_or_error = pcall(function()',
+      '        local events = {}',
+      '        for index = 0, tonumber(batch.event_count) - 1 do',
+      '            local event = batch.events[index]',
+      '            local flags, values = tonumber(event.flags), event.values',
+      '            local text0 = event_text(event.text0_offset, event.text0_length)',
+      '            local text1 = event_text(event.text1_offset, event.text1_length)',
+      '            local text2 = event_text(event.text2_offset, event.text2_length)',
+      '            local modifiers = { shift = bit.band(flags, 2) ~= 0, ctrl = bit.band(flags, 4) ~= 0, alt = bit.band(flags, 8) ~= 0, superKey = bit.band(flags, 16) ~= 0 }',
+      '            local value',
+      '            if event.kind == 1 then',
+      '                local names = { "resized", "moved", "closeRequested", "focusChanged", "occluded", "scaleFactorChanged", "redrawRequested" }',
+      '                value = { kind = "window", type = names[event.event_type], windowId = event.window_id }',
+      '                if event.event_type == 1 then value.width, value.height, value.scaleFactor = values[0], values[1], values[2] end',
+      '                if event.event_type == 2 then value.x, value.y = values[0], values[1] end',
+      '                if event.event_type == 4 then value.focused = bit.band(flags, 1) ~= 0 end',
+      '                if event.event_type == 5 then value.occluded = bit.band(flags, 1) ~= 0 end',
+      '                if event.event_type == 6 then value.scaleFactor = values[0] end',
+      '            elseif event.kind == 2 then',
+      '                local names = { "move", "button", "enter", "leave", "cancel", "scroll" }',
+      '                value = { kind = "pointer", type = names[event.event_type], windowId = event.window_id, pointerId = event.id, pointerType = ({ "mouse", "touch", "pen" })[event.subject_id], position = { values[0], values[1] } }',
+      '                if event.event_type == 1 then value.delta, value.pressure = { values[2], values[3] }, values[4] end',
+      '                if event.event_type == 2 then value.button, value.state, value.pressure = event_enum(text0), bit.band(flags, 1) ~= 0 and "pressed" or "released", values[2] end',
+      '                if event.event_type == 6 then value.delta = { [bit.band(flags, 64) ~= 0 and "pixels" or "lines"] = { values[2], values[3] } } end',
+      '            elseif event.kind == 3 then',
+      '                value = { kind = "keyboard", type = event.event_type == 1 and "input" or "modifiersChanged", windowId = event.window_id, modifiers = modifiers }',
+      '                if event.event_type == 1 then value.physicalKey, value.logicalKey, value.state = event_enum(text0), bit.band(flags, 128) ~= 0 and { named = event_enum(text1) } or text1, bit.band(flags, 1) ~= 0 and "pressed" or "released"; value["repeat"] = bit.band(flags, 32) ~= 0 end',
+      '                if bit.band(flags, 256) ~= 0 then value.text = text2 end',
+      '            else',
+      '                local names = { "connected", "disconnected", "button", "axis" }',
+      '                value = { kind = "gamepad", type = names[event.event_type], gamepadId = event.subject_id }',
+      '                if event.event_type == 1 then value.name = text0 end',
+      '                if event.event_type == 3 then value.button, value.state = event_enum(text0), bit.band(flags, 1) ~= 0 and "pressed" or "released" end',
+      '                if event.event_type == 4 then value.axis, value.value = event_enum(text0), values[0] end',
+      '            end',
+      '            events[#events + 1] = value',
+      '        end',
+      '        return events',
+      '    end)',
+      '    local released = clib.galfus_platform_release_event_batch(batch.batch_id)',
+      '    if released ~= 0 then error("platformReleaseEventBatch failed: " .. (M.get_last_error() or "unknown")) end',
+      '    if not ok then error(events_or_error) end',
+      '    return events_or_error',
+      'end',
       ''
     );
 
@@ -210,7 +268,9 @@ export class LuaStrategy implements CodegenStrategy {
             ? 'decode_transform_3d'
             : outStruct === 'Transform2D'
               ? 'decode_transform_2d'
-              : 'decode_camera_look_at_3d';
+              : outStruct === 'EventBatch'
+                ? 'decode_event_batch'
+                : 'decode_camera_look_at_3d';
         lines.push(`    return ${decoder}(${toSnakeCase(outParam.name)})`);
       } else if (
         isJson(fn.returnType) ||
