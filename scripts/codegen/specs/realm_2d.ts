@@ -547,10 +547,11 @@ export const realm2dFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_realm_2d_load_font_data',
     methodName: 'realm2dLoadFontData',
-    doc: 'Registers raw TTF/OTF font binary data from memory (zero filesystem access) via base64. Returns the detected font family name.',
+    doc: 'Registers raw TTF/OTF font binary data from memory (zero filesystem access). Returns the detected font family name.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'dataBase64', type: 'string', doc: 'Base64 encoded TTF/OTF font binary bytes.' }
+      { name: 'data', type: 'ptr', doc: 'Pointer to raw TTF/OTF font binary bytes.' },
+      { name: 'dataLen', type: 'u64', doc: 'Length of the font binary buffer in bytes.' }
     ],
     returnType: 'string'
   }

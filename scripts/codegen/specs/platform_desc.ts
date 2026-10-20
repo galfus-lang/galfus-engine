@@ -376,14 +376,6 @@ export const platformDescriptors: DescSpec[] = [
     }
   },
   {
-    kind: 'object',
-    name: 'SoundCreatePayload',
-    doc: 'Payload for loading raw sound data bytes into memory under a host logical ID.',
-    fields: {
-      dataBase64: { type: 'string' }
-    }
-  },
-  {
     kind: 'union',
     name: 'PlatformEvent',
     doc: 'Root enum of all events dispatched from the platform layer.',

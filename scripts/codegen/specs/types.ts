@@ -1,7 +1,10 @@
 export type PrimitiveType =
   'void' | 'bool' | 'i32' | 'u32' | 'u64' | 'f32' | 'f64' | 'string' | 'ptr';
 
-export type DataType = PrimitiveType | { json: string } | { jsonArray: string };
+export type BufferElementType = 'u8' | 'u32' | 'f32';
+
+export type DataType =
+  PrimitiveType | { json: string } | { jsonArray: string } | { buffer: BufferElementType };
 
 export interface ParamSpec {
   name: string;
@@ -30,6 +33,11 @@ export function isJson(type: DataType): type is { json: string } {
 
 export function isJsonArray(type: DataType): type is { jsonArray: string } {
   return typeof type === 'object' && 'jsonArray' in type;
+}
+
+/** A contiguous native-endian typed buffer passed without JSON serialization. */
+export function isBuffer(type: DataType): type is { buffer: BufferElementType } {
+  return typeof type === 'object' && 'buffer' in type;
 }
 
 /** Field type representation for schema descriptors. */

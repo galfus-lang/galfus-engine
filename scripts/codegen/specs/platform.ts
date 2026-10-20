@@ -163,7 +163,7 @@ export const platformFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_audio_load_sound',
     methodName: 'audioLoadSound',
-    doc: 'Loads raw audio data bytes (base64-encoded WAV, MP3, OGG, FLAC) under a host logical ID.',
+    doc: 'Loads raw audio data bytes (WAV, MP3, OGG, FLAC) from memory under a host logical ID.',
     params: [
       {
         name: 'soundId',
@@ -171,9 +171,14 @@ export const platformFunctions: FunctionSpec[] = [
         doc: 'Host logical ID of the sound asset'
       },
       {
-        name: 'payload',
-        type: { json: 'SoundCreatePayload' },
-        doc: 'Sound data payload containing base64 audio bytes'
+        name: 'data',
+        type: 'ptr',
+        doc: 'Pointer to raw audio byte buffer'
+      },
+      {
+        name: 'dataLen',
+        type: 'u64',
+        doc: 'Length of audio byte buffer'
       }
     ],
     returnType: 'i32'

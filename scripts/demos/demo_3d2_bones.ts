@@ -1,5 +1,4 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
-import type { Vertex3DDesc } from '../../sdk/typescript/galfus.ts';
 import { extractKey, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
@@ -25,14 +24,23 @@ const MESH_RADIAL_SEGS = 24;
 const TENTACLE_HEIGHT = 8.0;
 const BASE_RADIUS = 0.7;
 
+type SkinnedVertex = {
+  position: [number, number, number];
+  normal: [number, number, number];
+  uv: [number, number];
+  tangent?: [number, number, number, number];
+  joints?: [number, number, number, number];
+  weights?: [number, number, number, number];
+};
+
 /** Generates an articulated 3D column/tentacle mesh with smooth vertex joint weights */
 function buildProceduralSkinnedMesh(
   rings: number,
   radialSegs: number,
   height: number,
   boneCount: number
-): { vertices: Vertex3DDesc[]; indices: number[] } {
-  const vertices: Vertex3DDesc[] = [];
+): { vertices: SkinnedVertex[]; indices: number[] } {
+  const vertices: SkinnedVertex[] = [];
   const indices: number[] = [];
 
   const smoothstep = (t: number) => t * t * (3.0 - 2.0 * t);
@@ -100,6 +108,26 @@ function buildProceduralSkinnedMesh(
   return { vertices, indices };
 }
 
+/** Packs Vertex3D records using the native 80-byte C layout. */
+function packVertexData(vertices: SkinnedVertex[]): Uint8Array {
+  const data = new Uint8Array(vertices.length * 80);
+  const view = new DataView(data.buffer);
+  for (const [index, vertex] of vertices.entries()) {
+    const offset = index * 80;
+    const tangent = vertex.tangent ?? [1, 0, 0, 1];
+    const joints = vertex.joints ?? [0, 0, 0, 0];
+    const weights = vertex.weights ?? [1, 0, 0, 0];
+    [...vertex.position, ...vertex.normal, ...vertex.uv, ...tangent, ...weights].forEach(
+      (value, component) => {
+        const byteOffset = component < 12 ? component * 4 : (component + 4) * 4;
+        view.setFloat32(offset + byteOffset, value, true);
+      }
+    );
+    joints.forEach((joint, component) => view.setUint32(offset + 48 + component * 4, joint, true));
+  }
+  return data;
+}
+
 /** Computes analytical skinning matrix: M = T(dx, restY, dz) * R * T(0, -restY, 0) */
 function computeBoneMatrix(
   restY: number,
@@ -152,9 +180,9 @@ function computeBoneSkinningPalette(
   boneCount: number,
   height: number,
   mode: number
-): number[] {
+): Float32Array {
   const boneHeight = height / (boneCount - 1);
-  const palette: number[] = [];
+  const palette = new Float32Array(boneCount * 16);
 
   for (let i = 0; i < boneCount; i++) {
     const frac = i / (boneCount - 1);
@@ -190,7 +218,7 @@ function computeBoneSkinningPalette(
       rz = -whip * frac * 0.7;
     }
 
-    palette.push(...computeBoneMatrix(restY, dx, dz, rx, ry, rz));
+    palette.set(computeBoneMatrix(restY, dx, dz, rx, ry, rz), i * 16);
   }
 
   return palette;
@@ -230,10 +258,16 @@ export async function runDemo3d2(): Promise<void> {
     TENTACLE_HEIGHT,
     BONE_COUNT
   );
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_SKINNED_TENTACLE_ID, {
-    vertices: skinnedMesh.vertices,
-    indices: skinnedMesh.indices
-  });
+  const skinnedVertexData = packVertexData(skinnedMesh.vertices);
+  const skinnedIndices = new Uint32Array(skinnedMesh.indices);
+  galfus.realm3dCreateGeometryRaw(
+    REALM_3D,
+    GEOM_SKINNED_TENTACLE_ID,
+    skinnedVertexData,
+    skinnedVertexData.byteLength,
+    skinnedIndices,
+    skinnedIndices.length
+  );
   console.log(
     `✔ Skinned mesh uploaded: ${skinnedMesh.vertices.length} vertices, ${skinnedMesh.indices.length / 3} triangles, ${BONE_COUNT} bones.`
   );
@@ -520,7 +554,7 @@ export async function runDemo3d2(): Promise<void> {
       TENTACLE_HEIGHT,
       animMode
     );
-    galfus.realm3dUpdateBones(REALM_3D, MODEL_TENTACLE_ID, boneMatrices);
+    galfus.realm3dUpdateBones(REALM_3D, MODEL_TENTACLE_ID, boneMatrices, boneMatrices.length);
 
     // 4. Render Multiverse frame
     galfus.multiverseDispatch(frameCount, dt);

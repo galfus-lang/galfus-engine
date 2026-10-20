@@ -42,11 +42,25 @@ export const realm3dFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_realm_3d_create_geometry',
     methodName: 'realm3dCreateGeometry',
-    doc: 'Registers or updates a 3D Geometry mesh in the 3D Realm.',
+    doc: 'Registers or updates a procedural 3D Geometry mesh in the 3D Realm.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
       { name: 'geometry', type: { json: 'Geometry3DDesc' }, doc: 'Geometry description' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_geometry_raw',
+    methodName: 'realm3dCreateGeometryRaw',
+    doc: 'Registers custom geometry from 80-byte interleaved Vertex3D records and u32 indices.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'vertexData', type: { buffer: 'u8' }, doc: 'Interleaved Vertex3D bytes.' },
+      { name: 'vertexDataLen', type: 'u64', doc: 'Length of vertexData in bytes.' },
+      { name: 'indices', type: { buffer: 'u32' }, doc: 'Triangle indices.' },
+      { name: 'indexCount', type: 'u64', doc: 'Number of u32 indices.' }
     ],
     returnType: 'i32'
   },
@@ -102,29 +116,19 @@ export const realm3dFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_realm_3d_set_instanced_model_data',
     methodName: 'realm3dSetInstancedModelData',
-    doc: 'Uploads instance data (transforms, colors, emissives, PBR, custom params) for an Instanced Model.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
-      { name: 'instancedModelId', type: 'u32', doc: 'Logical ID of the Instanced Model.' },
-      {
-        name: 'instances',
-        type: { jsonArray: 'InstanceData3DDesc' },
-        doc: 'Array of instance descriptions.'
-      }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_3d_set_instanced_model_raw_data',
-    methodName: 'realm3dSetInstancedModelRawData',
-    doc: 'Uploads raw flat floats (32 floats per instance: 16 transform, 4 color, 4 emissive, 4 pbr, 4 custom) for high performance.',
+    doc: 'Uploads packed instance data: 32 f32 values per instance.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'instancedModelId', type: 'u32', doc: 'Logical ID of the Instanced Model.' },
       {
         name: 'data',
-        type: { jsonArray: 'number' },
-        doc: 'Flat array of float values (multiples of 32).'
+        type: { buffer: 'f32' },
+        doc: 'Packed instance floats.'
+      },
+      {
+        name: 'floatCount',
+        type: 'u64',
+        doc: 'Number of f32 values; must be a multiple of 32.'
       }
     ],
     returnType: 'i32'
@@ -169,14 +173,19 @@ export const realm3dFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_realm_3d_update_bones',
     methodName: 'realm3dUpdateBones',
-    doc: 'Uploads bone matrices (flattened array of 16-element 4x4 matrices) for a model in the 3D Realm.',
+    doc: 'Uploads packed 4x4 bone matrices for a model in the 3D Realm.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'modelId', type: 'u32', doc: 'Logical ID of the Model.' },
       {
-        name: 'matrices',
-        type: { jsonArray: 'number' },
-        doc: 'Array of bone transform floats (multiples of 16)'
+        name: 'data',
+        type: { buffer: 'f32' },
+        doc: 'Bone matrix floats.'
+      },
+      {
+        name: 'floatCount',
+        type: 'u64',
+        doc: 'Number of f32 values; must be a multiple of 16.'
       }
     ],
     returnType: 'i32'

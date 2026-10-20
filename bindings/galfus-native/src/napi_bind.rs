@@ -142,19 +142,10 @@ pub fn gamepad_set_rumble(
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct NapiSoundPayload {
-    data_base64: String,
-}
-
 #[napi]
-pub fn audio_load_sound(env: Env, sound_id: u32, payload_val: JsUnknown) -> Result<()> {
-    let payload: NapiSoundPayload = env.from_js_value(payload_val)?;
-    let bytes = crate::ffi_resources::decode_base64(&payload.data_base64)
-        .map_err(|e| Error::new(Status::GenericFailure, e))?;
+pub fn audio_load_sound(sound_id: u32, data: Uint8Array, _data_len: Option<i64>) -> Result<()> {
     with_context_mut(|ctx| {
-        ctx.load_sound_bytes(sound_id, &bytes)
+        ctx.load_sound_bytes(sound_id, data.as_ref())
             .map(|_| ())
             .map_err(|e| e.to_string())
     })
@@ -476,63 +467,39 @@ pub fn multiverse_get_anti_aliasing() -> Result<String> {
     Ok(s.trim_matches('"').to_string())
 }
 
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct NapiTextureCreatePayload {
-    desc: galfus_gpu_manager::GpuTextureDesc,
-    data_base64: String,
-}
-
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct NapiTextureUpdatePayload {
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-    data_base64: String,
-}
-
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct NapiBufferCreatePayload {
-    label: Option<String>,
-    usages: galfus_gpu_manager::BufferUsageFlags,
-    data_base64: String,
-}
-
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct NapiBufferUpdatePayload {
-    offset: u64,
-    data_base64: String,
-}
-
 #[napi]
-pub fn resource_create_texture(env: Env, texture_id: u32, payload_val: JsUnknown) -> Result<()> {
-    let payload: NapiTextureCreatePayload = env.from_js_value(payload_val)?;
-    let bytes = crate::ffi_resources::decode_base64(&payload.data_base64)
-        .map_err(|e| Error::new(Status::GenericFailure, e))?;
+pub fn resource_create_texture(
+    env: Env,
+    texture_id: u32,
+    desc_val: JsUnknown,
+    data: Uint8Array,
+    _data_len: Option<i64>,
+) -> Result<()> {
+    let desc: galfus_gpu_manager::GpuTextureDesc = env.from_js_value(desc_val)?;
     with_multiverse_mut(|mv| {
-        mv.create_texture(texture_id, &payload.desc, &bytes)
+        mv.create_texture(texture_id, &desc, data.as_ref())
             .map_err(|e| e.to_string())
     })
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
 #[napi]
-pub fn resource_update_texture(env: Env, texture_id: u32, payload_val: JsUnknown) -> Result<()> {
-    let payload: NapiTextureUpdatePayload = env.from_js_value(payload_val)?;
-    let bytes = crate::ffi_resources::decode_base64(&payload.data_base64)
-        .map_err(|e| Error::new(Status::GenericFailure, e))?;
+pub fn resource_update_texture(
+    env: Env,
+    texture_id: u32,
+    rect_val: JsUnknown,
+    data: Uint8Array,
+    _data_len: Option<i64>,
+) -> Result<()> {
+    let rect: crate::ffi_resources::TextureUpdateDesc = env.from_js_value(rect_val)?;
     with_multiverse_mut(|mv| {
         mv.write_texture(
             texture_id,
-            payload.x,
-            payload.y,
-            payload.width,
-            payload.height,
-            &bytes,
+            rect.x,
+            rect.y,
+            rect.width,
+            rect.height,
+            data.as_ref(),
         )
         .map_err(|e| e.to_string())
     })
@@ -546,24 +513,30 @@ pub fn resource_dispose_texture(texture_id: u32) -> Result<()> {
 }
 
 #[napi]
-pub fn resource_create_buffer(env: Env, buffer_id: u32, payload_val: JsUnknown) -> Result<()> {
-    let payload: NapiBufferCreatePayload = env.from_js_value(payload_val)?;
-    let bytes = crate::ffi_resources::decode_base64(&payload.data_base64)
-        .map_err(|e| Error::new(Status::GenericFailure, e))?;
+pub fn resource_create_buffer(
+    env: Env,
+    buffer_id: u32,
+    desc_val: JsUnknown,
+    data: Uint8Array,
+    _data_len: Option<i64>,
+) -> Result<()> {
+    let desc: crate::ffi_resources::BufferDesc = env.from_js_value(desc_val)?;
     with_multiverse_mut(|mv| {
-        mv.create_buffer(buffer_id, payload.label.as_deref(), &bytes, payload.usages)
+        mv.create_buffer(buffer_id, desc.label.as_deref(), data.as_ref(), desc.usages)
             .map_err(|e| e.to_string())
     })
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
 #[napi]
-pub fn resource_update_buffer(env: Env, buffer_id: u32, payload_val: JsUnknown) -> Result<()> {
-    let payload: NapiBufferUpdatePayload = env.from_js_value(payload_val)?;
-    let bytes = crate::ffi_resources::decode_base64(&payload.data_base64)
-        .map_err(|e| Error::new(Status::GenericFailure, e))?;
+pub fn resource_update_buffer(
+    buffer_id: u32,
+    offset: i64,
+    data: Uint8Array,
+    _data_len: Option<i64>,
+) -> Result<()> {
     with_multiverse_mut(|mv| {
-        mv.write_buffer(buffer_id, payload.offset, &bytes)
+        mv.write_buffer(buffer_id, offset as u64, data.as_ref())
             .map_err(|e| e.to_string())
     })
     .map_err(|e| Error::new(Status::GenericFailure, e))

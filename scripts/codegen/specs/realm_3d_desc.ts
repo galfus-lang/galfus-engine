@@ -26,43 +26,18 @@ export const realm3dDescriptors: DescSpec[] = [
   },
   {
     kind: 'object',
-    name: 'Vertex3DDesc',
-    doc: 'Vertex data for 3D meshes (position, normal, UV, tangent).',
-    fields: {
-      position: { type: { tuple: ['number', 'number', 'number'] } },
-      normal: { type: { tuple: ['number', 'number', 'number'] } },
-      uv: { type: { tuple: ['number', 'number'] } },
-      tangent: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      joints: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      weights: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true }
-    }
-  },
-  {
-    kind: 'object',
     name: 'Geometry3DDesc',
-    doc: '3D mesh definition with built-in primitives (cube, plane, sphere) or custom vertices and indices.',
+    doc: 'Procedural 3D primitive configuration. Custom geometry uses binary vertex and index buffers.',
     fields: {
       primitive: {
         type: {
-          enum: [
-            'cube',
-            'plane',
-            'quad',
-            'sphere',
-            'cylinder',
-            'capsule',
-            'pyramid',
-            'torus',
-            'custom'
-          ]
+          enum: ['cube', 'plane', 'quad', 'sphere', 'cylinder', 'capsule', 'pyramid', 'torus']
         },
         optional: true
       },
       size: { type: 'number', optional: true },
       radius: { type: 'number', optional: true },
-      subdivisions: { type: 'number', optional: true },
-      vertices: { type: { array: { ref: 'Vertex3DDesc' } }, optional: true },
-      indices: { type: { array: 'number' }, optional: true }
+      subdivisions: { type: 'number', optional: true }
     }
   },
   {
@@ -256,18 +231,6 @@ export const realm3dDescriptors: DescSpec[] = [
       uvRect: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       emissionShape: { type: { ref: 'EmissionShape3DDesc' }, optional: true },
       active: { type: 'boolean', optional: true }
-    }
-  },
-  {
-    kind: 'object',
-    name: 'InstanceData3DDesc',
-    doc: 'Per-instance data for 3D GPU mesh instancing (transform, color, emissive, PBR, custom).',
-    fields: {
-      transform: { type: { array: 'number' }, optional: true },
-      color: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      emissive: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      pbr: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      custom: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true }
     }
   },
   {

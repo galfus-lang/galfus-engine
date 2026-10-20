@@ -1,5 +1,5 @@
 import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-import { type DataType, isJson, isJsonArray, type ParamSpec } from '../spec.ts';
+import { type DataType, isBuffer, isJson, isJsonArray, type ParamSpec } from '../spec.ts';
 
 function toSnakeCase(str: string): string {
   return str.replace(/([A-Z])/g, '_$1').toLowerCase();
@@ -7,6 +7,11 @@ function toSnakeCase(str: string): string {
 
 function mapLuaCParam(p: ParamSpec): string {
   const pName = toSnakeCase(p.name);
+  if (isBuffer(p.type)) {
+    const element =
+      p.type.buffer === 'u8' ? 'uint8_t' : p.type.buffer === 'u32' ? 'uint32_t' : 'float';
+    return `const ${element}* ${pName}`;
+  }
   if (typeof p.type === 'object') {
     return `const char* ${pName}`;
   }

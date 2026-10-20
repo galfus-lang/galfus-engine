@@ -1,7 +1,14 @@
 import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-import { type DataType, isJson, isJsonArray } from '../spec.ts';
+import { type DataType, isBuffer, isJson, isJsonArray } from '../spec.ts';
 
 function mapParamTsType(type: DataType): string {
+  if (isBuffer(type)) {
+    return type.buffer === 'u8'
+      ? 'Uint8Array'
+      : type.buffer === 'u32'
+        ? 'Uint32Array'
+        : 'Float32Array';
+  }
   if (isJson(type)) {
     if (type.json === 'Transform3DDesc') {
       return `Transform3DDesc | Float32Array | number[] | string`;

@@ -305,66 +305,12 @@ pub extern "C" fn galfus_gamepad_set_rumble(
     }
 }
 
-/// Loads raw audio data bytes (base64-encoded) under a host logical ID. Returns 0 on success, -1 on failure.
-///
-/// # Safety
-/// `payload_json` must be a valid, null-terminated UTF-8 C string pointer.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_audio_load_sound(
-    sound_id: u32,
-    payload_json: *const c_char,
-) -> i32 {
-    let json_str = match unsafe { from_c_str(payload_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    #[derive(serde::Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct SoundPayload {
-        data_base64: String,
-    }
-
-    let payload: SoundPayload = match serde_json::from_str(json_str) {
-        Ok(p) => p,
-        Err(e) => {
-            set_last_error(&format!("Invalid SoundCreatePayload JSON: {e}"));
-            return -1;
-        }
-    };
-
-    let bytes = match crate::ffi_resources::decode_base64(&payload.data_base64) {
-        Ok(b) => b,
-        Err(e) => {
-            set_last_error(&format!("Base64 decoding failed: {e}"));
-            return -1;
-        }
-    };
-
-    let result = with_context_mut(|ctx| {
-        ctx.load_sound_bytes(sound_id, &bytes)
-            .map(|_| ())
-            .map_err(|e| e.to_string())
-    });
-
-    match result {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Loads raw audio data bytes directly from a buffer pointer. Returns 0 on success, -1 on failure.
+/// Loads raw audio data bytes (WAV, MP3, OGG, FLAC) from memory under a host logical ID. Returns 0 on success, -1 on failure.
 ///
 /// # Safety
 /// `data_ptr` must be valid for reads of `data_len` bytes.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_audio_load_sound_raw(
+pub unsafe extern "C" fn galfus_audio_load_sound(
     sound_id: u32,
     data_ptr: *const u8,
     data_len: usize,

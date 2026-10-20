@@ -352,32 +352,27 @@ pub extern "C" fn galfus_realm_2d_destroy_svg(realm_id: u32, svg_id: u32) -> i32
 
 /// Registers raw TTF/OTF font binary data from memory (zero filesystem access).
 ///
-/// Accepts base64 encoded font data string and returns the detected font family name as a C string.
+/// Accepts raw font buffer pointer and length, returning the detected font family name as a C string.
+///
+/// # Safety
+/// `data_ptr` must be valid for reads of `data_len` bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_load_font_data(
     realm_id: u32,
-    data_base64: *const c_char,
+    data_ptr: *const u8,
+    data_len: usize,
 ) -> *mut c_char {
-    let b64 = match unsafe { from_c_str(data_base64) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return std::ptr::null_mut();
-        }
-    };
-    let bytes = match crate::ffi_resources::decode_base64(b64.trim()) {
-        Ok(b) => b,
-        Err(e) => {
-            set_last_error(&format!("Invalid base64 font data: {e}"));
-            return std::ptr::null_mut();
-        }
-    };
+    if data_ptr.is_null() || data_len == 0 {
+        set_last_error("Null or empty font buffer");
+        return std::ptr::null_mut();
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
 
     match with_multiverse_mut(|mv| {
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
             .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        let family = realm.load_font_data(&bytes).map_err(|e| e.to_string())?;
+        let family = realm.load_font_data(bytes).map_err(|e| e.to_string())?;
         Ok(family)
     }) {
         Ok(family) => to_c_string(&family),

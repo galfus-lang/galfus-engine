@@ -59,23 +59,13 @@ export const resourceDescriptors: DescSpec[] = [
   },
   {
     kind: 'object',
-    name: 'TextureCreatePayload',
-    doc: 'Payload for creating a texture with initial pixel data.',
-    fields: {
-      desc: { type: { ref: 'GpuTextureDesc' } },
-      dataBase64: { type: 'string' }
-    }
-  },
-  {
-    kind: 'object',
-    name: 'TextureUpdatePayload',
-    doc: 'Payload for updating a texture sub-rectangle with pixel data.',
+    name: 'TextureUpdateDesc',
+    doc: 'Sub-rectangle destination coordinates for updating a texture region.',
     fields: {
       x: { type: 'number' },
       y: { type: 'number' },
       width: { type: 'number' },
-      height: { type: 'number' },
-      dataBase64: { type: 'string' }
+      height: { type: 'number' }
     }
   },
   {
@@ -93,21 +83,11 @@ export const resourceDescriptors: DescSpec[] = [
   },
   {
     kind: 'object',
-    name: 'BufferCreatePayload',
-    doc: 'Payload for creating a buffer with initial byte data.',
+    name: 'BufferDesc',
+    doc: 'Descriptor for creating a shared GPU buffer.',
     fields: {
       label: { type: 'string', optional: true },
-      usages: { type: { ref: 'BufferUsageFlags' } },
-      dataBase64: { type: 'string' }
-    }
-  },
-  {
-    kind: 'object',
-    name: 'BufferUpdatePayload',
-    doc: 'Payload for updating buffer contents at an offset.',
-    fields: {
-      offset: { type: 'number' },
-      dataBase64: { type: 'string' }
+      usages: { type: { ref: 'BufferUsageFlags' } }
     }
   }
 ];
@@ -116,7 +96,7 @@ export const resourceFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_resource_create_texture',
     methodName: 'resourceCreateTexture',
-    doc: 'Allocates and initializes a shared GPU texture under a host logical ID.',
+    doc: 'Allocates and initializes a shared GPU texture under a host logical ID with raw pixel bytes.',
     params: [
       {
         name: 'textureId',
@@ -124,9 +104,19 @@ export const resourceFunctions: FunctionSpec[] = [
         doc: 'Host logical ID of the texture'
       },
       {
-        name: 'payload',
-        type: { json: 'TextureCreatePayload' },
-        doc: 'Texture creation descriptor and base64 pixel data'
+        name: 'desc',
+        type: { json: 'GpuTextureDesc' },
+        doc: 'Texture creation descriptor'
+      },
+      {
+        name: 'data',
+        type: 'ptr',
+        doc: 'Pointer to raw pixel data bytes'
+      },
+      {
+        name: 'dataLen',
+        type: 'u64',
+        doc: 'Length of raw pixel data in bytes'
       }
     ],
     returnType: 'i32'
@@ -134,7 +124,7 @@ export const resourceFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_resource_update_texture',
     methodName: 'resourceUpdateTexture',
-    doc: 'Updates a sub-rectangle of an existing logical texture with base64 pixel data.',
+    doc: 'Updates a sub-rectangle of an existing logical texture with raw pixel bytes.',
     params: [
       {
         name: 'textureId',
@@ -142,9 +132,19 @@ export const resourceFunctions: FunctionSpec[] = [
         doc: 'Host logical ID of the texture'
       },
       {
-        name: 'payload',
-        type: { json: 'TextureUpdatePayload' },
-        doc: 'Sub-rectangle coordinates and base64 pixel data'
+        name: 'rect',
+        type: { json: 'TextureUpdateDesc' },
+        doc: 'Sub-rectangle coordinates'
+      },
+      {
+        name: 'data',
+        type: 'ptr',
+        doc: 'Pointer to raw pixel data bytes'
+      },
+      {
+        name: 'dataLen',
+        type: 'u64',
+        doc: 'Length of raw pixel data in bytes'
       }
     ],
     returnType: 'i32'
@@ -165,7 +165,7 @@ export const resourceFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_resource_create_buffer',
     methodName: 'resourceCreateBuffer',
-    doc: 'Allocates and initializes a shared GPU buffer under a host logical ID.',
+    doc: 'Allocates and initializes a shared GPU buffer under a host logical ID with raw byte contents.',
     params: [
       {
         name: 'bufferId',
@@ -173,9 +173,19 @@ export const resourceFunctions: FunctionSpec[] = [
         doc: 'Host logical ID of the buffer'
       },
       {
-        name: 'payload',
-        type: { json: 'BufferCreatePayload' },
-        doc: 'Buffer creation descriptor and base64 byte contents'
+        name: 'desc',
+        type: { json: 'BufferDesc' },
+        doc: 'Buffer creation configuration descriptor'
+      },
+      {
+        name: 'data',
+        type: 'ptr',
+        doc: 'Pointer to raw buffer byte contents'
+      },
+      {
+        name: 'dataLen',
+        type: 'u64',
+        doc: 'Length of raw buffer contents in bytes'
       }
     ],
     returnType: 'i32'
@@ -183,7 +193,7 @@ export const resourceFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_resource_update_buffer',
     methodName: 'resourceUpdateBuffer',
-    doc: 'Updates byte contents of an existing logical buffer at a given offset.',
+    doc: 'Updates byte contents of an existing logical buffer at a given offset with raw byte contents.',
     params: [
       {
         name: 'bufferId',
@@ -191,9 +201,19 @@ export const resourceFunctions: FunctionSpec[] = [
         doc: 'Host logical ID of the buffer'
       },
       {
-        name: 'payload',
-        type: { json: 'BufferUpdatePayload' },
-        doc: 'Offset and base64 byte contents'
+        name: 'offset',
+        type: 'u64',
+        doc: 'Byte offset in destination buffer'
+      },
+      {
+        name: 'data',
+        type: 'ptr',
+        doc: 'Pointer to raw byte contents'
+      },
+      {
+        name: 'dataLen',
+        type: 'u64',
+        doc: 'Length of raw byte contents in bytes'
       }
     ],
     returnType: 'i32'

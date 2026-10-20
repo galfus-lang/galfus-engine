@@ -1,5 +1,5 @@
 import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-import { type DataType, isJson, isJsonArray } from '../spec.ts';
+import { type DataType, isBuffer, isJson, isJsonArray } from '../spec.ts';
 
 function mapFFIType(type: DataType): string {
   if (typeof type === 'object') {
@@ -28,6 +28,13 @@ function mapFFIType(type: DataType): string {
 }
 
 function mapParamTsType(type: DataType): string {
+  if (isBuffer(type)) {
+    return type.buffer === 'u8'
+      ? 'Uint8Array'
+      : type.buffer === 'u32'
+        ? 'Uint32Array'
+        : 'Float32Array';
+  }
   if (isJson(type)) {
     if (type.json === 'Transform3DDesc') {
       return `Transform3DDesc | Float32Array | number[] | string`;
@@ -266,7 +273,7 @@ export class BunFfiStrategy implements CodegenStrategy {
         } else if (p.type === 'string') {
           lines.push(`    const _${p.name}_buf = this.toCString(${p.name});`);
           ffiArgs.push(`bunPtr(_${p.name}_buf)`);
-        } else if (p.type === 'ptr') {
+        } else if (p.type === 'ptr' || isBuffer(p.type)) {
           lines.push(
             `    const _${p.name}_ptr = ArrayBuffer.isView(${p.name}) ? bunPtr(${p.name} as any) : ${p.name};`
           );

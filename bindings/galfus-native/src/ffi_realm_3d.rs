@@ -1,6 +1,8 @@
 use std::os::raw::c_char;
 
 use galfus_realm_3d::Realm3DContext;
+use galfus_realm_3d_resources::geometry::{Geometry3D, Vertex3D};
+use galfus_realm_3d_resources::model::InstanceData3D;
 
 use crate::ffi::{from_c_str, set_last_error};
 use crate::ffi_realm_3d_desc::*;
@@ -154,12 +156,84 @@ pub unsafe extern "C" fn galfus_realm_3d_create_geometry(
             }
         };
 
+    if geom_desc.primitive.is_none() || geom_desc.primitive.as_deref() == Some("custom") {
+        set_last_error("Custom geometry must be uploaded with galfus_realm_3d_create_geometry_raw");
+        return -1;
+    }
+
     match with_multiverse_mut(|mv| {
         let realm = mv
             .get_realm_mut::<Realm3DContext>(realm_id)
             .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
         realm
             .create_geometry(geometry_id, geom_desc.into())
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Registers or updates custom 3D geometry from interleaved binary vertex data and u32 indices.
+///
+/// Vertex data uses the `Vertex3D` C layout: position `[f32; 3]`, normal `[f32; 3]`, UV
+/// `[f32; 2]`, tangent `[f32; 4]`, joints `[u32; 4]`, and weights `[f32; 4]` (80 bytes).
+/// Indices must reference an existing vertex.
+///
+/// # Safety
+/// `vertices_ptr` must be valid for `vertices_len` bytes and `indices_ptr` must be valid for
+/// `indices_len` u32 elements when their respective lengths are non-zero.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_3d_create_geometry_raw(
+    realm_id: u32,
+    geometry_id: u32,
+    vertices_ptr: *const u8,
+    vertices_len: usize,
+    indices_ptr: *const u32,
+    indices_len: usize,
+) -> i32 {
+    const VERTEX3D_BYTES: usize = std::mem::size_of::<Vertex3D>();
+
+    if vertices_len == 0 || !vertices_len.is_multiple_of(VERTEX3D_BYTES) {
+        set_last_error("Vertex data length must be a non-zero multiple of 80 bytes");
+        return -1;
+    }
+    if vertices_ptr.is_null() || (indices_len != 0 && indices_ptr.is_null()) {
+        set_last_error("Null custom geometry data pointer");
+        return -1;
+    }
+
+    let vertex_bytes = unsafe { std::slice::from_raw_parts(vertices_ptr, vertices_len) };
+    let vertices = vertex_bytes
+        .as_chunks::<VERTEX3D_BYTES>()
+        .0
+        .iter()
+        .map(|chunk| unsafe { std::ptr::read_unaligned(chunk.as_ptr().cast::<Vertex3D>()) })
+        .collect::<Vec<_>>();
+    let indices = if indices_len == 0 {
+        Vec::new()
+    } else {
+        unsafe { std::slice::from_raw_parts(indices_ptr, indices_len) }.to_vec()
+    };
+
+    if indices
+        .iter()
+        .any(|&index| index as usize >= vertices.len())
+    {
+        set_last_error("Custom geometry index is outside the vertex buffer");
+        return -1;
+    }
+
+    let geometry = Geometry3D::new(vertices, indices, None);
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm
+            .create_geometry(geometry_id, geometry)
             .map_err(|e| e.to_string())
     }) {
         Ok(()) => 0,
@@ -350,80 +424,31 @@ pub unsafe extern "C" fn galfus_realm_3d_create_instanced_model(
     }
 }
 
-/// Uploads instance descriptions for an existing Instanced Model in the 3D Realm.
+/// Uploads 32-float instance records for an existing Instanced Model in the 3D Realm.
+///
+/// The layout per instance is: 16 transform floats, 4 color floats, 4 emissive floats,
+/// 4 PBR floats, and 4 custom floats.
 ///
 /// # Safety
-/// `instances_json` must be a valid, null-terminated UTF-8 string.
+/// `data_ptr` must be valid for reads of `float_count` f32 elements.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_3d_set_instanced_model_data(
     realm_id: u32,
     instanced_model_id: u32,
-    instances_json: *const c_char,
+    data_ptr: *const f32,
+    float_count: usize,
 ) -> i32 {
-    let desc_list: Vec<InstanceData3DDesc> =
-        match serde_json::from_str(match unsafe { from_c_str(instances_json) } {
-            Ok(s) => s,
-            Err(e) => {
-                set_last_error(&e);
-                return -1;
-            }
-        }) {
-            Ok(d) => d,
-            Err(e) => {
-                set_last_error(&format!("Invalid InstanceData3DDesc list: {e}"));
-                return -1;
-            }
-        };
-
-    let instances: Vec<galfus_realm_3d_resources::model::InstanceData3D> =
-        desc_list.into_iter().map(Into::into).collect();
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm3DContext>(realm_id)
-            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
-        realm
-            .set_instanced_model_data(instanced_model_id, instances)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Uploads raw flat floats (32 floats per instance) for an existing Instanced Model in the 3D Realm.
-///
-/// # Safety
-/// `data_json` must be a valid, null-terminated UTF-8 string representing `number[]`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_3d_set_instanced_model_raw_data(
-    realm_id: u32,
-    instanced_model_id: u32,
-    data_json: *const c_char,
-) -> i32 {
-    let floats: Vec<f32> = match serde_json::from_str(match unsafe { from_c_str(data_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    }) {
-        Ok(f) => f,
-        Err(e) => {
-            set_last_error(&format!("Invalid raw data JSON: {e}"));
-            return -1;
-        }
-    };
-
-    if !floats.len().is_multiple_of(32) {
+    if float_count == 0 || !float_count.is_multiple_of(32) {
         set_last_error("Instanced raw data length must be a multiple of 32");
         return -1;
     }
+    if data_ptr.is_null() {
+        set_last_error("Null instanced model data pointer");
+        return -1;
+    }
+    let floats = unsafe { std::slice::from_raw_parts(data_ptr, float_count) };
 
-    let instances: Vec<galfus_realm_3d_resources::model::InstanceData3D> = floats
+    let instances: Vec<InstanceData3D> = floats
         .as_chunks::<32>()
         .0
         .iter()
@@ -437,7 +462,7 @@ pub unsafe extern "C" fn galfus_realm_3d_set_instanced_model_raw_data(
             let emissive = glam::Vec4::new(chunk[20], chunk[21], chunk[22], chunk[23]);
             let pbr = glam::Vec4::new(chunk[24], chunk[25], chunk[26], chunk[27]);
             let custom = glam::Vec4::new(chunk[28], chunk[29], chunk[30], chunk[31]);
-            galfus_realm_3d_resources::model::InstanceData3D {
+            InstanceData3D {
                 transform,
                 color,
                 emissive,
@@ -600,34 +625,26 @@ pub unsafe extern "C" fn galfus_realm_3d_set_environment(
     }
 }
 
-/// Uploads bone transform matrices (array of 16-element floats) for skeletal skinning.
+/// Uploads contiguous 16-float matrices for skeletal skinning.
 ///
 /// # Safety
-/// `matrices_json` must be a valid, null-terminated UTF-8 string representing `number[]`.
+/// `data_ptr` must be valid for reads of `float_count` f32 elements.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_3d_update_bones(
     realm_id: u32,
     model_id: u32,
-    matrices_json: *const c_char,
+    data_ptr: *const f32,
+    float_count: usize,
 ) -> i32 {
-    let floats: Vec<f32> = match serde_json::from_str(match unsafe { from_c_str(matrices_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    }) {
-        Ok(f) => f,
-        Err(e) => {
-            set_last_error(&format!("Invalid matrices JSON: {e}"));
-            return -1;
-        }
-    };
-
-    if !floats.len().is_multiple_of(16) {
+    if float_count == 0 || !float_count.is_multiple_of(16) {
         set_last_error("Matrices array length must be a multiple of 16");
         return -1;
     }
+    if data_ptr.is_null() {
+        set_last_error("Null bone matrix data pointer");
+        return -1;
+    }
+    let floats = unsafe { std::slice::from_raw_parts(data_ptr, float_count) };
 
     let matrices: Vec<glam::Mat4> = floats
         .as_chunks::<16>()

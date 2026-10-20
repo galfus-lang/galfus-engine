@@ -1,5 +1,5 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
-import type { InstanceData3DDesc, Transform3DDesc } from '../../sdk/typescript/galfus.ts';
+import type { Transform3DDesc } from '../../sdk/typescript/galfus.ts';
 import { extractKey, eulerToQuat, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
@@ -296,7 +296,7 @@ export async function runDemo3d8(): Promise<void> {
 
   // Generate instances: field of bioluminescent crystals / grass with wind parameters
   console.log(`==> Generating ${totalInstances.toLocaleString()} instances data...`);
-  const instanceDataList: InstanceData3DDesc[] = [];
+  const instanceDataList: number[] = [];
   const halfGrid = (INSTANCE_GRID_SIZE * INSTANCE_SPACING) / 2.0;
 
   for (let gz = 0; gz < INSTANCE_GRID_SIZE; gz++) {
@@ -368,18 +368,37 @@ export async function runDemo3d8(): Promise<void> {
         1.0
       ];
 
-      instanceDataList.push({
-        transform: mat,
-        color: [r, g, b, 1.0],
-        emissive: [glowR, glowG, glowB, 1.0],
-        pbr: [0.1, 0.3, 0.5, 1.0],
-        custom: [windAmp, windFreq, pulseSpeed, phaseOffset]
-      });
+      instanceDataList.push(
+        ...mat,
+        r,
+        g,
+        b,
+        1.0,
+        glowR,
+        glowG,
+        glowB,
+        1.0,
+        0.1,
+        0.3,
+        0.5,
+        1.0,
+        windAmp,
+        windFreq,
+        pulseSpeed,
+        phaseOffset
+      );
     }
   }
 
-  console.log(`✔ Generated ${instanceDataList.length.toLocaleString()} active instances`);
-  galfus.realm3dSetInstancedModelData(REALM_3D, INSTANCED_CRYSTAL_ID, instanceDataList);
+  const instanceData = new Float32Array(instanceDataList);
+  const instanceCount = instanceData.length / 32;
+  console.log(`✔ Generated ${instanceCount.toLocaleString()} active instances`);
+  galfus.realm3dSetInstancedModelData(
+    REALM_3D,
+    INSTANCED_CRYSTAL_ID,
+    instanceData,
+    instanceData.length
+  );
   console.log('✔ Uploaded instance data to GPU vertex buffer (1 draw call)!');
 
   // Multiverse Invocation
@@ -416,7 +435,7 @@ export async function runDemo3d8(): Promise<void> {
       const fps = (frameCount * 1000.0) / (now - fpsTimer);
       galfus.windowSetTitle(
         windowId,
-        `Galfus Engine - Demo 3D-8: Instancing (${instanceDataList.length.toLocaleString()} instances, 1 Draw Call) [${fps.toFixed(1)} FPS]`
+        `Galfus Engine - Demo 3D-8: Instancing (${instanceCount.toLocaleString()} instances, 1 Draw Call) [${fps.toFixed(1)} FPS]`
       );
       frameCount = 0;
       fpsTimer = now;

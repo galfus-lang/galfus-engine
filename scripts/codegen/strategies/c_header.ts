@@ -1,11 +1,15 @@
 import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-import type { DataType } from '../spec.ts';
+import { type DataType, isBuffer } from '../spec.ts';
 
 function toSnakeCase(str: string): string {
   return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
 }
 
 function mapCType(type: DataType, isParam: boolean): string {
+  if (isBuffer(type)) {
+    const element = type.buffer === 'u8' ? 'uint8_t' : type.buffer === 'u32' ? 'uint32_t' : 'float';
+    return isParam ? `const ${element}*` : `${element}*`;
+  }
   if (typeof type === 'object') {
     return isParam ? 'const char*' : 'char*';
   }

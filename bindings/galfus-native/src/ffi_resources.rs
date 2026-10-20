@@ -6,78 +6,34 @@ use crate::state::with_multiverse_mut;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TextureCreatePayload {
-    desc: galfus_gpu_manager::GpuTextureDesc,
-    data_base64: String,
+pub struct TextureUpdateDesc {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TextureUpdatePayload {
-    x: u32,
-    y: u32,
-    width: u32,
-    height: u32,
-    data_base64: String,
+pub struct BufferDesc {
+    pub label: Option<String>,
+    pub usages: galfus_gpu_manager::BufferUsageFlags,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BufferCreatePayload {
-    label: Option<String>,
-    usages: galfus_gpu_manager::BufferUsageFlags,
-    data_base64: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BufferUpdatePayload {
-    offset: u64,
-    data_base64: String,
-}
-
-/// Decodes standard base64 byte contents.
-pub(crate) fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
-    let input = input.trim();
-    let mut out = Vec::with_capacity(input.len() * 3 / 4);
-    let mut buf = 0u32;
-    let mut bits = 0u32;
-    for &b in input.as_bytes() {
-        if b == b'=' {
-            break;
-        }
-        if b.is_ascii_whitespace() {
-            continue;
-        }
-        let val = match b {
-            b'A'..=b'Z' => b - b'A',
-            b'a'..=b'z' => b - b'a' + 26,
-            b'0'..=b'9' => b - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            _ => return Err(format!("Invalid base64 character: {}", b as char)),
-        };
-        buf = (buf << 6) | (val as u32);
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push((buf >> bits) as u8);
-        }
-    }
-    Ok(out)
-}
-
-/// Allocates and initializes a shared GPU texture under a host logical ID.
+/// Allocates and initializes a shared GPU texture under a host logical ID with raw pixel bytes.
 /// Returns 0 on success, -1 on failure.
 ///
 /// # Safety
-/// `payload_json` must be a valid, null-terminated UTF-8 C string pointer.
+/// `desc_json` must be a valid, null-terminated UTF-8 C string pointer.
+/// `data_ptr` must be valid for reads of `data_len` bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_resource_create_texture(
     texture_id: u32,
-    payload_json: *const c_char,
+    desc_json: *const c_char,
+    data_ptr: *const u8,
+    data_len: usize,
 ) -> i32 {
-    let json_str = match unsafe { from_c_str(payload_json) } {
+    let json_str = match unsafe { from_c_str(desc_json) } {
         Ok(s) => s,
         Err(e) => {
             set_last_error(&e);
@@ -85,24 +41,22 @@ pub unsafe extern "C" fn galfus_resource_create_texture(
         }
     };
 
-    let payload: TextureCreatePayload = match serde_json::from_str(json_str) {
-        Ok(p) => p,
+    let desc: galfus_gpu_manager::GpuTextureDesc = match serde_json::from_str(json_str) {
+        Ok(d) => d,
         Err(e) => {
-            set_last_error(&format!("Invalid TextureCreatePayload JSON: {e}"));
+            set_last_error(&format!("Invalid GpuTextureDesc JSON: {e}"));
             return -1;
         }
     };
 
-    let bytes = match decode_base64(&payload.data_base64) {
-        Ok(b) => b,
-        Err(e) => {
-            set_last_error(&format!("Failed to decode base64 texture data: {e}"));
-            return -1;
-        }
-    };
+    if data_ptr.is_null() || data_len == 0 {
+        set_last_error("Null or empty texture data buffer");
+        return -1;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
 
     match with_multiverse_mut(|mv| {
-        mv.create_texture(texture_id, &payload.desc, &bytes)
+        mv.create_texture(texture_id, &desc, bytes)
             .map_err(|e| e.to_string())
     }) {
         Ok(()) => 0,
@@ -113,17 +67,20 @@ pub unsafe extern "C" fn galfus_resource_create_texture(
     }
 }
 
-/// Updates a sub-rectangle of an existing logical texture with base64 pixel data.
+/// Updates a sub-rectangle of an existing logical texture with raw pixel bytes.
 /// Returns 0 on success, -1 on failure.
 ///
 /// # Safety
-/// `payload_json` must be a valid, null-terminated UTF-8 C string pointer.
+/// `rect_json` must be a valid, null-terminated UTF-8 C string pointer.
+/// `data_ptr` must be valid for reads of `data_len` bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_resource_update_texture(
     texture_id: u32,
-    payload_json: *const c_char,
+    rect_json: *const c_char,
+    data_ptr: *const u8,
+    data_len: usize,
 ) -> i32 {
-    let json_str = match unsafe { from_c_str(payload_json) } {
+    let json_str = match unsafe { from_c_str(rect_json) } {
         Ok(s) => s,
         Err(e) => {
             set_last_error(&e);
@@ -131,32 +88,23 @@ pub unsafe extern "C" fn galfus_resource_update_texture(
         }
     };
 
-    let payload: TextureUpdatePayload = match serde_json::from_str(json_str) {
-        Ok(p) => p,
+    let rect: TextureUpdateDesc = match serde_json::from_str(json_str) {
+        Ok(r) => r,
         Err(e) => {
-            set_last_error(&format!("Invalid TextureUpdatePayload JSON: {e}"));
+            set_last_error(&format!("Invalid TextureUpdateDesc JSON: {e}"));
             return -1;
         }
     };
 
-    let bytes = match decode_base64(&payload.data_base64) {
-        Ok(b) => b,
-        Err(e) => {
-            set_last_error(&format!("Failed to decode base64 texture data: {e}"));
-            return -1;
-        }
-    };
+    if data_ptr.is_null() || data_len == 0 {
+        set_last_error("Null or empty texture update buffer");
+        return -1;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
 
     match with_multiverse_mut(|mv| {
-        mv.write_texture(
-            texture_id,
-            payload.x,
-            payload.y,
-            payload.width,
-            payload.height,
-            &bytes,
-        )
-        .map_err(|e| e.to_string())
+        mv.write_texture(texture_id, rect.x, rect.y, rect.width, rect.height, bytes)
+            .map_err(|e| e.to_string())
     }) {
         Ok(()) => 0,
         Err(e) => {
@@ -178,18 +126,21 @@ pub extern "C" fn galfus_resource_dispose_texture(texture_id: u32) -> i32 {
     }
 }
 
-/// Allocates and initializes a shared GPU buffer under a host logical ID.
+/// Allocates and initializes a shared GPU buffer under a host logical ID with raw byte contents.
 /// Returns 0 on success, -1 on failure.
 ///
 /// # Safety
-/// `payload_json` must be a valid, null-terminated UTF-8 C string pointer.
+/// `desc_json` must be a valid, null-terminated UTF-8 C string pointer.
+/// `data_ptr` must be valid for reads of `data_len` bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_resource_create_buffer(
     buffer_id: u32,
-    payload_json: *const c_char,
+    desc_json: *const c_char,
+    data_ptr: *const u8,
+    data_len: usize,
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let json_str = match unsafe { from_c_str(payload_json) } {
+        let json_str = match unsafe { from_c_str(desc_json) } {
             Ok(s) => s,
             Err(e) => {
                 set_last_error(&e);
@@ -197,24 +148,22 @@ pub unsafe extern "C" fn galfus_resource_create_buffer(
             }
         };
 
-        let payload: BufferCreatePayload = match serde_json::from_str(json_str) {
-            Ok(p) => p,
+        let desc: BufferDesc = match serde_json::from_str(json_str) {
+            Ok(d) => d,
             Err(e) => {
-                set_last_error(&format!("Invalid BufferCreatePayload JSON: {e}"));
+                set_last_error(&format!("Invalid BufferDesc JSON: {e}"));
                 return -1;
             }
         };
 
-        let bytes = match decode_base64(&payload.data_base64) {
-            Ok(b) => b,
-            Err(e) => {
-                set_last_error(&format!("Failed to decode base64 buffer contents: {e}"));
-                return -1;
-            }
-        };
+        if data_ptr.is_null() || data_len == 0 {
+            set_last_error("Null or empty buffer data");
+            return -1;
+        }
+        let bytes = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
 
         match with_multiverse_mut(|mv| {
-            mv.create_buffer(buffer_id, payload.label.as_deref(), &bytes, payload.usages)
+            mv.create_buffer(buffer_id, desc.label.as_deref(), bytes, desc.usages)
                 .map_err(|e| e.to_string())
         }) {
             Ok(()) => 0,
@@ -241,42 +190,26 @@ pub unsafe extern "C" fn galfus_resource_create_buffer(
     }
 }
 
-/// Updates byte contents of an existing logical buffer at a given offset.
+/// Updates byte contents of an existing logical buffer at a given offset with raw byte contents.
 /// Returns 0 on success, -1 on failure.
 ///
 /// # Safety
-/// `payload_json` must be a valid, null-terminated UTF-8 C string pointer.
+/// `data_ptr` must be valid for reads of `data_len` bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_resource_update_buffer(
     buffer_id: u32,
-    payload_json: *const c_char,
+    offset: u64,
+    data_ptr: *const u8,
+    data_len: usize,
 ) -> i32 {
-    let json_str = match unsafe { from_c_str(payload_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    let payload: BufferUpdatePayload = match serde_json::from_str(json_str) {
-        Ok(p) => p,
-        Err(e) => {
-            set_last_error(&format!("Invalid BufferUpdatePayload JSON: {e}"));
-            return -1;
-        }
-    };
-
-    let bytes = match decode_base64(&payload.data_base64) {
-        Ok(b) => b,
-        Err(e) => {
-            set_last_error(&format!("Failed to decode base64 buffer contents: {e}"));
-            return -1;
-        }
-    };
+    if data_ptr.is_null() || data_len == 0 {
+        set_last_error("Null or empty buffer update data");
+        return -1;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
 
     match with_multiverse_mut(|mv| {
-        mv.write_buffer(buffer_id, payload.offset, &bytes)
+        mv.write_buffer(buffer_id, offset, bytes)
             .map_err(|e| e.to_string())
     }) {
         Ok(()) => 0,
@@ -306,32 +239,38 @@ mod tests {
     use std::ffi::CString;
 
     #[test]
-    fn test_base64_decode() {
-        assert_eq!(decode_base64("").unwrap(), Vec::<u8>::new());
-        assert_eq!(decode_base64("AQID").unwrap(), vec![1, 2, 3]);
-        assert_eq!(decode_base64("AP/+/w==").unwrap(), vec![0, 255, 254, 255]);
-        assert!(decode_base64("invalid!").is_err());
-    }
-
-    #[test]
     fn test_ffi_resource_lifecycle() {
         assert_eq!(galfus_platform_init_headless(), 0);
 
         // 1. Create Texture (2x2 rgba8 = 16 bytes)
-        let tex_payload = CString::new(
-            r#"{"desc":{"label":"TestTexture","width":2,"height":2,"format":"rgba8Unorm"},"dataBase64":"/////////////////////w=="}"#,
-        )
-        .unwrap();
+        let tex_desc =
+            CString::new(r#"{"label":"TestTexture","width":2,"height":2,"format":"rgba8Unorm"}"#)
+                .unwrap();
+        let tex_data = [255u8; 16];
         assert_eq!(
-            unsafe { galfus_resource_create_texture(10, tex_payload.as_ptr()) },
+            unsafe {
+                galfus_resource_create_texture(
+                    10,
+                    tex_desc.as_ptr(),
+                    tex_data.as_ptr(),
+                    tex_data.len(),
+                )
+            },
             0
         );
 
         // 2. Update Texture sub-rectangle
-        let tex_update =
-            CString::new(r#"{"x":0,"y":0,"width":1,"height":1,"dataBase64":"gICA/w=="}"#).unwrap();
+        let tex_update = CString::new(r#"{"x":0,"y":0,"width":1,"height":1}"#).unwrap();
+        let tex_pixel = [128u8, 128, 0, 255];
         assert_eq!(
-            unsafe { galfus_resource_update_texture(10, tex_update.as_ptr()) },
+            unsafe {
+                galfus_resource_update_texture(
+                    10,
+                    tex_update.as_ptr(),
+                    tex_pixel.as_ptr(),
+                    tex_pixel.len(),
+                )
+            },
             0
         );
 
@@ -340,19 +279,33 @@ mod tests {
         assert_eq!(galfus_resource_dispose_texture(10), -1);
 
         // 4. Create Buffer (8 bytes = multiple of 4)
-        let buf_payload = CString::new(
-            r#"{"label":"TestBuffer","usages":{"vertex":true,"copyDst":true},"dataBase64":"AQIDBAUGBwg="}"#,
-        )
-        .unwrap();
+        let buf_desc =
+            CString::new(r#"{"label":"TestBuffer","usages":{"vertex":true,"copyDst":true}}"#)
+                .unwrap();
+        let buf_data = [1u8, 2, 3, 4, 5, 6, 7, 8];
         assert_eq!(
-            unsafe { galfus_resource_create_buffer(20, buf_payload.as_ptr()) },
+            unsafe {
+                galfus_resource_create_buffer(
+                    20,
+                    buf_desc.as_ptr(),
+                    buf_data.as_ptr(),
+                    buf_data.len(),
+                )
+            },
             0
         );
 
         // 5. Update Buffer (4 bytes at offset 4)
-        let buf_update = CString::new(r#"{"offset":4,"dataBase64":"c1hNQg=="}"#).unwrap();
+        let buf_update_data = [115u8, 88, 77, 66];
         assert_eq!(
-            unsafe { galfus_resource_update_buffer(20, buf_update.as_ptr()) },
+            unsafe {
+                galfus_resource_update_buffer(
+                    20,
+                    4,
+                    buf_update_data.as_ptr(),
+                    buf_update_data.len(),
+                )
+            },
             0
         );
 

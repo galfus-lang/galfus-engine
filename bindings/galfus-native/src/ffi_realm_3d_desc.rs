@@ -5,10 +5,10 @@ use galfus_realm_3d_resources::environment::{
     BloomConfig3D, EnvironmentRealm3D, FogMode3D, OutlineConfig3D, SkyboxConfig3D, SkyboxMode3D,
     SsaoConfig3D,
 };
-use galfus_realm_3d_resources::geometry::{Geometry3D, Vertex3D};
+use galfus_realm_3d_resources::geometry::Geometry3D;
 use galfus_realm_3d_resources::light::Light3D;
 use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D};
-use galfus_realm_3d_resources::model::{InstanceData3D, InstancedModel3D, Model3D};
+use galfus_realm_3d_resources::model::{InstancedModel3D, Model3D};
 use galfus_realm_3d_resources::particle::{EmissionShape3D, ParticleEmitter3D};
 use galfus_realm_3d_resources::transform::Transform3D;
 use glam::{Quat, Vec3, Vec4};
@@ -70,25 +70,12 @@ impl From<Camera3DDesc> for Camera3D {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Vertex3DDesc {
-    pub position: [f32; 3],
-    pub normal: [f32; 3],
-    pub uv: [f32; 2],
-    pub tangent: Option<[f32; 4]>,
-    pub joints: Option<[u32; 4]>,
-    pub weights: Option<[f32; 4]>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Geometry3DDesc {
     pub primitive: Option<String>,
     pub size: Option<f32>,
     pub radius: Option<f32>,
     pub subdivisions: Option<u32>,
-    pub vertices: Option<Vec<Vertex3DDesc>>,
-    pub indices: Option<Vec<u32>>,
 }
 
 impl From<Geometry3DDesc> for Geometry3D {
@@ -124,23 +111,7 @@ impl From<Geometry3DDesc> for Geometry3D {
                 d.subdivisions.unwrap_or(32),
                 d.subdivisions.unwrap_or(16),
             ),
-            _ => {
-                let vertices = d
-                    .vertices
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|v| Vertex3D {
-                        position: v.position,
-                        normal: v.normal,
-                        uv: v.uv,
-                        tangent: v.tangent.unwrap_or([1.0, 0.0, 0.0, 1.0]),
-                        joints: v.joints.unwrap_or([0, 0, 0, 0]),
-                        weights: v.weights.unwrap_or([1.0, 0.0, 0.0, 0.0]),
-                    })
-                    .collect();
-                let indices = d.indices.unwrap_or_default();
-                Geometry3D::new(vertices, indices, None)
-            }
+            _ => Geometry3D::new(Vec::new(), Vec::new(), None),
         }
     }
 }
@@ -272,59 +243,6 @@ impl From<InstancedModel3DDesc> for InstancedModel3D {
             cast_shadow: d.cast_shadow.unwrap_or(true),
             receive_shadow: d.receive_shadow.unwrap_or(true),
             active: d.active.unwrap_or(true),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InstanceData3DDesc {
-    pub transform: Option<Vec<f32>>,
-    pub color: Option<[f32; 4]>,
-    pub emissive: Option<[f32; 4]>,
-    pub pbr: Option<[f32; 4]>,
-    pub custom: Option<[f32; 4]>,
-}
-
-impl From<InstanceData3DDesc> for InstanceData3D {
-    fn from(d: InstanceData3DDesc) -> Self {
-        let transform = d
-            .transform
-            .and_then(|t| {
-                if t.len() == 16 {
-                    Some(glam::Mat4::from_cols_array(&[
-                        t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7], t[8], t[9], t[10], t[11],
-                        t[12], t[13], t[14], t[15],
-                    ]))
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(glam::Mat4::IDENTITY);
-
-        let color = d
-            .color
-            .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
-            .unwrap_or(Vec4::ONE);
-        let emissive = d
-            .emissive
-            .map(|e| Vec4::new(e[0], e[1], e[2], e[3]))
-            .unwrap_or(Vec4::ZERO);
-        let pbr = d
-            .pbr
-            .map(|p| Vec4::new(p[0], p[1], p[2], p[3]))
-            .unwrap_or(Vec4::new(0.0, 0.5, 0.5, 1.0));
-        let custom = d
-            .custom
-            .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
-            .unwrap_or(Vec4::ZERO);
-
-        InstanceData3D {
-            transform,
-            color,
-            emissive,
-            pbr,
-            custom,
         }
     }
 }

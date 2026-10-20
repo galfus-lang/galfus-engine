@@ -104,6 +104,43 @@ if (Math.abs(cam3dTfUpdated[0]! - 1.5) > 0.001 || Math.abs(cam3dTfUpdated[1]! - 
 // Create Cube Geometry (size: 2.0 -> half-extent 1.0 -> min: [-1, -1, -1], max: [1, 1, 1])
 galfus.realm3dCreateGeometry(20, 1, { primitive: 'cube', size: 2.0 });
 galfus.realm3dCreateMaterial(20, 1, { baseColor: [1, 0, 0, 1], albedoTextureId: 2 });
+
+// Create a custom triangle from binary Vertex3D records (80 bytes per vertex) and u32 indices.
+const triangleVertices = new Uint8Array(3 * 80);
+const triangleView = new DataView(triangleVertices.buffer);
+function writeVertex(offset: number, position: [number, number, number], uv: [number, number]) {
+  for (let i = 0; i < 3; i++) triangleView.setFloat32(offset + i * 4, position[i]!, true);
+  triangleView.setFloat32(offset + 12, 0, true);
+  triangleView.setFloat32(offset + 16, 0, true);
+  triangleView.setFloat32(offset + 20, 1, true);
+  triangleView.setFloat32(offset + 24, uv[0], true);
+  triangleView.setFloat32(offset + 28, uv[1], true);
+  triangleView.setFloat32(offset + 32, 1, true);
+  triangleView.setFloat32(offset + 44, 1, true);
+  triangleView.setFloat32(offset + 64, 1, true);
+}
+writeVertex(0, [-1, -1, 0], [0, 0]);
+writeVertex(80, [1, -1, 0], [1, 0]);
+writeVertex(160, [0, 1, 0], [0.5, 1]);
+galfus.realm3dCreateGeometryRaw(
+  20,
+  2,
+  triangleVertices,
+  triangleVertices.byteLength,
+  new Uint32Array([0, 1, 2]),
+  3
+);
+console.log('✔ Created custom geometry through typed binary buffers');
+
+let rejectedInvalidCustomGeometry = false;
+try {
+  galfus.realm3dCreateGeometryRaw(20, 3, new Uint8Array(1), 1, new Uint32Array(), 0);
+} catch {
+  rejectedInvalidCustomGeometry = true;
+}
+if (!rejectedInvalidCustomGeometry) {
+  throw new Error('Expected invalid custom geometry buffer to be rejected');
+}
 // Create Model at position [10, 20, 30] scaled by [2, 2, 2]
 galfus.realm3dCreateModel(
   20,
@@ -111,6 +148,23 @@ galfus.realm3dCreateModel(
   { geometryId: 1, materialId: 1 },
   { position: [10, 20, 30], scale: [2, 2, 2] }
 );
+galfus.realm3dCreateModel(20, 2, { geometryId: 2, materialId: 1, boneOffset: 0, boneCount: 1 }, {});
+galfus.realm3dUpdateBones(
+  20,
+  2,
+  new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]),
+  16
+);
+
+galfus.realm3dCreateInstancedModel(20, 1, { geometryId: 2, materialId: 1, capacity: 1 });
+const instanceData = new Float32Array(32);
+instanceData.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], 0);
+instanceData.set([1, 1, 1, 1], 16);
+instanceData.set([0, 0, 0, 0], 20);
+instanceData.set([0, 0.5, 0.5, 1], 24);
+instanceData.set([0, 0, 0, 0], 28);
+galfus.realm3dSetInstancedModelData(20, 1, instanceData, instanceData.length);
+console.log('✔ Uploaded instancing and bone buffers without JSON serialization');
 const modelTf = galfus.realm3dGetModelTransform(20, 1);
 if (Math.abs(modelTf[0]! - 10) > 0.001 || Math.abs(modelTf[7]! - 2) > 0.001) {
   throw new Error(`Realm3D Model transform readback failed: ${modelTf}`);

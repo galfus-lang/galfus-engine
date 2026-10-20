@@ -1,11 +1,20 @@
 import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-import { type DataType, isJson, isJsonArray } from '../spec.ts';
+import { type DataType, isBuffer, isJson, isJsonArray } from '../spec.ts';
 
 function toSnakeCase(str: string): string {
   return str.replace(/([A-Z])/g, '_$1').toLowerCase();
 }
 
 function mapPythonCType(type: DataType, isParam: boolean): string {
+  if (isBuffer(type)) {
+    const element =
+      type.buffer === 'u8'
+        ? 'ctypes.c_uint8'
+        : type.buffer === 'u32'
+          ? 'ctypes.c_uint32'
+          : 'ctypes.c_float';
+    return isParam ? `ctypes.POINTER(${element})` : `ctypes.POINTER(${element})`;
+  }
   if (typeof type === 'object') {
     return isParam ? 'ctypes.c_char_p' : 'ctypes.c_void_p';
   }
