@@ -1,6 +1,7 @@
 //! WGSL Shaders for SSAO generation, bilateral blur, and blending.
 
 pub const SSAO_SHADER: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -140,6 +141,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 "#;
 
 pub const SSAO_BLUR_SHADER: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -216,6 +218,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 "#;
 
 pub const SSAO_APPLY_SHADER: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,

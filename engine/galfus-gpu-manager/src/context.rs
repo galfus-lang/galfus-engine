@@ -1,12 +1,12 @@
+use crate::GpuShared;
 use crate::error::{GpuError, GpuResult};
-use std::sync::Arc;
 
 /// Global graphics context holding `wgpu` device, queue, and instance state.
 pub struct GpuContext {
-    instance: Arc<wgpu::Instance>,
-    adapter: Arc<wgpu::Adapter>,
-    device: Arc<wgpu::Device>,
-    queue: Arc<wgpu::Queue>,
+    instance: GpuShared<wgpu::Instance>,
+    adapter: GpuShared<wgpu::Adapter>,
+    device: GpuShared<wgpu::Device>,
+    queue: GpuShared<wgpu::Queue>,
     adapter_info: wgpu::AdapterInfo,
 }
 
@@ -23,7 +23,7 @@ impl GpuContext {
 
     /// Synchronously initializes a new `GpuContext` reusing an existing `wgpu::Instance`.
     pub fn with_instance(
-        instance: Arc<wgpu::Instance>,
+        instance: GpuShared<wgpu::Instance>,
         compatible_surface: Option<&wgpu::Surface>,
     ) -> GpuResult<Self> {
         pollster::block_on(Self::with_instance_async(instance, compatible_surface))
@@ -31,7 +31,7 @@ impl GpuContext {
 
     /// Asynchronously initializes a new `GpuContext` reusing an existing `wgpu::Instance`.
     pub async fn with_instance_async(
-        instance: Arc<wgpu::Instance>,
+        instance: GpuShared<wgpu::Instance>,
         compatible_surface: Option<&wgpu::Surface<'_>>,
     ) -> GpuResult<Self> {
         let adapter = instance
@@ -41,7 +41,7 @@ impl GpuContext {
                 force_fallback_adapter: false,
             })
             .await
-            .map(Arc::new)
+            .map(GpuShared::new)
             .map_err(|e| GpuError::AdapterRequestFailed(e.to_string()))?;
 
         let adapter_info = adapter.get_info();
@@ -67,15 +67,15 @@ impl GpuContext {
         Ok(Self {
             instance,
             adapter,
-            device: Arc::new(device),
-            queue: Arc::new(queue),
+            device: GpuShared::new(device),
+            queue: GpuShared::new(queue),
             adapter_info,
         })
     }
 
     /// Asynchronously initializes a new `GpuContext`.
     pub async fn new_async(compatible_surface: Option<&wgpu::Surface<'_>>) -> GpuResult<Self> {
-        let instance = Arc::new(wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = GpuShared::new(wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             flags: wgpu::InstanceFlags::default(),
             backend_options: wgpu::BackendOptions::default(),
@@ -99,9 +99,9 @@ impl GpuContext {
         &self.device
     }
 
-    /// Returns a cloned `Arc<wgpu::Device>`.
-    pub fn device_arc(&self) -> Arc<wgpu::Device> {
-        Arc::clone(&self.device)
+    /// Returns a cloned shared device reference.
+    pub fn device_arc(&self) -> GpuShared<wgpu::Device> {
+        GpuShared::clone(&self.device)
     }
 
     /// Returns a reference to the `wgpu::Queue`.
@@ -109,9 +109,9 @@ impl GpuContext {
         &self.queue
     }
 
-    /// Returns a cloned `Arc<wgpu::Queue>`.
-    pub fn queue_arc(&self) -> Arc<wgpu::Queue> {
-        Arc::clone(&self.queue)
+    /// Returns a cloned shared queue reference.
+    pub fn queue_arc(&self) -> GpuShared<wgpu::Queue> {
+        GpuShared::clone(&self.queue)
     }
 
     /// Returns the active adapter information.

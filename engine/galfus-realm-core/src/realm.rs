@@ -1,12 +1,29 @@
 use crate::error::RealmResult;
 use crate::types::{RealmInvocationContext, RealmKind, RealmPrepareContext};
 
+/// Platform-specific thread-safety requirement for Realm implementations.
+///
+/// Native GPU handles can cross the engine's synchronization boundary, while browser WebGPU
+/// handles are bound to the JavaScript main thread and intentionally do not implement `Send` or
+/// `Sync`.
+#[cfg(not(target_arch = "wasm32"))]
+pub trait RealmThreadBound: Send + Sync {}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<T: Send + Sync> RealmThreadBound for T {}
+
+#[cfg(target_arch = "wasm32")]
+pub trait RealmThreadBound {}
+
+#[cfg(target_arch = "wasm32")]
+impl<T> RealmThreadBound for T {}
+
 /// Core contract defining a graphics-producing Realm.
 ///
 /// A Realm represents a scene or domain-specific graphics producer (e.g. 2D HUD, 3D World).
 /// The Multiverse interacts with Realms strictly through this contract, without knowing
 /// their internal structure or shader details.
-pub trait Realm: Send + Sync + 'static {
+pub trait Realm: RealmThreadBound + 'static {
     /// Returns the logical identifier of the realm.
     fn id(&self) -> u32;
 

@@ -4,6 +4,7 @@ use crate::surface_effect::{SURFACE_EFFECT_PRELUDE_2D, compose_surface_shader_2d
 
 /// Base WGSL template for 2D forward rendering.
 pub const SHADER_2D_TEMPLATE: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct Camera2DUniform {
     view: mat4x4<f32>,
     projection: mat4x4<f32>,

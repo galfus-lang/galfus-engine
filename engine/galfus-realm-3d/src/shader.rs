@@ -1,6 +1,7 @@
 //! Forward 3D WGSL Shader with Reverse-Z support and PBR-like lighting.
 
 pub const REALM_3D_SHADER: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct CameraUniform {
     view: mat4x4<f32>,
     projection: mat4x4<f32>,

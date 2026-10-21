@@ -5,12 +5,13 @@
 //! 2. Blending Weight Calculation (Pattern & LUT search) -> `weights` (Rgba8Unorm)
 //! 3. Neighborhood Blending (Subpixel offset sample & blend) -> destination
 
-use std::sync::Arc;
+use galfus_gpu_manager::GpuShared;
 
 pub const AREA_TEX_BYTES: &[u8] = include_bytes!("../assets/smaa_area.bin");
 pub const SEARCH_TEX_BYTES: &[u8] = include_bytes!("../assets/smaa_search.bin");
 
 const WGSL_SMAA: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -170,7 +171,7 @@ pub struct SmaaPipeline {
     weight_pipeline: wgpu::RenderPipeline,
     blend_pipeline: wgpu::RenderPipeline,
 
-    bind_group_layout: Arc<wgpu::BindGroupLayout>,
+    bind_group_layout: GpuShared<wgpu::BindGroupLayout>,
 }
 
 impl SmaaPipeline {
@@ -250,7 +251,7 @@ impl SmaaPipeline {
             source: wgpu::ShaderSource::Wgsl(WGSL_SMAA.into()),
         });
 
-        let bind_group_layout = Arc::new(device.create_bind_group_layout(
+        let bind_group_layout = GpuShared::new(device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: Some("SMAA Bind Group Layout"),
                 entries: &[

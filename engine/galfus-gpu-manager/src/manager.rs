@@ -1,3 +1,4 @@
+use crate::GpuShared;
 use crate::bind_group::BindGroupManager;
 use crate::buffer::BufferManager;
 use crate::context::GpuContext;
@@ -33,9 +34,26 @@ impl GpuManager {
         })
     }
 
+    /// Asynchronously initializes a `GpuManager` reusing an existing `wgpu::Instance`.
+    pub async fn with_instance_async(
+        instance: GpuShared<wgpu::Instance>,
+        compatible_surface: Option<&wgpu::Surface<'_>>,
+    ) -> GpuResult<Self> {
+        let context = GpuContext::with_instance_async(instance, compatible_surface).await?;
+        Ok(Self {
+            context,
+            buffers: BufferManager::new(),
+            textures: TextureManager::new(),
+            samplers: SamplerManager::new(),
+            layouts: LayoutManager::new(),
+            bind_groups: BindGroupManager::new(),
+            pipelines: PipelineManager::new(),
+        })
+    }
+
     /// Initializes a new `GpuManager` reusing an existing `wgpu::Instance`.
     pub fn with_instance(
-        instance: std::sync::Arc<wgpu::Instance>,
+        instance: GpuShared<wgpu::Instance>,
         compatible_surface: Option<&wgpu::Surface>,
     ) -> GpuResult<Self> {
         let context = GpuContext::with_instance(instance, compatible_surface)?;

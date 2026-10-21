@@ -1,7 +1,7 @@
+use crate::GpuShared;
 use crate::error::GpuResult;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
 
 /// Stages of the shader pipeline where a binding is visible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -144,7 +144,7 @@ pub struct BindGroupLayoutDesc {
 
 /// Manager and cache for `BindGroupLayout` and `PipelineLayout` objects.
 pub struct LayoutManager {
-    bind_group_layouts: HashMap<Vec<BindGroupLayoutEntryDesc>, Arc<wgpu::BindGroupLayout>>,
+    bind_group_layouts: HashMap<Vec<BindGroupLayoutEntryDesc>, GpuShared<wgpu::BindGroupLayout>>,
 }
 
 impl Default for LayoutManager {
@@ -165,7 +165,7 @@ impl LayoutManager {
         &mut self,
         device: &wgpu::Device,
         desc: &BindGroupLayoutDesc,
-    ) -> Arc<wgpu::BindGroupLayout> {
+    ) -> GpuShared<wgpu::BindGroupLayout> {
         self.bind_group_layouts
             .entry(desc.entries.clone())
             .or_insert_with(|| {
@@ -175,7 +175,7 @@ impl LayoutManager {
                     .map(BindGroupLayoutEntryDesc::to_wgpu)
                     .collect();
 
-                Arc::new(
+                GpuShared::new(
                     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                         label: desc.label.as_deref(),
                         entries: &wgpu_entries,

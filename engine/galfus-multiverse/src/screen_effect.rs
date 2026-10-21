@@ -3,6 +3,7 @@ use galfus_core::shader_effects::{ComposedShader, EffectResult, ShaderEffectTemp
 /// Canonical WGSL template for multiverse screen/post-processing shaders.
 /// Generates a procedural fullscreen triangle and invokes the user's `screen_effect` function.
 pub const SCREEN_EFFECT_TEMPLATE: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,

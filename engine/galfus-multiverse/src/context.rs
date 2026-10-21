@@ -6,7 +6,7 @@ use galfus_gpu_manager::handle::{GpuTextureHandle, GpuTextureViewHandle};
 use galfus_gpu_manager::types::{
     GpuPresentMode, GpuTextureDesc, NormalizedTextureFormat, TextureDimension, TextureUsageFlags,
 };
-use galfus_gpu_manager::{GpuManager, GpuSurface};
+use galfus_gpu_manager::{GpuManager, GpuShared, GpuSurface};
 use galfus_realm_core::Realm;
 use glam::UVec2;
 
@@ -126,17 +126,60 @@ impl MultiverseContext {
                 .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
             (gpu, surface)
         } else {
-            let instance = Arc::new(wgpu::Instance::new(&wgpu::InstanceDescriptor::default()));
+            let instance =
+                GpuShared::new(wgpu::Instance::new(&wgpu::InstanceDescriptor::default()));
             let surface = instance
                 .create_surface(Arc::clone(&window))
                 .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
-            let gpu = GpuManager::with_instance(Arc::clone(&instance), Some(&surface))
+            let gpu = GpuManager::with_instance(GpuShared::clone(&instance), Some(&surface))
                 .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
             self.post_processor = Some(PostProcessor::new(gpu.device(), gpu.queue()));
             self.gpu_manager = Some(gpu);
             (self.gpu_manager.as_ref().unwrap(), surface)
         };
 
+        let gpu_surface = GpuSurface::new(
+            surface,
+            gpu.context.adapter(),
+            gpu.device(),
+            width,
+            height,
+            GpuPresentMode::AutoVsync,
+        )
+        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
+
+        self.surfaces.insert(window_id, gpu_surface);
+        self.window_sizes
+            .insert(window_id, UVec2::new(width, height));
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Installs a pre-created swapchain surface (and optionally a newly initialized GPU manager).
+    ///
+    /// Used by platforms that cannot block on adapter/device requests (browser/WASM): the host
+    /// prepares the instance, surface, and `GpuManager` asynchronously, then hands them over here.
+    pub fn attach_prepared_surface(
+        &mut self,
+        window_id: u32,
+        gpu: Option<GpuManager>,
+        surface: wgpu::Surface<'static>,
+        width: u32,
+        height: u32,
+    ) -> MultiverseResult<()> {
+        validate_host_logical_id(window_id)?;
+        if let Some(gpu) = gpu {
+            if self.gpu_manager.is_some() {
+                return Err(MultiverseError::InvalidConfig(
+                    "GpuManager is already initialized".into(),
+                ));
+            }
+            self.post_processor = Some(PostProcessor::new(gpu.device(), gpu.queue()));
+            self.gpu_manager = Some(gpu);
+        }
+        let gpu = self.gpu_manager.as_ref().ok_or_else(|| {
+            MultiverseError::InvalidConfig("GpuManager is not initialized".into())
+        })?;
         let gpu_surface = GpuSurface::new(
             surface,
             gpu.context.adapter(),

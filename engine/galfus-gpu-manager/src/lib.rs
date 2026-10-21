@@ -27,6 +27,15 @@ pub mod surface;
 pub mod texture;
 pub mod types;
 
+/// Reference-counted GPU resource storage.
+///
+/// Browser WebGPU handles are single-threaded, so WASM uses `Rc`; native targets retain `Arc`.
+#[cfg(target_arch = "wasm32")]
+pub type GpuShared<T> = std::rc::Rc<T>;
+/// Reference-counted GPU resource storage.
+#[cfg(not(target_arch = "wasm32"))]
+pub type GpuShared<T> = std::sync::Arc<T>;
+
 pub use alloc::{ArenaAllocHandle, ArenaSlice, BufferArena, BufferArenaDesc};
 pub use atlas::{AtlasRelocation, AtlasTileHandle, TileAtlas2DArray, TileAtlasDesc, TileAtlasInfo};
 pub use bind_group::{

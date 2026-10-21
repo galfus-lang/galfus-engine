@@ -11,6 +11,7 @@ struct BloomParamsUniform {
 }
 
 const BLOOM_SHADER: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,

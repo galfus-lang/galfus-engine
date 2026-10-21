@@ -229,13 +229,17 @@ export class TypeScriptStrategy implements CodegenStrategy {
         .filter((p) => !p.out)
         .map((p) => `${p.name}: ${mapParamTsType(p.type)}`)
         .join(', ');
-      const retType = outStruct
+      const baseReturnType = outStruct
         ? outStruct === 'EventBatch'
           ? 'PlatformEvent[]'
           : outStruct === 'CameraLookAt3D'
             ? 'CameraLookAt3DStateDesc'
             : outStruct
         : mapReturnTsType(fn.returnType, Boolean(fn.returnsParamField));
+      const retType =
+        fn.methodName === 'multiverseAttachWindow'
+          ? `${baseReturnType} | Promise<void>`
+          : baseReturnType;
 
       lines.push(`  /** ${fn.doc} */`);
       lines.push(`  ${fn.methodName}(${params}): ${retType};`);

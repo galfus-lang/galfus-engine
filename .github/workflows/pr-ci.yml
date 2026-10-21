@@ -79,6 +79,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
@@ -110,3 +111,12 @@ jobs:
 
       - name: Run Rust tests
         run: cargo test --workspace
+
+      - name: Install wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+
+      - name: Install Chromium for Playwright
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run Browser/WASM feature tour
+        run: bun run test:tour:browser

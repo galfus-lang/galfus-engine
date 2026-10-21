@@ -1,72 +1,5 @@
 import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-import { type DataType, isBuffer, isJson, isJsonArray, isNativeStruct } from '../spec.ts';
-
-function mapParamTsType(type: DataType): string {
-  if (isNativeStruct(type)) {
-    if (type.nativeStruct === 'EventBatch') return 'never';
-    return type.nativeStruct === 'SpatialAudio' ? 'SpatialAudio' : type.nativeStruct;
-  }
-  if (isBuffer(type)) {
-    return type.buffer === 'u8'
-      ? 'Uint8Array'
-      : type.buffer === 'u32'
-        ? 'Uint32Array'
-        : 'Float32Array';
-  }
-  if (isJson(type)) {
-    return `${type.json} | string`;
-  }
-  if (isJsonArray(type)) {
-    return `${type.jsonArray}[] | string`;
-  }
-  switch (type) {
-    case 'bool':
-      return 'boolean';
-    case 'i32':
-    case 'u32':
-    case 'u64':
-    case 'f32':
-    case 'f64':
-      return 'number';
-    case 'string':
-      return 'string';
-    case 'void':
-      return 'void';
-    case 'ptr':
-      return 'any';
-    default:
-      return 'any';
-  }
-}
-
-function mapReturnTsType(fnReturnType: DataType, hasParamFieldReturn: boolean): string {
-  if (hasParamFieldReturn) {
-    return 'number';
-  }
-  if (isJson(fnReturnType)) {
-    return fnReturnType.json;
-  }
-  if (isJsonArray(fnReturnType)) {
-    return `${fnReturnType.jsonArray}[]`;
-  }
-  switch (fnReturnType) {
-    case 'bool':
-      return 'boolean';
-    case 'i32':
-      return 'void';
-    case 'u32':
-    case 'u64':
-    case 'f32':
-    case 'f64':
-      return 'number';
-    case 'string':
-      return 'string';
-    case 'void':
-      return 'void';
-    default:
-      return 'void';
-  }
-}
+import { collectEngineTypes, engineMethodLines } from './ts_engine_methods.ts';
 
 export class NodeApiStrategy implements CodegenStrategy {
   readonly id = 'node_api';
@@ -75,29 +8,7 @@ export class NodeApiStrategy implements CodegenStrategy {
   readonly filename = 'galfus.ts';
 
   generate(context: CodegenContext): string {
-    const BUILTIN_TS_TYPES = new Set(['number', 'string', 'boolean', 'any', 'void']);
-    const importedTypes = new Set<string>(['GalfusEngine']);
-    const addType = (t: string) => {
-      const clean = t.replace(/\[\]$/, '').trim();
-      if (!BUILTIN_TS_TYPES.has(clean)) {
-        importedTypes.add(clean);
-      }
-    };
-    for (const fn of context.functions) {
-      if (isJson(fn.returnType)) addType(fn.returnType.json);
-      if (isJsonArray(fn.returnType)) addType(fn.returnType.jsonArray);
-      for (const p of fn.params) {
-        if (isJson(p.type)) addType(p.type.json);
-        if (isJsonArray(p.type)) addType(p.type.jsonArray);
-        if (isNativeStruct(p.type) && p.type.nativeStruct !== 'EventBatch')
-          addType(p.type.nativeStruct === 'SpatialAudio' ? 'SpatialAudio' : p.type.nativeStruct);
-        if (p.out && isNativeStruct(p.type) && p.type.nativeStruct === 'EventBatch')
-          addType('PlatformEvent');
-        if (p.out && isNativeStruct(p.type) && p.type.nativeStruct === 'CameraLookAt3D')
-          addType('CameraLookAt3DStateDesc');
-      }
-    }
-
+    const importedTypes = collectEngineTypes(context);
     importedTypes.delete('ViewportRect');
     const typeImports = Array.from(importedTypes).sort().join(',\n  ');
 
@@ -156,51 +67,7 @@ export class NodeApiStrategy implements CodegenStrategy {
       '  }'
     ];
 
-    for (const fn of context.functions) {
-      if (fn.methodName === 'getLastError') continue;
-
-      const outParam = fn.params.find((p) => p.out && isNativeStruct(p.type));
-      const outStruct =
-        outParam && isNativeStruct(outParam.type) ? outParam.type.nativeStruct : undefined;
-      const params = fn.params
-        .filter((p) => !p.out)
-        .map((p) => `${p.name}${p.optional ? '?' : ''}: ${mapParamTsType(p.type)}`)
-        .join(', ');
-      const retType = outStruct
-        ? outStruct === 'EventBatch'
-          ? 'PlatformEvent[]'
-          : outStruct === 'CameraLookAt3D'
-            ? 'CameraLookAt3DStateDesc'
-            : outStruct
-        : mapReturnTsType(fn.returnType, !!fn.returnsParamField);
-
-      lines.push('');
-      lines.push(`  /** ${fn.doc} */`);
-      lines.push(`  ${fn.methodName}(${params}): ${retType} {`);
-      lines.push(`    if (typeof this._addon.${fn.methodName} !== 'function') {`);
-      lines.push(
-        `      throw new GalfusError("Node-API method not implemented: ${fn.methodName}");`
-      );
-      lines.push(`    }`);
-
-      // Prepare call args, parsing JSON strings to objects if passed as string
-      const callArgs = fn.params
-        .filter((p) => !p.out)
-        .map((p) => {
-          if (isJson(p.type) || isJsonArray(p.type)) {
-            return `typeof ${p.name} === 'string' ? JSON.parse(${p.name}) : ${p.name}`;
-          }
-          return p.name;
-        })
-        .join(', ');
-
-      if (retType === 'void') {
-        lines.push(`    this._addon.${fn.methodName}(${callArgs});`);
-      } else {
-        lines.push(`    return this._addon.${fn.methodName}(${callArgs});`);
-      }
-      lines.push('  }');
-    }
+    lines.push(...engineMethodLines(context, 'Node-API'));
 
     lines.push(
       '',

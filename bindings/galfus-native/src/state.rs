@@ -137,6 +137,7 @@ pub fn attach_window_to_multiverse(window_id: u32) -> Result<(), String> {
     }
     #[cfg(target_arch = "wasm32")]
     {
+        let _ = window_id;
         Err("Window attachment not supported on wasm32 in this build".into())
     }
 }

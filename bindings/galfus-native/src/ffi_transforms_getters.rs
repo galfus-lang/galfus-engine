@@ -294,29 +294,21 @@ pub unsafe extern "C" fn galfus_platform_get_window_size(
         set_last_error("Null pointer passed to get_window_size");
         return -1;
     }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        match with_context(|ctx| {
-            let win = ctx
-                .get_window(window_id)
-                .map_err(|e| format!("Window #{window_id} not found: {e}"))?;
-            let size = win.raw_window().inner_size();
-            unsafe {
-                *out_width = size.width;
-                *out_height = size.height;
-            }
-            Ok(())
-        }) {
-            Ok(()) => 0,
-            Err(e) => {
-                set_last_error(&e);
-                -1
-            }
+    match with_context(|ctx| {
+        let win = ctx
+            .get_window(window_id)
+            .map_err(|e| format!("Window #{window_id} not found: {e}"))?;
+        let size = win.inner_size();
+        unsafe {
+            *out_width = size.x;
+            *out_height = size.y;
         }
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        set_last_error("galfus_platform_get_window_size not implemented for wasm32");
-        -1
+        Ok(())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
     }
 }

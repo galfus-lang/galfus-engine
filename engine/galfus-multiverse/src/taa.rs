@@ -4,12 +4,13 @@
 //! and YCoCg neighborhood bounding box color clamping to eliminate edge aliasing
 //! and specular crawling without ghosting artifacts.
 
-use std::sync::Arc;
+use galfus_gpu_manager::GpuShared;
 
 use bytemuck::{Pod, Zeroable};
 use glam::Vec2;
 
 const WGSL_TAA: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -123,7 +124,7 @@ pub struct TaaParamsUniform {
 
 pub struct TaaPipeline {
     pipeline: wgpu::RenderPipeline,
-    bind_group_layout: Arc<wgpu::BindGroupLayout>,
+    bind_group_layout: GpuShared<wgpu::BindGroupLayout>,
     sampler: wgpu::Sampler,
     param_buffer: wgpu::Buffer,
 }
@@ -148,7 +149,7 @@ impl TaaPipeline {
             mapped_at_creation: false,
         });
 
-        let bind_group_layout = Arc::new(device.create_bind_group_layout(
+        let bind_group_layout = GpuShared::new(device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: Some("TAA Bind Group Layout"),
                 entries: &[

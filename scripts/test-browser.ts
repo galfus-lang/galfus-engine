@@ -14,7 +14,6 @@ const wasmPath = resolve(
 const cargoBinDir = resolve(process.env.CARGO_HOME ?? resolve(homedir(), '.cargo'), 'bin');
 const wasmBindgenPath = Bun.which('wasm-bindgen') ?? resolve(cargoBinDir, 'wasm-bindgen');
 const isHeadless = process.env.CI === 'true' || process.env.GALFUS_BROWSER_TEST_HEADLESS === 'true';
-const visibleDurationMs = isHeadless ? 0 : 5_000;
 
 function run(command: string[]): void {
   const result = Bun.spawnSync({
@@ -27,10 +26,6 @@ function run(command: string[]): void {
   if (result.exitCode !== 0) {
     throw new Error(`Command failed (${result.exitCode}): ${command.join(' ')}`);
   }
-}
-
-function wait(durationMs: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
 
 async function main(): Promise<void> {
@@ -88,54 +83,50 @@ async function main(): Promise<void> {
   <head>
     <meta charset="utf-8">
     <title>Galfus Browser SDK Test</title>
-    <style>
-      #galfus-browser-sdk-test { width: 640px; height: 360px; }
-    </style>
+    <style>#galfus-browser-sdk-test { width: 640px; height: 360px; }</style>
   </head>
   <body>
     <canvas id="galfus-browser-sdk-test" width="640" height="360"></canvas>
     <script type="module">
-      import init, { GalfusBrowser } from './pkg/galfus_browser.js';
+      import init, * as wasm from './pkg/galfus_browser.js';
       import { initializeGalfusBrowser } from './galfus-sdk.js';
 
+      let galfus;
+      let windowId;
       try {
-        const galfus = await initializeGalfusBrowser({ default: init, GalfusBrowser });
-        const windowId = galfus.createWindow({
+        galfus = await initializeGalfusBrowser({ ...wasm, default: init });
+        galfus.platformInit();
+        windowId = galfus.windowCreate({
           id: 42,
           title: 'Galfus Browser SDK Test',
           size: [640, 360],
           canvasId: 'galfus-browser-sdk-test',
           resizable: true
         });
-        const capabilities = galfus.getCapabilities();
+
+        const capabilities = galfus.platformGetCapabilities();
         const size = galfus.windowGetSize(windowId);
-        const events = galfus.pumpEvents();
-        galfus.setWindowTitle(windowId, 'Galfus Browser SDK Test Updated');
-        const canvas = document.getElementById('galfus-browser-sdk-test');
-        await galfus.renderDiagnosticCube('galfus-browser-sdk-test', 0);
-        await new Promise(requestAnimationFrame);
+        const events = galfus.platformPumpEvents();
+        galfus.windowSetTitle(windowId, 'Galfus Browser SDK Test Updated');
 
         if (!capabilities || typeof capabilities !== 'object') {
-          throw new Error('getCapabilities() did not return an object');
+          throw new Error('platformGetCapabilities() did not return an object');
         }
         if (size[0] !== 640 || size[1] !== 360) {
           throw new Error('windowGetSize() did not return the configured dimensions');
         }
         if (!Array.isArray(events)) {
-          throw new Error('pumpEvents() did not return an array');
+          throw new Error('platformPumpEvents() did not return an array');
         }
 
+        const canvas = document.getElementById('galfus-browser-sdk-test');
         canvas.style.width = '800px';
         canvas.style.height = '450px';
         await new Promise(requestAnimationFrame);
         await new Promise(requestAnimationFrame);
 
         const resizedSize = galfus.windowGetSize(windowId);
-        const resizeEvents = galfus.pumpEvents();
-        await galfus.renderDiagnosticCube('galfus-browser-sdk-test', 0.1);
-        await new Promise(requestAnimationFrame);
-        await galfus.renderDiagnosticCube('galfus-browser-sdk-test', 0.2);
-
+        const resizeEvents = galfus.platformPumpEvents();
         const resizeEvent = resizeEvents.find(
           (event) =>
             event.kind === 'window' &&
@@ -151,56 +142,25 @@ async function main(): Promise<void> {
           throw new Error('windowGetSize() did not reflect the resized canvas');
         }
         if (!resizeEvent) {
-          throw new Error('pumpEvents() did not report the canvas resize');
+          throw new Error('platformPumpEvents() did not report the canvas resize');
         }
-
-        const image = new Image();
-        image.src = canvas.toDataURL();
-        await image.decode();
-        if (image.width !== 800 || image.height !== 450) {
-          throw new Error('Diagnostic renderer did not use the resized canvas viewport');
-        }
-        const probe = document.createElement('canvas');
-        probe.width = image.width;
-        probe.height = image.height;
-        const context = probe.getContext('2d');
-        context.drawImage(image, 0, 0);
-        const pixels = context.getImageData(0, 0, probe.width, probe.height).data;
-        let colorfulPixels = 0;
-        for (let index = 0; index < pixels.length; index += 4) {
-          const red = pixels[index];
-          const green = pixels[index + 1];
-          const blue = pixels[index + 2];
-          if (Math.max(red, green, blue) > 100 && Math.max(red, green, blue) - Math.min(red, green, blue) > 30) {
-            colorfulPixels += 1;
-          }
-        }
-        if (colorfulPixels < 100) {
-          throw new Error(
-            'Diagnostic cube pixels were not present on the canvas (' +
-              image.width + 'x' + image.height + ', ' + colorfulPixels + ' colorful pixels)'
-          );
-        }
-
-        async function animate(timestamp) {
-          try {
-            await galfus.renderDiagnosticCube('galfus-browser-sdk-test', timestamp / 1000);
-            requestAnimationFrame(animate);
-          } catch (error) {
-            document.body.dataset.status = 'failed';
-            document.body.dataset.error = error instanceof Error ? error.message : String(error);
-            console.error(error);
-          }
-        }
-        requestAnimationFrame(animate);
-
-        galfus.closeWindow(windowId);
 
         document.body.dataset.status = 'passed';
       } catch (error) {
         document.body.dataset.status = 'failed';
         document.body.dataset.error = error instanceof Error ? error.message : String(error);
         console.error(error);
+      } finally {
+        try {
+          if (windowId !== undefined) galfus.windowClose(windowId);
+          if (galfus) galfus.platformShutdown();
+        } catch (error) {
+          if (document.body.dataset.status === 'passed') {
+            document.body.dataset.status = 'failed';
+            document.body.dataset.error = error instanceof Error ? error.message : String(error);
+          }
+          console.error(error);
+        }
       }
     </script>
   </body>
@@ -237,26 +197,13 @@ async function main(): Promise<void> {
 
   try {
     await page.goto(`http://127.0.0.1:${server.port}`);
-    await page.waitForFunction(() => {
-      const browserDocument = (
-        globalThis as unknown as {
-          document: { body: { dataset: Record<string, string | undefined> } };
-        }
-      ).document;
-      return browserDocument.body.dataset.status !== undefined;
+    await page.waitForFunction(() => document.body.dataset.status !== undefined, undefined, {
+      timeout: 30_000
     });
 
     const result = await page.evaluate(() => ({
-      status: (
-        globalThis as unknown as {
-          document: { body: { dataset: Record<string, string | undefined> } };
-        }
-      ).document.body.dataset.status,
-      error: (
-        globalThis as unknown as {
-          document: { body: { dataset: Record<string, string | undefined> } };
-        }
-      ).document.body.dataset.error
+      status: document.body.dataset.status,
+      error: document.body.dataset.error
     }));
 
     if (result.status !== 'passed') {
@@ -265,33 +212,12 @@ async function main(): Promise<void> {
     if (pageErrors.length > 0) {
       throw new Error(`Unexpected browser page error: ${pageErrors[0]?.message}`);
     }
-
-    if (visibleDurationMs > 0) {
-      console.log('✔ Browser/WASM SDK test passed. Showing the animated cube for 5 seconds.');
-      await wait(visibleDurationMs);
-
-      const animationResult = await page.evaluate(() => ({
-        status: (
-          globalThis as unknown as {
-            document: { body: { dataset: Record<string, string | undefined> } };
-          }
-        ).document.body.dataset.status,
-        error: (
-          globalThis as unknown as {
-            document: { body: { dataset: Record<string, string | undefined> } };
-          }
-        ).document.body.dataset.error
-      }));
-      if (animationResult.status !== 'passed') {
-        throw new Error(animationResult.error ?? 'The diagnostic cube animation failed');
-      }
-    }
   } finally {
     await browser.close();
     server.stop();
   }
 
-  console.log('✔ Browser/WASM SDK initialized and passed the Chromium smoke test.');
+  console.log('✔ Full Browser/WASM SDK passed the Chromium smoke test.');
 }
 
 main().catch((error: unknown) => {

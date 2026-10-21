@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
-use std::sync::Arc;
+
+use crate::GpuShared;
 
 /// Strongly typed handle to an allocated slice in a `BufferArena`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -76,13 +77,17 @@ pub struct BufferArena {
     garbage: Vec<GarbageEntry>,
     keep_frames: u64,
 
-    device: Arc<wgpu::Device>,
-    queue: Arc<wgpu::Queue>,
+    device: GpuShared<wgpu::Device>,
+    queue: GpuShared<wgpu::Queue>,
 }
 
 impl BufferArena {
     /// Creates a new `BufferArena` using device and queue references.
-    pub fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>, desc: BufferArenaDesc) -> Self {
+    pub fn new(
+        device: GpuShared<wgpu::Device>,
+        queue: GpuShared<wgpu::Queue>,
+        desc: BufferArenaDesc,
+    ) -> Self {
         assert!(desc.initial_capacity > 0, "initial_capacity must be > 0");
         assert!(
             desc.alignment.is_power_of_two(),

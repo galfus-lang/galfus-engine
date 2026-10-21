@@ -15,6 +15,7 @@
     "test:binds": "bun scripts/test-binds.ts",
     "test:napi": "bun run build:napi && bun scripts/test-napi.ts",
     "test:browser": "bun scripts/test-browser.ts",
+    "test:tour:browser": "bun scripts/test-browser-tour.ts",
     "demo": "cargo build -p galfus-native && bun scripts/demos/main.ts",
     "tour": "bun examples/feature-tour/runners/bun/index.ts",
     "tour:bun": "bun examples/feature-tour/runners/bun/index.ts",
@@ -22,7 +23,8 @@
     "tour:python": "python3 examples/feature-tour/runners/python/main.py",
     "tour:lua": "luajit examples/feature-tour/runners/lua/main.lua",
     "tour:c": "make -C examples/feature-tour/runners/c run",
-    "tour:csharp": "dotnet run --project examples/feature-tour/runners/csharp/FeatureTour.csproj"
+    "tour:csharp": "dotnet run --project examples/feature-tour/runners/csharp/FeatureTour.csproj",
+    "tour:browser": "bun examples/feature-tour/runners/browser/index.ts"
   },
   "devDependencies": {
     "@johnnymorganz/stylua-bin": "^2.6.0",

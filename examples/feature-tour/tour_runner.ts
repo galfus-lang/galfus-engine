@@ -1,4 +1,3 @@
-import { GalfusBun } from '../../sdk/bun/galfus.ts';
 import { extractKey } from '../../scripts/demos/utils.ts';
 import type { RoomMarker, TourConfig } from './types.ts';
 import tourJsonData from './tour.json';
@@ -17,27 +16,54 @@ const PATH_CAMERA_POS_ID = 401;
 const PATH_CAMERA_LOOK_ID = 402;
 const SOUND_ID = 501;
 
+/** Playback controls exposed to hosts that drive the tour from their own UI. */
+export interface TourController {
+  togglePause(): void;
+  next(): void;
+  previous(): void;
+  restart(): void;
+  stop(): void;
+}
+
+/** Snapshot of the playback state reported after every frame. */
+export interface TourFrameState {
+  roomIndex: number;
+  paused: boolean;
+  tourClock: number;
+  duration: number;
+}
+
 export interface TourRunnerOptions {
+  /** Engine binding instance (Bun FFI, Node-API, browser WASM, ...). */
+  engine: any;
   headless?: boolean;
   maxFrames?: number;
   fixedDelta?: number;
-  engine?: any;
   activeBinding?: string;
+  /** Extra window configuration merged into `windowCreate` (e.g. `canvasId` in the browser). */
+  windowConfig?: Record<string, unknown>;
+  /** Awaited at the end of every frame; browsers use it to wait for `requestAnimationFrame`. */
+  nextFrame?: () => Promise<void>;
+  /** Called once playback controls are available. */
+  onReady?: (controller: TourController) => void;
+  /** Called after every frame with the current playback state. */
+  onFrame?: (state: TourFrameState) => void;
 }
 
-export async function runFeatureTour(options: TourRunnerOptions = {}): Promise<void> {
+export async function runFeatureTour(options: TourRunnerOptions): Promise<void> {
   const tour = tourJsonData as unknown as TourConfig;
   const activeBinding = options.activeBinding ?? 'Bun / FFI';
   console.log(`=== ${tour.title} [${activeBinding}] (v${tour.version}) ===\n`);
 
-  const galfus = options.engine ?? new GalfusBun();
+  const galfus = options.engine;
   try {
     galfus.platformInit();
   } catch {}
 
   const windowId = 1;
-  const initialWidth = 1024;
-  const initialHeight = 768;
+  const requestedSize = options.windowConfig?.size as [number, number] | undefined;
+  const initialWidth = requestedSize?.[0] ?? 1024;
+  const initialHeight = requestedSize?.[1] ?? 768;
 
   if (!options.headless) {
     galfus.windowCreate({
@@ -45,9 +71,10 @@ export async function runFeatureTour(options: TourRunnerOptions = {}): Promise<v
       title: `${tour.title} — Cross-Binding Tour`,
       size: [initialWidth, initialHeight],
       resizable: true,
-      decorations: true
+      decorations: true,
+      ...options.windowConfig
     });
-    galfus.multiverseAttachWindow(windowId);
+    await galfus.multiverseAttachWindow(windowId);
   }
 
   // 1. Create Target (Window swapchain or headless offscreen texture)
@@ -305,6 +332,25 @@ export async function runFeatureTour(options: TourRunnerOptions = {}): Promise<v
     console.log(`[Tour] Jumped to Room ${wrapped + 1}: ${room.name}`);
   };
 
+  const togglePause = () => {
+    isPaused = !isPaused;
+    if (!isPaused) {
+      setupPaths(currentRoomIndex);
+    }
+    updateHud();
+    console.log(`[Tour] Playback ${isPaused ? 'PAUSED' : 'RESUMED'}`);
+  };
+
+  options.onReady?.({
+    togglePause,
+    next: () => seekToRoom(currentRoomIndex + 1),
+    previous: () => seekToRoom(currentRoomIndex - 1),
+    restart: () => seekToRoom(0),
+    stop: () => {
+      running = false;
+    }
+  });
+
   while (running) {
     const now = performance.now();
     const dt = options.fixedDelta ?? Math.min(0.1, (now - lastTime) / 1000.0);
@@ -325,12 +371,7 @@ export async function runFeatureTour(options: TourRunnerOptions = {}): Promise<v
           if (key === 'escape') {
             running = false;
           } else if (key === ' ' || key === 'space') {
-            isPaused = !isPaused;
-            if (!isPaused) {
-              setupPaths(currentRoomIndex);
-            }
-            updateHud();
-            console.log(`[Tour] Playback ${isPaused ? 'PAUSED' : 'RESUMED'}`);
+            togglePause();
           } else if (key === 'r') {
             seekToRoom(0);
           } else if (key === 'arrowright' || key === 'right') {
@@ -383,8 +424,19 @@ export async function runFeatureTour(options: TourRunnerOptions = {}): Promise<v
     galfus.multiverseDispatch(frame, dt);
     frame++;
 
+    options.onFrame?.({
+      roomIndex: currentRoomIndex,
+      paused: isPaused,
+      tourClock,
+      duration: tour.duration
+    });
+
     if (options.maxFrames && frame >= options.maxFrames) {
       break;
+    }
+
+    if (options.nextFrame) {
+      await options.nextFrame();
     }
   }
 

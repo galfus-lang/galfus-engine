@@ -7,6 +7,7 @@ use wgpu::util::DeviceExt;
 use galfus_realm_3d_resources::environment::SkyboxConfig3D;
 
 pub const SKYBOX_SHADER: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct SkyboxUniform {
     inv_view_proj: mat4x4<f32>,
     camera_pos: vec4<f32>,

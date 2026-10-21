@@ -1,6 +1,6 @@
 # Galfus Feature Tour
 
-A guided, cross-binding demonstration proving the core capabilities of the Galfus engine in one coherent split-screen experience across all supported SDKs (Bun, Node.js, Python, LuaJIT, C99, and C#).
+A guided, cross-binding demonstration proving the core capabilities of the Galfus engine in one coherent split-screen experience across all supported SDKs (Bun, Node.js, Python, LuaJIT, C99, C#, and Browser/WASM).
 
 ## Architecture
 
@@ -49,3 +49,15 @@ You can run any SDK tour directly using the configured npm/bun scripts:
 | **LuaJIT**  | `bun run tour:lua`                     | `luajit examples/feature-tour/runners/lua/main.lua`                            |
 | **C99**     | `bun run tour:c`                       | `make -C examples/feature-tour/runners/c run`                                  |
 | **C#**      | `bun run tour:csharp`                  | `dotnet run --project examples/feature-tour/runners/csharp/FeatureTour.csproj` |
+| **Browser** | `bun run tour:browser`                 | `bun examples/feature-tour/runners/browser/index.ts`                           |
+
+The Browser/WASM tour reuses the same shared runner, room schedule, 3D Realm, 2D Realm, Multiverse graph, and telemetry as the native SDKs. It renders both realms into one full-window canvas and updates the viewport automatically when that canvas changes size. Select **Enable Sound** once before reaching the audio room: browsers require a user gesture before Web Audio playback may begin.
+
+Before running the browser tour, install its WebAssembly toolchain once:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.129 --locked
+```
+
+Run `bunx playwright install chromium` before using `bun run test:tour:browser` on a new machine.

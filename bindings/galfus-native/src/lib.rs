@@ -16,6 +16,12 @@ pub mod ffi_transforms_getters;
 #[cfg(feature = "napi")]
 pub mod napi_bind;
 pub mod state;
+#[cfg(target_arch = "wasm32")]
+pub mod wasm_attach;
+#[cfg(target_arch = "wasm32")]
+pub mod wasm_bind;
+#[cfg(target_arch = "wasm32")]
+pub mod wasm_shim;
 
 pub use ffi::*;
 pub use ffi_animation::*;

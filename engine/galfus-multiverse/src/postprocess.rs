@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+
+use galfus_gpu_manager::GpuShared;
 
 use crate::error::{MultiverseError, MultiverseResult};
 use crate::screen_effect::compose_screen_effect;
@@ -7,6 +8,7 @@ use crate::types::InvocationFilter;
 use glam::{UVec2, UVec4};
 
 const WGSL_POSTPROCESS: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -264,8 +266,8 @@ fn create_1x1_texture(
 
 /// Internal post-processing coordinator for invocation filter passes.
 pub(crate) struct PostProcessor {
-    bind_group_layout: Arc<wgpu::BindGroupLayout>,
-    pipeline_layout: Arc<wgpu::PipelineLayout>,
+    bind_group_layout: GpuShared<wgpu::BindGroupLayout>,
+    pipeline_layout: GpuShared<wgpu::PipelineLayout>,
     shader_module: wgpu::ShaderModule,
     sampler: wgpu::Sampler,
     samplers: galfus_gpu_manager::StandardSamplers,
@@ -348,14 +350,14 @@ impl PostProcessor {
             });
         }
 
-        let bind_group_layout = Arc::new(device.create_bind_group_layout(
+        let bind_group_layout = GpuShared::new(device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {
                 label: Some("PostProcess BGL"),
                 entries: &entries,
             },
         ));
 
-        let pipeline_layout = Arc::new(device.create_pipeline_layout(
+        let pipeline_layout = GpuShared::new(device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("PostProcess Pipeline Layout"),
                 bind_group_layouts: &[&bind_group_layout],

@@ -7,6 +7,7 @@ use glam::UVec2;
 use wgpu::util::DeviceExt;
 
 pub const OUTLINE_SILHOUETTE_SHADER: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct CameraUniform {
     view: mat4x4<f32>,
     projection: mat4x4<f32>,
@@ -85,6 +86,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 "#;
 
 pub const OUTLINE_COMPOSITE_SHADER: &str = r#"
+diagnostic(off, derivative_uniformity);
 struct OutlineParams {
     params: vec4<f32>, // x: width, y: threshold, z: strength, w: unused
 };

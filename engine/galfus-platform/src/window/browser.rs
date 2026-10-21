@@ -290,6 +290,13 @@ impl BrowserWindow {
                 let size = UVec2::new(width, height);
                 let mut state = state.borrow_mut();
 
+                if observed_canvas.width() != width {
+                    observed_canvas.set_width(width);
+                }
+                if observed_canvas.height() != height {
+                    observed_canvas.set_height(height);
+                }
+
                 if state.size == size && state.scale_factor == scale_factor {
                     return;
                 }
