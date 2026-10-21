@@ -1,6 +1,7 @@
 import html
 from typing import Any, Dict
 
+
 def escape_xml(unsafe: Any) -> str:
     return (
         str(unsafe)
@@ -11,12 +12,13 @@ def escape_xml(unsafe: Any) -> str:
         .replace("'", "&apos;")
     )
 
+
 def render_companion_panel_svg(
     tour: Dict[str, Any],
     current_room: Dict[str, Any],
     elapsed_secs: float,
     is_paused: bool,
-    active_binding: str = "Python / ctypes"
+    active_binding: str = "Python / ctypes",
 ) -> str:
     total_duration = tour["duration"]
     progress_ratio = max(0.0, min(1.0, elapsed_secs / total_duration))
@@ -40,8 +42,8 @@ def render_companion_panel_svg(
     status_badge = (
         '<rect x="390" y="20" width="80" height="24" rx="6" fill="#DC2626"/>'
         '<text x="430" y="36" font-family="sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle">PAUSED</text>'
-        if is_paused else
-        '<rect x="390" y="20" width="80" height="24" rx="6" fill="#059669"/>'
+        if is_paused
+        else '<rect x="390" y="20" width="80" height="24" rx="6" fill="#059669"/>'
         '<text x="430" y="36" font-family="sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle">LIVE TOUR</text>'
     )
 

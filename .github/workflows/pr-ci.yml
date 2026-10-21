@@ -24,6 +24,12 @@ on:
       - 'Cargo.lock'
       - 'package.json'
       - 'bun.lock'
+      - '.clang-format'
+      - '.editorconfig'
+      - '.prettierignore'
+      - '.prettierrc'
+      - '.stylua.toml'
+      - 'pyproject.toml'
       - '.github/workflows/pr-ci.yml'
   push:
     branches:
@@ -37,6 +43,12 @@ on:
       - 'Cargo.lock'
       - 'package.json'
       - 'bun.lock'
+      - '.clang-format'
+      - '.editorconfig'
+      - '.prettierignore'
+      - '.prettierrc'
+      - '.stylua.toml'
+      - 'pyproject.toml'
       - '.github/workflows/pr-ci.yml'
   workflow_dispatch:
 
@@ -61,23 +73,34 @@ jobs:
           bun-version: 1.4.3
 
       - name: Install Bun dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+          sudo apt-get install -y clang-format pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
 
-      - name: Check Rust formatting
-        run: cargo fmt --all --check
+      - name: Generate SDKs
+        run: bun run codegen
 
-      - name: Check Prettier formatting
-        run: bunx prettier --check .
+      - name: Prepare formatting tools
+        run: bun prepare
+
+      - name: Check formatting
+        run: bun run format:check
 
       - name: Check TypeScript
         run: bun --check
@@ -87,6 +110,3 @@ jobs:
 
       - name: Run Rust tests
         run: cargo test --workspace
-
-      - name: Generate SDKs
-        run: bun run codegen

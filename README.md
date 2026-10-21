@@ -88,13 +88,14 @@ An application owns its lifecycle and decides when to process events, update its
 
 ## Multi-Language SDK Generation
 
-Galfus uses a centralized, specification-driven code generator (`scripts/codegen.ts`) implementing the Strategy pattern to generate idiomatic bindings for multiple programming languages:
+Galfus uses a centralized, specification-driven code generator (`scripts/codegen.ts`) implementing the Strategy pattern to generate idiomatic bindings for multiple programming languages and Browser/WASM:
 
 - **C / C++**: `sdk/c/galfus.h`
 - **C# / MonoDevelop**: `sdk/csharp/Galfus.cs`
 - **Python**: `sdk/python/galfus.py`
 - **LuaJIT**: `sdk/lua/galfus.lua`
 - **TypeScript**: `sdk/typescript/galfus.ts`
+- **Browser/WASM**: `sdk/browser/galfus.ts`
 - **Bun FFI**: `sdk/bun/galfus.ts`
 - **Node.js (Node-API)**: `sdk/node/galfus.ts`
 

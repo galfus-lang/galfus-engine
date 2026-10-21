@@ -2,48 +2,58 @@
 local json = {}
 
 local function kind_of(obj)
-    if type(obj) ~= 'table' then return type(obj) end
+    if type(obj) ~= "table" then
+        return type(obj)
+    end
     local i = 1
     for _ in pairs(obj) do
-        if obj[i] ~= nil then i = i + 1 else return 'table' end
+        if obj[i] ~= nil then
+            i = i + 1
+        else
+            return "table"
+        end
     end
-    if i == 1 then return 'empty' else return 'array' end
+    if i == 1 then
+        return "empty"
+    else
+        return "array"
+    end
 end
 
 local function escape_str(s)
-    local in_char  = {'\\', '"', '/', '\b', '\f', '\n', '\r', '\t'}
-    local out_char = {'\\', '"', '/',  'b',  'f',  'n',  'r',  't'}
+    local in_char = { "\\", '"', "/", "\b", "\f", "\n", "\r", "\t" }
+    local out_char = { "\\", '"', "/", "b", "f", "n", "r", "t" }
     for i, c in ipairs(in_char) do
-        s = s:gsub(c, '\\' .. out_char[i])
+        s = s:gsub(c, "\\" .. out_char[i])
     end
     return s
 end
 
 function json.encode(val)
     local t = type(val)
-    if t == 'nil' then
-        return 'null'
-    elseif t == 'boolean' or t == 'number' then
+    if t == "nil" then
+        return "null"
+    elseif t == "boolean" or t == "number" then
         return tostring(val)
-    elseif t == 'string' then
+    elseif t == "string" then
         return '"' .. escape_str(val) .. '"'
-    elseif t == 'table' then
+    elseif t == "table" then
         local kind = kind_of(val)
-        if kind == 'array' or kind == 'empty' then
+        if kind == "array" or kind == "empty" then
             local items = {}
             for i, v in ipairs(val) do
                 table.insert(items, json.encode(v))
             end
-            return '[' .. table.concat(items, ',') .. ']'
+            return "[" .. table.concat(items, ",") .. "]"
         else
             local items = {}
             for k, v in pairs(val) do
-                table.insert(items, json.encode(tostring(k)) .. ':' .. json.encode(v))
+                table.insert(items, json.encode(tostring(k)) .. ":" .. json.encode(v))
             end
-            return '{' .. table.concat(items, ',') .. '}'
+            return "{" .. table.concat(items, ",") .. "}"
         end
     else
-        return 'null'
+        return "null"
     end
 end
 
@@ -78,13 +88,18 @@ function json.decode(str)
                 table.insert(chunks, str:sub(start, pos - 1))
                 pos = pos + 1
                 local esc = str:sub(pos, pos)
-                if esc == '"' or esc == '\\' or esc == '/' then
+                if esc == '"' or esc == "\\" or esc == "/" then
                     table.insert(chunks, esc)
-                elseif esc == 'b' then table.insert(chunks, '\b')
-                elseif esc == 'f' then table.insert(chunks, '\f')
-                elseif esc == 'n' then table.insert(chunks, '\n')
-                elseif esc == 'r' then table.insert(chunks, '\r')
-                elseif esc == 't' then table.insert(chunks, '\t')
+                elseif esc == "b" then
+                    table.insert(chunks, "\b")
+                elseif esc == "f" then
+                    table.insert(chunks, "\f")
+                elseif esc == "n" then
+                    table.insert(chunks, "\n")
+                elseif esc == "r" then
+                    table.insert(chunks, "\r")
+                elseif esc == "t" then
+                    table.insert(chunks, "\t")
                 end
                 pos = pos + 1
                 start = pos
@@ -97,7 +112,9 @@ function json.decode(str)
 
     local function parse_number()
         local start = pos
-        if str:byte(pos) == 45 then pos = pos + 1 end
+        if str:byte(pos) == 45 then
+            pos = pos + 1
+        end
         while pos <= len do
             local c = str:byte(pos)
             if (c >= 48 and c <= 57) or c == 46 or c == 101 or c == 69 or c == 43 or c == 45 then
@@ -171,7 +188,9 @@ function json.decode(str)
 
     parse_value = function()
         skip_whitespace()
-        if pos > len then error("Unexpected end of JSON") end
+        if pos > len then
+            error("Unexpected end of JSON")
+        end
         local c = str:byte(pos)
         if c == 34 then -- '"'
             return parse_string()

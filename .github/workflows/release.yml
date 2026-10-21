@@ -32,29 +32,40 @@ jobs:
           bun-version: 1.4.3
 
       - name: Install Bun dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+          sudo apt-get install -y clang-format pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libvulkan1 mesa-vulkan-drivers
+
+      - name: Generate SDKs
+        run: bun run codegen
+
+      - name: Prepare formatting tools
+        run: bun prepare
 
       - name: Check formatting
-        run: cargo fmt --all --check
+        run: bun run format:check
 
       - name: Check Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run Rust tests
         run: cargo test --workspace
-
-      - name: Generate SDKs
-        run: bun run codegen
 
   build-native:
     name: Build native ${{ matrix.alias }}
@@ -105,7 +116,7 @@ jobs:
           bun-version: 1.4.3
 
       - name: Install Bun dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -183,7 +194,7 @@ jobs:
           bun-version: 1.4.3
 
       - name: Install Bun dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -247,7 +258,7 @@ jobs:
           bun-version: 1.4.3
 
       - name: Install Bun dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Resolve release version
         id: version

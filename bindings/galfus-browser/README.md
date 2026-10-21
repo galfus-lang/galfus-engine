@@ -12,7 +12,7 @@ WebAssembly packaging boundary for the platform layer in modern web browsers.
 
 ## Capabilities & Powers
 
-> The browser binding currently wraps `PlatformContext` only. It does not expose Multiverse, GPU resources, realms, or animation. Browser audio and gamepad behavior follows the wasm implementations in `galfus-platform`, which currently return placeholder/no-op results for several operations.
+> The browser binding currently wraps `PlatformContext` only. It does not expose Multiverse, GPU resources, realms, or animation. `renderDiagnosticCube(canvasId)` is a narrow GPU surface smoke-test and is not a Realm3D API. Browser audio and gamepad behavior follows the wasm implementations in `galfus-platform`, which currently return placeholder/no-op results for several operations.
 
 - **GalfusBrowser Controller**:
   - `new()`: Initializes the platform context within the browser window.

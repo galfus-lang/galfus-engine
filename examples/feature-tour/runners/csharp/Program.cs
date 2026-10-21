@@ -324,12 +324,26 @@ namespace FeatureTourRunner
 
                             verts[vIdx] = new Vertex3DRecord
                             {
-                                posX = ct * radius, posY = y, posZ = st * radius,
-                                normX = ct, normY = 0.0f, normZ = st,
-                                uvU = u, uvV = v,
-                                tanX = 1.0f, tanY = 0.0f, tanZ = 0.0f, tanW = 1.0f,
-                                joint0 = (uint)b0, joint1 = (uint)b1, joint2 = 0, joint3 = 0,
-                                weight0 = 1.0f - t, weight1 = t, weight2 = 0.0f, weight3 = 0.0f
+                                posX = ct * radius,
+                                posY = y,
+                                posZ = st * radius,
+                                normX = ct,
+                                normY = 0.0f,
+                                normZ = st,
+                                uvU = u,
+                                uvV = v,
+                                tanX = 1.0f,
+                                tanY = 0.0f,
+                                tanZ = 0.0f,
+                                tanW = 1.0f,
+                                joint0 = (uint)b0,
+                                joint1 = (uint)b1,
+                                joint2 = 0,
+                                joint3 = 0,
+                                weight0 = 1.0f - t,
+                                weight1 = t,
+                                weight2 = 0.0f,
+                                weight3 = 0.0f
                             };
                             vIdx++;
                         }

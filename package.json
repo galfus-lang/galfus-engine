@@ -3,15 +3,18 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "prepare": "bun scripts/prepare.ts",
     "format": "bun scripts/format.ts",
+    "format:check": "bun scripts/format.ts --check",
     "check": "bun scripts/check.ts",
-    "validate": "bun format && bun check",
+    "validate": "bun run format:check && bun check",
     "version": "bun scripts/github/set-version.ts",
     "codegen": "bun scripts/codegen.ts",
     "build:napi": "cargo build -p galfus-native --features napi && cp build/cargo-target/debug/libgalfus_native.so build/cargo-target/debug/galfus.node && cargo build -p galfus-native",
     "test:ffi": "bun scripts/test-ffi.ts",
     "test:binds": "bun scripts/test-binds.ts",
     "test:napi": "bun run build:napi && bun scripts/test-napi.ts",
+    "test:browser": "bun scripts/test-browser.ts",
     "demo": "cargo build -p galfus-native && bun scripts/demos/main.ts",
     "tour": "bun examples/feature-tour/runners/bun/index.ts",
     "tour:bun": "bun examples/feature-tour/runners/bun/index.ts",
@@ -22,6 +25,8 @@
     "tour:csharp": "dotnet run --project examples/feature-tour/runners/csharp/FeatureTour.csproj"
   },
   "devDependencies": {
+    "@johnnymorganz/stylua-bin": "^2.6.0",
+    "@playwright/test": "^1.64.1",
     "@types/bun": "^1.4.3",
     "prettier": "^3.9.10"
   }

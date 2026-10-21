@@ -68,7 +68,7 @@ The engine does not impose an entity-component system (ECS), game loop, or speci
 | `engine/galfus-realm-3d`           | Concrete 3D realm: Forward+ PBR, Reverse-Z depth, directional/point/spot lights, shadow maps, SSAO, gizmos, portals, and world AABB queries.                   |
 | `engine/galfus-realm-3d-resources` | Raw 3D domain models: geometry meshes, PBR materials, lights, 3D cameras, particles, and skeleton animation.                                                   |
 | `bindings/galfus-native`           | Unified C-ABI dynamic library (`libgalfus_native.so`) providing exported C functions, memory ownership, and direct pointer fast paths.                         |
-| `scripts/codegen`                  | Multi-language code generation engine implementing the Strategy pattern to generate SDKs for C, Python, LuaJIT, TypeScript, and Bun FFI.                       |
+| `scripts/codegen`                  | Multi-language code generation engine implementing the Strategy pattern to generate SDKs for C, Python, LuaJIT, TypeScript, Bun FFI, and Browser/WASM.         |
 
 ---
 
@@ -201,12 +201,13 @@ The exported raw functions accept pointers to these layouts. Generated host wrap
 
 ## 7. Multi-Language SDK Code Generation
 
-Galfus uses a specification-driven codegen architecture located in `scripts/codegen/`. Using the **Strategy Pattern**, a single declarative specification generates client bindings for multiple runtimes:
+Galfus uses a specification-driven codegen architecture located in `scripts/codegen/`. Shared native ABI specifications and a Browser/WASM contract generate client bindings for multiple runtimes:
 
 ```text
 scripts/codegen/specs/
   ├── types.ts            (Type system, primitive & pointer mappings)
   ├── platform.ts         (Windowing, capabilities, flat event specs)
+  ├── browser.ts          (Browser/WASM JavaScript API contract)
   ├── multiverse.ts       (Targets, invocations, bindings, dispatch)
   ├── realm_2d.ts         (2D sprites, shapes, lights, cameras)
   ├── realm_3d.ts         (3D models, geometry, materials, cameras)
@@ -218,7 +219,10 @@ scripts/codegen/strategies/
   ├── python.ts           ──► sdk/python/galfus.py
   ├── lua.ts              ──► sdk/lua/galfus.lua
   ├── typescript.ts       ──► sdk/typescript/galfus.ts
-  └── bun_ffi.ts          ──► sdk/bun/galfus.ts
+  ├── bun_ffi.ts          ──► sdk/bun/galfus.ts
+  ├── node_api.ts         ──► sdk/node/galfus.ts
+  ├── csharp.ts           ──► sdk/csharp/Galfus.cs
+  └── browser_wasm.ts     ──► sdk/browser/galfus.ts
 ```
 
 ---

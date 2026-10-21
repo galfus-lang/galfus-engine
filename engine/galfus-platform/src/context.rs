@@ -20,11 +20,13 @@ use winit::window::{Window as WinitWindow, WindowId as WinitWindowId};
 use crate::capabilities::PlatformCapabilities;
 use crate::error::{PlatformError, PlatformResult};
 use crate::event::PlatformEvent;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::keyboard::KeyboardEvent;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::keyboard::mapping::{map_key_state, map_logical_key, map_modifiers, map_physical_key};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::keyboard::types::ModifiersState;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::pointer::PointerEvent;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::pointer::mapping::{
@@ -37,6 +39,7 @@ use crate::window::BrowserWindow;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::window::NativeWindow;
 use crate::window::Window;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::window::event::WindowEvent;
 use crate::window::types::WindowConfig;
 #[cfg(not(target_arch = "wasm32"))]
@@ -437,7 +440,12 @@ impl PlatformContext {
     /// On browser, returns empty or collected events from DOM listeners.
     #[cfg(target_arch = "wasm32")]
     pub fn pump_events(&mut self) -> PlatformResult<Vec<PlatformEvent>> {
-        Ok(Vec::new())
+        Ok(self
+            .windows
+            .values()
+            .flat_map(|window| window.drain_resize_events())
+            .map(PlatformEvent::Window)
+            .collect())
     }
 }
 

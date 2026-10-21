@@ -3,6 +3,12 @@
 //! Provides direct native JavaScript object integration for web applications via `wasm-bindgen`
 //! and `serde-wasm-bindgen`.
 
+#[cfg(target_arch = "wasm32")]
+mod diagnostic_cube;
+
+#[cfg(target_arch = "wasm32")]
+use std::cell::RefCell;
+
 use wasm_bindgen::prelude::*;
 
 use galfus_platform::{CursorGrabMode, CursorIcon, PlatformContext, WindowConfig};
@@ -11,6 +17,8 @@ use galfus_platform::{CursorGrabMode, CursorIcon, PlatformContext, WindowConfig}
 #[wasm_bindgen]
 pub struct GalfusBrowser {
     context: PlatformContext,
+    #[cfg(target_arch = "wasm32")]
+    diagnostic_cube: RefCell<Option<diagnostic_cube::DiagnosticCubeRenderer>>,
 }
 
 #[wasm_bindgen]
@@ -20,7 +28,11 @@ impl GalfusBrowser {
     pub fn new() -> Result<GalfusBrowser, JsValue> {
         let context = PlatformContext::new()
             .map_err(|e| JsValue::from_str(&format!("Failed to initialize platform: {e}")))?;
-        Ok(Self { context })
+        Ok(Self {
+            context,
+            #[cfg(target_arch = "wasm32")]
+            diagnostic_cube: RefCell::new(None),
+        })
     }
 
     /// Creates a headless `GalfusBrowser` instance (useful in Web Workers or test runners).
@@ -28,7 +40,20 @@ impl GalfusBrowser {
     pub fn new_headless() -> GalfusBrowser {
         Self {
             context: PlatformContext::new_headless(),
+            #[cfg(target_arch = "wasm32")]
+            diagnostic_cube: RefCell::new(None),
         }
+    }
+
+    /// Renders a GPU diagnostic cube at the requested animation time.
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen(js_name = "renderDiagnosticCube")]
+    pub async fn render_diagnostic_cube(
+        &self,
+        canvas_id: String,
+        elapsed_seconds: f64,
+    ) -> Result<(), JsValue> {
+        diagnostic_cube::render(&self.diagnostic_cube, &canvas_id, elapsed_seconds as f32).await
     }
 
     /// Returns the environment capabilities as a direct JavaScript object.

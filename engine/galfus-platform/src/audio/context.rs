@@ -1,6 +1,9 @@
+#[cfg(not(target_arch = "wasm32"))]
 use std::collections::HashMap;
 
+#[cfg(not(target_arch = "wasm32"))]
 use galfus_core::Handle;
+#[cfg(not(target_arch = "wasm32"))]
 use galfus_core::handle::GenerationalPool;
 use galfus_core::id::validate_host_logical_id;
 #[cfg(not(target_arch = "wasm32"))]
@@ -12,7 +15,9 @@ use kira::{
 use super::types::{
     PlaybackConfig, PlaybackState, SpatialAudioConfig, SpatialTransform, calculate_spatial_playback,
 };
-use crate::error::{PlatformError, PlatformResult};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::error::PlatformError;
+use crate::error::PlatformResult;
 
 /// Namespace for audio playback voices in the generational pool.
 pub const NAMESPACE_AUDIO_VOICE: u16 = 0x30;

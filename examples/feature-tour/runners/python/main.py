@@ -10,11 +10,7 @@ root_dir = os.path.abspath(os.path.join(script_dir, "../../../.."))
 sys.path.append(os.path.join(root_dir, "sdk/python"))
 
 import galfus
-from procedural import (
-    build_room_scene,
-    make_sound,
-    compute_bone_palette
-)
+from procedural import build_room_scene, make_sound, compute_bone_palette
 from panel_svg import render_companion_panel_svg
 
 TARGET_WINDOW = 1
@@ -28,6 +24,7 @@ SVG_HUD_ID = 1
 PATH_CAMERA_POS_ID = 401
 PATH_CAMERA_LOOK_ID = 402
 SOUND_ID = 501
+
 
 def extract_key(ev: Dict[str, Any]) -> str:
     logical = ev.get("logicalKey")
@@ -43,6 +40,7 @@ def extract_key(ev: Dict[str, Any]) -> str:
     if phys.startswith("key") and len(phys) == 4:
         return phys[3:]
     return phys
+
 
 def main(max_frames: Any = None) -> None:
     tour_json_path = os.path.join(script_dir, "../../tour.json")
@@ -60,61 +58,69 @@ def main(max_frames: Any = None) -> None:
     window_id = 1
     width, height = 1024, 768
 
-    galfus.window_create({
-        "id": window_id,
-        "title": f"{tour['title']} — Python Runner",
-        "size": [width, height],
-        "resizable": True,
-        "decorations": True
-    })
+    galfus.window_create(
+        {
+            "id": window_id,
+            "title": f"{tour['title']} — Python Runner",
+            "size": [width, height],
+            "resizable": True,
+            "decorations": True,
+        }
+    )
     galfus.multiverse_attach_window(window_id)
 
     # 1. Create Target
-    galfus.multiverse_create_target(TARGET_WINDOW, {
-        "kind": {"type": "window", "windowId": window_id}
-    })
+    galfus.multiverse_create_target(
+        TARGET_WINDOW, {"kind": {"type": "window", "windowId": window_id}}
+    )
 
     # 2. Create Realms
     galfus.realm3d_create(REALM_3D)
     galfus.realm2d_create(REALM_2D)
 
     # 3. Multiverse Invocations: Top 50vh 3D, Bottom 50vh 2D
-    galfus.multiverse_create_invocation(INVOCATION_3D, {
-        "realmId": REALM_3D,
-        "targetId": TARGET_WINDOW,
-        "cameraSlot": 0,
-        "viewport": {
-            "anchorX": "left",
-            "anchorY": "top",
-            "width": {"vw": 100},
-            "height": {"vh": 50}
+    galfus.multiverse_create_invocation(
+        INVOCATION_3D,
+        {
+            "realmId": REALM_3D,
+            "targetId": TARGET_WINDOW,
+            "cameraSlot": 0,
+            "viewport": {
+                "anchorX": "left",
+                "anchorY": "top",
+                "width": {"vw": 100},
+                "height": {"vh": 50},
+            },
+            "clearColor": [0.06, 0.08, 0.12, 1.0],
+            "enabled": True,
+            "zIndex": 0,
         },
-        "clearColor": [0.06, 0.08, 0.12, 1.0],
-        "enabled": True,
-        "zIndex": 0
-    })
+    )
 
-    galfus.multiverse_create_invocation(INVOCATION_2D, {
-        "realmId": REALM_2D,
-        "targetId": TARGET_WINDOW,
-        "cameraSlot": 0,
-        "viewport": {
-            "anchorX": "left",
-            "anchorY": "bottom",
-            "width": {"vw": 100},
-            "height": {"vh": 50}
+    galfus.multiverse_create_invocation(
+        INVOCATION_2D,
+        {
+            "realmId": REALM_2D,
+            "targetId": TARGET_WINDOW,
+            "cameraSlot": 0,
+            "viewport": {
+                "anchorX": "left",
+                "anchorY": "bottom",
+                "width": {"vw": 100},
+                "height": {"vh": 50},
+            },
+            "clearColor": [0.08, 0.1, 0.15, 1.0],
+            "enabled": True,
+            "zIndex": 1,
         },
-        "clearColor": [0.08, 0.1, 0.15, 1.0],
-        "enabled": True,
-        "zIndex": 1
-    })
+    )
 
     # 3b. 2D Ambient Light for bright SVG rendering
     galfus.realm2d_create_light(
         REALM_2D,
         1,
         {"color": [1.0, 1.0, 1.0], "intensity": 1.0, "range": 1000.0, "active": True},
-        {"position": [0.0, 0.0]}
+        {"position": [0.0, 0.0]},
     )
 
     # 4. Cameras
@@ -124,31 +130,37 @@ def main(max_frames: Any = None) -> None:
     galfus.realm3d_create_camera(
         REALM_3D,
         CAMERA_3D_ID,
-        {"fovY": 60.0, "near": 0.1, "far": 1000.0, "cameraSlot": 0, "lookAt": {"target": first_look, "up": [0.0, 1.0, 0.0]}},
-        {"position": first_pos}
+        {
+            "fovY": 60.0,
+            "near": 0.1,
+            "far": 1000.0,
+            "cameraSlot": 0,
+            "lookAt": {"target": first_look, "up": [0.0, 1.0, 0.0]},
+        },
+        {"position": first_pos},
     )
 
     galfus.realm2d_create_camera(
-        REALM_2D,
-        CAMERA_2D_ID,
-        {"orthoScale": 240, "cameraSlot": 0},
-        {"position": [0.0, 0.0]}
+        REALM_2D, CAMERA_2D_ID, {"orthoScale": 240, "cameraSlot": 0}, {"position": [0.0, 0.0]}
     )
 
     # 5. Environment & Skybox
-    galfus.realm3d_set_environment(REALM_3D, {
-        "ambientColor": [0.15, 0.18, 0.22, 1.0],
-        "exposure": 1.1,
-        "skybox": {
-            "mode": "procedural",
-            "skyColor": [0.2, 0.4, 0.7, 1.0],
-            "horizonColor": [0.55, 0.65, 0.75, 1.0],
-            "groundColor": [0.06, 0.08, 0.1, 1.0],
-            "sunDirection": [0.6, 0.8, 0.3, 0.0],
-            "sunColor": [1.0, 0.95, 0.85, 2.0],
-            "intensity": 1.2
-        }
-    })
+    galfus.realm3d_set_environment(
+        REALM_3D,
+        {
+            "ambientColor": [0.15, 0.18, 0.22, 1.0],
+            "exposure": 1.1,
+            "skybox": {
+                "mode": "procedural",
+                "skyColor": [0.2, 0.4, 0.7, 1.0],
+                "horizonColor": [0.55, 0.65, 0.75, 1.0],
+                "groundColor": [0.06, 0.08, 0.1, 1.0],
+                "sunDirection": [0.6, 0.8, 0.3, 0.0],
+                "sunColor": [1.0, 0.95, 0.85, 2.0],
+                "intensity": 1.2,
+            },
+        },
+    )
 
     # 6. Procedural exhibit rooms
     for room in tour["rooms"]:
@@ -166,14 +178,13 @@ def main(max_frames: Any = None) -> None:
     initial_room = tour["rooms"][0]
     initial_svg = render_companion_panel_svg(tour, initial_room, 0.0, False, active_binding)
     galfus.realm2d_create_svg(
-        REALM_2D,
-        SVG_HUD_ID,
-        {"source": initial_svg},
-        {"position": [0, 0], "scale": [1, 1]}
+        REALM_2D, SVG_HUD_ID, {"source": initial_svg}, {"position": [0, 0], "scale": [1, 1]}
     )
 
     # 9. Path followers setup
-    def rotate_path_commands(commands: List[Dict[str, Any]], room_idx: int, origin: List[float]) -> List[Dict[str, Any]]:
+    def rotate_path_commands(
+        commands: List[Dict[str, Any]], room_idx: int, origin: List[float]
+    ) -> List[Dict[str, Any]]:
         rotated = [{"type": "moveTo", "to": origin}]
         num_rooms = len(tour["rooms"])
         for offset in range(num_rooms):
@@ -197,17 +208,35 @@ def main(max_frames: Any = None) -> None:
             pass
 
         room = tour["rooms"][room_idx]
-        pos_commands = rotate_path_commands(tour["cameraPositionPath"]["commands"], room_idx, room["cameraPoint"])
-        look_commands = rotate_path_commands(tour["cameraLookTargetPath"]["commands"], room_idx, room["focusPoint"])
+        pos_commands = rotate_path_commands(
+            tour["cameraPositionPath"]["commands"], room_idx, room["cameraPoint"]
+        )
+        look_commands = rotate_path_commands(
+            tour["cameraLookTargetPath"]["commands"], room_idx, room["focusPoint"]
+        )
 
-        galfus.animation_create_path_follow(PATH_CAMERA_POS_ID, pos_commands, tour["cameraPositionPath"]["config"])
-        galfus.animation_bind_path_follow_target(PATH_CAMERA_POS_ID, {"kind": "camera3DTransform", "realmId": REALM_3D, "cameraId": CAMERA_3D_ID})
+        galfus.animation_create_path_follow(
+            PATH_CAMERA_POS_ID, pos_commands, tour["cameraPositionPath"]["config"]
+        )
+        galfus.animation_bind_path_follow_target(
+            PATH_CAMERA_POS_ID,
+            {"kind": "camera3DTransform", "realmId": REALM_3D, "cameraId": CAMERA_3D_ID},
+        )
 
-        galfus.animation_create_path_follow(PATH_CAMERA_LOOK_ID, look_commands, tour["cameraLookTargetPath"]["config"])
-        galfus.animation_bind_path_follow_target(PATH_CAMERA_LOOK_ID, {"kind": "camera3DLookAt", "realmId": REALM_3D, "cameraId": CAMERA_3D_ID})
+        galfus.animation_create_path_follow(
+            PATH_CAMERA_LOOK_ID, look_commands, tour["cameraLookTargetPath"]["config"]
+        )
+        galfus.animation_bind_path_follow_target(
+            PATH_CAMERA_LOOK_ID,
+            {"kind": "camera3DLookAt", "realmId": REALM_3D, "cameraId": CAMERA_3D_ID},
+        )
 
-        galfus.realm3d_set_camera_transform(REALM_3D, CAMERA_3D_ID, {"position": room["cameraPoint"]})
-        galfus.realm3d_set_camera_look_at(REALM_3D, CAMERA_3D_ID, {"target": room["focusPoint"], "up": [0.0, 1.0, 0.0]})
+        galfus.realm3d_set_camera_transform(
+            REALM_3D, CAMERA_3D_ID, {"position": room["cameraPoint"]}
+        )
+        galfus.realm3d_set_camera_look_at(
+            REALM_3D, CAMERA_3D_ID, {"target": room["focusPoint"], "up": [0.0, 1.0, 0.0]}
+        )
 
     setup_paths(0)
     print("✔ Tour paths and rooms configured successfully!\n")
@@ -223,7 +252,9 @@ def main(max_frames: Any = None) -> None:
 
     def update_hud() -> None:
         active_room = tour["rooms"][current_room_index]
-        updated_svg = render_companion_panel_svg(tour, active_room, tour_clock, is_paused, active_binding)
+        updated_svg = render_companion_panel_svg(
+            tour, active_room, tour_clock, is_paused, active_binding
+        )
         galfus.realm2d_set_svg_source(REALM_2D, SVG_HUD_ID, updated_svg)
 
     def apply_room_state(room_idx: int) -> None:
@@ -234,7 +265,9 @@ def main(max_frames: Any = None) -> None:
         # Multiverse screen shader filters for Room 8 (Effects)
         if room_idx == 8:
             try:
-                galfus.multiverse_set_invocation_filters(INVOCATION_3D, ["chromaticAberration", "vignette"])
+                galfus.multiverse_set_invocation_filters(
+                    INVOCATION_3D, ["chromaticAberration", "vignette"]
+                )
             except Exception:
                 pass
         else:
@@ -272,7 +305,9 @@ def main(max_frames: Any = None) -> None:
                 if ev_type == "closeRequested":
                     running = False
                 elif ev_type == "resized":
-                    galfus.multiverse_update_window_size(window_id, int(ev.get("width", width)), int(ev.get("height", height)))
+                    galfus.multiverse_update_window_size(
+                        window_id, int(ev.get("width", width)), int(ev.get("height", height))
+                    )
             elif ev.get("kind") == "keyboard" and ev.get("type") == "input":
                 if ev.get("state") == "pressed":
                     key = extract_key(ev)
@@ -306,8 +341,14 @@ def main(max_frames: Any = None) -> None:
         if is_paused:
             active_room = tour["rooms"][current_room_index]
             try:
-                galfus.realm3d_set_camera_transform(REALM_3D, CAMERA_3D_ID, {"position": active_room["cameraPoint"]})
-                galfus.realm3d_set_camera_look_at(REALM_3D, CAMERA_3D_ID, {"target": active_room["focusPoint"], "up": [0.0, 1.0, 0.0]})
+                galfus.realm3d_set_camera_transform(
+                    REALM_3D, CAMERA_3D_ID, {"position": active_room["cameraPoint"]}
+                )
+                galfus.realm3d_set_camera_look_at(
+                    REALM_3D,
+                    CAMERA_3D_ID,
+                    {"target": active_room["focusPoint"], "up": [0.0, 1.0, 0.0]},
+                )
             except Exception:
                 pass
 
@@ -343,6 +384,7 @@ def main(max_frames: Any = None) -> None:
         pass
 
     print("✔ Python feature tour finished gracefully.")
+
 
 if __name__ == "__main__":
     max_frames_arg = int(sys.argv[1]) if len(sys.argv) > 1 else None

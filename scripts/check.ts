@@ -15,6 +15,21 @@ const COMMANDS: Command[] = [
   {
     label: 'cargo clippy',
     args: ['cargo', 'clippy', '--workspace', '--all-targets']
+  },
+  {
+    label: 'cargo clippy (browser WASM)',
+    args: [
+      'cargo',
+      'clippy',
+      '--locked',
+      '--package',
+      'galfus-browser',
+      '--target',
+      'wasm32-unknown-unknown',
+      '--',
+      '-D',
+      'warnings'
+    ]
   }
 ];
 

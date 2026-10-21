@@ -1,20 +1,48 @@
 use glam::{IVec2, UVec2};
 
+#[cfg(all(target_arch = "wasm32", feature = "browser"))]
+use std::cell::RefCell;
+#[cfg(all(target_arch = "wasm32", feature = "browser"))]
+use std::rc::Rc;
+#[cfg(all(target_arch = "wasm32", feature = "browser"))]
+use wasm_bindgen::{JsCast, closure::Closure};
+
 use crate::error::PlatformResult;
+use crate::window::WindowEvent;
 use crate::window::types::{
     CursorGrabMode, CursorIcon, FullscreenMode, UserAttentionType, WindowConfig,
 };
 
-/// A browser canvas surface representation.
+#[cfg(all(target_arch = "wasm32", feature = "browser"))]
 #[derive(Debug)]
+struct BrowserResizeState {
+    size: UVec2,
+    scale_factor: f64,
+    events: Vec<WindowEvent>,
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "browser"))]
+struct BrowserResizeObserver {
+    observer: web_sys::ResizeObserver,
+    _callback: Closure<dyn FnMut(js_sys::Array, web_sys::ResizeObserver)>,
+}
+
+/// A browser canvas surface representation.
 pub struct BrowserWindow {
     id: u32,
     canvas_id: String,
     title: String,
     size: UVec2,
+    #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
     scale_factor: f64,
     visible: bool,
     resizable: bool,
+    #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+    resize_state: Rc<RefCell<BrowserResizeState>>,
+    #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+    canvas: Option<web_sys::HtmlCanvasElement>,
+    #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+    resize_observer: Option<BrowserResizeObserver>,
 }
 
 impl BrowserWindow {
@@ -25,15 +53,36 @@ impl BrowserWindow {
             .clone()
             .unwrap_or_else(|| "galfus-canvas".to_string());
 
-        Ok(Self {
+        let window = Self {
             id: config.id,
             canvas_id,
             title: config.title.clone(),
             size: config.size,
+            #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
             scale_factor: 1.0,
             visible: true,
             resizable: config.resizable,
-        })
+            #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+            resize_state: Rc::new(RefCell::new(BrowserResizeState {
+                size: config.size,
+                scale_factor: 1.0,
+                events: Vec::new(),
+            })),
+            #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+            canvas: None,
+            #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+            resize_observer: None,
+        };
+
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        {
+            let mut window = window;
+            window.observe_canvas_resize()?;
+            Ok(window)
+        }
+
+        #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
+        Ok(window)
     }
 
     /// Returns the logical window ID.
@@ -58,12 +107,27 @@ impl BrowserWindow {
 
     /// Returns canvas dimensions.
     pub fn inner_size(&self) -> UVec2 {
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        return self.resize_state.borrow().size;
+
+        #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
         self.size
     }
 
     /// Updates canvas dimensions.
     pub fn set_inner_size(&mut self, width: u32, height: u32) {
         self.size = UVec2::new(width, height);
+
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        {
+            let size = UVec2::new(width, height);
+            let mut state = self.resize_state.borrow_mut();
+            state.size = size;
+            if let Some(canvas) = &self.canvas {
+                canvas.set_width(width);
+                canvas.set_height(height);
+            }
+        }
     }
 
     /// Sets the minimum inner dimensions.
@@ -87,6 +151,10 @@ impl BrowserWindow {
 
     /// Returns display device pixel ratio.
     pub fn scale_factor(&self) -> f64 {
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        return self.resize_state.borrow().scale_factor;
+
+        #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
         self.scale_factor
     }
 
@@ -171,4 +239,93 @@ impl BrowserWindow {
 
     /// Schedules `requestAnimationFrame`.
     pub fn request_redraw(&self) {}
+
+    /// Drains resize events produced by the DOM canvas observer.
+    pub fn drain_resize_events(&self) -> Vec<WindowEvent> {
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        return std::mem::take(&mut self.resize_state.borrow_mut().events);
+
+        #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
+        Vec::new()
+    }
+
+    #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+    fn observe_canvas_resize(&mut self) -> PlatformResult<()> {
+        let window = web_sys::window().ok_or_else(|| {
+            crate::error::PlatformError::WindowCreationFailed(
+                "Browser window is unavailable".into(),
+            )
+        })?;
+        let document = window.document().ok_or_else(|| {
+            crate::error::PlatformError::WindowCreationFailed(
+                "Browser document is unavailable".into(),
+            )
+        })?;
+        let element = document.get_element_by_id(&self.canvas_id).ok_or_else(|| {
+            crate::error::PlatformError::WindowCreationFailed(format!(
+                "Canvas element '{}' was not found",
+                self.canvas_id
+            ))
+        })?;
+        let canvas = element
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .map_err(|_| {
+                crate::error::PlatformError::WindowCreationFailed(format!(
+                    "Element '{}' is not a canvas",
+                    self.canvas_id
+                ))
+            })?;
+        let observed_element: web_sys::Element = canvas.clone().unchecked_into();
+        let observed_canvas = canvas.clone();
+        let state = Rc::clone(&self.resize_state);
+        let window_id = self.id;
+        let callback = Closure::<dyn FnMut(js_sys::Array, web_sys::ResizeObserver)>::new(
+            move |_entries, _observer| {
+                let width = observed_canvas.client_width().max(1) as u32;
+                let height = observed_canvas.client_height().max(1) as u32;
+                let scale_factor = web_sys::window()
+                    .map(|window| window.device_pixel_ratio())
+                    .filter(|scale| *scale > 0.0)
+                    .unwrap_or(1.0);
+                let size = UVec2::new(width, height);
+                let mut state = state.borrow_mut();
+
+                if state.size == size && state.scale_factor == scale_factor {
+                    return;
+                }
+
+                state.size = size;
+                state.scale_factor = scale_factor;
+                state.events.push(WindowEvent::Resized {
+                    window_id,
+                    width,
+                    height,
+                    scale_factor,
+                });
+            },
+        );
+        let observer =
+            web_sys::ResizeObserver::new(callback.as_ref().unchecked_ref()).map_err(|error| {
+                crate::error::PlatformError::WindowCreationFailed(format!(
+                    "Failed to create canvas resize observer: {error:?}"
+                ))
+            })?;
+        observer.observe(&observed_element);
+
+        self.canvas = Some(canvas);
+        self.resize_observer = Some(BrowserResizeObserver {
+            observer,
+            _callback: callback,
+        });
+        Ok(())
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "browser"))]
+impl Drop for BrowserWindow {
+    fn drop(&mut self) {
+        if let Some(resize_observer) = &self.resize_observer {
+            resize_observer.observer.disconnect();
+        }
+    }
 }

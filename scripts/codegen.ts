@@ -9,6 +9,7 @@ import { TypeScriptStrategy } from './codegen/strategies/typescript.ts';
 import { BunFfiStrategy } from './codegen/strategies/bun_ffi.ts';
 import { NodeApiStrategy } from './codegen/strategies/node_api.ts';
 import { CSharpStrategy } from './codegen/strategies/csharp.ts';
+import { BrowserWasmStrategy } from './codegen/strategies/browser_wasm.ts';
 
 const rootDir = resolve(import.meta.dir, '..');
 
@@ -19,7 +20,8 @@ const STRATEGIES: CodegenStrategy[] = [
   new TypeScriptStrategy(),
   new BunFfiStrategy(),
   new NodeApiStrategy(),
-  new CSharpStrategy()
+  new CSharpStrategy(),
+  new BrowserWasmStrategy()
 ];
 
 async function main() {
