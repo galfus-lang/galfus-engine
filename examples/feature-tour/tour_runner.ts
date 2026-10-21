@@ -21,13 +21,16 @@ export interface TourRunnerOptions {
   headless?: boolean;
   maxFrames?: number;
   fixedDelta?: number;
+  engine?: any;
+  activeBinding?: string;
 }
 
 export async function runFeatureTour(options: TourRunnerOptions = {}): Promise<void> {
   const tour = tourJsonData as unknown as TourConfig;
-  console.log(`=== ${tour.title} (v${tour.version}) ===\n`);
+  const activeBinding = options.activeBinding ?? 'Bun / FFI';
+  console.log(`=== ${tour.title} [${activeBinding}] (v${tour.version}) ===\n`);
 
-  const galfus = new GalfusBun();
+  const galfus = options.engine ?? new GalfusBun();
   try {
     galfus.platformInit();
   } catch {}
@@ -170,7 +173,7 @@ export async function runFeatureTour(options: TourRunnerOptions = {}): Promise<v
 
   // 8. Companion SVG panel in Realm2D
   const initialRoom = tour.rooms[0]!;
-  const initialSvg = renderCompanionPanelSvg(tour, initialRoom, 0.0, false);
+  const initialSvg = renderCompanionPanelSvg(tour, initialRoom, 0.0, false, activeBinding);
   galfus.realm2dCreateSvg(
     REALM_2D,
     SVG_HUD_ID,
@@ -258,7 +261,13 @@ export async function runFeatureTour(options: TourRunnerOptions = {}): Promise<v
 
   const updateHud = () => {
     const activeRoom = tour.rooms[currentRoomIndex] ?? tour.rooms[0]!;
-    const updatedSvg = renderCompanionPanelSvg(tour, activeRoom, tourClock, isPaused);
+    const updatedSvg = renderCompanionPanelSvg(
+      tour,
+      activeRoom,
+      tourClock,
+      isPaused,
+      activeBinding
+    );
     galfus.realm2dSetSvgSource(REALM_2D, SVG_HUD_ID, updatedSvg);
   };
 

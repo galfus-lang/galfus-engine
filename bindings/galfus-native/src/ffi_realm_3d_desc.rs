@@ -14,7 +14,7 @@ use galfus_realm_3d_resources::transform::Transform3D;
 use glam::{Quat, Vec3, Vec4};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Transform3DDesc {
     pub position: Option<[f32; 3]>,

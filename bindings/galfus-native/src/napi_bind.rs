@@ -304,7 +304,7 @@ pub fn multiverse_unregister_realm(realm_id: u32) -> Result<()> {
         .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
-#[napi]
+#[napi(js_name = "realm3dSetCameraLookAt")]
 pub fn realm3d_set_camera_look_at(
     env: Env,
     realm_id: u32,
@@ -324,7 +324,7 @@ pub fn realm3d_set_camera_look_at(
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
-#[napi]
+#[napi(js_name = "realm3dGetCameraLookAt")]
 pub fn realm3d_get_camera_look_at(env: Env, realm_id: u32, camera_id: u32) -> Result<JsUnknown> {
     let state = with_multiverse_mut(|mv| {
         let realm = mv
@@ -339,7 +339,7 @@ pub fn realm3d_get_camera_look_at(env: Env, realm_id: u32, camera_id: u32) -> Re
     env.to_js_value(&state)
 }
 
-#[napi]
+#[napi(js_name = "realm3dClearCameraLookAt")]
 pub fn realm3d_clear_camera_look_at(realm_id: u32, camera_id: u32) -> Result<()> {
     with_multiverse_mut(|mv| {
         let realm = mv
@@ -910,4 +910,503 @@ pub fn animation_get_path_follow_state(env: Env, path_id: u32) -> Result<JsUnkno
     })
     .map_err(|e| Error::new(Status::GenericFailure, e))?;
     env.to_js_value(&state)
+}
+
+fn js_to_c_string(env: &Env, val: Option<JsUnknown>) -> Result<Option<std::ffi::CString>> {
+    match val {
+        None => Ok(None),
+        Some(v) => {
+            let v_type = v.get_type()?;
+            if v_type == napi::ValueType::Undefined || v_type == napi::ValueType::Null {
+                return Ok(None);
+            }
+            if v_type == napi::ValueType::String {
+                let s: String = env.from_js_value(v)?;
+                let cs = std::ffi::CString::new(s)
+                    .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+                return Ok(Some(cs));
+            }
+            let json_val: serde_json::Value = env.from_js_value(v)?;
+            let json_str = serde_json::to_string(&json_val)
+                .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+            let cs = std::ffi::CString::new(json_str)
+                .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+            Ok(Some(cs))
+        }
+    }
+}
+
+fn check_ffi_res(code: i32) -> Result<()> {
+    if code == 0 {
+        Ok(())
+    } else {
+        let ptr = crate::ffi::galfus_get_last_error();
+        let err = if ptr.is_null() {
+            "Unknown native error".to_string()
+        } else {
+            let s = unsafe { std::ffi::CStr::from_ptr(ptr) }
+                .to_string_lossy()
+                .to_string();
+            unsafe {
+                crate::ffi::galfus_string_free(ptr);
+            }
+            s
+        };
+        Err(Error::new(Status::GenericFailure, err))
+    }
+}
+
+// Realm 3D
+#[napi(js_name = "realm3dCreate")]
+pub fn realm_3d_create(realm_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create(realm_id))
+}
+
+#[napi(js_name = "realm3dDestroy")]
+pub fn realm_3d_destroy(realm_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_destroy(realm_id))
+}
+
+#[napi(js_name = "realm3dCreateCamera")]
+pub fn realm_3d_create_camera(
+    env: Env,
+    realm_id: u32,
+    camera_id: u32,
+    camera_val: JsUnknown,
+    transform_val: Option<JsUnknown>,
+) -> Result<()> {
+    let c_cam = js_to_c_string(&env, Some(camera_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "camera cannot be null"))?;
+    let c_tf = js_to_c_string(&env, transform_val)?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_create_camera(
+            realm_id,
+            camera_id,
+            c_cam.as_ptr(),
+            c_tf.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        )
+    })
+}
+
+#[napi(js_name = "realm3dSetCameraTransform")]
+pub fn realm_3d_set_camera_transform(
+    env: Env,
+    realm_id: u32,
+    camera_id: u32,
+    transform_val: JsUnknown,
+) -> Result<()> {
+    let desc: crate::ffi_realm_3d_desc::Transform3DDesc = env.from_js_value(transform_val)?;
+    let native_tf: crate::ffi_native_structs::GalfusTransform3D =
+        galfus_realm_3d_resources::transform::Transform3D::from(desc).into();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_set_camera_transform(realm_id, camera_id, &native_tf)
+    })
+}
+
+#[napi(js_name = "realm3dCreateGeometry")]
+pub fn realm_3d_create_geometry(
+    env: Env,
+    realm_id: u32,
+    geometry_id: u32,
+    geometry_val: JsUnknown,
+) -> Result<()> {
+    let c_geom = js_to_c_string(&env, Some(geometry_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "geometry cannot be null"))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_create_geometry(realm_id, geometry_id, c_geom.as_ptr())
+    })
+}
+
+#[napi(js_name = "realm3dCreateGeometryRaw")]
+pub fn realm_3d_create_geometry_raw(
+    realm_id: u32,
+    geometry_id: u32,
+    vertex_data: Uint8Array,
+    _vertex_data_len: Option<i64>,
+    indices: Uint32Array,
+    _index_count: Option<i64>,
+) -> Result<()> {
+    let v_slice: &[u8] = vertex_data.as_ref();
+    let i_slice: &[u32] = indices.as_ref();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_create_geometry_raw(
+            realm_id,
+            geometry_id,
+            v_slice.as_ptr(),
+            v_slice.len(),
+            i_slice.as_ptr(),
+            i_slice.len(),
+        )
+    })
+}
+
+#[napi(js_name = "realm3dCreateMaterial")]
+pub fn realm_3d_create_material(
+    env: Env,
+    realm_id: u32,
+    material_id: u32,
+    material_val: JsUnknown,
+) -> Result<()> {
+    let c_mat = js_to_c_string(&env, Some(material_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "material cannot be null"))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_create_material(realm_id, material_id, c_mat.as_ptr())
+    })
+}
+
+#[napi(js_name = "realm3dCreateModel")]
+pub fn realm_3d_create_model(
+    env: Env,
+    realm_id: u32,
+    model_id: u32,
+    model_val: JsUnknown,
+    transform_val: Option<JsUnknown>,
+) -> Result<()> {
+    let c_mod = js_to_c_string(&env, Some(model_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "model cannot be null"))?;
+    let c_tf = js_to_c_string(&env, transform_val)?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_create_model(
+            realm_id,
+            model_id,
+            c_mod.as_ptr(),
+            c_tf.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        )
+    })
+}
+
+#[napi(js_name = "realm3dSetModelTransform")]
+pub fn realm_3d_set_model_transform(
+    env: Env,
+    realm_id: u32,
+    model_id: u32,
+    transform_val: JsUnknown,
+) -> Result<()> {
+    let desc: crate::ffi_realm_3d_desc::Transform3DDesc = env.from_js_value(transform_val)?;
+    let native_tf: crate::ffi_native_structs::GalfusTransform3D =
+        galfus_realm_3d_resources::transform::Transform3D::from(desc).into();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_set_model_transform(realm_id, model_id, &native_tf)
+    })
+}
+
+#[napi(js_name = "realm3dCreateLight")]
+pub fn realm_3d_create_light(
+    env: Env,
+    realm_id: u32,
+    light_id: u32,
+    light_val: JsUnknown,
+    transform_val: Option<JsUnknown>,
+) -> Result<()> {
+    let c_light = js_to_c_string(&env, Some(light_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "light cannot be null"))?;
+    let c_tf = js_to_c_string(&env, transform_val)?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_create_light(
+            realm_id,
+            light_id,
+            c_light.as_ptr(),
+            c_tf.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        )
+    })
+}
+
+#[napi(js_name = "realm3dSetLightTransform")]
+pub fn realm_3d_set_light_transform(
+    env: Env,
+    realm_id: u32,
+    light_id: u32,
+    transform_val: JsUnknown,
+) -> Result<()> {
+    let desc: crate::ffi_realm_3d_desc::Transform3DDesc = env.from_js_value(transform_val)?;
+    let native_tf: crate::ffi_native_structs::GalfusTransform3D =
+        galfus_realm_3d_resources::transform::Transform3D::from(desc).into();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_set_light_transform(realm_id, light_id, &native_tf)
+    })
+}
+
+#[napi(js_name = "realm3dSetEnvironment")]
+pub fn realm_3d_set_environment(env: Env, realm_id: u32, environment_val: JsUnknown) -> Result<()> {
+    let c_env = js_to_c_string(&env, Some(environment_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "environment cannot be null"))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_set_environment(realm_id, c_env.as_ptr())
+    })
+}
+
+#[napi(js_name = "realm3dUpdateBones")]
+pub fn realm_3d_update_bones(
+    realm_id: u32,
+    model_id: u32,
+    data: Float32Array,
+    _float_count: Option<i64>,
+) -> Result<()> {
+    let f_slice: &[f32] = data.as_ref();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_update_bones(
+            realm_id,
+            model_id,
+            f_slice.as_ptr(),
+            f_slice.len(),
+        )
+    })
+}
+
+#[napi(js_name = "realm3dCreateParticleEmitter")]
+pub fn realm_3d_create_particle_emitter(
+    env: Env,
+    realm_id: u32,
+    emitter_id: u32,
+    emitter_val: JsUnknown,
+    transform_val: Option<JsUnknown>,
+) -> Result<()> {
+    let c_emitter = js_to_c_string(&env, Some(emitter_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "emitter cannot be null"))?;
+    let c_tf = js_to_c_string(&env, transform_val)?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d_particles::galfus_realm_3d_create_particle_emitter(
+            realm_id,
+            emitter_id,
+            c_emitter.as_ptr(),
+            c_tf.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        )
+    })
+}
+
+#[napi(js_name = "realm3dSetParticleEmitterTransform")]
+pub fn realm_3d_set_particle_emitter_transform(
+    env: Env,
+    realm_id: u32,
+    emitter_id: u32,
+    transform_val: JsUnknown,
+) -> Result<()> {
+    let desc: crate::ffi_realm_3d_desc::Transform3DDesc = env.from_js_value(transform_val)?;
+    let native_tf: crate::ffi_native_structs::GalfusTransform3D =
+        galfus_realm_3d_resources::transform::Transform3D::from(desc).into();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d_particles::galfus_realm_3d_set_particle_emitter_transform(
+            realm_id, emitter_id, &native_tf,
+        )
+    })
+}
+
+#[napi(js_name = "realm3dCreatePortal")]
+pub fn realm_3d_create_portal(
+    env: Env,
+    realm_id: u32,
+    portal_id: u32,
+    portal_val: JsUnknown,
+) -> Result<()> {
+    let c_portal = js_to_c_string(&env, Some(portal_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "portal cannot be null"))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d_portals::galfus_realm_3d_create_portal(
+            realm_id,
+            portal_id,
+            c_portal.as_ptr(),
+        )
+    })
+}
+
+// Realm 2D
+#[napi(js_name = "realm2dCreate")]
+pub fn realm_2d_create(realm_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_2d::galfus_realm_2d_create(realm_id))
+}
+
+#[napi(js_name = "realm2dDestroy")]
+pub fn realm_2d_destroy(realm_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_2d::galfus_realm_2d_destroy(realm_id))
+}
+
+#[napi(js_name = "realm2dCreateCamera")]
+pub fn realm_2d_create_camera(
+    env: Env,
+    realm_id: u32,
+    camera_id: u32,
+    camera_val: JsUnknown,
+    transform_val: Option<JsUnknown>,
+) -> Result<()> {
+    let c_cam = js_to_c_string(&env, Some(camera_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "camera cannot be null"))?;
+    let c_tf = js_to_c_string(&env, transform_val)?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d::galfus_realm_2d_create_camera(
+            realm_id,
+            camera_id,
+            c_cam.as_ptr(),
+            c_tf.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        )
+    })
+}
+
+#[napi(js_name = "realm2dSetCameraTransform")]
+pub fn realm_2d_set_camera_transform(
+    env: Env,
+    realm_id: u32,
+    camera_id: u32,
+    transform_val: JsUnknown,
+) -> Result<()> {
+    let desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
+    let native_tf: crate::ffi_native_structs::GalfusTransform2D =
+        galfus_realm_2d_resources::Transform2D::from(desc).into();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d::galfus_realm_2d_set_camera_transform(realm_id, camera_id, &native_tf)
+    })
+}
+
+#[napi(js_name = "realm2dCreateLight")]
+pub fn realm_2d_create_light(
+    env: Env,
+    realm_id: u32,
+    light_id: u32,
+    light_val: JsUnknown,
+    transform_val: Option<JsUnknown>,
+) -> Result<()> {
+    let c_light = js_to_c_string(&env, Some(light_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "light cannot be null"))?;
+    let c_tf = js_to_c_string(&env, transform_val)?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d::galfus_realm_2d_create_light(
+            realm_id,
+            light_id,
+            c_light.as_ptr(),
+            c_tf.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        )
+    })
+}
+
+#[napi(js_name = "realm2dSetLightTransform")]
+pub fn realm_2d_set_light_transform(
+    env: Env,
+    realm_id: u32,
+    light_id: u32,
+    transform_val: JsUnknown,
+) -> Result<()> {
+    let desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
+    let native_tf: crate::ffi_native_structs::GalfusTransform2D =
+        galfus_realm_2d_resources::Transform2D::from(desc).into();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d::galfus_realm_2d_set_light_transform(realm_id, light_id, &native_tf)
+    })
+}
+
+#[napi(js_name = "realm2dCreateSvg")]
+pub fn realm_2d_create_svg(
+    env: Env,
+    realm_id: u32,
+    svg_id: u32,
+    svg_val: JsUnknown,
+    transform_val: Option<JsUnknown>,
+) -> Result<()> {
+    let c_svg = js_to_c_string(&env, Some(svg_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "svg cannot be null"))?;
+    let c_tf = js_to_c_string(&env, transform_val)?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_svg::galfus_realm_2d_create_svg(
+            realm_id,
+            svg_id,
+            c_svg.as_ptr(),
+            c_tf.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        )
+    })
+}
+
+#[napi(js_name = "realm2dSetSvgSource")]
+pub fn realm_2d_set_svg_source(realm_id: u32, svg_id: u32, source: String) -> Result<()> {
+    let c_source = std::ffi::CString::new(source)
+        .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_svg::galfus_realm_2d_set_svg_source(realm_id, svg_id, c_source.as_ptr())
+    })
+}
+
+#[napi(js_name = "realm2dSetSvgTransform")]
+pub fn realm_2d_set_svg_transform(
+    env: Env,
+    realm_id: u32,
+    svg_id: u32,
+    transform_val: JsUnknown,
+) -> Result<()> {
+    let desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
+    let native_tf: crate::ffi_native_structs::GalfusTransform2D =
+        galfus_realm_2d_resources::Transform2D::from(desc).into();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_svg::galfus_realm_2d_set_svg_transform(realm_id, svg_id, &native_tf)
+    })
+}
+
+#[napi(js_name = "realm3dDestroyCamera")]
+pub fn realm_3d_destroy_camera(realm_id: u32, camera_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_destroy::galfus_realm_3d_destroy_camera(
+        realm_id, camera_id,
+    ))
+}
+
+#[napi(js_name = "realm3dDestroyMaterial")]
+pub fn realm_3d_destroy_material(realm_id: u32, material_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_destroy::galfus_realm_3d_destroy_material(
+        realm_id,
+        material_id,
+    ))
+}
+
+#[napi(js_name = "realm3dDestroyGeometry")]
+pub fn realm_3d_destroy_geometry(realm_id: u32, geometry_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_destroy::galfus_realm_3d_destroy_geometry(
+        realm_id,
+        geometry_id,
+    ))
+}
+
+#[napi(js_name = "realm3dDestroyModel")]
+pub fn realm_3d_destroy_model(realm_id: u32, model_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_destroy::galfus_realm_3d_destroy_model(
+        realm_id, model_id,
+    ))
+}
+
+#[napi(js_name = "realm3dDestroyLight")]
+pub fn realm_3d_destroy_light(realm_id: u32, light_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_destroy::galfus_realm_3d_destroy_light(
+        realm_id, light_id,
+    ))
+}
+
+#[napi(js_name = "realm3dDestroyPortal")]
+pub fn realm_3d_destroy_portal(realm_id: u32, portal_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d_portals::galfus_realm_3d_destroy_portal(
+        realm_id, portal_id,
+    ))
+}
+
+#[napi(js_name = "realm3dDestroyParticleEmitter")]
+pub fn realm_3d_destroy_particle_emitter(realm_id: u32, emitter_id: u32) -> Result<()> {
+    check_ffi_res(
+        crate::ffi_realm_3d_particles::galfus_realm_3d_destroy_particle_emitter(
+            realm_id, emitter_id,
+        ),
+    )
+}
+
+#[napi(js_name = "realm2dDestroyCamera")]
+pub fn realm_2d_destroy_camera(realm_id: u32, camera_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_destroy::galfus_realm_2d_destroy_camera(
+        realm_id, camera_id,
+    ))
+}
+
+#[napi(js_name = "realm2dDestroyLight")]
+pub fn realm_2d_destroy_light(realm_id: u32, light_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_destroy::galfus_realm_2d_destroy_light(
+        realm_id, light_id,
+    ))
+}
+
+#[napi(js_name = "realm2dDestroySvg")]
+pub fn realm_2d_destroy_svg(realm_id: u32, svg_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_2d_svg::galfus_realm_2d_destroy_svg(
+        realm_id, svg_id,
+    ))
 }

@@ -135,7 +135,7 @@ function mapNativeType(type: DataType, isParam: boolean): string {
   }
 }
 
-function renderFieldType(type: FieldType, optional?: boolean): string {
+function renderFieldType(type: FieldType, optional?: boolean, enumNames?: Set<string>): string {
   if (typeof type === 'string') {
     switch (type) {
       case 'string':
@@ -149,6 +149,9 @@ function renderFieldType(type: FieldType, optional?: boolean): string {
     }
   }
   if ('ref' in type) {
+    if (enumNames && enumNames.has(type.ref)) {
+      return 'string';
+    }
     return type.ref;
   }
   if ('enum' in type) {
@@ -158,11 +161,11 @@ function renderFieldType(type: FieldType, optional?: boolean): string {
     return typeof type.literal === 'string' ? 'string' : 'double';
   }
   if ('tuple' in type) {
-    const inner = type.tuple[0] ? renderFieldType(type.tuple[0]) : 'object';
+    const inner = type.tuple[0] ? renderFieldType(type.tuple[0], false, enumNames) : 'object';
     return `${inner}[]`;
   }
   if ('array' in type) {
-    return `${renderFieldType(type.array)}[]`;
+    return `${renderFieldType(type.array, false, enumNames)}[]`;
   }
   if ('inline' in type) {
     return 'Dictionary<string, object>';
@@ -170,7 +173,7 @@ function renderFieldType(type: FieldType, optional?: boolean): string {
   return 'object';
 }
 
-function renderCSharpDescriptor(desc: DescSpec): string[] {
+function renderCSharpDescriptor(desc: DescSpec, enumNames?: Set<string>): string[] {
   const lines: string[] = [];
   if (desc.doc) {
     lines.push(`    /// <summary>${desc.doc}</summary>`);
@@ -195,7 +198,7 @@ function renderCSharpDescriptor(desc: DescSpec): string[] {
       if (spec.doc) {
         lines.push(`        /// <summary>${spec.doc}</summary>`);
       }
-      const propType = renderFieldType(spec.type, spec.optional);
+      const propType = renderFieldType(spec.type, spec.optional, enumNames);
       const propName = escapeIdent(name);
       lines.push(`        public ${propType} ${propName} { get; set; }`);
     }
@@ -212,7 +215,7 @@ function renderCSharpDescriptor(desc: DescSpec): string[] {
     for (const variant of desc.variants) {
       if (typeof variant === 'object' && 'inline' in variant) {
         for (const [fName, fSpec] of Object.entries(variant.inline)) {
-          fieldMap.set(fName, renderFieldType(fSpec.type, true));
+          fieldMap.set(fName, renderFieldType(fSpec.type, true, enumNames));
         }
       }
     }
@@ -303,8 +306,11 @@ export class CSharpStrategy implements CodegenStrategy {
     lines.push('    #endregion', '');
 
     lines.push('    #region Descriptors');
+    const enumNames = new Set(
+      context.descriptors.filter((d) => d.kind === 'enum').map((d) => d.name)
+    );
     for (const desc of context.descriptors) {
-      lines.push(...renderCSharpDescriptor(desc));
+      lines.push(...renderCSharpDescriptor(desc, enumNames));
     }
     lines.push('    #endregion', '');
 
@@ -412,7 +418,7 @@ export class CSharpStrategy implements CodegenStrategy {
     lines.push('            finally');
     lines.push('            {');
     lines.push(
-      '                if (Native.galfus_platform_release_event_batch(batch.batch_id) != 0) throw new GalfusError("platformReleaseEventBatch failed: " + GetLastError());'
+      '                if (Native.galfus_platform_release_event_batch(batch.batch_id) != 0) throw new GalfusError("platformReleaseEventBatch failed: " + PtrToStringUtf8AndFree(Native.galfus_get_last_error()));'
     );
     lines.push('            }');
     lines.push('        }');

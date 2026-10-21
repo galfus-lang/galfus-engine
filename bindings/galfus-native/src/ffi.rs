@@ -37,6 +37,25 @@ pub(crate) unsafe fn from_c_str<'a>(ptr: *const c_char) -> Result<&'a str, Strin
         .map_err(|e| format!("Invalid UTF-8 in C string: {e}"))
 }
 
+/// Helper safely reading an optional C string pointer (NULL or empty string returns Ok(None)).
+pub(crate) unsafe fn from_c_str_optional<'a>(
+    ptr: *const c_char,
+) -> Result<Option<&'a str>, String> {
+    if ptr.is_null() {
+        return Ok(None);
+    }
+    // SAFETY: caller guarantees null-terminated UTF-8 string when non-null.
+    let s = unsafe { CStr::from_ptr(ptr) }
+        .to_str()
+        .map_err(|e| format!("Invalid UTF-8 in C string: {e}"))?;
+    let trimmed = s.trim();
+    if trimmed.is_empty() || trimmed == "null" || trimmed == "undefined" {
+        Ok(None)
+    } else {
+        Ok(Some(trimmed))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Exported C API Functions
 // ---------------------------------------------------------------------------

@@ -12,13 +12,15 @@ use crate::ffi_realm_2d_desc::Transform2DDesc;
 use crate::state::{with_multiverse, with_multiverse_mut};
 
 unsafe fn parse_transform_2d(transform_json: *const c_char) -> Result<Transform2D, String> {
-    if transform_json.is_null() {
-        return Err("Transform JSON pointer is null".to_string());
+    match unsafe { crate::ffi::from_c_str_optional(transform_json) } {
+        Ok(Some(s)) => {
+            let d: Transform2DDesc =
+                serde_json::from_str(s).map_err(|e| format!("Invalid Transform2DDesc: {e}"))?;
+            Ok(d.into())
+        }
+        Ok(None) => Ok(Transform2D::default()),
+        Err(e) => Err(e),
     }
-    let s = unsafe { from_c_str(transform_json) }.map_err(|e| e.to_string())?;
-    let d: Transform2DDesc =
-        serde_json::from_str(s).map_err(|e| format!("Invalid Transform2DDesc: {e}"))?;
-    Ok(d.into())
 }
 
 /// Creates or updates a 2D SVG vector entity with an initial transform.

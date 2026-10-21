@@ -34,16 +34,17 @@ pub unsafe extern "C" fn galfus_realm_3d_create_particle_emitter(
         };
 
     let transform_desc: Transform3DDesc =
-        match serde_json::from_str(match unsafe { from_c_str(transform_json) } {
-            Ok(s) => s,
+        match unsafe { crate::ffi::from_c_str_optional(transform_json) } {
+            Ok(Some(s)) => match serde_json::from_str(s) {
+                Ok(d) => d,
+                Err(e) => {
+                    set_last_error(&format!("Invalid Transform3DDesc: {e}"));
+                    return -1;
+                }
+            },
+            Ok(None) => Transform3DDesc::default(),
             Err(e) => {
                 set_last_error(&e);
-                return -1;
-            }
-        }) {
-            Ok(d) => d,
-            Err(e) => {
-                set_last_error(&format!("Invalid Transform3DDesc: {e}"));
                 return -1;
             }
         };

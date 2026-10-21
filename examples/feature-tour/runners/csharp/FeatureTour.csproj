@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\..\..\sdk\csharp\Galfus.cs" Link="Galfus.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\tour.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>tour.json</Link>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\..\build\cargo-target\debug\libgalfus_native.so" Condition="Exists('..\..\..\..\build\cargo-target\debug\libgalfus_native.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>libgalfus_native.so</Link>
+    </None>
+    <None Include="..\..\..\..\build\cargo-target\debug\galfus_native.dll" Condition="Exists('..\..\..\..\build\cargo-target\debug\galfus_native.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>galfus_native.dll</Link>
+    </None>
+    <None Include="..\..\..\..\build\cargo-target\debug\libgalfus_native.dylib" Condition="Exists('..\..\..\..\build\cargo-target\debug\libgalfus_native.dylib')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>libgalfus_native.dylib</Link>
+    </None>
+  </ItemGroup>
+
+</Project>

@@ -5,10 +5,18 @@ use galfus_realm_3d_resources::camera::Camera3D;
 use galfus_realm_3d_resources::geometry::{Geometry3D, Vertex3D};
 use galfus_realm_3d_resources::model::InstanceData3D;
 
-use crate::ffi::{from_c_str, set_last_error};
+use crate::ffi::{from_c_str, from_c_str_optional, set_last_error};
 use crate::ffi_native_structs::GalfusTransform3D;
 use crate::ffi_realm_3d_desc::*;
 use crate::state::with_multiverse_mut;
+
+unsafe fn parse_transform_3d(transform_json: *const c_char) -> Result<Transform3DDesc, String> {
+    match unsafe { from_c_str_optional(transform_json) } {
+        Ok(Some(s)) => serde_json::from_str(s).map_err(|e| format!("Invalid Transform3DDesc: {e}")),
+        Ok(None) => Ok(Transform3DDesc::default()),
+        Err(e) => Err(e),
+    }
+}
 
 /// Creates and registers a new 3D Realm in the Multiverse.
 #[unsafe(no_mangle)]
@@ -61,20 +69,13 @@ pub unsafe extern "C" fn galfus_realm_3d_create_camera(
             }
         };
 
-    let trans_desc: Transform3DDesc =
-        match serde_json::from_str(match unsafe { from_c_str(transform_json) } {
-            Ok(s) => s,
-            Err(e) => {
-                set_last_error(&e);
-                return -1;
-            }
-        }) {
-            Ok(d) => d,
-            Err(e) => {
-                set_last_error(&format!("Invalid Transform3DDesc: {e}"));
-                return -1;
-            }
-        };
+    let trans_desc: Transform3DDesc = match unsafe { parse_transform_3d(transform_json) } {
+        Ok(d) => d,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
 
     let look_at = cam_desc.look_at.clone();
     let mut camera: Camera3D = cam_desc.into();
@@ -334,20 +335,13 @@ pub unsafe extern "C" fn galfus_realm_3d_create_model(
             }
         };
 
-    let trans_desc: Transform3DDesc =
-        match serde_json::from_str(match unsafe { from_c_str(transform_json) } {
-            Ok(s) => s,
-            Err(e) => {
-                set_last_error(&e);
-                return -1;
-            }
-        }) {
-            Ok(d) => d,
-            Err(e) => {
-                set_last_error(&format!("Invalid Transform3DDesc: {e}"));
-                return -1;
-            }
-        };
+    let trans_desc: Transform3DDesc = match unsafe { parse_transform_3d(transform_json) } {
+        Ok(d) => d,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
 
     match with_multiverse_mut(|mv| {
         let realm = mv
@@ -529,20 +523,13 @@ pub unsafe extern "C" fn galfus_realm_3d_create_light(
             }
         };
 
-    let trans_desc: Transform3DDesc =
-        match serde_json::from_str(match unsafe { from_c_str(transform_json) } {
-            Ok(s) => s,
-            Err(e) => {
-                set_last_error(&e);
-                return -1;
-            }
-        }) {
-            Ok(d) => d,
-            Err(e) => {
-                set_last_error(&format!("Invalid Transform3DDesc: {e}"));
-                return -1;
-            }
-        };
+    let trans_desc: Transform3DDesc = match unsafe { parse_transform_3d(transform_json) } {
+        Ok(d) => d,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
 
     match with_multiverse_mut(|mv| {
         let realm = mv
