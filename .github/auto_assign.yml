@@ -1,0 +1,15 @@
+addReviewers: true
+addAssignees: true
+
+reviewers:
+  - morbden
+
+assignees:
+  - morbden
+
+numberOfReviewers: 1
+numberOfAssignees: 1
+
+skipKeywords:
+  - wip
+  - draft

@@ -753,7 +753,7 @@ dependencies = [
 
 [[package]]
 name = "galfus-animation"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "galfus-core",
  "galfus-multiverse",
@@ -769,7 +769,7 @@ dependencies = [
 
 [[package]]
 name = "galfus-browser"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "galfus-core",
  "galfus-platform",
@@ -781,14 +781,14 @@ dependencies = [
 
 [[package]]
 name = "galfus-core"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "galfus-gpu-manager"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "bytemuck",
  "galfus-core",
@@ -802,7 +802,7 @@ dependencies = [
 
 [[package]]
 name = "galfus-multiverse"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "bytemuck",
  "galfus-core",
@@ -819,7 +819,7 @@ dependencies = [
 
 [[package]]
 name = "galfus-native"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "galfus-animation",
  "galfus-core",
@@ -840,7 +840,7 @@ dependencies = [
 
 [[package]]
 name = "galfus-platform"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "galfus-core",
  "gilrs",
@@ -859,7 +859,7 @@ dependencies = [
 
 [[package]]
 name = "galfus-realm-2d"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "bytemuck",
  "galfus-core",
@@ -879,7 +879,7 @@ dependencies = [
 
 [[package]]
 name = "galfus-realm-2d-resources"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "bytemuck",
  "galfus-core",
@@ -892,7 +892,7 @@ dependencies = [
 
 [[package]]
 name = "galfus-realm-3d"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "bytemuck",
  "galfus-core",
@@ -909,7 +909,7 @@ dependencies = [
 
 [[package]]
 name = "galfus-realm-3d-resources"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "bytemuck",
  "galfus-core",
@@ -920,7 +920,7 @@ dependencies = [
 
 [[package]]
 name = "galfus-realm-core"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "galfus-core",
  "glam 0.30.10",

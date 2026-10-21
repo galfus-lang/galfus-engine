@@ -19,6 +19,7 @@ pub const NAMESPACE_AUDIO_VOICE: u16 = 0x30;
 
 /// Helper converting linear amplitude (0.0 ..= 1.0) into Decibels.
 #[inline]
+#[cfg(not(target_arch = "wasm32"))]
 fn amplitude_to_decibels(amplitude: f32) -> Decibels {
     if amplitude <= 0.0001 {
         Decibels::SILENCE

@@ -1,0 +1,68 @@
+area:core:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'engine/galfus-core/**'
+          - 'engine/galfus-realm-core/**'
+
+area:platform:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'engine/galfus-platform/**'
+
+area:gpu:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'engine/galfus-gpu-manager/**'
+
+area:multiverse:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'engine/galfus-multiverse/**'
+
+area:realm-2d:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'engine/galfus-realm-2d/**'
+          - 'engine/galfus-realm-2d-resources/**'
+
+area:realm-3d:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'engine/galfus-realm-3d/**'
+          - 'engine/galfus-realm-3d-resources/**'
+
+area:animation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'engine/galfus-animation/**'
+
+area:bindings:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'bindings/**'
+          - 'sdk/**'
+
+area:tooling:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+          - 'scripts/**'
+          - 'Cargo.toml'
+          - 'Cargo.lock'
+          - 'package.json'
+          - 'bun.lock'
+
+area:examples:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'examples/**'
+
+area:docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'README.md'
+          - 'AGENTS.md'
+          - '.agents/**'
+          - 'docs/**'
+          - 'engine/*/README.md'
+          - 'bindings/*/README.md'

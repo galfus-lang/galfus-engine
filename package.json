@@ -6,6 +6,7 @@
     "format": "bun scripts/format.ts",
     "check": "bun scripts/check.ts",
     "validate": "bun format && bun check",
+    "version": "bun scripts/github/set-version.ts",
     "codegen": "bun scripts/codegen.ts",
     "build:napi": "cargo build -p galfus-native --features napi && cp build/cargo-target/debug/libgalfus_native.so build/cargo-target/debug/galfus.node && cargo build -p galfus-native",
     "test:ffi": "bun scripts/test-ffi.ts",

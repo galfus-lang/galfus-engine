@@ -1,0 +1,33 @@
+name: PR Labels and Validate
+
+on:
+  pull_request_target:
+    branches:
+      - main
+      - feat/**
+      - fix/**
+      - refactor/**
+      - docs/**
+      - test/**
+      - chore/**
+      - stable/**
+      - alpha/**
+      - beta/**
+      - next/**
+      - latest/**
+    types:
+      - opened
+      - synchronize
+      - edited
+      - ready_for_review
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  shared-validate:
+    uses: galfus-lang/.github/.github/workflows/pr-labels-n-validate.yml@main
