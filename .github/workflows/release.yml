@@ -52,10 +52,8 @@ jobs:
       - name: Run Rust tests
         run: cargo test --workspace
 
-      - name: Verify generated SDKs
-        run: |
-          bun run codegen
-          git diff --exit-code -- sdk
+      - name: Generate SDKs
+        run: bun run codegen
 
   build-native:
     name: Build native ${{ matrix.alias }}
@@ -67,22 +65,22 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            alias: linux-x64
+            alias: linux-x64-gnu
             extension: so
             prefix: lib
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            alias: linux-arm64
+            alias: linux-arm64-gnu
             extension: so
             prefix: lib
           - os: macos-15-intel
             target: x86_64-apple-darwin
-            alias: macos-x64
+            alias: darwin-x64
             extension: dylib
             prefix: lib
           - os: macos-latest
             target: aarch64-apple-darwin
-            alias: macos-arm64
+            alias: darwin-arm64
             extension: dylib
             prefix: lib
           - os: windows-latest
@@ -114,6 +112,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Apply release version
+        id: version
         run: bun run version
 
       - name: Update Cargo lockfile
@@ -128,22 +127,40 @@ jobs:
       - name: Build FFI library
         run: cargo build --locked --release --package galfus-native --target ${{ matrix.target }}
 
-      - name: Prepare FFI artifact
+      - name: Preserve FFI library
         shell: bash
         run: |
-          mkdir -p dist
-          cp "build/cargo-target/${{ matrix.target }}/release/${{ matrix.prefix }}galfus_native.${{ matrix.extension }}" "dist/galfus-native-ffi-${{ matrix.alias }}.${{ matrix.extension }}"
+          library="${{ matrix.prefix }}galfus_native.${{ matrix.extension }}"
+          mkdir -p native-artifacts
+          cp "build/cargo-target/${{ matrix.target }}/release/${library}" "native-artifacts/${library}"
 
       - name: Build Node-API library
         run: cargo build --locked --release --package galfus-native --features napi --target ${{ matrix.target }}
 
-      - name: Prepare Node-API artifact
-        shell: bash
-        run: |
-          mkdir -p dist
-          cp "build/cargo-target/${{ matrix.target }}/release/${{ matrix.prefix }}galfus_native.${{ matrix.extension }}" "dist/galfus-native-napi-${{ matrix.alias }}.node"
+      - name: Generate SDKs
+        run: bun run codegen
 
-      - name: Upload native artifacts
+      - name: Package native release
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.packageVersion }}
+        run: |
+          package_name="galfus-engine-${PACKAGE_VERSION}-${{ matrix.alias }}"
+          package_dir="package/${package_name}"
+          library="${{ matrix.prefix }}galfus_native.${{ matrix.extension }}"
+
+          rm -rf package dist
+          mkdir -p "${package_dir}/lib" dist
+          cp "native-artifacts/${library}" "${package_dir}/lib/${library}"
+          cp "build/cargo-target/${{ matrix.target }}/release/${library}" "${package_dir}/lib/galfus.node"
+          cp -R sdk "${package_dir}/sdk"
+          cp docs/release-package.md "${package_dir}/README.md"
+
+          tar -C package -czf "dist/${package_name}.tar.gz" "${package_name}"
+          bun scripts/github/create-md5.ts "dist/${package_name}.tar.gz"
+          rm -rf native-artifacts
+
+      - name: Upload native release package
         uses: actions/upload-artifact@v4
         with:
           name: galfus-native-${{ matrix.alias }}
@@ -173,6 +190,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Apply release version
+        id: version
         run: bun run version
 
       - name: Update Cargo lockfile
@@ -184,19 +202,31 @@ jobs:
       - name: Install wasm-bindgen CLI
         run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
 
-      - name: Generate browser package
+      - name: Package browser release
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.packageVersion }}
         run: |
+          package_name="galfus-engine-${PACKAGE_VERSION}-browser-wasm"
+          package_dir="package/${package_name}"
+
+          rm -rf package dist
+          mkdir -p "${package_dir}/browser" dist
           wasm-bindgen \
             --target web \
-            --out-dir dist/galfus-browser-web \
+            --out-dir "${package_dir}/browser" \
             --out-name galfus_browser \
             build/cargo-target/wasm32-unknown-unknown/release/galfus_browser.wasm
+          cp docs/release-package.md "${package_dir}/README.md"
 
-      - name: Upload browser artifacts
+          tar -C package -czf "dist/${package_name}.tar.gz" "${package_name}"
+          bun scripts/github/create-md5.ts "dist/${package_name}.tar.gz"
+
+      - name: Upload browser release package
         uses: actions/upload-artifact@v4
         with:
-          name: galfus-browser-web
-          path: dist/galfus-browser-web
+          name: galfus-browser-wasm
+          path: dist/*
           if-no-files-found: error
           retention-days: 1
 
@@ -222,18 +252,27 @@ jobs:
         id: version
         run: bun run version
 
-      - name: Download build artifacts
+      - name: Download release packages
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           pattern: galfus-*
           merge-multiple: true
 
+      - name: Verify release checksums
+        shell: bash
+        run: |
+          for checksum in artifacts/*.md5; do
+            (cd "$(dirname "${checksum}")" && md5sum -c "$(basename "${checksum}")")
+          done
+
       - name: Publish release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.version.outputs.packageVersion }}
           name: v${{ steps.version.outputs.packageVersion }}
-          files: artifacts/**
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.tar.gz.md5
           generate_release_notes: true
           prerelease: ${{ !startsWith(github.ref_name, 'stable/') }}
