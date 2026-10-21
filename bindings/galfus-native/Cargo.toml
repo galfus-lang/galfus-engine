@@ -25,8 +25,7 @@ galfus-realm-3d-resources.workspace = true
 galfus-realm-2d.workspace = true
 galfus-realm-2d-resources.workspace = true
 galfus-animation.workspace = true
-napi = { version = "2.16", default-features = false, features = ["napi4", "serde-json"], optional = true }
+napi = { version = "2.16", default-features = false, features = ["napi4", "serde-json", "dyn-symbols"], optional = true }
 napi-derive = { version = "2.16", optional = true }
-
 
 
