@@ -11,6 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
 
 concurrency:
@@ -276,3 +277,26 @@ jobs:
             artifacts/*.tar.gz.md5
           generate_release_notes: true
           prerelease: ${{ !startsWith(github.ref_name, 'stable/') }}
+
+      - name: Delete temporary workflow artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+              per_page: 100
+            });
+
+            await Promise.all(
+              artifacts
+                .filter((artifact) => artifact.name.startsWith('galfus-'))
+                .map((artifact) =>
+                  github.rest.actions.deleteArtifact({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    artifact_id: artifact.id
+                  })
+                )
+            );
