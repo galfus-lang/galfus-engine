@@ -1,5 +1,16 @@
 use serde::{Deserialize, Serialize};
 
+/// Transfer function encoded by a GPU texture format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TextureColorSpace {
+    /// Texture samples are already linear data.
+    #[default]
+    Linear,
+    /// Texture samples are decoded from sRGB to linear by the GPU.
+    Srgb,
+}
+
 /// Normalized texture pixel format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +33,14 @@ pub enum NormalizedTextureFormat {
 }
 
 impl NormalizedTextureFormat {
+    /// Returns the transfer function associated with this texture format.
+    pub const fn color_space(self) -> TextureColorSpace {
+        match self {
+            Self::Rgba8UnormSrgb | Self::Bgra8UnormSrgb => TextureColorSpace::Srgb,
+            _ => TextureColorSpace::Linear,
+        }
+    }
+
     /// Converts to the corresponding `wgpu::TextureFormat`.
     pub fn to_wgpu(self) -> wgpu::TextureFormat {
         match self {
@@ -154,6 +173,34 @@ pub struct GpuTextureDesc {
     pub format: NormalizedTextureFormat,
     #[serde(default)]
     pub usages: TextureUsageFlags,
+}
+
+impl GpuTextureDesc {
+    /// Returns the color space encoded by this texture's pixel format.
+    pub const fn color_space(&self) -> TextureColorSpace {
+        self.format.color_space()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn texture_format_is_the_color_space_source_of_truth() {
+        assert_eq!(
+            NormalizedTextureFormat::Rgba8Unorm.color_space(),
+            TextureColorSpace::Linear
+        );
+        assert_eq!(
+            NormalizedTextureFormat::Rgba8UnormSrgb.color_space(),
+            TextureColorSpace::Srgb
+        );
+        assert_eq!(
+            NormalizedTextureFormat::Bgra8UnormSrgb.color_space(),
+            TextureColorSpace::Srgb
+        );
+    }
 }
 
 fn default_depth() -> u32 {

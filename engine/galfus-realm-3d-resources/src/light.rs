@@ -2,6 +2,7 @@ use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, UVec4, Vec2, Vec3, Vec4};
 use serde::{Deserialize, Serialize};
 
+use crate::color::srgb_to_linear_rgb;
 use crate::transform::Transform3D;
 
 /// Category of light emitter in the 3D scene.
@@ -37,7 +38,7 @@ impl LightKind3D {
 pub struct Light3D {
     /// Category of the light source.
     pub kind: LightKind3D,
-    /// RGB linear color multiplier.
+    /// sRGB color multiplier.
     pub color: Vec3,
     /// Lumens or relative intensity factor.
     pub intensity: f32,
@@ -166,7 +167,7 @@ impl Light3D {
         Light3DUniform {
             position: pos.extend(1.0),
             direction: dir.extend(0.0),
-            color_intensity: self.color.extend(self.intensity),
+            color_intensity: srgb_to_linear_rgb(self.color).extend(self.intensity),
             params: Vec4::new(
                 self.range,
                 self.spot_inner_outer.x,
@@ -230,5 +231,13 @@ mod tests {
         let u = light.build_uniform(&Transform3D::default());
         assert_eq!(u.flags.x & 1, 1);
         assert_eq!(u.color_intensity.w, 2.5);
+    }
+
+    #[test]
+    fn light_color_is_converted_from_srgb_for_the_gpu() {
+        let light = Light3D::directional(Vec3::splat(0.5), 2.0, false);
+        let uniform = light.build_uniform(&Transform3D::default());
+        assert!((uniform.color_intensity.x - 0.214_041_14).abs() < 1e-6);
+        assert_eq!(uniform.color_intensity.w, 2.0);
     }
 }

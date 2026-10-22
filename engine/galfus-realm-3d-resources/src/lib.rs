@@ -5,6 +5,7 @@
 
 pub mod aabb;
 pub mod camera;
+pub mod color;
 pub mod environment;
 pub mod frustum;
 pub mod geometry;
@@ -18,6 +19,10 @@ pub mod transform;
 
 pub use aabb::Aabb;
 pub use camera::{Camera3D, Camera3DUniform, CameraKind3D};
+pub use color::{
+    linear_to_srgb_channel, linear_to_srgb_rgb, linear_to_srgb_rgba, srgb_to_linear_channel,
+    srgb_to_linear_rgb, srgb_to_linear_rgba,
+};
 pub use environment::{BloomConfig3D, Environment3DUniform, EnvironmentRealm3D, FogMode3D};
 pub use frustum::Frustum;
 pub use geometry::{Geometry3D, PrimitiveTopology3D, Vertex3D};

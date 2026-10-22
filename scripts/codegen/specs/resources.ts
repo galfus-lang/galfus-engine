@@ -4,7 +4,7 @@ export const resourceDescriptors: DescSpec[] = [
   {
     kind: 'enum',
     name: 'NormalizedTextureFormat',
-    doc: 'Normalized pixel format for GPU textures.',
+    doc: 'Normalized pixel format for GPU textures. The format is the single source of truth for texture color space: *Srgb formats decode RGB to linear light when sampled.',
     values: [
       'r8Unorm',
       'rg8Unorm',
@@ -53,7 +53,10 @@ export const resourceDescriptors: DescSpec[] = [
       mipLevels: { type: 'number', optional: true },
       sampleCount: { type: 'number', optional: true },
       dimension: { type: { ref: 'TextureDimension' }, optional: true },
-      format: { type: { ref: 'NormalizedTextureFormat' } },
+      format: {
+        type: { ref: 'NormalizedTextureFormat' },
+        doc: 'Pixel format and texture color-space contract. Use an *Srgb format for sRGB-encoded pixels; all other formats are linear.'
+      },
       usages: { type: { ref: 'TextureUsageFlags' }, optional: true }
     }
   },

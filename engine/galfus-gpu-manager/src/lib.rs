@@ -58,5 +58,6 @@ pub use surface::GpuSurface;
 pub use texture::{GpuTexture, GpuTextureView, TextureManager};
 pub use types::{
     AddressMode, BufferUsageFlags, CompareFunction, FilterMode, GpuBufferDesc, GpuPresentMode,
-    GpuSamplerDesc, GpuTextureDesc, NormalizedTextureFormat, TextureDimension, TextureUsageFlags,
+    GpuSamplerDesc, GpuTextureDesc, NormalizedTextureFormat, TextureColorSpace, TextureDimension,
+    TextureUsageFlags,
 };

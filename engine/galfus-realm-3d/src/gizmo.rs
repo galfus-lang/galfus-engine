@@ -1,4 +1,5 @@
 use bytemuck::{Pod, Zeroable};
+use galfus_realm_3d_resources::srgb_to_linear_rgba;
 use glam::{Vec3, Vec4};
 
 /// Vertex representation for debug lines and wireframes.
@@ -9,12 +10,13 @@ pub struct GizmoVertex {
     pub position: [f32; 3],
     /// Alignment padding for 16-byte boundary.
     pub _pad: f32,
-    /// RGBA line color.
+    /// Linear RGBA line color ready for the GPU.
     pub color: [f32; 4],
 }
 
 impl GizmoVertex {
     pub fn new(position: Vec3, color: Vec4) -> Self {
+        let color = srgb_to_linear_rgba(color);
         Self {
             position: [position.x, position.y, position.z],
             _pad: 0.0,

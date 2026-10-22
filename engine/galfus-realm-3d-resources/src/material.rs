@@ -2,6 +2,8 @@ use bytemuck::{Pod, Zeroable};
 use glam::{UVec4, Vec4};
 use serde::{Deserialize, Serialize};
 
+use crate::color::srgb_to_linear_rgba;
+
 /// Rendering classification of a 3D surface material.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -116,9 +118,9 @@ pub struct Material3D {
     /// Triangle faces rendered by this material. Defaults to [`MaterialSide3D::Front`].
     #[serde(default)]
     pub side: MaterialSide3D,
-    /// Base surface RGBA albedo color tint.
+    /// sRGB base surface RGBA albedo tint.
     pub base_color: Vec4,
-    /// RGB emissive glow color.
+    /// sRGB RGB emissive glow color.
     pub emissive_color: Vec4,
     /// Surface micro-roughness `0.0` (smooth) to `1.0` (rough).
     pub roughness: f32,
@@ -306,8 +308,8 @@ impl Material3D {
         }
 
         Material3DUniform {
-            base_color: self.base_color,
-            emissive_color: self.emissive_color,
+            base_color: srgb_to_linear_rgba(self.base_color),
+            emissive_color: srgb_to_linear_rgba(self.emissive_color),
             pbr_params: Vec4::new(
                 self.roughness,
                 self.metallic,
@@ -455,5 +457,19 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(material.build_uniform().refraction_params.w, 1.0);
+    }
+
+    #[test]
+    fn color_vectors_are_converted_from_srgb_for_the_gpu() {
+        let material = Material3D {
+            base_color: Vec4::new(0.5, 0.5, 0.5, 0.4),
+            emissive_color: Vec4::new(0.5, 0.5, 0.5, 2.0),
+            ..Default::default()
+        };
+        let uniform = material.build_uniform();
+        assert!((uniform.base_color.x - 0.214_041_14).abs() < 1e-6);
+        assert_eq!(uniform.base_color.w, 0.4);
+        assert!((uniform.emissive_color.x - 0.214_041_14).abs() < 1e-6);
+        assert_eq!(uniform.emissive_color.w, 2.0);
     }
 }

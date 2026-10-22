@@ -89,29 +89,61 @@ export const realm3dDescriptors: DescSpec[] = [
         optional: true,
         doc: 'Triangle faces to render. Defaults to front.'
       },
-      baseColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      emissiveColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      baseColor: {
+        type: { tuple: ['number', 'number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB base-color factor. Realm3D converts RGB to linear light before GPU upload.'
+      },
+      emissiveColor: {
+        type: { tuple: ['number', 'number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB emissive factor. Realm3D converts RGB to linear light before GPU upload.'
+      },
       roughness: { type: 'number', optional: true },
       metallic: { type: 'number', optional: true },
       reflectance: { type: 'number', optional: true },
       refractionIndex: { type: 'number', optional: true },
       refractionDistortion: { type: 'number', optional: true },
-      albedoTextureId: { type: 'number', optional: true },
-      normalTextureId: { type: 'number', optional: true },
+      albedoTextureId: {
+        type: 'number',
+        optional: true,
+        doc: 'Base-color texture. Its resource format alone determines whether it is sampled as sRGB or linear.'
+      },
+      normalTextureId: {
+        type: 'number',
+        optional: true,
+        doc: 'Tangent-space normal texture. Its resource format alone determines its sampled color space.'
+      },
       normalScale: {
         type: 'number',
         optional: true,
         doc: 'Tangent-space normal map strength. Defaults to 1.0.'
       },
-      metallicRoughnessTextureId: { type: 'number', optional: true },
-      occlusionTextureId: { type: 'number', optional: true },
+      metallicRoughnessTextureId: {
+        type: 'number',
+        optional: true,
+        doc: 'Metallic-roughness texture. Its resource format alone determines its sampled color space.'
+      },
+      occlusionTextureId: {
+        type: 'number',
+        optional: true,
+        doc: 'Ambient-occlusion texture. Its resource format alone determines its sampled color space.'
+      },
       occlusionStrength: {
         type: 'number',
         optional: true,
         doc: 'Ambient occlusion texture influence from 0.0 to 1.0. Defaults to 1.0.'
       },
-      emissiveTextureId: { type: 'number', optional: true },
-      textureSlots: { type: { array: 'number' }, optional: true },
+      emissiveTextureId: {
+        type: 'number',
+        optional: true,
+        doc: 'Emissive texture. Its resource format alone determines whether it is sampled as sRGB or linear.'
+      },
+      textureSlots: {
+        type: { array: 'number' },
+        optional: true,
+        doc: 'Canonical texture slots. Each binding inherits color space from its linked texture resource format.'
+      },
       textureSamplers: {
         type: { array: { ref: 'TextureSamplerSelection3D' } },
         optional: true,
@@ -139,7 +171,11 @@ export const realm3dDescriptors: DescSpec[] = [
       castShadow: { type: 'boolean', optional: true },
       receiveShadow: { type: 'boolean', optional: true },
       castOutline: { type: 'boolean', optional: true },
-      outlineColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      outlineColor: {
+        type: { tuple: ['number', 'number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB outline color; RGB is converted to linear light before GPU upload.'
+      },
       boneOffset: { type: 'number', optional: true },
       boneCount: { type: 'number', optional: true },
       active: { type: 'boolean', optional: true }
@@ -151,7 +187,11 @@ export const realm3dDescriptors: DescSpec[] = [
     doc: '3D dynamic light source (directional, point, or spot).',
     fields: {
       kind: { type: { enum: ['directional', 'point', 'spot'] }, optional: true },
-      color: { type: { tuple: ['number', 'number', 'number'] }, optional: true },
+      color: {
+        type: { tuple: ['number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB light color; RGB is converted to linear light before GPU upload.'
+      },
       intensity: { type: 'number', optional: true },
       range: { type: 'number', optional: true },
       spotInnerAngleRad: { type: 'number', optional: true },
@@ -165,11 +205,27 @@ export const realm3dDescriptors: DescSpec[] = [
     doc: 'Atmospheric procedural skybox gradient and sun parameters.',
     fields: {
       mode: { type: { enum: ['none', 'procedural', 'cubemap'] }, optional: true },
-      skyColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      horizonColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      groundColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      skyColor: {
+        type: { tuple: ['number', 'number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB sky color; RGB is converted to linear light before GPU upload.'
+      },
+      horizonColor: {
+        type: { tuple: ['number', 'number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB horizon color; RGB is converted to linear light before GPU upload.'
+      },
+      groundColor: {
+        type: { tuple: ['number', 'number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB ground color; RGB is converted to linear light before GPU upload.'
+      },
       sunDirection: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      sunColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      sunColor: {
+        type: { tuple: ['number', 'number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB sun color; RGB is converted to linear light before GPU upload. The alpha component is linear intensity.'
+      },
       intensity: { type: 'number', optional: true },
       sunSize: { type: 'number', optional: true },
       rotation: { type: 'number', optional: true },
@@ -205,9 +261,21 @@ export const realm3dDescriptors: DescSpec[] = [
     name: 'EnvironmentRealm3DDesc',
     doc: 'Global atmospheric, fog, and ambient lighting parameters for Realm 3D.',
     fields: {
-      ambientColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      clearColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      fogColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      ambientColor: {
+        type: { tuple: ['number', 'number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB ambient color; RGB is converted to linear light before GPU upload.'
+      },
+      clearColor: {
+        type: { tuple: ['number', 'number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB clear color.'
+      },
+      fogColor: {
+        type: { tuple: ['number', 'number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB fog color; RGB is converted to linear light before GPU upload.'
+      },
       fogMode: { type: { enum: ['none', 'linear', 'exponential'] }, optional: true },
       fogStart: { type: 'number', optional: true },
       fogEnd: { type: 'number', optional: true },
@@ -282,8 +350,16 @@ export const realm3dDescriptors: DescSpec[] = [
       drag: { type: 'number', optional: true },
       startSizeRange: { type: { tuple: ['number', 'number'] }, optional: true },
       endSizeRange: { type: { tuple: ['number', 'number'] }, optional: true },
-      startColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
-      endColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
+      startColor: {
+        type: { tuple: ['number', 'number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB particle start color; RGB is converted to linear light before GPU upload.'
+      },
+      endColor: {
+        type: { tuple: ['number', 'number', 'number', 'number'] },
+        optional: true,
+        doc: 'sRGB particle end color; RGB is converted to linear light before GPU upload.'
+      },
       rotationSpeedRange: { type: { tuple: ['number', 'number'] }, optional: true },
       uvRect: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       emissionShape: { type: { ref: 'EmissionShape3DDesc' }, optional: true },

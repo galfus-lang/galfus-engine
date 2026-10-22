@@ -41,6 +41,26 @@ effect receives `world_normal`. Geometry using slot 1 must provide glTF/MikkTSpa
 `tangent` values; Realm3D consumes the canonical tangent attribute and does not
 derive tangents at render time.
 
+## Color space
+
+The texture resource format is the sole source of truth for color space. An
+`rgba8UnormSrgb` or `bgra8UnormSrgb` texture is sampled through an sRGB view and
+hardware decodes its RGB channels to linear light. Every other supported
+material texture format is sampled as linear data. Material slots only bind a
+texture view, sampler, and UV set; they do not define, override, or pack a
+color-space flag.
+
+All public Realm3D color vectors are sRGB input: material base and emissive
+colors, instance tints and emission colors, lights, environment colors,
+procedural sky colors, outlines, particles, and gizmos. Realm3D converts their
+RGB channels to linear light before GPU upload, preserving alpha and explicit
+intensity components. Values outside normalized `0.0..=1.0` are treated as
+already-linear HDR values.
+
+`Vertex3D.color` is the explicit exception: it is raw GPU-ready linear data,
+matching glTF `COLOR_0`. Custom parameters and mathematical vectors are also
+linear/untyped data. No shader-side gamma conversion is permitted.
+
 ## Rasterization
 
 `side` is a pipeline property, not a material-uniform bit. `front` culls back

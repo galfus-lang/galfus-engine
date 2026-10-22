@@ -3,7 +3,7 @@ use crate::handle::{
     GpuTextureHandle, GpuTextureViewHandle, NAMESPACE_TEXTURE, NAMESPACE_TEXTURE_VIEW,
     TextureResource, TextureViewResource,
 };
-use crate::types::GpuTextureDesc;
+use crate::types::{GpuTextureDesc, TextureColorSpace};
 use galfus_core::{GenerationalPool, Handle};
 use std::num::NonZeroU32;
 
@@ -29,6 +29,11 @@ impl GpuTexture {
 
     pub fn format(&self) -> wgpu::TextureFormat {
         self.desc.format.to_wgpu()
+    }
+
+    /// Returns the color space encoded by this texture's format.
+    pub fn color_space(&self) -> TextureColorSpace {
+        self.desc.color_space()
     }
 
     pub fn width(&self) -> u32 {

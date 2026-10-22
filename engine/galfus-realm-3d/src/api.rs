@@ -138,7 +138,10 @@ impl Realm3DContext {
             .instanced_models
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "InstancedModel", id))?;
-        entry.1 = instances;
+        entry.1 = instances
+            .into_iter()
+            .map(InstanceData3D::into_linear_gpu)
+            .collect();
         self.dirty = true;
         Ok(())
     }

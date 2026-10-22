@@ -2,6 +2,7 @@ use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, UVec4, Vec4};
 use serde::{Deserialize, Serialize};
 
+use crate::color::srgb_to_linear_rgba;
 use crate::transform::Transform3D;
 
 /// 3D Model render instance binding a geometry and material to an entity.
@@ -18,7 +19,7 @@ pub struct Model3D {
     pub receive_shadow: bool,
     /// Whether this model generates outline silhouettes.
     pub cast_outline: bool,
-    /// RGBA tint for this model's outline silhouette.
+    /// sRGB RGBA tint for this model's outline silhouette.
     pub outline_color: Vec4,
     /// Whether this model instance is actively drawn.
     pub active: bool,
@@ -73,7 +74,7 @@ impl Model3D {
         Model3DUniform {
             model: model_matrix,
             normal_matrix,
-            outline_color: self.outline_color,
+            outline_color: srgb_to_linear_rgba(self.outline_color),
             flags: UVec4::new(flags, self.bone_offset, self.bone_count, 0),
         }
     }
@@ -100,9 +101,9 @@ pub struct Model3DUniform {
 pub struct InstanceData3D {
     /// 4x4 Model-to-world transformation matrix.
     pub transform: Mat4,
-    /// RGBA tint / multiplier for base albedo and alpha.
+    /// sRGB RGBA tint / multiplier for base albedo and alpha.
     pub color: Vec4,
-    /// RGB emissive glow + emissive intensity in w.
+    /// sRGB RGB emissive glow + linear emissive intensity in w.
     pub emissive: Vec4,
     /// PBR properties: [x: metallic, y: roughness, z: reflectance, w: ao].
     pub pbr: Vec4,
@@ -119,6 +120,15 @@ impl Default for InstanceData3D {
             pbr: Vec4::new(0.0, 0.5, 0.5, 1.0),
             custom: Vec4::ZERO,
         }
+    }
+}
+
+impl InstanceData3D {
+    /// Converts public sRGB color inputs into the linear representation consumed by the GPU.
+    pub fn into_linear_gpu(mut self) -> Self {
+        self.color = srgb_to_linear_rgba(self.color);
+        self.emissive = srgb_to_linear_rgba(self.emissive);
+        self
     }
 }
 
@@ -192,5 +202,25 @@ mod tests {
         let inst = InstanceData3D::default();
         let bytes = bytemuck::bytes_of(&inst);
         assert_eq!(bytes.len(), 128);
+    }
+
+    #[test]
+    fn model_and_instance_colors_are_converted_for_the_gpu() {
+        let model = Model3D {
+            outline_color: Vec4::splat(0.5),
+            ..Default::default()
+        };
+        let uniform = model.build_uniform(&Transform3D::default());
+        assert!((uniform.outline_color.x - 0.214_041_14).abs() < 1e-6);
+
+        let instance = InstanceData3D {
+            color: Vec4::new(0.5, 0.5, 0.5, 0.25),
+            emissive: Vec4::new(0.5, 0.5, 0.5, 3.0),
+            ..Default::default()
+        }
+        .into_linear_gpu();
+        assert!((instance.color.x - 0.214_041_14).abs() < 1e-6);
+        assert_eq!(instance.color.w, 0.25);
+        assert_eq!(instance.emissive.w, 3.0);
     }
 }

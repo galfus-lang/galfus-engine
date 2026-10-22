@@ -161,7 +161,7 @@ export async function runDemo3d3(): Promise<void> {
       label: 'Demo 3D-3 Alpha Cutout Shadow Texture',
       width: 64,
       height: 64,
-      format: 'rgba8Unorm',
+      format: 'rgba8UnormSrgb',
       usages: { copyDst: true, textureBinding: true }
     },
     cutoutTexture,
