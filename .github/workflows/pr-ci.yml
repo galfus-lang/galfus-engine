@@ -1,0 +1,122 @@
+name: PR Quality
+
+on:
+  pull_request:
+    branches:
+      - main
+      - feat/**
+      - fix/**
+      - refactor/**
+      - docs/**
+      - test/**
+      - chore/**
+      - stable/**
+      - alpha/**
+      - beta/**
+      - next/**
+      - latest/**
+    paths:
+      - 'engine/**'
+      - 'bindings/**'
+      - 'scripts/**'
+      - 'examples/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'package.json'
+      - 'bun.lock'
+      - '.clang-format'
+      - '.editorconfig'
+      - '.prettierignore'
+      - '.prettierrc'
+      - '.stylua.toml'
+      - 'pyproject.toml'
+      - '.github/workflows/pr-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'engine/**'
+      - 'bindings/**'
+      - 'scripts/**'
+      - 'examples/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'package.json'
+      - 'bun.lock'
+      - '.clang-format'
+      - '.editorconfig'
+      - '.prettierignore'
+      - '.prettierrc'
+      - '.stylua.toml'
+      - 'pyproject.toml'
+      - '.github/workflows/pr-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Format, lint, test, and codegen
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+
+      - name: Generate SDKs
+        run: bun run codegen
+
+      - name: Prepare formatting tools
+        run: bun prepare
+
+      - name: Check formatting
+        run: bun run format:check
+
+      - name: Check TypeScript
+        run: bun --check
+
+      - name: Check Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run Rust tests
+        run: cargo test --workspace
+
+      - name: Install wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+
+      - name: Install Chromium for Playwright
+        run: bunx playwright install --with-deps chromium
+
+      - name: Run Browser/WASM feature tour
+        run: bun run test:tour:browser

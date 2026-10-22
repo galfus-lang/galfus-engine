@@ -1,9 +1,0 @@
-[package]
-name = "galfus-realm-2d"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-
-[dependencies]
-galfus-realm-core = { path = "../galfus-realm-core" }
-galfus-types = { path = "../galfus-types" }

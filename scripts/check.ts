@@ -1,53 +1,62 @@
 type Command = {
-  args: string[];
   label: string;
+  args: string[];
 };
 
 const COMMANDS: Command[] = [
   {
-    label: 'cargo check -p galfus-bindings-ffi --lib',
-    args: ['cargo', 'check', '-p', 'galfus-bindings-ffi', '--lib']
+    label: 'bun --check',
+    args: ['bun', '--check']
   },
   {
-    label: 'cargo check -p galfus-runtime --lib',
-    args: ['cargo', 'check', '-p', 'galfus-runtime', '--lib']
+    label: 'cargo check',
+    args: ['cargo', 'check', '--workspace', '--all-targets']
   },
   {
-    label: 'cargo run --bin wgsl_check',
-    args: ['cargo', 'run', '-p', 'galfus-devtools', '--bin', 'wgsl_check']
+    label: 'cargo clippy',
+    args: ['cargo', 'clippy', '--workspace', '--all-targets']
   },
   {
-    label: 'cargo test -p galfus-runtime --lib',
-    args: ['cargo', 'test', '-p', 'galfus-runtime', '--lib']
-  },
-  {
-    label: 'cargo fmt --all',
-    args: ['cargo', 'fmt', '--all']
+    label: 'cargo clippy (browser WASM)',
+    args: [
+      'cargo',
+      'clippy',
+      '--locked',
+      '--package',
+      'galfus-browser',
+      '--target',
+      'wasm32-unknown-unknown',
+      '--',
+      '-D',
+      'warnings'
+    ]
   }
 ];
 
-async function runCommand(command: Command): Promise<void> {
-  console.log(`[check] ${command.label}`);
+async function runCommand(cmd: Command): Promise<void> {
+  console.log(`\x1b[36m==> [check]\x1b[0m ${cmd.label}`);
   const proc = Bun.spawn({
-    cmd: command.args,
+    cmd: cmd.args,
     cwd: process.cwd(),
     stdout: 'inherit',
     stderr: 'inherit',
     stdin: 'inherit'
   });
+
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
-    throw new Error(`Command failed (${exitCode}): ${command.label}`);
+    throw new Error(`Command failed with exit code ${exitCode}: ${cmd.label}`);
   }
 }
 
 async function main(): Promise<void> {
-  for (const command of COMMANDS) {
-    await runCommand(command);
+  for (const cmd of COMMANDS) {
+    await runCommand(cmd);
   }
+  console.log('\x1b[32m✔ Checks passed successfully\x1b[0m');
 }
 
-main().catch((error) => {
-  console.error('[check] Failed:', error);
-  process.exitCode = 1;
+main().catch((err: Error) => {
+  console.error('\x1b[31m✖ Checks failed:\x1b[0m', err.message);
+  process.exit(1);
 });

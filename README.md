@@ -1,516 +1,148 @@
-<div align="center">
-  <img src="/assets/brand-effect.png" alt="Galfus" width="400" />
-  
-  # Galfus
-  
-  **High-Performance Rendering & Systems Core powered by WebGPU**
-  
-  [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
-  [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
-</div>
+# Galfus Engine
+
+**A host-agnostic, modular graphics foundation for native and web applications.**
+
+> **Status:** This document describes the implementation in this repository. The Rust source and tests are the authoritative definition of behavior.
+
+Galfus provides low-level graphics building blocks, resource management, platform integration, and a graph-based way to combine graphical worlds. It is not tied to a game loop, an entity-component system (ECS), or a particular host language.
+
+An application owns its lifecycle and decides when to process events, update its state, and render. Galfus provides the capabilities needed to do that work, without dictating how the application itself is structured.
 
 ---
 
-## 📋 Table of Contents
+## Key Architecture & Capabilities
 
-- [About Galfus](#-about-galfus)
-- [Design Philosophy](#-design-philosophy)
-- [Architecture](#️-architecture)
-- [Key Concepts](#-key-concepts)
-- [Quick Start](#-quick-start)
-- [Main Features](#-main-features)
-- [Development](#️-development)
-- [Project Structure](#-project-structure)
-- [Documentation](#-documentation)
-- [Contributing](#-contributing)
-- [License](#-license)
-- [About Vulppi](#-about-vulppi)
-
----
-
-## 🦊 About Galfus
-
-**Galfus** is a **rendering and systems core** written in Rust and exposed as a dynamic library. The name combines "Vulppi" (derived from _Vulpes_, the scientific name for fox) and "Frame", representing our mission to create perfect frames for incredible interactive experiences.
-
-Galfus is designed to be **host-agnostic** and driven by external runtimes via FFI or WASM:
-
-- 🟢 **Node.js** (N-API)
-- 🌙 **Lua** (via `mlua`)
-- 🐍 **Python** (via `PyO3`)
-- 🔧 Any environment capable of calling C-ABI functions
-- 🌐 Browser runtimes via WASM (WebGPU + DOM canvas)
-
-### Core Features
-
-- 🚀 **High Performance**: GPU-accelerated rendering with WGPU (WebGPU)
-- 🔄 **Cross-Platform**: Native support for Windows, macOS, and Linux
-- 🎮 **Complete Input System**: Keyboard, mouse, touch, and gamepads (via Gilrs)
-- 🪟 **Advanced Window Management**: Full control over multiple windows (via Winit) or a DOM canvas (WASM)
-- 💡 **Lighting & Shadows**: Support for various light types and shadow mapping
-- 🎨 **Materials & Textures**: Flexible resource management for rendering
-- 🔌 **Language Bindings**: N-API (Node.js), Lua, Python, and more. With C-ABI, `bun:ffi` is also possible.
-- ⚡ **MessagePack Communication**: Fast binary serialization for commands and events
-- 🎯 **Host-Agnostic Design**: No assumptions about ECS, OOP, or game framework
+- **Host-Owned Lifecycle:** The host initializes, drives, and shuts down Galfus. No engine-owned application loop is imposed. Supports headless execution for server/CI.
+- **Native Shared Library:** `galfus-native` packages the native crates as a C-compatible dynamic library (`libgalfus_native.so`, `galfus.dll`, or `libgalfus_native.dylib`). Node-API exports are available when it is built with the `napi` feature.
+- **Host-Controlled Logical IDs:** The host controls logical IDs for all entities and resources. Galfus reserves the top 65,535 IDs (`4294901761..=4294967295` for `u32`) for internal engine resources.
+- **Fast-Path Raw Float Transforms:** Hot-path spatial updates bypass JSON serialization via direct raw float buffers:
+  - **3D**: 10 floats (`[px, py, pz, rx, ry, rz, rw, sx, sy, sz]`)
+  - **2D**: 6 floats (`[px, py, rot, sx, sy, zLayer]`)
+- **Pure Quaternions:** Rotations in the core and SDKs use unit quaternions `[x, y, z, w]` exclusively. The engine remains lean and unopinionated; host code performs any desired Euler conversions.
+- **Multiverse Render Graph:** Coordinates execution of Realms, Invocations, and Targets with topological DAG resolution, soft-cut cycle breaking, and texture binding validation.
+- **Responsive Viewport Anchors:** Invocations support CSS-like units (`vw`, `vh`, `px`) and anchored rectangles through `ViewportRect::full()` and `ViewportRect::anchored(...)`.
+- **Hook-Based Shader Effects:** Custom graphics logic is authored via sandboxed WGSL hook functions injected into engine pipeline templates with deterministic 64-bit `ContentId` caching:
+  - **Screen Effects**: `fn screen_effect(in: ScreenInput) -> vec4<f32>` (post-processing filters)
+  - **3D Surface Effects**: `fn surface_effect(in: SurfaceInput) -> SurfaceOutput` (PBR material customization)
+  - **2D Surface Effects**: `fn surface_effect(in: SurfaceInput2D) -> SurfaceOutput2D` (2D sprite shaders)
+- **Built-in Realms:**
+  - **Realm 3D**: Forward+ PBR, Reverse-Z depth, directional/point/spot lights, shadows, SSAO, particles, portals/mirrors, skeleton animation, and world AABB queries.
+  - **Realm 2D**: Instanced batched sprites, vector shapes, normal mapping, 2D penumbra shadow cones, and 2D particle systems.
+- **Realm Lifecycle Contract:** Full support for `realmClear(realmId)` (entity flush without unregistering) and `realmDestroy(realmId)` (full GPU resource reclamation and Multiverse unregistration).
+- **Flat Platform Events:** Polled events are exposed as flat discriminated unions tagged with `{ kind: "window" | "pointer" | "keyboard" | "gamepad", type: ... }`, eliminating host callback deadlocks.
 
 ---
 
-## 💡 Design Philosophy
+## High-Level Architecture
 
-Galfus follows a **black box** approach where:
-
-> The host controls the engine **only** through:
->
-> - A small set of C functions (`galfus_*`)
-> - Binary buffers serialized with **MessagePack**
-
-**Design Goals:**
-
-- **Host-agnostic**: Works with any game framework or architecture
-- **Minimal public surface**: Only essential C-ABI functions exposed
-- **Binary and fast**: MessagePack for structured data, raw bytes for heavy assets
-- **Clear separation**: Host manages logic and IDs, Core manages GPU and rendering
-- **Async linking**: Components/resources can be created in any order, using fallbacks until data is available
-
----
-
-## 🏗️ Architecture
-
-Galfus uses a queue-based architecture that enables efficient communication between the host and the Rust core:
-
+```text
+                        APPLICATION / HOST
+           Bun / Rust / C / Python / Lua / Browser
+          lifecycle · update logic · custom shaders
+                               |
+                    Direct C-ABI / Host SDKs
+                               |
++-----------------------------------------------------------+
+|                       GALFUS ENGINE                       |
+|                                                           |
+|                  galfus-multiverse                         |
+|      realms · targets · invocations · graph execution     |
+|                      /           \                         |
+|             galfus-realm-2d   galfus-realm-3d              |
+|                    |               |                      |
+|         galfus-realm-2d-   galfus-realm-3d-                |
+|             resources         resources                   |
+|                                                           |
+|     galfus-platform           galfus-gpu-manager          |
+|     surfaces · input          wgpu · buffers · textures    |
+|     events · audio            allocator · pipelines       |
+|                                                           |
+|       galfus-realm-core       galfus-core                  |
+|       realm contracts         IDs · handles · primitives  |
++-----------------------------------------------------------+
+               |                           |
+     desktop / browser APIs        wgpu graphics backends
 ```
+
+---
 
 ## Workspace Layout
 
-The monorepo is split by ecosystem:
-
-- `crates/`
-  Rust workspace crates for runtime, render, realms, bindings and demos
-- `packages/`
-  Bun/TypeScript workspace packages for transports and host-facing JS runtimes
-- `scripts/`
-  repository automation executed through Bun
-
-### Repository Scripts
-
-- `bun run check`
-  runs the standard Rust/WGSL validation pipeline
-- `bun run artifacts -- --skip-download`
-  skips artifact download explicitly via CLI flag
-- `bun run artifacts -- --base-url <url>`
-  overrides the artifact source URL without environment variables
-- `bun run version -- <semver>`
-  updates Cargo workspace version and transport package versions, except
-  `transport-types`
-- `bun run release-meta -- --ref <channel>/vX.Y.Z`
-  resolves the package version, artifact version, npm dist-tag, and GitHub release tag
-┌─────────────────────────────────────┐
-│          Host Layer                 │
-│  (JS/TS, Lua, Python, etc.)         │
-│  • Game Logic                       │
-│  • Entity Management                │
-│  • ID Generation                    │
-└────────┬────────────┬───────────────┘
-         │            │
-         │ Commands   │ Events
-         │ (MsgPack)  │ (MsgPack)
-         ▼            ▲
-    ┌────────────────────────────┐
-    │  galfus_send_queue()      │
-    │  galfus_receive_queue()   │
-    │  galfus_receive_events()  │
-    │  galfus_upload_buffer()   │
-    │  galfus_tick()            │
-    └──────────┬─────────────────┘
-               │
-┌──────────────▼───────────────────────┐
-│        Galfus Core (Rust)           │
-│  • Resource Management               │
-│  • Component Instances               │
-│  • Platform Proxy (Desktop/Browser)  │
-│  • GPU Rendering (WGPU)              │
-│  • Input Processing (Gilrs/Web)      │
-└──────────────┬───────────────────────┘
-               │
-┌──────────────▼───────────────────────┐
-│           GPU Layer                  │
-│  Vulkan / Metal / DirectX 12         │
-└──────────────────────────────────────┘
-```
-
-### Responsibilities
-
-**Host (Your Game/App):**
-
-- Manage game logic and world state
-- Generate logical IDs (entities, resources, buffers)
-- Build MessagePack command batches
-- Drive the main loop with `galfus_tick()`
-- Process events and responses
-
-**Galfus Core:**
-
-- Abstract window, input, and rendering systems via platform proxies
-- Manage GPU resources and pipelines using WGPU
-- Track component instances (cameras, models, etc.)
-- Translate commands into internal state changes
-- Render frames efficiently
+| Path                               | Description                                                                                                      |
+| :--------------------------------- | :--------------------------------------------------------------------------------------------------------------- |
+| `engine/galfus-core`               | Core types, ContentId, ShaderEffectTemplate, reserved ID policies.                                               |
+| `engine/galfus-platform`           | Cross-platform windowing (`winit`), headless mode, flat event queues.                                            |
+| `engine/galfus-gpu-manager`        | Shared `wgpu` instance, device, queue, and texture/buffer management.                                            |
+| `engine/galfus-realm-core`         | Realm lifecycle trait (`id`, `kind`, `prepare`, `render`, `clear`, `destroy`, `referenced_texture_ids`).         |
+| `engine/galfus-multiverse`         | Graph coordinator, target blocks, DAG topological ordering, screen effects.                                      |
+| `engine/galfus-realm-2d`           | 2D renderer, sprite batching, 2D shadows, 2D surface effects.                                                    |
+| `engine/galfus-realm-2d-resources` | 2D domain models: sprites, shapes, 2D cameras, materials, particles.                                             |
+| `engine/galfus-realm-3d`           | 3D forward+ renderer, reverse-Z, shadow maps, SSAO, gizmos, portals.                                             |
+| `engine/galfus-realm-3d-resources` | 3D domain models: meshes, PBR materials, lights, cameras, particles, AABB.                                       |
+| `bindings/galfus-native`           | Unified C-ABI dynamic library (`libgalfus_native.so`).                                                           |
+| `scripts/codegen`                  | Multi-language code generator using the Strategy pattern.                                                        |
+| `sdk/`                             | Generated client SDKs (`sdk/c`, `sdk/csharp`, `sdk/python`, `sdk/lua`, `sdk/typescript`, `sdk/bun`, `sdk/node`). |
+| `scripts/demos`                    | Interactive realtime demonstration suite (3D PBR, SSAO, portals, 2D shadows, multiverse).                        |
 
 ---
 
-## 🔑 Key Concepts
+## Multi-Language SDK Generation
 
-### Components vs Resources
+Galfus uses a centralized, specification-driven code generator (`scripts/codegen.ts`) implementing the Strategy pattern to generate idiomatic bindings for multiple programming languages and Browser/WASM:
 
-Galfus distinguishes between two fundamental types:
+- **C / C++**: `sdk/c/galfus.h`
+- **C# / MonoDevelop**: `sdk/csharp/Galfus.cs`
+- **Python**: `sdk/python/galfus.py`
+- **LuaJIT**: `sdk/lua/galfus.lua`
+- **TypeScript**: `sdk/typescript/galfus.ts`
+- **Browser/WASM**: `sdk/browser/galfus.ts`
+- **Bun FFI**: `sdk/bun/galfus.ts`
+- **Node.js (Node-API)**: `sdk/node/galfus.ts`
 
-**Components** - High-level structures describing scene participation:
+To regenerate all SDKs after specification changes:
 
-- Always attached to a host-chosen ID (e.g. `camera_id`, `model_id`, `light_id`)
-- Examples: `Camera`, `Model`, `Light`
-- Can contain static data (local colors, matrices)
-- Reference sharable resources by logical ID
-- Created/updated via MessagePack commands
-
-**Resources** - Reusable assets used by components:
-
-- Identified by logical IDs: `GeometryId`, `MaterialId`, `TextureId`
-- Sharable across multiple components/entities
-- Have internal GPU handles (buffers, textures, pipelines)
-- Examples: geometries, textures, materials
-
-### Logical IDs
-
-The host manages all logical identifiers:
-
-- `WindowId` - Window instances
-- `RealmId` - Realm instances
-- `TargetId` - Logical composition targets
-- `CameraId` - Camera instances
-- `ModelId` - Model instances
-- `LightId` - Light instances
-- `GeometryId` - Mesh/geometry assets
-- `MaterialId` - Material configurations
-- `TextureId` - Texture assets
-- `BufferId` - Upload blob identifiers
-
-These are opaque integers to the core. The host ensures uniqueness and consistency.
-
-### Internal Composition Tables
-
-The core derives and owns these runtime tables internally:
-
-- `Surface`
-- `Present`
-- `Connector`
-
-The host composes output through `Realm`, `Target`, and `TargetLayer` commands
-instead of managing these internal tables directly.
-
-### Asynchronous Resource Linking (Fallback-Driven)
-
-Galfus allows resources to be created out of order:
-
-- Models can reference geometry or material IDs that do not exist yet.
-- Materials can reference texture IDs that do not exist yet.
-
-In these cases, Galfus renders using fallback resources until the real
-resources are created later with the same IDs. When a referenced resource
-appears, it is picked up automatically on the next frame without recreating
-the model or material.
-
-This enables async streaming and decouples creation order.
-
-### Layer Masking
-
-Galfus uses `u32` bitmasks for visibility control:
-
-- `layerMaskCamera` - Specifies which layers a camera can see
-- `layerMaskComponent` - Specifies which layers a model belongs to
-- `layerMaskLight` - (Future) Which layers a light affects
-
-**Visibility Rule:**
-
-```text
-Visible if: (layerMaskCamera & layerMaskComponent) > 0
+```bash
+bun run codegen
 ```
-
-This enables:
-
-- World-only or UI-only cameras
-- Team-based rendering
-- Debug geometry filtering
-- Multi-pass rendering strategies
-
-### Reuse Semantics
-
-- A single geometry can be referenced by many models.
-- A single material can be referenced by many models.
-- A single texture can be referenced by many materials.
-
-There is no ownership tracking. If a resource is disposed while still referenced,
-rendering falls back gracefully.
-
-### Render Ordering & Batching
-
-Per camera:
-
-- Opaque/masked objects are sorted by `material_id` then `geometry_id` to reduce
-  state changes and batch draw calls.
-- Transparent objects are sorted by depth for correct blending.
-
-Draw calls are batched by runs of `(material_id, geometry_id)` after sorting.
-
-### Upload System
-
-Heavy data uses one-shot uploads:
-
-1. Host calls `galfusUploadBuffer(bufferId, type, data)`
-2. Core stores blob in internal upload table
-3. `Create*` commands reference `bufferId` to consume data
-4. Entry is marked as used and can be removed
-5. `CmdUploadBufferDiscardAll` command clears all pending uploads
-
-Uploads are independent of model/material creation, so you can create
-components first and upload data later.
 
 ---
 
-## 🚀 Quick Start
+## Building and Verification
 
 ### Prerequisites
 
-- **Rust** 1.70+ ([rustup.rs](https://rustup.rs/))
-- **Vulkan**, **Metal**, or **DirectX 12** updated drivers
+- **Rust**: Stable toolchain (edition 2024)
+- **Bun**: Fast JavaScript runtime and package manager
+- **Vulkan / Metal / DX12** compatible GPU driver
 
-### Quick Start (Demo Harness)
-
-```bash
-# Clone the repository
-git clone https://github.com/vulppi-dev/galfus.git
-cd galfus
-
-# Build and run the first demo
-cargo run -p galfus-demo -- 1
-```
-
-The demo harness lives in `crates/galfus-demo` and exercises:
-
-- window creation
-- primitive geometry creation
-- camera + model setup
-- basic rendering loop
-
----
-
-## 📚 Main Features
-
-### Window Management
-
-- Multiple window creation and management
-- Window state control (normal, minimized, maximized, fullscreen)
-- Position and size configuration
-- Borderless and resizable options
-- Custom window icons and cursors
-- Drag-and-drop file support
-- Window events (resize, move, focus, close)
-
-### Input System
-
-- **Keyboard**: Physical key events with modifiers and IME support
-- **Mouse**: Movement, buttons, scroll wheel
-- **Touch**: Multi-touch support with gestures (pinch, pan, rotate) on native
-- **Pointer**: Unified API for mouse/touch/pen via `PointerEvent`
-- **Gamepad**: Automatic detection, buttons, analog sticks, triggers (Gilrs on native, Gamepad API on web)
-  - Standard mapping with dead zones
-  - Change threshold filtering for efficient event generation
-
-### Rendering (WGPU)
-
-- GPU-accelerated rendering via WebGPU
-- Cross-platform support (Vulkan, Metal, DirectX 12)
-- Buffer upload for textures and meshes
-- Efficient CPU-GPU synchronization
-- Component-based rendering system
-- Layer-based visibility control
-
-### Communication
-
-- **MessagePack** serialization for fast binary communication
-- Separate queues for:
-  - Commands (host → core)
-  - Responses (core → host)
-  - Events (core → host)
-- Profiling data export for performance analysis
-
-### Performance Optimizations
-
-- **Event caching**: Filters duplicate events to reduce overhead
-- **Redraw optimization**: Dirty flag system for selective rendering
-- **Dead zone filtering**: Reduces gamepad noise
-- **Batch processing**: Commands processed in bulk for efficiency
-
----
-
-## 🛠️ Development
+### Build Commands
 
 ```bash
-# Build the workspace
-cargo build --workspace --release
+# Compile the native dynamic library
+cargo build -p galfus-native
 
-# Run tests
-cargo test
+# Run the complete workspace test suite
+cargo test --workspace
 
-# Check code with Clippy
-cargo clippy
+# Workspace checks (Bun syntax check, Cargo check, and Clippy)
+bun run check
 
-# Format code
-cargo fmt
+# Comprehensive C-ABI / Bun FFI test suite
+bun run test:ffi
 ```
 
-### Recommended Development Loop
+### Running Realtime Demos
 
-```text
-1. Update host-side logic (game state, entities)
-2. Upload heavy data (optional) via `galfus_upload_buffer()`
-3. Send command batch via `galfus_send_queue()`
-4. Advance the core via `galfus_tick(time, delta_time)`
-5. Receive responses via `galfus_receive_queue()`
-6. Receive events via `galfus_receive_events()`
-7. Read profiling data (optional) via `galfus_get_profiling()`
-```
-
-`galfus_receive_queue()` consumes and clears the internal response queue.
-
----
-
-## 📦 Project Structure
-
-```text
-galfus/
-├── crates/
-│   ├── galfus-runtime/         # Integration root, ABI re-exports and frame orchestration
-│   ├── galfus-types/           # Shared logical/base types
-│   ├── galfus-protocol/        # Host/runtime contracts + MsgPack codec
-│   ├── galfus-realm-core/      # Realm composition semantics and graph/report DTOs
-│   ├── galfus-input/           # Normalized input semantics
-│   ├── galfus-render/          # WGPU-facing render policy, graphs and planning helpers
-│   ├── galfus-audio/           # Audio domain + backends
-│   ├── galfus-platform/        # Desktop/browser integration
-│   ├── galfus-realm-3d/        # 3D realm semantics + sync plans
-│   ├── galfus-realm-2d/        # 2D realm placeholder/contracts
-│   ├── galfus-bindings-ffi/    # C ABI host binding
-│   ├── galfus-bindings-wasm/   # wasm-bindgen host binding
-│   ├── galfus-bindings-napi/   # Node.js binding
-│   ├── galfus-bindings-python/ # Python binding
-│   ├── galfus-bindings-lua/    # Lua binding
-│   └── galfus-demo/            # Visual/manual validation demos
-├── docs/
-├── assets/
-├── scripts/
-├── Cargo.toml
-└── README.md
+```bash
+# Launch interactive demo launcher
+bun scripts/demos/main.ts
 ```
 
 ---
 
-## 📖 Documentation
+## Documentation
 
-Comprehensive documentation is available in the `docs/` folder.
-
-### 📑 [Documentation Index](docs/INDEX.md)
-
-**Not sure where to start?** Check our [complete documentation index](docs/INDEX.md) for guided navigation based on your role and needs.
-
-### Quick Links
-
-**For Engine Users (Binding Authors):**
-
-1. **[OVERVIEW.md](docs/OVERVIEW.md)** - Start here! High-level concepts and design philosophy
-2. **[ABI.md](docs/ABI.md)** - C-ABI functions, usage contract, and calling conventions
-3. **[ARCH.md](docs/ARCH.md)** - Architecture, lifecycle, and main loop patterns
-4. **[REALM-ARCH.md](docs/REALM-ARCH.md)** - Realm composition architecture and refactor direction
-5. **[GLOSSARY.md](docs/GLOSSARY.md)** - Terminology and naming conventions
-
-**For Core Contributors (Rust Developers):**
-
-1. **[OVERVIEW.md](docs/OVERVIEW.md)** - Core concepts and design
-2. **[ARCH.md](docs/ARCH.md)** - System architecture
-3. **[API.md](docs/API.md)** - Internal Rust API, crates, and data structures
-4. **[GLOSSARY.md](docs/GLOSSARY.md)** - Internal terminology
-
-**Additional Resources:**
-
-- **[PLATFORM-PROXIES.md](docs/PLATFORM-PROXIES.md)** - Platform proxy architecture
-- **[Copilot Instructions](.github/copilot-instructions.md)** - Development patterns and memory
-
-Automated tests do not fully cover perceptual/platform-dependent flows (window lifecycle details, audio audibility, visual quality). Validate those manually by running demo scenarios.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these guidelines:
-
-### Code Style
-
-- **Rust code**: Minimal comments, self-descriptive names
-- **All code**: English for variables, functions, types, and comments
-- **Documentation**: English for all docs (README, API docs)
-- **Communication**: Brazilian Portuguese for discussions and issues
-
-### Development Process
-
-1. Fork the project
-2. Create a feature branch (`git checkout -b feature/MyFeature`)
-3. Follow the project's coding conventions (see `.github/copilot-instructions.md`)
-4. Write tests for your changes
-5. Ensure all tests pass (`cargo test`)
-6. Format your code (`cargo fmt`)
-7. Check for issues (`cargo clippy`)
-8. Commit your changes (`git commit -m 'Add MyFeature'`)
-9. Push to your branch (`git push origin feature/MyFeature`)
-10. Open a Pull Request
-
-### Architecture Guidelines
-
-- Keep the C-ABI surface minimal
-- Use MessagePack for all structured data crossing the ABI
-- Maintain clear separation between host and core responsibilities
-- Follow the component/resource model
-- Ensure thread safety (all functions are main-thread only)
-
----
-
-## 🏛️ Core Technology Stack
-
-### Rust Dependencies
-
-- **`wgpu`** - GPU abstraction layer (WebGPU implementation)
-- **`winit`** - Cross-platform windowing
-- **`gilrs`** - Gamepad input
-- **`napi`** - Node.js N-API bindings (optional)
-- **`serde`** - Serialization framework
-- **`rmp-serde`** - MessagePack serialization
-- **`glam`** - Vector and matrix math
-- **`bytemuck`** - Safe type conversions for GPU data
-- **`image`** - Image loading and decoding
-
-Bindings now live in dedicated workspace crates:
-`galfus-bindings-ffi`, `galfus-bindings-wasm`, `galfus-bindings-napi`,
-`galfus-bindings-lua`, and `galfus-bindings-python`.
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License. See the [LICENSE.md](LICENSE.md) file for details.
-
-## 🦊 About Vulppi
-
-**Vulppi** is a company focused on creating cutting-edge technologies for game development and interactive applications. Our name comes from _Vulpes_, the scientific name for fox, symbolizing agility, intelligence, and adaptability.
-
----
-
-<div align="center">
-  Made with ❤️ by the Vulppi team
-</div>
+- [ARCH.md](ARCH.md) — Comprehensive architectural specification and proof of implementation.
+- [docs/shader-effects/README.md](docs/shader-effects/README.md) — Shader Effects architecture and contracts.
+- [docs/shader-effects/screen-effects.md](docs/shader-effects/screen-effects.md) — Screen post-processing tutorial.
+- [docs/shader-effects/surface-effects.md](docs/shader-effects/surface-effects.md) — 3D PBR Surface Effects tutorial.

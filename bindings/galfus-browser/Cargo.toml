@@ -1,0 +1,12 @@
+[package]
+name = "galfus-browser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+galfus-platform = { workspace = true, features = ["browser"] }
+galfus-native.path = "../galfus-native"

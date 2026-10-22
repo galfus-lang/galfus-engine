@@ -29,6 +29,7 @@ bun.lockb
 /pkg/
 build/
 dist/
+sdk/
 *.gem
 *.egg
 
@@ -52,3 +53,8 @@ coverage/
 
 # refactor
 .old
+
+# .NET / C build artifacts
+bin/
+obj/
+tour_c

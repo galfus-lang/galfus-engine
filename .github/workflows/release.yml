@@ -1,0 +1,313 @@
+name: Build and Release Engine
+
+on:
+  push:
+    branches:
+      - stable/v*
+      - alpha/v*
+      - beta/v*
+      - next/v*
+      - latest/v*
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: engine-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate Workspace
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libvulkan1 mesa-vulkan-drivers
+
+      - name: Generate SDKs
+        run: bun run codegen
+
+      - name: Prepare formatting tools
+        run: bun prepare
+
+      - name: Check formatting
+        run: bun run format:check
+
+      - name: Check Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run Rust tests
+        run: cargo test --workspace
+
+  build-native:
+    name: Build native ${{ matrix.alias }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            alias: linux-x64-gnu
+            extension: so
+            prefix: lib
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            alias: linux-arm64-gnu
+            extension: so
+            prefix: lib
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            alias: darwin-x64
+            extension: dylib
+            prefix: lib
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            alias: darwin-arm64
+            extension: dylib
+            prefix: lib
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            alias: windows-x64
+            extension: dll
+            prefix: ''
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            alias: windows-arm64
+            extension: dll
+            prefix: ''
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Apply release version
+        id: version
+        run: bun run version
+
+      - name: Update Cargo lockfile
+        run: cargo generate-lockfile
+
+      - name: Install native build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
+
+      - name: Build FFI library
+        run: cargo build --locked --release --package galfus-native --target ${{ matrix.target }}
+
+      - name: Preserve FFI library
+        shell: bash
+        run: |
+          library="${{ matrix.prefix }}galfus_native.${{ matrix.extension }}"
+          mkdir -p native-artifacts
+          cp "build/cargo-target/${{ matrix.target }}/release/${library}" "native-artifacts/${library}"
+
+      - name: Build Node-API library
+        run: cargo build --locked --release --package galfus-native --features napi --target ${{ matrix.target }}
+
+      - name: Generate SDKs
+        run: bun run codegen
+
+      - name: Package native release
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.packageVersion }}
+        run: |
+          package_name="galfus-engine-${PACKAGE_VERSION}-${{ matrix.alias }}"
+          package_dir="package/${package_name}"
+          library="${{ matrix.prefix }}galfus_native.${{ matrix.extension }}"
+
+          rm -rf package dist
+          mkdir -p "${package_dir}/lib" dist
+          cp "native-artifacts/${library}" "${package_dir}/lib/${library}"
+          cp "build/cargo-target/${{ matrix.target }}/release/${library}" "${package_dir}/lib/galfus.node"
+          cp -R sdk "${package_dir}/sdk"
+          cp docs/release-package.md "${package_dir}/README.md"
+
+          tar -C package -czf "dist/${package_name}.tar.gz" "${package_name}"
+          bun scripts/github/create-md5.ts "dist/${package_name}.tar.gz"
+          rm -rf native-artifacts
+
+      - name: Upload native release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: galfus-native-${{ matrix.alias }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  build-browser:
+    name: Build browser WASM
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Apply release version
+        id: version
+        run: bun run version
+
+      - name: Update Cargo lockfile
+        run: cargo generate-lockfile
+
+      - name: Build browser binding
+        run: cargo build --locked --release --package galfus-browser --target wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+
+      - name: Package browser release
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.packageVersion }}
+        run: |
+          package_name="galfus-engine-${PACKAGE_VERSION}-browser-wasm"
+          package_dir="package/${package_name}"
+
+          rm -rf package dist
+          mkdir -p "${package_dir}/browser" dist
+          wasm-bindgen \
+            --target web \
+            --out-dir "${package_dir}/browser" \
+            --out-name galfus_browser \
+            build/cargo-target/wasm32-unknown-unknown/release/galfus_browser.wasm
+          cp docs/release-package.md "${package_dir}/README.md"
+
+          tar -C package -czf "dist/${package_name}.tar.gz" "${package_name}"
+          bun scripts/github/create-md5.ts "dist/${package_name}.tar.gz"
+
+      - name: Upload browser release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: galfus-browser-wasm
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Publish GitHub Release
+    needs:
+      - build-native
+      - build-browser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Resolve release version
+        id: version
+        run: bun run version
+
+      - name: Download release packages
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: galfus-*
+          merge-multiple: true
+
+      - name: Verify release checksums
+        shell: bash
+        run: |
+          for checksum in artifacts/*.md5; do
+            (cd "$(dirname "${checksum}")" && md5sum -c "$(basename "${checksum}")")
+          done
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.version.outputs.packageVersion }}
+          name: v${{ steps.version.outputs.packageVersion }}
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.tar.gz.md5
+          generate_release_notes: true
+          prerelease: ${{ !startsWith(github.ref_name, 'stable/') }}
+
+      - name: Delete temporary workflow artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+              per_page: 100
+            });
+
+            await Promise.all(
+              artifacts
+                .filter((artifact) => artifact.name.startsWith('galfus-'))
+                .map((artifact) =>
+                  github.rest.actions.deleteArtifact({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    artifact_id: artifact.id
+                  })
+                )
+            );

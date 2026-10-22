@@ -1,0 +1,12 @@
+[package]
+name = "galfus-realm-3d-resources"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+galfus-core.workspace = true
+glam.workspace = true
+bytemuck.workspace = true
+serde.workspace = true
+thiserror.workspace = true

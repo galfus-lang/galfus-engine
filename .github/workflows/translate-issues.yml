@@ -1,0 +1,22 @@
+name: Translate issues
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Ant-OSS-Utility-Set/github-issue-translate-action@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          IS_MODIFY_TITLE: true
+          APPEND_TRANSLATION: true
+          CUSTOM_BOT_NOTE: 'Automatic English translation:'

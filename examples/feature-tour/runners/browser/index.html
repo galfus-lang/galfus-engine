@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Galfus Engine Feature Tour — Browser/WASM</title>
+    <meta
+      name="description"
+      content="Galfus Engine feature tour rendered by the WASM binding: a 3D realm and a 2D companion realm sharing one full-window canvas."
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0f141f;
+        color: #e2e8f0;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+      }
+
+      canvas#galfus-browser-tour {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        display: block;
+      }
+
+      .controls-dock {
+        position: fixed;
+        top: 12px;
+        right: 12px;
+        display: flex;
+        gap: 6px;
+        padding: 6px;
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.72);
+        border: 1px solid rgba(56, 189, 248, 0.35);
+        backdrop-filter: blur(10px);
+      }
+
+      .controls-dock button {
+        padding: 6px 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(30, 41, 59, 0.85);
+        color: inherit;
+        font: inherit;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition:
+          background 0.15s ease,
+          border-color 0.15s ease;
+      }
+
+      .controls-dock button:hover {
+        background: rgba(51, 65, 85, 0.95);
+        border-color: #38bdf8;
+      }
+
+      .sr-hook {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body data-status="loading" data-room-index="0" data-paused="false">
+    <h1 class="sr-hook">Galfus Engine Feature Tour — Browser/WASM</h1>
+    <canvas id="galfus-browser-tour" aria-label="Galfus feature tour viewport"></canvas>
+
+    <nav class="controls-dock" aria-label="Tour controls">
+      <button type="button" data-tour-action="previous" title="Previous room (Arrow Left)">
+        Prev
+      </button>
+      <button type="button" data-tour-action="pause" title="Pause / resume (Space)">Pause</button>
+      <button type="button" data-tour-action="next" title="Next room (Arrow Right)">Next</button>
+      <button type="button" data-tour-action="restart" title="Restart (R)">Restart</button>
+      <button type="button" data-tour-audio title="Enable browser audio">Enable Sound</button>
+    </nav>
+
+    <!-- Semantic hooks consumed by the Playwright smoke test and assistive technology. -->
+    <div class="sr-hook">
+      <progress data-tour-progress max="1" value="0"></progress>
+      <p data-tour-viewport></p>
+    </div>
+
+    <script type="module">
+      globalThis.galfusBrowserWasmModule = import('./pkg/galfus_browser.js');
+    </script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

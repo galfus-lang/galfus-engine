@@ -1,67 +1,68 @@
 area:core:
   - changed-files:
       - any-glob-to-any-file:
-          - 'crates/galfus-runtime/**'
-          - 'crates/galfus-protocol/**'
-          - 'crates/galfus-types/**'
-          - 'crates/galfus-input/**'
-          - 'crates/galfus-platform/**'
-          - 'crates/galfus-log/**'
-          - 'packages/transport-types/**'
-          - 'packages/engine/**'
+          - 'engine/galfus-core/**'
+          - 'engine/galfus-realm-core/**'
 
-area:render:
+area:platform:
   - changed-files:
       - any-glob-to-any-file:
-          - 'crates/galfus-render/**'
-          - 'crates/galfus-realm-core/**'
+          - 'engine/galfus-platform/**'
+
+area:gpu:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'engine/galfus-gpu-manager/**'
+
+area:multiverse:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'engine/galfus-multiverse/**'
+
+area:realm-2d:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'engine/galfus-realm-2d/**'
+          - 'engine/galfus-realm-2d-resources/**'
+
+area:realm-3d:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'engine/galfus-realm-3d/**'
+          - 'engine/galfus-realm-3d-resources/**'
+
+area:animation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'engine/galfus-animation/**'
 
 area:bindings:
   - changed-files:
       - any-glob-to-any-file:
-          - 'crates/galfus-bindings-*/**'
-
-area:2d:
-  - changed-files:
-      - any-glob-to-any-file:
-          - 'crates/galfus-realm-2d/**'
-
-area:3d:
-  - changed-files:
-      - any-glob-to-any-file:
-          - 'crates/galfus-realm-3d/**'
-
-area:audio:
-  - changed-files:
-      - any-glob-to-any-file:
-          - 'crates/galfus-audio/**'
-
-area:demo:
-  - changed-files:
-      - any-glob-to-any-file:
-          - 'crates/galfus-demo/**'
-          - 'apps/demos/**'
+          - 'bindings/**'
+          - 'sdk/**'
 
 area:tooling:
   - changed-files:
       - any-glob-to-any-file:
           - '.github/**'
           - 'scripts/**'
-          - 'crates/galfus-devtools/**'
-          - 'package.json'
-          - 'bun.lock'
           - 'Cargo.toml'
           - 'Cargo.lock'
-          - 'tsconfig.json'
-          - 'packages/transport-*/**'
-          - 'packages/gltf-loader/**'
-          - 'packages/camera-control/**'
+          - 'package.json'
+          - 'bun.lock'
+
+area:examples:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'examples/**'
 
 area:docs:
   - changed-files:
       - any-glob-to-any-file:
           - 'README.md'
-          - 'SYSTEMS.md'
           - 'AGENTS.md'
+          - '.agents/**'
           - 'docs/**'
-          - '.github/**/*.md'
+          - 'engine/*/README.md'
+          - 'bindings/*/README.md'

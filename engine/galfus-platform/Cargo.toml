@@ -1,0 +1,51 @@
+[package]
+name = "galfus-platform"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["native"]
+native = ["dep:winit", "dep:gilrs", "dep:kira"]
+browser = [
+    "dep:wasm-bindgen",
+    "dep:wasm-bindgen-futures",
+    "dep:js-sys",
+    "dep:web-sys",
+]
+
+[dependencies]
+galfus-core.workspace = true
+glam.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+
+# Native dependencies (optional via feature = "native")
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+winit = { version = "0.30", optional = true }
+gilrs = { version = "0.11", optional = true }
+kira = { version = "0.12", optional = true }
+
+# Browser dependencies (optional via feature = "browser")
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { workspace = true, optional = true }
+wasm-bindgen-futures = { workspace = true, optional = true }
+js-sys = { version = "0.3", optional = true }
+web-sys = { workspace = true, optional = true, features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlCanvasElement",
+    "ResizeObserver",
+    "Navigator",
+    "Gamepad",
+    "GamepadButton",
+    "AudioContext",
+    "AudioBuffer",
+    "AudioBufferSourceNode",
+    "AudioDestinationNode",
+    "GainNode",
+] }

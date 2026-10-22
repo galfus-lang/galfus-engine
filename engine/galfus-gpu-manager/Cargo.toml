@@ -1,0 +1,15 @@
+[package]
+name = "galfus-gpu-manager"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+galfus-core.workspace = true
+glam.workspace = true
+log.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+bytemuck.workspace = true
+wgpu.workspace = true
+pollster.workspace = true

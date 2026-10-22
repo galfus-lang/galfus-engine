@@ -1,14 +1,10 @@
-packages/**/dist/
-packages/**/lib/
-
-# Package Managers
-package-lock.json
-pnpm-lock.yaml
-yarn.lock
+.git/
+node_modules/
 bun.lock
 bun.lockb
+Cargo.lock
 
-# Miscellaneous
-/static/
-/build/
-/crate/
+build/
+target/
+.old/
+

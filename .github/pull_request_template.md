@@ -12,6 +12,7 @@
 - [ ] `changelog:breaking`
 - [ ] `changelog:feature`
 - [ ] `changelog:fix`
+- [ ] `changelog:refactor`
 - [ ] `changelog:performance`
 - [ ] `changelog:docs`
 - [ ] `changelog:internal` (exclude from public changelog)
@@ -19,7 +20,7 @@
 ## Validation
 
 - [ ] `bun run check`
-- [ ] Relevant demo(s) manually tested
+- [ ] Relevant binding or feature-tour runner tested
 - [ ] No unexpected regressions observed
 
 ## User-facing Changelog Note

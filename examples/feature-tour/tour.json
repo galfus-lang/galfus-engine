@@ -1,0 +1,289 @@
+{
+  "title": "Galfus Engine Feature Tour",
+  "version": "1.1.0",
+  "duration": 40.0,
+  "defaultSeed": 1337,
+  "loopPolicy": "loop",
+  "cameraPositionPath": {
+    "config": {
+      "duration": 40.0,
+      "loopMode": "loop",
+      "valueType": "position3D"
+    },
+    "commands": [
+      { "type": "moveTo", "to": [0.0, 2.8, 6.5] },
+      { "type": "lineTo", "to": [0.6, 2.8, 6.5], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [18.0, 2.8, 6.5], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [18.6, 2.8, 6.5], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [36.0, 2.8, 6.5], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [36.6, 2.8, 6.5], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [54.0, 2.8, 6.5], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [54.6, 2.8, 6.5], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [72.0, 2.8, 6.5], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [72.6, 2.8, 6.5], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [72.0, 2.8, 28.5], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [71.4, 2.8, 28.5], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [54.0, 2.8, 28.5], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [53.4, 2.8, 28.5], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [36.0, 2.8, 28.5], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [35.4, 2.8, 28.5], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [18.0, 2.8, 28.5], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [17.4, 2.8, 28.5], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [0.0, 2.8, 28.5], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [-0.6, 2.8, 28.5], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [0.0, 2.8, 6.5], "duration": 1.0, "easing": "easeInOutQuad" }
+    ]
+  },
+  "cameraLookTargetPath": {
+    "config": {
+      "duration": 40.0,
+      "loopMode": "loop",
+      "valueType": "position3D"
+    },
+    "commands": [
+      { "type": "moveTo", "to": [0.0, 1.4, 0.0] },
+      { "type": "lineTo", "to": [0.0, 1.4, 0.0], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [18.0, 1.4, 0.0], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [18.0, 1.4, 0.0], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [36.0, 1.4, 0.0], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [36.0, 1.4, 0.0], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [54.0, 1.6, 0.0], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [54.0, 1.6, 0.0], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [72.0, 1.4, 0.0], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [72.0, 1.4, 0.0], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [72.0, 1.8, 22.0], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [72.0, 1.8, 22.0], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [54.0, 2.5, 22.0], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [54.0, 2.5, 22.0], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [36.0, 1.4, 22.0], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [36.0, 1.4, 22.0], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [18.0, 1.4, 22.0], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [18.0, 1.4, 22.0], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [0.0, 1.5, 22.0], "duration": 1.0, "easing": "easeInOutQuad" },
+      { "type": "lineTo", "to": [0.0, 1.5, 22.0], "duration": 3.0, "easing": "easeInOutSine" },
+      { "type": "lineTo", "to": [0.0, 1.4, 0.0], "duration": 1.0, "easing": "easeInOutQuad" }
+    ]
+  },
+  "rooms": [
+    {
+      "id": "entrance",
+      "roomIndex": 0,
+      "name": "Entrance & Monument",
+      "category": "Platform & Realm Core",
+      "startTime": 0.0,
+      "duration": 4.0,
+      "cameraPoint": [0.0, 2.8, 6.5],
+      "focusPoint": [0.0, 1.4, 0.0],
+      "description": "Procedural atmosphere, environment lighting, and Galfus golden identity monument.",
+      "telemetry": {
+        "realm": "Realm3D + Realm2D",
+        "reverseZ": "Active",
+        "hdrBloom": "Enabled",
+        "split": "50% Top / 50% Bottom"
+      },
+      "recipe": {
+        "primaryColor": [0.15, 0.55, 0.95, 1.0],
+        "secondaryColor": [0.95, 0.75, 0.2, 1.0],
+        "accentColor": [0.1, 0.85, 0.6, 1.0]
+      }
+    },
+    {
+      "id": "geometry",
+      "roomIndex": 1,
+      "name": "PBR Primitives & Materials",
+      "category": "3D Primitives & PBR",
+      "startTime": 4.0,
+      "duration": 4.0,
+      "cameraPoint": [18.0, 2.8, 6.5],
+      "focusPoint": [18.0, 1.4, 0.0],
+      "description": "Cook-Torrance PBR materials across Cube, Sphere, Cylinder, Torus, and Capsule.",
+      "telemetry": {
+        "primitives": "Cube / Sphere / Torus",
+        "shading": "Forward+ PBR",
+        "materials": "Gold / Chrome / Ruby",
+        "roughness": "0.05 to 0.80"
+      },
+      "recipe": {
+        "primaryColor": [0.95, 0.75, 0.2, 1.0],
+        "secondaryColor": [0.2, 0.8, 0.95, 1.0],
+        "accentColor": [0.95, 0.25, 0.35, 1.0]
+      }
+    },
+    {
+      "id": "lighting",
+      "roomIndex": 2,
+      "name": "Dynamic Lights & Shadows",
+      "category": "Omnidirectional Shadows",
+      "startTime": 8.0,
+      "duration": 4.0,
+      "cameraPoint": [36.0, 2.8, 6.5],
+      "focusPoint": [36.0, 1.4, 0.0],
+      "description": "Multi-colored point lights casting real shadows onto pillars, with emissive blocks.",
+      "telemetry": {
+        "pointLights": "3x (RGB Dynamic)",
+        "shadows": "PCF Reverse-Z (6 Faces)",
+        "emissive": "High-Intensity Bloom",
+        "attenuation": "Inverse-Square Law"
+      },
+      "recipe": {
+        "primaryColor": [1.0, 0.3, 0.3, 1.0],
+        "secondaryColor": [0.2, 1.0, 0.4, 1.0],
+        "accentColor": [0.3, 0.6, 1.0, 1.0]
+      }
+    },
+    {
+      "id": "particles",
+      "roomIndex": 3,
+      "name": "3D GPU Particle Systems",
+      "category": "GPU Compute Particles",
+      "startTime": 12.0,
+      "duration": 4.0,
+      "cameraPoint": [54.0, 2.8, 6.5],
+      "focusPoint": [54.0, 1.6, 0.0],
+      "description": "Additive spark fountain & swirling vortex with Reverse-Z occlusion against pillars.",
+      "telemetry": {
+        "emitters": "Fountain + Vortex",
+        "maxParticles": 1200,
+        "spawnRate": "250/sec",
+        "blending": "Additive GPU"
+      },
+      "recipe": {
+        "primaryColor": [1.0, 0.8, 0.2, 1.0],
+        "secondaryColor": [1.0, 0.3, 0.1, 1.0],
+        "accentColor": [0.4, 0.8, 1.0, 1.0]
+      }
+    },
+    {
+      "id": "animation",
+      "roomIndex": 4,
+      "name": "Animation & Motion Paths",
+      "category": "Active Transitions",
+      "startTime": 16.0,
+      "duration": 4.0,
+      "cameraPoint": [72.0, 2.8, 6.5],
+      "focusPoint": [72.0, 1.4, 0.0],
+      "description": "Kinetic sculptures in motion: bouncing cube (Bounce), elastic pulse, and rotating diamond.",
+      "telemetry": {
+        "transitions": "3 Active Transitions",
+        "curves": "EaseOutBounce / Elastic",
+        "conflictLock": "Active",
+        "retargeting": "Real-time Mid-flight"
+      },
+      "recipe": {
+        "primaryColor": [0.3, 0.9, 0.4, 1.0],
+        "secondaryColor": [0.2, 0.5, 1.0, 1.0],
+        "accentColor": [0.95, 0.4, 0.7, 1.0]
+      }
+    },
+    {
+      "id": "mirror_portal",
+      "roomIndex": 5,
+      "name": "Planar Mirrors & Portals",
+      "category": "Planar Reflections",
+      "startTime": 20.0,
+      "duration": 4.0,
+      "cameraPoint": [72.0, 2.8, 28.5],
+      "focusPoint": [72.0, 1.8, 22.0],
+      "description": "Real-time planar reflection mirror reflecting the scene and an optical portal gateway.",
+      "telemetry": {
+        "mirror": "Planar Real-Time RTT",
+        "portal": "Virtual View Matrix",
+        "clippingPlane": "Oblique Near Plane",
+        "target": "Secret Chamber"
+      },
+      "recipe": {
+        "primaryColor": [0.9, 0.95, 1.0, 1.0],
+        "secondaryColor": [0.2, 0.85, 0.45, 1.0],
+        "accentColor": [0.85, 0.7, 0.2, 1.0]
+      }
+    },
+    {
+      "id": "bones",
+      "roomIndex": 6,
+      "name": "Procedural Skeletal Bones",
+      "category": "Skinned Bone Animation",
+      "startTime": 24.0,
+      "duration": 4.0,
+      "cameraPoint": [54.0, 2.8, 28.5],
+      "focusPoint": [54.0, 2.5, 22.0],
+      "description": "12-joint skinned tentacle with vertex blend weights animated via GPU bone palettes.",
+      "telemetry": {
+        "joints": "12 Skeletal Bones",
+        "skinning": "4 Weights per Vertex",
+        "deformation": "Trigonometric Wave",
+        "outline": "Skinned Stencil"
+      },
+      "recipe": {
+        "primaryColor": [0.15, 0.85, 0.95, 1.0],
+        "secondaryColor": [0.95, 0.35, 1.0, 1.0],
+        "accentColor": [0.1, 0.9, 0.4, 1.0]
+      }
+    },
+    {
+      "id": "refraction",
+      "roomIndex": 7,
+      "name": "Screen-Space Refraction",
+      "category": "Optical Snell's Law",
+      "startTime": 28.0,
+      "duration": 4.0,
+      "cameraPoint": [36.0, 2.8, 28.5],
+      "focusPoint": [36.0, 1.4, 22.0],
+      "description": "Physical Snell's Law refraction across crystal gems, refracting background geometry.",
+      "telemetry": {
+        "surface": "Refractive Material",
+        "ior": "1.52 (Crown Glass)",
+        "distortion": "Screen-Space Normal",
+        "chromatic": "Dispersion Active"
+      },
+      "recipe": {
+        "primaryColor": [0.1, 0.85, 0.4, 0.35],
+        "secondaryColor": [0.95, 0.15, 0.3, 0.35],
+        "accentColor": [0.2, 0.5, 1.0, 0.35]
+      }
+    },
+    {
+      "id": "effects",
+      "roomIndex": 8,
+      "name": "Multiverse Screen Filters",
+      "category": "Post-Processing Pipeline",
+      "startTime": 32.0,
+      "duration": 4.0,
+      "cameraPoint": [18.0, 2.8, 28.5],
+      "focusPoint": [18.0, 1.4, 22.0],
+      "description": "Dynamic invocation filters: Chromatic Aberration, Vignette, Bloom, and Sepia.",
+      "telemetry": {
+        "filters": "Aberration / Vignette",
+        "pipeline": "Full-Screen Quad",
+        "colorGrading": "ACES Tonemapping",
+        "aaMode": "Dynamic FXAA"
+      },
+      "recipe": {
+        "primaryColor": [0.85, 0.3, 0.9, 1.0],
+        "secondaryColor": [0.2, 0.9, 0.8, 1.0],
+        "accentColor": [1.0, 0.5, 0.2, 1.0]
+      }
+    },
+    {
+      "id": "audio_finale",
+      "roomIndex": 9,
+      "name": "Spatial Audio & Parity Finale",
+      "category": "Spatial Audio & Summary",
+      "startTime": 36.0,
+      "duration": 4.0,
+      "cameraPoint": [0.0, 2.8, 28.5],
+      "focusPoint": [0.0, 1.5, 22.0],
+      "description": "Synthesized 3D spatial sound beacon with distance attenuation, completing the tour cycle.",
+      "telemetry": {
+        "audio": "Procedural 16-bit PCM",
+        "spatialAttenuation": "Distance Model",
+        "bindingsParity": "100% Identical",
+        "loopMode": "Seamless Continuous"
+      },
+      "recipe": {
+        "primaryColor": [0.95, 0.8, 0.2, 1.0],
+        "secondaryColor": [0.3, 0.85, 0.6, 1.0],
+        "accentColor": [0.38, 0.74, 0.97, 1.0]
+      }
+    }
+  ]
+}

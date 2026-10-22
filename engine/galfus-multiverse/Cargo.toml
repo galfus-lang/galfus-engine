@@ -1,0 +1,18 @@
+[package]
+name = "galfus-multiverse"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bytemuck.workspace = true
+galfus-core.workspace = true
+galfus-gpu-manager.workspace = true
+galfus-realm-core.workspace = true
+glam.workspace = true
+log.workspace = true
+pollster.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+wgpu.workspace = true
