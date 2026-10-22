@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 use galfus_realm_3d_resources::geometry::{PrimitiveTopology3D, Vertex3D};
-use galfus_realm_3d_resources::material::{Material3D, MaterialSide3D};
+use galfus_realm_3d_resources::material::{Material3D, MaterialSide3D, SurfaceType3D};
 
 /// WGSL shader for the shadow depth pass.
 pub const SHADOW_SHADER: &str = r#"
@@ -22,9 +22,27 @@ struct ModelUniform {
     flags: vec4<u32>,
 };
 
+struct MaterialUniform {
+    base_color: vec4<f32>,
+    emissive_color: vec4<f32>,
+    pbr_params: vec4<f32>,
+    flags: vec4<u32>,
+    refraction_params: vec4<f32>,
+    custom_v0: vec4<f32>,
+    custom_v1: vec4<f32>,
+    custom_v2: vec4<f32>,
+    custom_v3: vec4<f32>,
+};
+
 @group(0) @binding(0) var<uniform> shadow: ShadowUniform;
 @group(0) @binding(1) var<storage, read> bones: array<mat4x4<f32>>;
-@group(1) @binding(0) var<uniform> object: ModelUniform;
+@group(1) @binding(0) var<uniform> material: MaterialUniform;
+@group(1) @binding(1) var mat_tex_0: texture_2d<f32>;
+@group(1) @binding(9) var sampler_linear_repeat: sampler;
+@group(1) @binding(10) var sampler_linear_clamp: sampler;
+@group(1) @binding(11) var sampler_nearest_repeat: sampler;
+@group(1) @binding(12) var sampler_nearest_clamp: sampler;
+@group(2) @binding(0) var<uniform> object: ModelUniform;
 
 struct InstanceData {
     transform: mat4x4<f32>,
@@ -33,15 +51,25 @@ struct InstanceData {
     pbr: vec4<f32>,
     custom: vec4<f32>,
 };
-@group(1) @binding(1) var<storage, read> instances: array<InstanceData>;
+@group(2) @binding(1) var<storage, read> instances: array<InstanceData>;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) uv0: vec2<f32>,
-    @location(2) joints0: vec4<u32>,
-    @location(3) weights0: vec4<f32>,
-    @location(4) joints1: vec4<u32>,
-    @location(5) weights1: vec4<f32>,
+    @location(2) uv1: vec2<f32>,
+    @location(3) color: vec4<f32>,
+    @location(4) joints0: vec4<u32>,
+    @location(5) weights0: vec4<f32>,
+    @location(6) joints1: vec4<u32>,
+    @location(7) weights1: vec4<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0) uv0: vec2<f32>,
+    @location(1) uv1: vec2<f32>,
+    @location(2) vertex_alpha: f32,
+    @location(3) instance_alpha: f32,
 };
 
 fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
@@ -77,7 +105,7 @@ fn skin_position(position: vec3<f32>, joints0: vec4<u32>, weights0: vec4<f32>, j
 }
 
 @vertex
-fn vs_main(in: VertexInput) -> @builtin(position) vec4<f32> {
+fn vs_main(in: VertexInput) -> VertexOutput {
     var local_pos = in.position;
     let bone_offset = object.flags.y;
     let bone_count = object.flags.z;
@@ -85,11 +113,17 @@ fn vs_main(in: VertexInput) -> @builtin(position) vec4<f32> {
         local_pos = skin_position(in.position, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
     }
     let world_pos = object.model * vec4<f32>(local_pos, 1.0);
-    return shadow.view_proj * world_pos;
+    var out: VertexOutput;
+    out.clip_position = shadow.view_proj * world_pos;
+    out.uv0 = in.uv0;
+    out.uv1 = in.uv1;
+    out.vertex_alpha = in.color.a;
+    out.instance_alpha = 1.0;
+    return out;
 }
 
 @vertex
-fn vs_instanced_main(in: VertexInput, @builtin(instance_index) instance_index: u32) -> @builtin(position) vec4<f32> {
+fn vs_instanced_main(in: VertexInput, @builtin(instance_index) instance_index: u32) -> VertexOutput {
     let inst = instances[instance_index];
     var local_pos = in.position;
     let bone_offset = object.flags.y;
@@ -110,14 +144,63 @@ fn vs_instanced_main(in: VertexInput, @builtin(instance_index) instance_index: u
         world_pos4.z += cos(time * wind_freq * 2.5 + world_pos4.z * 0.3) * wind_amp * 0.5 * height_factor;
     }
 
-    return shadow.view_proj * world_pos4;
+    var out: VertexOutput;
+    out.clip_position = shadow.view_proj * world_pos4;
+    out.uv0 = in.uv0;
+    out.uv1 = in.uv1;
+    out.vertex_alpha = in.color.a;
+    out.instance_alpha = inst.color.a;
+    return out;
+}
+
+fn sample_albedo(uv: vec2<f32>) -> vec4<f32> {
+    let sampler_idx = material.flags.y & 0x3u;
+    switch (sampler_idx) {
+        case 1u: { return textureSample(mat_tex_0, sampler_linear_clamp, uv); }
+        case 2u: { return textureSample(mat_tex_0, sampler_nearest_repeat, uv); }
+        case 3u: { return textureSample(mat_tex_0, sampler_nearest_clamp, uv); }
+        default: { return textureSample(mat_tex_0, sampler_linear_repeat, uv); }
+    }
+}
+
+@fragment
+fn fs_alpha_mask(in: VertexOutput) {
+    let uv = select(in.uv0, in.uv1, (material.flags.z & 1u) == 1u);
+    let alpha = material.base_color.a * sample_albedo(uv).a * in.vertex_alpha * in.instance_alpha;
+    if (alpha < material.pbr_params.w) {
+        discard;
+    }
 }
 "#;
 
 /// Dedicated depth-only pipeline for rendering shadow maps.
 pub struct ShadowPipeline3D {
-    pipelines: HashMap<(PrimitiveTopology3D, MaterialSide3D, bool), wgpu::RenderPipeline>,
+    pipelines: HashMap<
+        (PrimitiveTopology3D, MaterialSide3D, bool, ShadowSurfaceMode),
+        wgpu::RenderPipeline,
+    >,
     pub vp_layout: wgpu::BindGroupLayout,
+    fallback_material_bg: wgpu::BindGroup,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum ShadowSurfaceMode {
+    Solid,
+    AlphaMask,
+}
+
+impl ShadowSurfaceMode {
+    const fn from_surface_type(surface_type: SurfaceType3D) -> Option<Self> {
+        match surface_type {
+            SurfaceType3D::Additive => None,
+            SurfaceType3D::Masked | SurfaceType3D::Transparent | SurfaceType3D::Refractive => {
+                Some(Self::AlphaMask)
+            }
+            SurfaceType3D::Opaque | SurfaceType3D::Mirror | SurfaceType3D::Portal => {
+                Some(Self::Solid)
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -125,6 +208,7 @@ struct ShadowPipelineOptions {
     topology: PrimitiveTopology3D,
     side: MaterialSide3D,
     instanced: bool,
+    surface_mode: ShadowSurfaceMode,
 }
 
 fn effective_side(topology: PrimitiveTopology3D, side: MaterialSide3D) -> MaterialSide3D {
@@ -171,7 +255,14 @@ fn create_shadow_render_pipeline(
             buffers: std::slice::from_ref(vertex_buffer_layout),
             compilation_options: Default::default(),
         },
-        fragment: None,
+        fragment: matches!(options.surface_mode, ShadowSurfaceMode::AlphaMask).then_some(
+            wgpu::FragmentState {
+                module: shader,
+                entry_point: Some("fs_alpha_mask"),
+                targets: &[],
+                compilation_options: Default::default(),
+            },
+        ),
         primitive: wgpu::PrimitiveState {
             topology: crate::pipeline::to_wgpu_topology(options.topology),
             strip_index_format: options
@@ -192,7 +283,11 @@ fn create_shadow_render_pipeline(
 }
 
 impl ShadowPipeline3D {
-    pub fn new(device: &wgpu::Device, model_layout: &wgpu::BindGroupLayout) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        material_layout: &wgpu::BindGroupLayout,
+        model_layout: &wgpu::BindGroupLayout,
+    ) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Realm3D Shadow Shader"),
             source: wgpu::ShaderSource::Wgsl(SHADOW_SHADER.into()),
@@ -226,8 +321,54 @@ impl ShadowPipeline3D {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Realm3D Shadow Pipeline Layout"),
-            bind_group_layouts: &[&vp_layout, model_layout],
+            bind_group_layouts: &[&vp_layout, material_layout, model_layout],
             immediate_size: 0,
+        });
+
+        let fallback_material_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Realm3D Shadow Fallback Material Buffer"),
+            size: std::mem::size_of::<galfus_realm_3d_resources::material::Material3DUniform>()
+                as u64,
+            usage: wgpu::BufferUsages::UNIFORM,
+            mapped_at_creation: false,
+        });
+        let fallback_material_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Realm3D Shadow Fallback Material Texture"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let fallback_material_view =
+            fallback_material_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let fallback_material_sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+        let mut fallback_material_entries = vec![wgpu::BindGroupEntry {
+            binding: 0,
+            resource: fallback_material_buffer.as_entire_binding(),
+        }];
+        for binding in 1..=8 {
+            fallback_material_entries.push(wgpu::BindGroupEntry {
+                binding,
+                resource: wgpu::BindingResource::TextureView(&fallback_material_view),
+            });
+        }
+        for binding in 9..=12 {
+            fallback_material_entries.push(wgpu::BindGroupEntry {
+                binding,
+                resource: wgpu::BindingResource::Sampler(&fallback_material_sampler),
+            });
+        }
+        let fallback_material_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Realm3D Shadow Fallback Material Bind Group"),
+            layout: material_layout,
+            entries: &fallback_material_entries,
         });
 
         let vertex_buffer_layout = wgpu::VertexBufferLayout {
@@ -245,24 +386,34 @@ impl ShadowPipeline3D {
                     shader_location: 1,
                 },
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Uint32x4,
-                    offset: 72,
+                    format: wgpu::VertexFormat::Float32x2,
+                    offset: 32,
                     shader_location: 2,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x4,
-                    offset: 88,
+                    offset: 56,
                     shader_location: 3,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Uint32x4,
-                    offset: 104,
+                    offset: 72,
                     shader_location: 4,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x4,
-                    offset: 120,
+                    offset: 88,
                     shader_location: 5,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Uint32x4,
+                    offset: 104,
+                    shader_location: 6,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 120,
+                    shader_location: 7,
                 },
             ],
         };
@@ -288,21 +439,24 @@ impl ShadowPipeline3D {
                     continue;
                 }
                 for &instanced in &[false, true] {
-                    pipelines.insert(
-                        (topology, side, instanced),
-                        create_shadow_render_pipeline(
-                            device,
-                            &pipeline_layout,
-                            &shader,
-                            &vertex_buffer_layout,
-                            &depth_stencil,
-                            ShadowPipelineOptions {
-                                topology,
-                                side,
-                                instanced,
-                            },
-                        ),
-                    );
+                    for surface_mode in [ShadowSurfaceMode::Solid, ShadowSurfaceMode::AlphaMask] {
+                        pipelines.insert(
+                            (topology, side, instanced, surface_mode),
+                            create_shadow_render_pipeline(
+                                device,
+                                &pipeline_layout,
+                                &shader,
+                                &vertex_buffer_layout,
+                                &depth_stencil,
+                                ShadowPipelineOptions {
+                                    topology,
+                                    side,
+                                    instanced,
+                                    surface_mode,
+                                },
+                            ),
+                        );
+                    }
                 }
             }
         }
@@ -310,6 +464,7 @@ impl ShadowPipeline3D {
         Self {
             pipelines,
             vp_layout,
+            fallback_material_bg,
         }
     }
 
@@ -318,10 +473,11 @@ impl ShadowPipeline3D {
         topology: PrimitiveTopology3D,
         side: MaterialSide3D,
         instanced: bool,
+        surface_mode: ShadowSurfaceMode,
     ) -> &wgpu::RenderPipeline {
         let side = effective_side(topology, side);
         self.pipelines
-            .get(&(topology, side, instanced))
+            .get(&(topology, side, instanced, surface_mode))
             .expect("all shadow primitive topologies are precompiled")
     }
 }
@@ -548,11 +704,28 @@ fn render_single_shadow_layer(
         if !shadow_frustum.intersects_aabb(world_aabb.min, world_aabb.max) {
             continue;
         }
-        let side = materials
-            .get(&model.material_id)
-            .map_or_default(|entry| entry.0.side);
-        s_pass.set_pipeline(shadow_pipe.pipeline(geom.topology, side, false));
-        s_pass.set_bind_group(1, model_bg, &[]);
+        let (side, surface_mode, material_bg) = match materials.get(&model.material_id) {
+            Some((material, _, material_bg)) => {
+                let Some(surface_mode) =
+                    ShadowSurfaceMode::from_surface_type(material.surface_type)
+                else {
+                    continue;
+                };
+                (material.side, surface_mode, material_bg.as_ref())
+            }
+            None => (MaterialSide3D::default(), ShadowSurfaceMode::Solid, None),
+        };
+        let material_bg = if matches!(surface_mode, ShadowSurfaceMode::AlphaMask) {
+            let Some(material_bg) = material_bg else {
+                continue;
+            };
+            material_bg
+        } else {
+            material_bg.unwrap_or(&shadow_pipe.fallback_material_bg)
+        };
+        s_pass.set_pipeline(shadow_pipe.pipeline(geom.topology, side, false, surface_mode));
+        s_pass.set_bind_group(1, material_bg, &[]);
+        s_pass.set_bind_group(2, model_bg, &[]);
         s_pass.set_vertex_buffer(0, v.slice(..));
         s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);
         s_pass.draw_indexed(0..*count, 0, 0..1);
@@ -572,11 +745,28 @@ fn render_single_shadow_layer(
         let Some((geom, Some((v, i, count)))) = geometries.get(&inst_model.geometry_id) else {
             continue;
         };
-        let side = materials
-            .get(&inst_model.material_id)
-            .map_or_default(|entry| entry.0.side);
-        s_pass.set_pipeline(shadow_pipe.pipeline(geom.topology, side, true));
-        s_pass.set_bind_group(1, model_bg, &[]);
+        let (side, surface_mode, material_bg) = match materials.get(&inst_model.material_id) {
+            Some((material, _, material_bg)) => {
+                let Some(surface_mode) =
+                    ShadowSurfaceMode::from_surface_type(material.surface_type)
+                else {
+                    continue;
+                };
+                (material.side, surface_mode, material_bg.as_ref())
+            }
+            None => (MaterialSide3D::default(), ShadowSurfaceMode::Solid, None),
+        };
+        let material_bg = if matches!(surface_mode, ShadowSurfaceMode::AlphaMask) {
+            let Some(material_bg) = material_bg else {
+                continue;
+            };
+            material_bg
+        } else {
+            material_bg.unwrap_or(&shadow_pipe.fallback_material_bg)
+        };
+        s_pass.set_pipeline(shadow_pipe.pipeline(geom.topology, side, true, surface_mode));
+        s_pass.set_bind_group(1, material_bg, &[]);
+        s_pass.set_bind_group(2, model_bg, &[]);
         s_pass.set_vertex_buffer(0, v.slice(..));
         s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);
         s_pass.draw_indexed(0..*count, 0, 0..instances.len() as u32);
@@ -671,5 +861,49 @@ pub fn render_shadow_depth_pass(
             );
             layer_idx += 1;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn surface_types_select_the_expected_shadow_mode() {
+        assert_eq!(
+            ShadowSurfaceMode::from_surface_type(SurfaceType3D::Opaque),
+            Some(ShadowSurfaceMode::Solid)
+        );
+        assert_eq!(
+            ShadowSurfaceMode::from_surface_type(SurfaceType3D::Mirror),
+            Some(ShadowSurfaceMode::Solid)
+        );
+        assert_eq!(
+            ShadowSurfaceMode::from_surface_type(SurfaceType3D::Masked),
+            Some(ShadowSurfaceMode::AlphaMask)
+        );
+        assert_eq!(
+            ShadowSurfaceMode::from_surface_type(SurfaceType3D::Transparent),
+            Some(ShadowSurfaceMode::AlphaMask)
+        );
+        assert_eq!(
+            ShadowSurfaceMode::from_surface_type(SurfaceType3D::Refractive),
+            Some(ShadowSurfaceMode::AlphaMask)
+        );
+        assert_eq!(
+            ShadowSurfaceMode::from_surface_type(SurfaceType3D::Additive),
+            None
+        );
+    }
+
+    #[test]
+    fn alpha_shadow_shader_uses_the_material_alpha_contract() {
+        assert!(SHADOW_SHADER.contains("@group(1) @binding(1) var mat_tex_0"));
+        assert!(SHADOW_SHADER.contains("material.flags.y & 0x3u"));
+        assert!(SHADOW_SHADER.contains("material.flags.z & 1u"));
+        assert!(SHADOW_SHADER.contains(
+            "material.base_color.a * sample_albedo(uv).a * in.vertex_alpha * in.instance_alpha"
+        ));
+        assert!(SHADOW_SHADER.contains("material.pbr_params.w"));
     }
 }

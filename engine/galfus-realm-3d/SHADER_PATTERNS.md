@@ -48,3 +48,13 @@ faces, `back` culls front faces, and `double` disables culling. It applies to
 regular, instanced, and shadow draws. glTF `doubleSided: true` maps to `side:
 "double"`; a missing or false value maps to `side: "front"` in an external
 serializer.
+
+## Shadow alpha test
+
+Shadow maps keep opaque, mirror, and portal materials fully solid. Masked,
+transparent, and refractive materials discard shadow fragments below
+`pbr_params.w`; their alpha is `base_color.a * albedo_slot_0.a * vertex_color.a
+
+- instance_color.a`. The shadow pass uses slot 0's configured sampler and UV
+  set. Additive materials do not cast shadows. Custom surface effects do not
+  alter this shadow-alpha contract.

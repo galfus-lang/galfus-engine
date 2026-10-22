@@ -88,9 +88,9 @@ impl Realm for Realm3DContext {
         );
 
         // 4. Sync Scene Buffers (Environment, Lights, Shadows)
-        let shadow_pipe = self
-            .shadow_pipeline
-            .get_or_insert_with(|| ShadowPipeline3D::new(device, &pipeline.model_layout));
+        let shadow_pipe = self.shadow_pipeline.get_or_insert_with(|| {
+            ShadowPipeline3D::new(device, &pipeline.material_layout, &pipeline.model_layout)
+        });
 
         crate::types::sync_scene_buffers(
             device,
