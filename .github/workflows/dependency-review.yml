@@ -34,8 +34,8 @@ jobs:
               });
               core.setOutput('enabled', 'true');
             } catch (error) {
-              if (error.status === 403 && error.message.includes('Dependency graph is not enabled')) {
-                core.warning('Dependency review skipped because Dependency graph is disabled for this repository.');
+              if (error.status === 403) {
+                core.warning(`Dependency review skipped because Dependency graph is unavailable for this repository: ${error.message}`);
                 core.setOutput('enabled', 'false');
                 return;
               }

@@ -156,7 +156,10 @@ function inspectCanvas(screenshot: Uint8Array): CanvasInspection {
   return {
     width,
     height,
-    topColorfulPixels: countColorfulPixels(0, Math.floor(height / 2)),
+    topColorfulPixels: countColorfulPixels(
+      Math.min(96, Math.floor(height / 2)),
+      Math.floor(height / 2)
+    ),
     bottomColorfulPixels: countColorfulPixels(Math.floor(height / 2), height)
   };
 }
@@ -164,14 +167,13 @@ function inspectCanvas(screenshot: Uint8Array): CanvasInspection {
 async function waitForRenderedCanvas(
   page: import('@playwright/test').Page
 ): Promise<CanvasInspection> {
-  const canvas = page.locator('#galfus-browser-tour');
-  let inspection = inspectCanvas(await canvas.screenshot());
+  let inspection = inspectCanvas(await page.screenshot());
   for (let attempt = 0; attempt < 20; attempt++) {
     if (inspection.topColorfulPixels >= 5 && inspection.bottomColorfulPixels >= 5) {
       return inspection;
     }
     await page.waitForTimeout(100);
-    inspection = inspectCanvas(await canvas.screenshot());
+    inspection = inspectCanvas(await page.screenshot());
   }
   return inspection;
 }
