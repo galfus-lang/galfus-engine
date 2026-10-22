@@ -10,6 +10,17 @@ function wait(durationMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
 
+async function invokeTourAction(
+  page: import('@playwright/test').Page,
+  action: 'next' | 'pause'
+): Promise<void> {
+  await page.evaluate((tourAction) => {
+    const button = document.querySelector<HTMLButtonElement>(`[data-tour-action="${tourAction}"]`);
+    if (!button) throw new Error(`Browser tour action '${tourAction}' was not found`);
+    button.click();
+  }, action);
+}
+
 async function main(): Promise<void> {
   const server = await startBrowserTourServer();
   const browser = await chromium.launch({
@@ -64,9 +75,9 @@ async function main(): Promise<void> {
       throw new Error(`Expected Room 1 at startup, received room index ${initialRoom}`);
     }
 
-    await page.locator('[data-tour-action="next"]').click();
+    await invokeTourAction(page, 'next');
     await page.waitForFunction(() => document.body.dataset.roomIndex === '1');
-    await page.locator('[data-tour-action="pause"]').click();
+    await invokeTourAction(page, 'pause');
     await page.waitForFunction(() => document.body.dataset.paused === 'true');
 
     await page.evaluate(() => {
