@@ -203,8 +203,8 @@ pub unsafe extern "C" fn galfus_realm_3d_create_geometry(
 
 /// Registers or updates custom 3D geometry from interleaved binary vertex data and u32 indices.
 ///
-/// Vertex data uses the `Vertex3D` C layout: position `[f32; 3]`, normal `[f32; 3]`, UV
-/// `[f32; 2]`, tangent `[f32; 4]`, joints `[u32; 4]`, and weights `[f32; 4]` (80 bytes).
+/// Vertex data uses the 136-byte canonical `Vertex3D` C layout: position, normal, `uv0`, `uv1`,
+/// tangent, color, `joints0`, `weights0`, `joints1`, and `weights1`.
 /// Indices must reference an existing vertex.
 ///
 /// # Safety
@@ -222,7 +222,7 @@ pub unsafe extern "C" fn galfus_realm_3d_create_geometry_raw(
     const VERTEX3D_BYTES: usize = std::mem::size_of::<Vertex3D>();
 
     if vertices_len == 0 || !vertices_len.is_multiple_of(VERTEX3D_BYTES) {
-        set_last_error("Vertex data length must be a non-zero multiple of 80 bytes");
+        set_last_error("Vertex data length must be a non-zero multiple of 136 bytes");
         return -1;
     }
     if vertices_ptr.is_null() || (indices_len != 0 && indices_ptr.is_null()) {

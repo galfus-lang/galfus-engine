@@ -31,8 +31,10 @@ struct ModelUniform {
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
-    @location(1) joints: vec4<u32>,
-    @location(2) weights: vec4<f32>,
+    @location(1) joints0: vec4<u32>,
+    @location(2) weights0: vec4<f32>,
+    @location(3) joints1: vec4<u32>,
+    @location(4) weights1: vec4<f32>,
 };
 
 struct VertexOutput {
@@ -52,15 +54,23 @@ fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
     );
 }
 
-fn skin_position(position: vec3<f32>, joints: vec4<u32>, weights: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
-    let m0 = bone_at(joints.x, bone_offset, bone_count);
-    let m1 = bone_at(joints.y, bone_offset, bone_count);
-    let m2 = bone_at(joints.z, bone_offset, bone_count);
-    let m3 = bone_at(joints.w, bone_offset, bone_count);
-    let skinned = (m0 * vec4<f32>(position, 1.0)) * weights.x
-                + (m1 * vec4<f32>(position, 1.0)) * weights.y
-                + (m2 * vec4<f32>(position, 1.0)) * weights.z
-                + (m3 * vec4<f32>(position, 1.0)) * weights.w;
+fn skin_position(position: vec3<f32>, joints0: vec4<u32>, weights0: vec4<f32>, joints1: vec4<u32>, weights1: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
+    let m0 = bone_at(joints0.x, bone_offset, bone_count);
+    let m1 = bone_at(joints0.y, bone_offset, bone_count);
+    let m2 = bone_at(joints0.z, bone_offset, bone_count);
+    let m3 = bone_at(joints0.w, bone_offset, bone_count);
+    let m4 = bone_at(joints1.x, bone_offset, bone_count);
+    let m5 = bone_at(joints1.y, bone_offset, bone_count);
+    let m6 = bone_at(joints1.z, bone_offset, bone_count);
+    let m7 = bone_at(joints1.w, bone_offset, bone_count);
+    let skinned = (m0 * vec4<f32>(position, 1.0)) * weights0.x
+                + (m1 * vec4<f32>(position, 1.0)) * weights0.y
+                + (m2 * vec4<f32>(position, 1.0)) * weights0.z
+                + (m3 * vec4<f32>(position, 1.0)) * weights0.w
+                + (m4 * vec4<f32>(position, 1.0)) * weights1.x
+                + (m5 * vec4<f32>(position, 1.0)) * weights1.y
+                + (m6 * vec4<f32>(position, 1.0)) * weights1.z
+                + (m7 * vec4<f32>(position, 1.0)) * weights1.w;
     return skinned.xyz;
 }
 
@@ -70,7 +80,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     let bone_offset = object.flags.y;
     let bone_count = object.flags.z;
     if (bone_count > 0u) {
-        local_pos = skin_position(in.position, in.joints, in.weights, bone_offset, bone_count);
+        local_pos = skin_position(in.position, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
     }
     let world_pos = object.model * vec4<f32>(local_pos, 1.0);
     var out: VertexOutput;
@@ -193,13 +203,23 @@ impl OutlinePipeline3D {
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Uint32x4,
-                    offset: 48,
+                    offset: 72,
                     shader_location: 1,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x4,
-                    offset: 64,
+                    offset: 88,
                     shader_location: 2,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Uint32x4,
+                    offset: 104,
+                    shader_location: 3,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 120,
+                    shader_location: 4,
                 },
             ],
         };

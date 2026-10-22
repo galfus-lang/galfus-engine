@@ -60,6 +60,7 @@ export type FieldType =
   | 'string'
   | 'number'
   | 'boolean'
+  | 'null'
   | { ref: string }
   | { enum: string[] }
   | { array: FieldType }

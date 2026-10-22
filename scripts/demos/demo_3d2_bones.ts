@@ -27,10 +27,14 @@ const BASE_RADIUS = 0.7;
 type SkinnedVertex = {
   position: [number, number, number];
   normal: [number, number, number];
-  uv: [number, number];
+  uv0: [number, number];
+  uv1?: [number, number];
   tangent?: [number, number, number, number];
-  joints?: [number, number, number, number];
-  weights?: [number, number, number, number];
+  color?: [number, number, number, number];
+  joints0?: [number, number, number, number];
+  weights0?: [number, number, number, number];
+  joints1?: [number, number, number, number];
+  weights1?: [number, number, number, number];
 };
 
 /** Generates an articulated 3D column/tentacle mesh with smooth vertex joint weights */
@@ -68,10 +72,10 @@ function buildProceduralSkinnedMesh(
       vertices.push({
         position: [cosT * radius, y, sinT * radius],
         normal: [cosT, 0.0, sinT],
-        uv: [u, v],
+        uv0: [u, v],
         tangent: [-sinT, 0.0, cosT, 1.0],
-        joints: [boneIdx, nextIdx, 0, 0],
-        weights: [weight0, weight1, 0.0, 0.0]
+        joints0: [boneIdx, nextIdx, 0, 0],
+        weights0: [weight0, weight1, 0.0, 0.0]
       });
     }
   }
@@ -81,16 +85,16 @@ function buildProceduralSkinnedMesh(
     {
       position: [-4.5, 0.0, -4.5],
       normal: [0, 1, 0],
-      uv: [0, 0],
-      joints: [0, 0, 0, 0],
-      weights: [0, 0, 0, 0]
+      uv0: [0, 0],
+      joints0: [0, 0, 0, 0],
+      weights0: [0, 0, 0, 0]
     },
     {
       position: [4.5, height + 1.5, 4.5],
       normal: [0, 1, 0],
-      uv: [0, 0],
-      joints: [0, 0, 0, 0],
-      weights: [0, 0, 0, 0]
+      uv0: [0, 0],
+      joints0: [0, 0, 0, 0],
+      weights0: [0, 0, 0, 0]
     }
   );
 
@@ -108,22 +112,32 @@ function buildProceduralSkinnedMesh(
   return { vertices, indices };
 }
 
-/** Packs Vertex3D records using the native 80-byte C layout. */
+/** Packs Vertex3D records using the native 136-byte canonical C layout. */
 function packVertexData(vertices: SkinnedVertex[]): Uint8Array {
-  const data = new Uint8Array(vertices.length * 80);
+  const data = new Uint8Array(vertices.length * 136);
   const view = new DataView(data.buffer);
   for (const [index, vertex] of vertices.entries()) {
-    const offset = index * 80;
+    const offset = index * 136;
     const tangent = vertex.tangent ?? [1, 0, 0, 1];
-    const joints = vertex.joints ?? [0, 0, 0, 0];
-    const weights = vertex.weights ?? [1, 0, 0, 0];
-    [...vertex.position, ...vertex.normal, ...vertex.uv, ...tangent, ...weights].forEach(
-      (value, component) => {
-        const byteOffset = component < 12 ? component * 4 : (component + 4) * 4;
-        view.setFloat32(offset + byteOffset, value, true);
-      }
+    const uv1 = vertex.uv1 ?? [0, 0];
+    const color = vertex.color ?? [1, 1, 1, 1];
+    const joints0 = vertex.joints0 ?? [0, 0, 0, 0];
+    const weights0 = vertex.weights0 ?? [0, 0, 0, 0];
+    const joints1 = vertex.joints1 ?? [0, 0, 0, 0];
+    const weights1 = vertex.weights1 ?? [0, 0, 0, 0];
+    [...vertex.position, ...vertex.normal, ...vertex.uv0, ...uv1, ...tangent, ...color].forEach(
+      (value, component) => view.setFloat32(offset + component * 4, value, true)
     );
-    joints.forEach((joint, component) => view.setUint32(offset + 48 + component * 4, joint, true));
+    joints0.forEach((joint, component) => view.setUint32(offset + 72 + component * 4, joint, true));
+    weights0.forEach((weight, component) =>
+      view.setFloat32(offset + 88 + component * 4, weight, true)
+    );
+    joints1.forEach((joint, component) =>
+      view.setUint32(offset + 104 + component * 4, joint, true)
+    );
+    weights1.forEach((weight, component) =>
+      view.setFloat32(offset + 120 + component * 4, weight, true)
+    );
   }
   return data;
 }

@@ -4,10 +4,14 @@ ffi.cdef([[
     typedef struct {
         float pos[3];
         float norm[3];
-        float uv[2];
+        float uv0[2];
+        float uv1[2];
         float tangent[4];
-        uint32_t joints[4];
-        float weights[4];
+        float color[4];
+        uint32_t joints0[4];
+        float weights0[4];
+        uint32_t joints1[4];
+        float weights1[4];
     } Vertex3DRecord;
 ]])
 
@@ -183,20 +187,34 @@ function procedural.build_procedural_skinned_mesh(rings, radial_segs, height, bo
             rec.norm[0] = cos_t
             rec.norm[1] = 0.0
             rec.norm[2] = sin_t
-            rec.uv[0] = u
-            rec.uv[1] = v
+            rec.uv0[0] = u
+            rec.uv0[1] = v
+            rec.uv1[0] = 0.0
+            rec.uv1[1] = 0.0
             rec.tangent[0] = 1.0
             rec.tangent[1] = 0.0
             rec.tangent[2] = 0.0
             rec.tangent[3] = 1.0
-            rec.joints[0] = bone_idx
-            rec.joints[1] = next_idx
-            rec.joints[2] = 0
-            rec.joints[3] = 0
-            rec.weights[0] = 1.0 - t
-            rec.weights[1] = t
-            rec.weights[2] = 0.0
-            rec.weights[3] = 0.0
+            rec.color[0] = 1.0
+            rec.color[1] = 1.0
+            rec.color[2] = 1.0
+            rec.color[3] = 1.0
+            rec.joints0[0] = bone_idx
+            rec.joints0[1] = next_idx
+            rec.joints0[2] = 0
+            rec.joints0[3] = 0
+            rec.weights0[0] = 1.0 - t
+            rec.weights0[1] = t
+            rec.weights0[2] = 0.0
+            rec.weights0[3] = 0.0
+            rec.joints1[0] = 0
+            rec.joints1[1] = 0
+            rec.joints1[2] = 0
+            rec.joints1[3] = 0
+            rec.weights1[0] = 0.0
+            rec.weights1[1] = 0.0
+            rec.weights1[2] = 0.0
+            rec.weights1[3] = 0.0
 
             v_idx = v_idx + 1
         end

@@ -23,6 +23,40 @@ pub enum SurfaceType3D {
     Portal,
 }
 
+/// Selects one of the shared filtering and addressing presets for a material texture slot.
+///
+/// Each selector uses two bits in [`Material3DUniform::flags`], allowing all eight texture
+/// slots to select a sampler without increasing the material uniform size.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TextureSampler3D {
+    /// Linear filtering with repeat addressing.
+    #[default]
+    LinearRepeat = 0,
+    /// Linear filtering with clamp-to-edge addressing.
+    LinearClamp = 1,
+    /// Nearest filtering with repeat addressing.
+    NearestRepeat = 2,
+    /// Nearest filtering with clamp-to-edge addressing.
+    NearestClamp = 3,
+}
+
+impl TextureSampler3D {
+    const BITS_PER_SLOT: u32 = 2;
+
+    /// Packs the sampler selectors for all eight texture slots into a single `u32`.
+    pub const fn pack_slots(slots: [Self; 8]) -> u32 {
+        let mut packed = 0;
+        let mut index = 0;
+        while index < slots.len() {
+            packed |= (slots[index] as u32) << (index as u32 * Self::BITS_PER_SLOT);
+            index += 1;
+        }
+        packed
+    }
+}
+
 /// 3D material properties for PBR or standard forward shading.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,9 +94,13 @@ pub struct Material3D {
     /// Universal 8-slot texture array `[Slot 0 .. Slot 7]`.
     #[serde(default = "default_texture_slots")]
     pub texture_slots: [Option<u32>; 8],
-    /// Sampler index: 0 = LinearRepeat, 1 = LinearClamp, 2 = NearestRepeat, 3 = NearestClamp.
+    /// Optional shared sampler selection for each texture slot.
+    ///
+    /// The slot selector is packed as two bits into the material GPU uniform. A surface effect
+    /// never needs to observe this implementation detail: internal sampling helpers select the
+    /// corresponding sampler for each texture slot.
     #[serde(default)]
-    pub sampler_index: u32,
+    pub texture_samplers: [Option<TextureSampler3D>; 8],
     /// Optional custom WGSL snippet implementing `fn surface_effect(in: SurfaceInput) -> SurfaceOutput`.
     pub shader_effect: Option<String>,
     /// Custom parameter vectors `[v0, v1, v2, v3]` passed to `in.custom.v0..v3`.
@@ -104,7 +142,7 @@ impl Default for Material3D {
             occlusion_texture_id: None,
             emissive_texture_id: None,
             texture_slots: [None; 8],
-            sampler_index: 0,
+            texture_samplers: [None; 8],
             shader_effect: None,
             custom_params: [Vec4::ZERO; 4],
         }
@@ -131,6 +169,14 @@ impl Material3D {
             slots[4] = self.emissive_texture_id;
         }
         slots
+    }
+
+    /// Returns the compact two-bit sampler selector set consumed by the material shader.
+    pub fn packed_texture_samplers(&self) -> u32 {
+        TextureSampler3D::pack_slots(
+            self.texture_samplers
+                .map(|sampler| sampler.unwrap_or_default()),
+        )
     }
 
     /// Creates a simple solid color material.
@@ -177,7 +223,7 @@ impl Material3D {
             base_color: self.base_color,
             emissive_color: self.emissive_color,
             pbr_params: Vec4::new(self.roughness, self.metallic, self.reflectance, 0.5),
-            flags: UVec4::new(flags, self.sampler_index, 0, 0),
+            flags: UVec4::new(flags, self.packed_texture_samplers(), 0, 0),
             refraction_params: Vec4::new(
                 self.refraction_index,
                 self.refraction_distortion,
@@ -202,7 +248,7 @@ pub struct Material3DUniform {
     pub emissive_color: Vec4,
     /// Surface parameters: `[roughness, metallic, reflectance, alpha_cutoff]`.
     pub pbr_params: Vec4,
-    /// Flags for surface type and active texture slots.
+    /// Flags for surface type and active texture slots. `y` packs eight 2-bit sampler selectors.
     pub flags: UVec4,
     /// Refraction parameters: `[index_of_refraction, distortion_strength, 0.0, 0.0]`.
     pub refraction_params: Vec4,
@@ -223,5 +269,25 @@ mod tests {
         let u = Material3DUniform::zeroed();
         let bytes = bytemuck::bytes_of(&u);
         assert_eq!(bytes.len(), std::mem::size_of::<Material3DUniform>());
+    }
+
+    #[test]
+    fn test_texture_sampler_selectors_are_packed_per_slot() {
+        let material = Material3D {
+            texture_samplers: [
+                None,
+                Some(TextureSampler3D::LinearClamp),
+                Some(TextureSampler3D::NearestRepeat),
+                Some(TextureSampler3D::NearestClamp),
+                None,
+                None,
+                None,
+                None,
+            ],
+            ..Default::default()
+        };
+
+        assert_eq!(material.packed_texture_samplers(), 0xE4);
+        assert_eq!(material.build_uniform().flags.y, 0xE4);
     }
 }

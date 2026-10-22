@@ -90,7 +90,7 @@ export const realm3dFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_realm_3d_create_geometry_raw',
     methodName: 'realm3dCreateGeometryRaw',
-    doc: 'Registers custom geometry from 80-byte interleaved Vertex3D records and u32 indices.',
+    doc: 'Registers custom geometry from 136-byte canonical interleaved Vertex3D records and u32 indices.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },

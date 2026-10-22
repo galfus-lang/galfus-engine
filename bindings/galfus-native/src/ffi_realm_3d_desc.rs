@@ -7,7 +7,7 @@ use galfus_realm_3d_resources::environment::{
 };
 use galfus_realm_3d_resources::geometry::Geometry3D;
 use galfus_realm_3d_resources::light::Light3D;
-use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D};
+use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D, TextureSampler3D};
 use galfus_realm_3d_resources::model::{InstancedModel3D, Model3D};
 use galfus_realm_3d_resources::particle::{EmissionShape3D, ParticleEmitter3D};
 use galfus_realm_3d_resources::transform::Transform3D;
@@ -187,7 +187,8 @@ pub struct Material3DDesc {
     pub occlusion_texture_id: Option<u32>,
     pub emissive_texture_id: Option<u32>,
     pub texture_slots: Option<Vec<Option<u32>>>,
-    pub sampler_index: Option<u32>,
+    /// Optional sampler overrides for individual texture slots. `null` uses the default sampler.
+    pub texture_samplers: Option<Vec<Option<TextureSampler3D>>>,
     pub shader_effect: Option<String>,
     pub custom_params: Option<Vec<[f32; 4]>>,
 }
@@ -215,6 +216,12 @@ impl From<Material3DDesc> for Material3D {
                 texture_slots[idx] = slot;
             }
         }
+        let mut texture_samplers = [None; 8];
+        if let Some(samplers) = d.texture_samplers {
+            for (idx, sampler) in samplers.into_iter().take(8).enumerate() {
+                texture_samplers[idx] = sampler;
+            }
+        }
         Material3D {
             surface_type,
             base_color: d
@@ -236,7 +243,7 @@ impl From<Material3DDesc> for Material3D {
             occlusion_texture_id: d.occlusion_texture_id,
             emissive_texture_id: d.emissive_texture_id,
             texture_slots,
-            sampler_index: d.sampler_index.unwrap_or(0),
+            texture_samplers,
             shader_effect: d.shader_effect,
             custom_params,
             label: None,

@@ -12,6 +12,7 @@ pub fn create_uniform_bg(
     label: &str,
     layout: &wgpu::BindGroupLayout,
     contents: &[u8],
+    instance_buffer: &wgpu::Buffer,
 ) -> (wgpu::Buffer, wgpu::BindGroup) {
     let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some(label),
@@ -21,10 +22,16 @@ pub fn create_uniform_bg(
     let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some(label),
         layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: buf.as_entire_binding(),
-        }],
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: instance_buffer.as_entire_binding(),
+            },
+        ],
     });
     (buf, bg)
 }
@@ -151,7 +158,7 @@ pub type GpuModelEntry = (
     Option<wgpu::BindGroup>,
 );
 
-/// Instanced model entity state tuple: instanced_model, instances, gpu_instance_buffer, uniform_buffer, bind_group.
+/// Instanced model entity state tuple: model, instances, storage buffer, model uniform buffer, model bind group.
 pub type GpuInstancedModelEntry = (
     galfus_realm_3d_resources::model::InstancedModel3D,
     Vec<galfus_realm_3d_resources::model::InstanceData3D>,
@@ -319,6 +326,7 @@ pub fn sync_realm_resources<'a>(
                 "Model",
                 &pipeline.model_layout,
                 bytemuck::bytes_of(&uniform),
+                &pipeline.dummy_instance_buffer,
             );
             *buf_opt = Some(buf);
             *bg_opt = Some(bg);
@@ -345,6 +353,7 @@ pub fn sync_realm_resources<'a>(
                 "Instanced Model",
                 &pipeline.model_layout,
                 bytemuck::bytes_of(&uniform),
+                &pipeline.dummy_instance_buffer,
             );
             *model_buf_opt = Some(buf);
             *model_bg_opt = Some(bg);
@@ -358,13 +367,32 @@ pub fn sync_realm_resources<'a>(
             };
             if needs_alloc {
                 let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Instanced Vertex Buffer"),
+                    label: Some("Instanced Storage Buffer"),
                     contents: bytemuck::cast_slice(instances),
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
                 });
                 *inst_buf_opt = Some(buf);
             } else if let Some(buf) = inst_buf_opt {
                 queue.write_buffer(buf, 0, bytemuck::cast_slice(instances));
+            }
+
+            if let (Some(model_buf), Some(inst_buf)) =
+                (model_buf_opt.as_ref(), inst_buf_opt.as_ref())
+            {
+                *model_bg_opt = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("Realm3D Instance Bind Group"),
+                    layout: &pipeline.model_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: model_buf.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: inst_buf.as_entire_binding(),
+                        },
+                    ],
+                }));
             }
         }
     }

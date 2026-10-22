@@ -258,8 +258,7 @@ pub fn render_draw_items<'a>(
             curr_geom = Some(item.geometry_id);
         }
         pass.set_bind_group(2, item.model_bg, &[]);
-        if let Some(inst_buf) = item.instance_buffer {
-            pass.set_vertex_buffer(1, inst_buf.slice(..));
+        if item.instance_buffer.is_some() {
             pass.draw_indexed(0..item.index_count, 0, 0..item.instance_count);
         } else {
             pass.draw_indexed(0..item.index_count, 0, 0..1);

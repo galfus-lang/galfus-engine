@@ -2,6 +2,18 @@ import type { DescSpec } from './types';
 
 export const realm3dDescriptors: DescSpec[] = [
   {
+    kind: 'enum',
+    name: 'TextureSampler3D',
+    doc: 'Shared sampler preset selected independently for each 3D material texture slot.',
+    values: ['linearRepeat', 'linearClamp', 'nearestRepeat', 'nearestClamp']
+  },
+  {
+    kind: 'union',
+    name: 'TextureSamplerSelection3D',
+    doc: 'An optional sampler override for one material texture slot.',
+    variants: [{ ref: 'TextureSampler3D' }, 'null']
+  },
+  {
     kind: 'object',
     name: 'CameraLookAt3DDesc',
     doc: 'World-space target and preferred up direction used to derive a 3D camera view.',
@@ -84,7 +96,11 @@ export const realm3dDescriptors: DescSpec[] = [
       occlusionTextureId: { type: 'number', optional: true },
       emissiveTextureId: { type: 'number', optional: true },
       textureSlots: { type: { array: 'number' }, optional: true },
-      samplerIndex: { type: 'number', optional: true },
+      textureSamplers: {
+        type: { array: { ref: 'TextureSamplerSelection3D' } },
+        optional: true,
+        doc: 'Per-slot sampler presets. Omitted or null slots use linearRepeat.'
+      },
       shaderEffect: { type: 'string', optional: true },
       customParams: {
         type: { array: { tuple: ['number', 'number', 'number', 'number'] } },

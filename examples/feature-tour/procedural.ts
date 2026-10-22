@@ -179,13 +179,12 @@ export function buildProceduralSkinnedMesh(
     }
   }
 
-  // Pack into 80-byte vertex buffer format:
-  // pos (3f32), norm (3f32), uv (2f32), tangent (4f32), joints (4u32), weights (4f32)
-  const vertexBuffer = new Uint8Array(vertices.length * 80);
+  // Pack into 136-byte canonical Vertex3D format.
+  const vertexBuffer = new Uint8Array(vertices.length * 136);
   const vView = new DataView(vertexBuffer.buffer);
   for (let i = 0; i < vertices.length; i++) {
     const v = vertices[i]!;
-    const off = i * 80;
+    const off = i * 136;
     vView.setFloat32(off + 0, v.pos[0], true);
     vView.setFloat32(off + 4, v.pos[1], true);
     vView.setFloat32(off + 8, v.pos[2], true);
@@ -194,18 +193,20 @@ export function buildProceduralSkinnedMesh(
     vView.setFloat32(off + 20, v.norm[2], true);
     vView.setFloat32(off + 24, v.uv[0], true);
     vView.setFloat32(off + 28, v.uv[1], true);
-    vView.setFloat32(off + 32, 1.0, true);
-    vView.setFloat32(off + 36, 0.0, true);
-    vView.setFloat32(off + 40, 0.0, true);
-    vView.setFloat32(off + 44, 1.0, true);
-    vView.setUint32(off + 48, v.joints[0], true);
-    vView.setUint32(off + 52, v.joints[1], true);
-    vView.setUint32(off + 56, v.joints[2], true);
-    vView.setUint32(off + 60, v.joints[3], true);
-    vView.setFloat32(off + 64, v.weights[0], true);
-    vView.setFloat32(off + 68, v.weights[1], true);
-    vView.setFloat32(off + 72, v.weights[2], true);
-    vView.setFloat32(off + 76, v.weights[3], true);
+    vView.setFloat32(off + 40, 1.0, true);
+    vView.setFloat32(off + 52, 1.0, true);
+    vView.setFloat32(off + 56, 1.0, true);
+    vView.setFloat32(off + 60, 1.0, true);
+    vView.setFloat32(off + 64, 1.0, true);
+    vView.setFloat32(off + 68, 1.0, true);
+    vView.setUint32(off + 72, v.joints[0], true);
+    vView.setUint32(off + 76, v.joints[1], true);
+    vView.setUint32(off + 80, v.joints[2], true);
+    vView.setUint32(off + 84, v.joints[3], true);
+    vView.setFloat32(off + 88, v.weights[0], true);
+    vView.setFloat32(off + 92, v.weights[1], true);
+    vView.setFloat32(off + 96, v.weights[2], true);
+    vView.setFloat32(off + 100, v.weights[3], true);
   }
 
   return { vertexBuffer, indexBuffer: new Uint32Array(indices) };

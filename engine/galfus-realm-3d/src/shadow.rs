@@ -24,11 +24,22 @@ struct ModelUniform {
 @group(0) @binding(1) var<storage, read> bones: array<mat4x4<f32>>;
 @group(1) @binding(0) var<uniform> object: ModelUniform;
 
+struct InstanceData {
+    transform: mat4x4<f32>,
+    color: vec4<f32>,
+    emissive: vec4<f32>,
+    pbr: vec4<f32>,
+    custom: vec4<f32>,
+};
+@group(1) @binding(1) var<storage, read> instances: array<InstanceData>;
+
 struct VertexInput {
     @location(0) position: vec3<f32>,
-    @location(1) uv: vec2<f32>,
-    @location(2) joints: vec4<u32>,
-    @location(3) weights: vec4<f32>,
+    @location(1) uv0: vec2<f32>,
+    @location(2) joints0: vec4<u32>,
+    @location(3) weights0: vec4<f32>,
+    @location(4) joints1: vec4<u32>,
+    @location(5) weights1: vec4<f32>,
 };
 
 fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
@@ -43,15 +54,23 @@ fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
     );
 }
 
-fn skin_position(position: vec3<f32>, joints: vec4<u32>, weights: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
-    let m0 = bone_at(joints.x, bone_offset, bone_count);
-    let m1 = bone_at(joints.y, bone_offset, bone_count);
-    let m2 = bone_at(joints.z, bone_offset, bone_count);
-    let m3 = bone_at(joints.w, bone_offset, bone_count);
-    let skinned = (m0 * vec4<f32>(position, 1.0)) * weights.x
-                + (m1 * vec4<f32>(position, 1.0)) * weights.y
-                + (m2 * vec4<f32>(position, 1.0)) * weights.z
-                + (m3 * vec4<f32>(position, 1.0)) * weights.w;
+fn skin_position(position: vec3<f32>, joints0: vec4<u32>, weights0: vec4<f32>, joints1: vec4<u32>, weights1: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
+    let m0 = bone_at(joints0.x, bone_offset, bone_count);
+    let m1 = bone_at(joints0.y, bone_offset, bone_count);
+    let m2 = bone_at(joints0.z, bone_offset, bone_count);
+    let m3 = bone_at(joints0.w, bone_offset, bone_count);
+    let m4 = bone_at(joints1.x, bone_offset, bone_count);
+    let m5 = bone_at(joints1.y, bone_offset, bone_count);
+    let m6 = bone_at(joints1.z, bone_offset, bone_count);
+    let m7 = bone_at(joints1.w, bone_offset, bone_count);
+    let skinned = (m0 * vec4<f32>(position, 1.0)) * weights0.x
+                + (m1 * vec4<f32>(position, 1.0)) * weights0.y
+                + (m2 * vec4<f32>(position, 1.0)) * weights0.z
+                + (m3 * vec4<f32>(position, 1.0)) * weights0.w
+                + (m4 * vec4<f32>(position, 1.0)) * weights1.x
+                + (m5 * vec4<f32>(position, 1.0)) * weights1.y
+                + (m6 * vec4<f32>(position, 1.0)) * weights1.z
+                + (m7 * vec4<f32>(position, 1.0)) * weights1.w;
     return skinned.xyz;
 }
 
@@ -61,40 +80,29 @@ fn vs_main(in: VertexInput) -> @builtin(position) vec4<f32> {
     let bone_offset = object.flags.y;
     let bone_count = object.flags.z;
     if (bone_count > 0u) {
-        local_pos = skin_position(in.position, in.joints, in.weights, bone_offset, bone_count);
+        local_pos = skin_position(in.position, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
     }
     let world_pos = object.model * vec4<f32>(local_pos, 1.0);
     return shadow.view_proj * world_pos;
 }
 
-struct InstanceInput {
-    @location(6) m0: vec4<f32>,
-    @location(7) m1: vec4<f32>,
-    @location(8) m2: vec4<f32>,
-    @location(9) m3: vec4<f32>,
-    @location(10) color: vec4<f32>,
-    @location(11) emissive: vec4<f32>,
-    @location(12) pbr: vec4<f32>,
-    @location(13) custom: vec4<f32>,
-};
-
 @vertex
-fn vs_instanced_main(in: VertexInput, inst: InstanceInput) -> @builtin(position) vec4<f32> {
+fn vs_instanced_main(in: VertexInput, @builtin(instance_index) instance_index: u32) -> @builtin(position) vec4<f32> {
+    let inst = instances[instance_index];
     var local_pos = in.position;
     let bone_offset = object.flags.y;
     let bone_count = object.flags.z;
     if (bone_count > 0u) {
-        local_pos = skin_position(in.position, in.joints, in.weights, bone_offset, bone_count);
+        local_pos = skin_position(in.position, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
     }
-    let model = mat4x4<f32>(inst.m0, inst.m1, inst.m2, inst.m3);
-    var world_pos4 = model * vec4<f32>(local_pos, 1.0);
+    var world_pos4 = inst.transform * vec4<f32>(local_pos, 1.0);
 
     // Procedural wind vertex displacement if custom.x (amplitude) > 0.0
     let wind_amp = inst.custom.x;
     if (wind_amp > 0.0) {
         let time = shadow.misc.z;
         let wind_freq = max(inst.custom.y, 0.5);
-        let height_factor = pow(clamp(in.uv.y, 0.0, 1.0), 1.5);
+        let height_factor = pow(clamp(in.uv0.y, 0.0, 1.0), 1.5);
         let wave = sin(time * wind_freq * 3.0 + world_pos4.x * 0.4 + world_pos4.z * 0.4);
         world_pos4.x += wave * wind_amp * height_factor;
         world_pos4.z += cos(time * wind_freq * 2.5 + world_pos4.z * 0.3) * wind_amp * 0.5 * height_factor;
@@ -166,13 +174,23 @@ impl ShadowPipeline3D {
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Uint32x4,
-                    offset: 48,
+                    offset: 72,
                     shader_location: 2,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x4,
-                    offset: 64,
+                    offset: 88,
                     shader_location: 3,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Uint32x4,
+                    offset: 104,
+                    shader_location: 4,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 120,
+                    shader_location: 5,
                 },
             ],
         };
@@ -223,10 +241,7 @@ impl ShadowPipeline3D {
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: Some("vs_instanced_main"),
-                    buffers: &[
-                        vertex_buffer_layout,
-                        crate::pipeline::get_instance_buffer_layout(),
-                    ],
+                    buffers: std::slice::from_ref(&vertex_buffer_layout),
                     compilation_options: Default::default(),
                 },
                 fragment: None,
@@ -484,9 +499,9 @@ fn render_single_shadow_layer(
         if !inst_model.active || !inst_model.cast_shadow || instances.is_empty() {
             continue;
         }
-        let Some(inst_buf) = inst_buf_opt else {
+        if inst_buf_opt.is_none() {
             continue;
-        };
+        }
         let Some(model_bg) = model_bg_opt else {
             continue;
         };
@@ -495,7 +510,6 @@ fn render_single_shadow_layer(
         };
         s_pass.set_bind_group(1, model_bg, &[]);
         s_pass.set_vertex_buffer(0, v.slice(..));
-        s_pass.set_vertex_buffer(1, inst_buf.slice(..));
         s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);
         s_pass.draw_indexed(0..*count, 0, 0..instances.len() as u32);
     }

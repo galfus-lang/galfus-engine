@@ -129,9 +129,9 @@ def build_procedural_skinned_mesh(
             cos_t = math.cos(theta)
             sin_t = math.sin(theta)
 
-            # Pack 80-byte vertex: pos(3f), norm(3f), uv(2f), tangent(4f), joints(4u), weights(4f)
+            # Pack 136-byte canonical Vertex3D record.
             packed = struct.pack(
-                "<3f3f2f4f4I4f",
+                "<3f3f2f2f4f4f4I4f4I4f",
                 cos_t * radius,
                 y,
                 sin_t * radius,
@@ -140,9 +140,15 @@ def build_procedural_skinned_mesh(
                 sin_t,
                 u,
                 v,
+                0.0,
+                0.0,
                 1.0,
                 0.0,
                 0.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
                 1.0,
                 bone_idx,
                 next_idx,
@@ -150,6 +156,14 @@ def build_procedural_skinned_mesh(
                 0,
                 1.0 - t,
                 t,
+                0.0,
+                0.0,
+                0,
+                0,
+                0,
+                0,
+                0.0,
+                0.0,
                 0.0,
                 0.0,
             )

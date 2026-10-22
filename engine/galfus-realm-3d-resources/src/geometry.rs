@@ -1,7 +1,10 @@
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 
-/// Standard 3D vertex layout containing position, normal, UV coordinates, tangent, and skinning weights.
+/// Canonical glTF-compatible 3D vertex layout.
+///
+/// All attributes are always present in GPU memory. Importers must use the documented defaults
+/// when a source primitive omits an optional glTF attribute.
 #[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Serialize, Deserialize)]
 #[repr(C)]
 pub struct Vertex3D {
@@ -9,28 +12,54 @@ pub struct Vertex3D {
     pub position: [f32; 3],
     /// Unit surface normal vector.
     pub normal: [f32; 3],
-    /// 2D texture mapping coordinate `[u, v]`.
-    pub uv: [f32; 2],
+    /// Primary texture mapping coordinate (`TEXCOORD_0`) `[u, v]`.
+    #[serde(default, alias = "uv")]
+    pub uv0: [f32; 2],
+    /// Secondary texture mapping coordinate (`TEXCOORD_1`) `[u, v]`.
+    #[serde(default)]
+    pub uv1: [f32; 2],
     /// 4D tangent vector with sign for bitangent calculation `[x, y, z, w]`.
+    #[serde(default = "default_tangent")]
     pub tangent: [f32; 4],
-    /// 4 bone joint indices for skeletal skinning.
+    /// Linear RGBA vertex color (`COLOR_0`).
+    #[serde(default = "default_color")]
+    pub color: [f32; 4],
+    /// First four bone joint indices (`JOINTS_0`).
+    #[serde(default, alias = "joints")]
+    pub joints0: [u32; 4],
+    /// First four bone influence weights (`WEIGHTS_0`).
+    #[serde(default, alias = "weights")]
+    pub weights0: [f32; 4],
+    /// Second four bone joint indices (`JOINTS_1`).
     #[serde(default)]
-    pub joints: [u32; 4],
-    /// 4 bone influence weights summing to 1.0.
+    pub joints1: [u32; 4],
+    /// Second four bone influence weights (`WEIGHTS_1`).
     #[serde(default)]
-    pub weights: [f32; 4],
+    pub weights1: [f32; 4],
+}
+
+const fn default_tangent() -> [f32; 4] {
+    [1.0, 0.0, 0.0, 1.0]
+}
+
+const fn default_color() -> [f32; 4] {
+    [1.0; 4]
 }
 
 impl Vertex3D {
     /// Helper to construct a static vertex with default tangent and zero skinning weights.
-    pub const fn new(position: [f32; 3], normal: [f32; 3], uv: [f32; 2]) -> Self {
+    pub const fn new(position: [f32; 3], normal: [f32; 3], uv0: [f32; 2]) -> Self {
         Self {
             position,
             normal,
-            uv,
-            tangent: [1.0, 0.0, 0.0, 1.0],
-            joints: [0; 4],
-            weights: [0.0; 4],
+            uv0,
+            uv1: [0.0; 2],
+            tangent: default_tangent(),
+            color: default_color(),
+            joints0: [0; 4],
+            weights0: [0.0; 4],
+            joints1: [0; 4],
+            weights1: [0.0; 4],
         }
     }
 
@@ -38,17 +67,46 @@ impl Vertex3D {
     pub const fn skinned(
         position: [f32; 3],
         normal: [f32; 3],
-        uv: [f32; 2],
-        joints: [u32; 4],
-        weights: [f32; 4],
+        uv0: [f32; 2],
+        joints0: [u32; 4],
+        weights0: [f32; 4],
     ) -> Self {
         Self {
             position,
             normal,
-            uv,
-            tangent: [1.0, 0.0, 0.0, 1.0],
-            joints,
-            weights,
+            uv0,
+            uv1: [0.0; 2],
+            tangent: default_tangent(),
+            color: default_color(),
+            joints0,
+            weights0,
+            joints1: [0; 4],
+            weights1: [0.0; 4],
+        }
+    }
+
+    /// Constructs a skinned vertex with up to eight explicit bone influences.
+    #[allow(clippy::too_many_arguments)]
+    pub const fn skinned8(
+        position: [f32; 3],
+        normal: [f32; 3],
+        uv0: [f32; 2],
+        joints0: [u32; 4],
+        weights0: [f32; 4],
+        joints1: [u32; 4],
+        weights1: [f32; 4],
+    ) -> Self {
+        Self {
+            position,
+            normal,
+            uv0,
+            uv1: [0.0; 2],
+            tangent: default_tangent(),
+            color: default_color(),
+            joints0,
+            weights0,
+            joints1,
+            weights1,
         }
     }
 }
@@ -268,6 +326,33 @@ impl Geometry3D {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn canonical_layout_and_defaults_are_stable() {
+        assert_eq!(std::mem::size_of::<Vertex3D>(), 136);
+        let vertex = Vertex3D::new([0.0; 3], [0.0, 1.0, 0.0], [0.0; 2]);
+        assert_eq!(vertex.color, [1.0; 4]);
+        assert_eq!(vertex.uv1, [0.0; 2]);
+        assert_eq!(vertex.tangent, [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(vertex.weights0, [0.0; 4]);
+        assert_eq!(vertex.weights1, [0.0; 4]);
+    }
+
+    #[test]
+    fn skinned8_preserves_both_joint_sets() {
+        let vertex = Vertex3D::skinned8(
+            [0.0; 3],
+            [0.0, 1.0, 0.0],
+            [0.0; 2],
+            [1, 2, 3, 4],
+            [0.4, 0.3, 0.2, 0.1],
+            [5, 6, 7, 8],
+            [0.05, 0.05, 0.05, 0.05],
+        );
+        assert_eq!(vertex.joints0, [1, 2, 3, 4]);
+        assert_eq!(vertex.joints1, [5, 6, 7, 8]);
+        assert_eq!(vertex.weights1, [0.05; 4]);
+    }
 
     #[test]
     fn test_cube_generation() {

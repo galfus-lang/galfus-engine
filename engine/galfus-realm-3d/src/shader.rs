@@ -86,7 +86,12 @@ fn sample_texture_with_sampler(tex: texture_2d<f32>, uv: vec2<f32>, sampler_idx:
     }
 }
 
-fn sample_material_texture(slot: u32, uv: vec2<f32>, sampler_idx: u32) -> vec4<f32> {
+fn material_sampler_index(slot: u32) -> u32 {
+    return (material.flags.y >> (slot * 2u)) & 0x3u;
+}
+
+fn sample_material_texture(slot: u32, uv: vec2<f32>) -> vec4<f32> {
+    let sampler_idx = material_sampler_index(slot);
     switch (slot) {
         case 0u: { return sample_texture_with_sampler(mat_tex_0, uv, sampler_idx); }
         case 1u: { return sample_texture_with_sampler(mat_tex_1, uv, sampler_idx); }
@@ -103,24 +108,39 @@ fn sample_material_texture(slot: u32, uv: vec2<f32>, sampler_idx: u32) -> vec4<f
 @group(3) @binding(0) var opaque_screen_texture: texture_2d<f32>;
 @group(3) @binding(1) var opaque_screen_sampler: sampler;
 
+struct InstanceData {
+    transform: mat4x4<f32>,
+    color: vec4<f32>,
+    emissive: vec4<f32>,
+    pbr: vec4<f32>,
+    custom: vec4<f32>,
+};
+@group(2) @binding(1) var<storage, read> instances: array<InstanceData>;
+
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
-    @location(2) uv: vec2<f32>,
-    @location(3) tangent: vec4<f32>,
-    @location(4) joints: vec4<u32>,
-    @location(5) weights: vec4<f32>,
+    @location(2) uv0: vec2<f32>,
+    @location(3) uv1: vec2<f32>,
+    @location(4) tangent: vec4<f32>,
+    @location(5) color: vec4<f32>,
+    @location(6) joints0: vec4<u32>,
+    @location(7) weights0: vec4<f32>,
+    @location(8) joints1: vec4<u32>,
+    @location(9) weights1: vec4<f32>,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) world_pos: vec3<f32>,
     @location(1) world_normal: vec3<f32>,
-    @location(2) uv: vec2<f32>,
-    @location(3) instance_color: vec4<f32>,
-    @location(4) instance_emissive: vec4<f32>,
-    @location(5) instance_pbr: vec4<f32>,
-    @location(6) instance_custom: vec4<f32>,
+    @location(2) uv0: vec2<f32>,
+    @location(3) uv1: vec2<f32>,
+    @location(4) vertex_color: vec4<f32>,
+    @location(5) instance_color: vec4<f32>,
+    @location(6) instance_emissive: vec4<f32>,
+    @location(7) instance_pbr: vec4<f32>,
+    @location(8) instance_custom: vec4<f32>,
 };
 
 fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
@@ -135,27 +155,43 @@ fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
     );
 }
 
-fn skin_position(position: vec3<f32>, joints: vec4<u32>, weights: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
-    let m0 = bone_at(joints.x, bone_offset, bone_count);
-    let m1 = bone_at(joints.y, bone_offset, bone_count);
-    let m2 = bone_at(joints.z, bone_offset, bone_count);
-    let m3 = bone_at(joints.w, bone_offset, bone_count);
-    let skinned = (m0 * vec4<f32>(position, 1.0)) * weights.x
-                + (m1 * vec4<f32>(position, 1.0)) * weights.y
-                + (m2 * vec4<f32>(position, 1.0)) * weights.z
-                + (m3 * vec4<f32>(position, 1.0)) * weights.w;
+fn skin_position(position: vec3<f32>, joints0: vec4<u32>, weights0: vec4<f32>, joints1: vec4<u32>, weights1: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
+    let m0 = bone_at(joints0.x, bone_offset, bone_count);
+    let m1 = bone_at(joints0.y, bone_offset, bone_count);
+    let m2 = bone_at(joints0.z, bone_offset, bone_count);
+    let m3 = bone_at(joints0.w, bone_offset, bone_count);
+    let m4 = bone_at(joints1.x, bone_offset, bone_count);
+    let m5 = bone_at(joints1.y, bone_offset, bone_count);
+    let m6 = bone_at(joints1.z, bone_offset, bone_count);
+    let m7 = bone_at(joints1.w, bone_offset, bone_count);
+    let skinned = (m0 * vec4<f32>(position, 1.0)) * weights0.x
+                + (m1 * vec4<f32>(position, 1.0)) * weights0.y
+                + (m2 * vec4<f32>(position, 1.0)) * weights0.z
+                + (m3 * vec4<f32>(position, 1.0)) * weights0.w
+                + (m4 * vec4<f32>(position, 1.0)) * weights1.x
+                + (m5 * vec4<f32>(position, 1.0)) * weights1.y
+                + (m6 * vec4<f32>(position, 1.0)) * weights1.z
+                + (m7 * vec4<f32>(position, 1.0)) * weights1.w;
     return skinned.xyz;
 }
 
-fn skin_normal(normal: vec3<f32>, joints: vec4<u32>, weights: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
-    let m0 = bone_at(joints.x, bone_offset, bone_count);
-    let m1 = bone_at(joints.y, bone_offset, bone_count);
-    let m2 = bone_at(joints.z, bone_offset, bone_count);
-    let m3 = bone_at(joints.w, bone_offset, bone_count);
-    let skinned = (m0 * vec4<f32>(normal, 0.0)) * weights.x
-                + (m1 * vec4<f32>(normal, 0.0)) * weights.y
-                + (m2 * vec4<f32>(normal, 0.0)) * weights.z
-                + (m3 * vec4<f32>(normal, 0.0)) * weights.w;
+fn skin_normal(normal: vec3<f32>, joints0: vec4<u32>, weights0: vec4<f32>, joints1: vec4<u32>, weights1: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
+    let m0 = bone_at(joints0.x, bone_offset, bone_count);
+    let m1 = bone_at(joints0.y, bone_offset, bone_count);
+    let m2 = bone_at(joints0.z, bone_offset, bone_count);
+    let m3 = bone_at(joints0.w, bone_offset, bone_count);
+    let m4 = bone_at(joints1.x, bone_offset, bone_count);
+    let m5 = bone_at(joints1.y, bone_offset, bone_count);
+    let m6 = bone_at(joints1.z, bone_offset, bone_count);
+    let m7 = bone_at(joints1.w, bone_offset, bone_count);
+    let skinned = (m0 * vec4<f32>(normal, 0.0)) * weights0.x
+                + (m1 * vec4<f32>(normal, 0.0)) * weights0.y
+                + (m2 * vec4<f32>(normal, 0.0)) * weights0.z
+                + (m3 * vec4<f32>(normal, 0.0)) * weights0.w
+                + (m4 * vec4<f32>(normal, 0.0)) * weights1.x
+                + (m5 * vec4<f32>(normal, 0.0)) * weights1.y
+                + (m6 * vec4<f32>(normal, 0.0)) * weights1.z
+                + (m7 * vec4<f32>(normal, 0.0)) * weights1.w;
     return normalize(skinned.xyz);
 }
 
@@ -168,15 +204,17 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     let bone_offset = object.flags.y;
     let bone_count = object.flags.z;
     if (bone_count > 0u) {
-        local_pos = skin_position(in.position, in.joints, in.weights, bone_offset, bone_count);
-        local_norm = skin_normal(in.normal, in.joints, in.weights, bone_offset, bone_count);
+        local_pos = skin_position(in.position, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+        local_norm = skin_normal(in.normal, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
     }
 
     let world_pos4 = object.model * vec4<f32>(local_pos, 1.0);
     out.world_pos = world_pos4.xyz;
     out.clip_position = camera.view_projection * world_pos4;
     out.world_normal = normalize((object.normal_matrix * vec4<f32>(local_norm, 0.0)).xyz);
-    out.uv = in.uv;
+    out.uv0 = in.uv0;
+    out.uv1 = in.uv1;
+    out.vertex_color = in.color;
     out.instance_color = vec4<f32>(1.0, 1.0, 1.0, 1.0);
     out.instance_emissive = vec4<f32>(0.0, 0.0, 0.0, 0.0);
     out.instance_pbr = vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -184,30 +222,27 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 
-struct InstanceInput {
-    @location(6) m0: vec4<f32>,
-    @location(7) m1: vec4<f32>,
-    @location(8) m2: vec4<f32>,
-    @location(9) m3: vec4<f32>,
-    @location(10) color: vec4<f32>,
-    @location(11) emissive: vec4<f32>,
-    @location(12) pbr: vec4<f32>,
-    @location(13) custom: vec4<f32>,
-};
-
 @vertex
-fn vs_instanced_main(in: VertexInput, inst: InstanceInput) -> VertexOutput {
+fn vs_instanced_main(in: VertexInput, @builtin(instance_index) instance_index: u32) -> VertexOutput {
     var out: VertexOutput;
+    let inst = instances[instance_index];
 
-    let model = mat4x4<f32>(inst.m0, inst.m1, inst.m2, inst.m3);
-    var world_pos4 = model * vec4<f32>(in.position, 1.0);
+    var local_pos = in.position;
+    var local_norm = in.normal;
+    let bone_offset = object.flags.y;
+    let bone_count = object.flags.z;
+    if (bone_count > 0u) {
+        local_pos = skin_position(in.position, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+        local_norm = skin_normal(in.normal, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+    }
+    var world_pos4 = inst.transform * vec4<f32>(local_pos, 1.0);
 
     // Procedural wind vertex displacement if custom.x (amplitude) > 0.0
     let wind_amp = inst.custom.x;
     if (wind_amp > 0.0) {
         let time = env.misc_params.z;
         let wind_freq = max(inst.custom.y, 0.5);
-        let height_factor = pow(clamp(in.uv.y, 0.0, 1.0), 1.5);
+        let height_factor = pow(clamp(in.uv0.y, 0.0, 1.0), 1.5);
         let wave = sin(time * wind_freq * 3.0 + world_pos4.x * 0.4 + world_pos4.z * 0.4);
         world_pos4.x = world_pos4.x + wave * wind_amp * height_factor;
         world_pos4.z = world_pos4.z + cos(time * wind_freq * 2.0 + world_pos4.x * 0.3) * wind_amp * 0.5 * height_factor;
@@ -217,10 +252,12 @@ fn vs_instanced_main(in: VertexInput, inst: InstanceInput) -> VertexOutput {
     out.clip_position = camera.view_projection * world_pos4;
 
     // Normal transform via 3x3 rotational submatrix
-    let normal_mat = mat3x3<f32>(inst.m0.xyz, inst.m1.xyz, inst.m2.xyz);
-    out.world_normal = normalize(normal_mat * in.normal);
+    let normal_mat = mat3x3<f32>(inst.transform[0].xyz, inst.transform[1].xyz, inst.transform[2].xyz);
+    out.world_normal = normalize(normal_mat * local_norm);
 
-    out.uv = in.uv;
+    out.uv0 = in.uv0;
+    out.uv1 = in.uv1;
+    out.vertex_color = in.color;
     out.instance_color = inst.color;
     out.instance_emissive = inst.emissive;
     out.instance_pbr = inst.pbr;
@@ -240,13 +277,14 @@ struct SurfaceInput {
     world_normal: vec3<f32>,
     view_dir: vec3<f32>,
     uv: vec2<f32>,
+    uv1: vec2<f32>,
+    vertex_color: vec4<f32>,
     albedo: vec4<f32>,
     emissive: vec3<f32>,
     roughness: f32,
     metallic: f32,
     reflectance: f32,
     time: f32,
-    sampler_index: u32,
     custom: CustomParams,
     instance_color: vec4<f32>,
     instance_emissive: vec4<f32>,
@@ -335,24 +373,24 @@ fn sample_shadow_layer(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let mat_sampler_idx = material.flags.y;
-    let tex_albedo = sample_texture_with_sampler(mat_tex_0, in.uv, mat_sampler_idx);
-    let tex_mr = sample_texture_with_sampler(mat_tex_2, in.uv, mat_sampler_idx);
-    let tex_ao = sample_texture_with_sampler(mat_tex_3, in.uv, mat_sampler_idx);
-    let tex_emissive = sample_texture_with_sampler(mat_tex_4, in.uv, mat_sampler_idx);
+    let tex_albedo = sample_material_texture(0u, in.uv0);
+    let tex_mr = sample_material_texture(2u, in.uv0);
+    let tex_ao = sample_material_texture(3u, in.uv0);
+    let tex_emissive = sample_material_texture(4u, in.uv0);
 
     var s_in: SurfaceInput;
     s_in.world_pos = in.world_pos;
     s_in.world_normal = normalize(in.world_normal);
     s_in.view_dir = normalize(camera.position.xyz - in.world_pos);
-    s_in.uv = in.uv;
-    s_in.albedo = material.base_color * tex_albedo * in.instance_color;
+    s_in.uv = in.uv0;
+    s_in.uv1 = in.uv1;
+    s_in.vertex_color = in.vertex_color;
+    s_in.albedo = material.base_color * tex_albedo * in.vertex_color * in.instance_color;
     s_in.emissive = material.emissive_color.rgb + tex_emissive.rgb + in.instance_emissive.rgb * in.instance_emissive.w;
     s_in.roughness = clamp((material.pbr_params.x + in.instance_pbr.y) * tex_mr.g, 0.04, 1.0);
     s_in.metallic = clamp(material.pbr_params.y * tex_mr.b + in.instance_pbr.x, 0.0, 1.0);
     s_in.reflectance = material.pbr_params.z;
     s_in.time = env.misc_params.z;
-    s_in.sampler_index = mat_sampler_idx;
     s_in.custom.v0 = material.custom_v0;
     s_in.custom.v1 = material.custom_v1;
     s_in.custom.v2 = material.custom_v2;
@@ -536,4 +574,18 @@ pub fn get_default_realm_3d_shader() -> String {
         galfus_core::shader_effects::EFFECT_SNIPPET_PLACEHOLDER,
         crate::surface_effect::BUILTIN_SURFACE_PASSTHROUGH,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_vertex_attributes_reach_surface_shading() {
+        let source = get_default_realm_3d_shader();
+        assert!(source.contains("@location(3) uv1: vec2<f32>"));
+        assert!(source.contains("@location(5) color: vec4<f32>"));
+        assert!(source.contains("@location(8) joints1: vec4<u32>"));
+        assert!(source.contains("* in.vertex_color * in.instance_color"));
+    }
 }

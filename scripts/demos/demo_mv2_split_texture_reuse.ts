@@ -151,7 +151,6 @@ export async function runDemoMv2(): Promise<void> {
   galfus.realm3dCreateMaterial(REALM_3D, MAT_CUBE_RTT_ID, {
     surfaceType: 'opaque',
     textureSlots: [TARGET_2D_RTT],
-    samplerIndex: 0, // LinearRepeat
     baseColor: [1.0, 1.0, 1.0, 1.0],
     roughness: 0.25,
     metallic: 0.1
@@ -570,7 +569,6 @@ Controls:
             galfus.realm3dCreateMaterial(REALM_3D, MAT_CUBE_RTT_ID, {
               surfaceType: 'opaque',
               textureSlots: [TARGET_2D_RTT],
-              samplerIndex: 0,
               baseColor: tintColor,
               roughness: 0.25,
               metallic: 0.1

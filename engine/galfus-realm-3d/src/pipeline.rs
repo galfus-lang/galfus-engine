@@ -14,6 +14,7 @@ pub struct Pipeline3D {
     pub material_layout: wgpu::BindGroupLayout,
     pub model_layout: wgpu::BindGroupLayout,
     pub refraction_layout: wgpu::BindGroupLayout,
+    pub dummy_instance_buffer: wgpu::Buffer,
     pub dummy_refraction_bg: wgpu::BindGroup,
     pub samplers: galfus_gpu_manager::StandardSamplers,
     pub fallback_white_view: wgpu::TextureView,
@@ -64,66 +65,6 @@ fn create_1x1_texture(
     (texture, view)
 }
 
-pub(crate) fn get_instance_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
-    const ATTRS: &[wgpu::VertexAttribute] = &[
-        // m0 (location 6)
-        wgpu::VertexAttribute {
-            format: wgpu::VertexFormat::Float32x4,
-            offset: 0,
-            shader_location: 6,
-        },
-        // m1 (location 7)
-        wgpu::VertexAttribute {
-            format: wgpu::VertexFormat::Float32x4,
-            offset: 16,
-            shader_location: 7,
-        },
-        // m2 (location 8)
-        wgpu::VertexAttribute {
-            format: wgpu::VertexFormat::Float32x4,
-            offset: 32,
-            shader_location: 8,
-        },
-        // m3 (location 9)
-        wgpu::VertexAttribute {
-            format: wgpu::VertexFormat::Float32x4,
-            offset: 48,
-            shader_location: 9,
-        },
-        // color (location 10)
-        wgpu::VertexAttribute {
-            format: wgpu::VertexFormat::Float32x4,
-            offset: 64,
-            shader_location: 10,
-        },
-        // emissive (location 11)
-        wgpu::VertexAttribute {
-            format: wgpu::VertexFormat::Float32x4,
-            offset: 80,
-            shader_location: 11,
-        },
-        // pbr (location 12)
-        wgpu::VertexAttribute {
-            format: wgpu::VertexFormat::Float32x4,
-            offset: 96,
-            shader_location: 12,
-        },
-        // custom (location 13)
-        wgpu::VertexAttribute {
-            format: wgpu::VertexFormat::Float32x4,
-            offset: 112,
-            shader_location: 13,
-        },
-    ];
-
-    wgpu::VertexBufferLayout {
-        array_stride: std::mem::size_of::<galfus_realm_3d_resources::model::InstanceData3D>()
-            as wgpu::BufferAddress,
-        step_mode: wgpu::VertexStepMode::Instance,
-        attributes: ATTRS,
-    }
-}
-
 fn create_3d_render_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
@@ -152,29 +93,44 @@ fn create_3d_render_pipeline(
                 shader_location: 2,
             },
             wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x4,
+                format: wgpu::VertexFormat::Float32x2,
                 offset: 32,
                 shader_location: 3,
             },
             wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Uint32x4,
-                offset: 48,
+                format: wgpu::VertexFormat::Float32x4,
+                offset: 40,
                 shader_location: 4,
             },
             wgpu::VertexAttribute {
                 format: wgpu::VertexFormat::Float32x4,
-                offset: 64,
+                offset: 56,
                 shader_location: 5,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Uint32x4,
+                offset: 72,
+                shader_location: 6,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x4,
+                offset: 88,
+                shader_location: 7,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Uint32x4,
+                offset: 104,
+                shader_location: 8,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x4,
+                offset: 120,
+                shader_location: 9,
             },
         ],
     };
 
-    let instance_layout = get_instance_buffer_layout();
-    let buffers: &[wgpu::VertexBufferLayout] = if instanced {
-        &[vertex_buffer_layout, instance_layout]
-    } else {
-        std::slice::from_ref(&vertex_buffer_layout)
-    };
+    let buffers = std::slice::from_ref(&vertex_buffer_layout);
     let entry_point = if instanced {
         "vs_instanced_main"
     } else {
@@ -373,16 +329,28 @@ impl Pipeline3D {
         // Group 2: Model
         let model_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Realm3D Model Layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
         });
 
         // Group 3: Refraction (Opaque screen texture + sampler)
@@ -406,6 +374,13 @@ impl Pipeline3D {
                     count: None,
                 },
             ],
+        });
+
+        let dummy_instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Realm3D Dummy Instance Storage Buffer"),
+            size: std::mem::size_of::<galfus_realm_3d_resources::model::InstanceData3D>() as u64,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
         });
 
         let dummy_tex = device.create_texture(&wgpu::TextureDescriptor {
@@ -487,6 +462,7 @@ impl Pipeline3D {
             material_layout,
             model_layout,
             refraction_layout,
+            dummy_instance_buffer,
             dummy_refraction_bg,
             samplers,
             fallback_white_view,

@@ -22,10 +22,14 @@
 typedef struct {
     float pos[3];
     float norm[3];
-    float uv[2];
+    float uv0[2];
+    float uv1[2];
     float tangent[4];
-    uint32_t joints[4];
-    float weights[4];
+    float color[4];
+    uint32_t joints0[4];
+    float weights0[4];
+    uint32_t joints1[4];
+    float weights1[4];
 } Vertex3DRecord;
 
 static const char *ROOM_NAMES[10] = {"Welcome & Engine Overview", "PBR Primitives & Materials",
@@ -196,20 +200,28 @@ static void build_skinned_mesh(Vertex3DRecord **out_verts, size_t *out_vert_coun
             rec->norm[0] = cos_t;
             rec->norm[1] = 0.0f;
             rec->norm[2] = sin_t;
-            rec->uv[0] = u;
-            rec->uv[1] = v;
+            rec->uv0[0] = u;
+            rec->uv0[1] = v;
+            rec->uv1[0] = 0.0f;
+            rec->uv1[1] = 0.0f;
             rec->tangent[0] = 1.0f;
             rec->tangent[1] = 0.0f;
             rec->tangent[2] = 0.0f;
             rec->tangent[3] = 1.0f;
-            rec->joints[0] = (uint32_t)bone_idx;
-            rec->joints[1] = (uint32_t)next_idx;
-            rec->joints[2] = 0;
-            rec->joints[3] = 0;
-            rec->weights[0] = 1.0f - t;
-            rec->weights[1] = t;
-            rec->weights[2] = 0.0f;
-            rec->weights[3] = 0.0f;
+            rec->color[0] = 1.0f;
+            rec->color[1] = 1.0f;
+            rec->color[2] = 1.0f;
+            rec->color[3] = 1.0f;
+            rec->joints0[0] = (uint32_t)bone_idx;
+            rec->joints0[1] = (uint32_t)next_idx;
+            rec->joints0[2] = 0;
+            rec->joints0[3] = 0;
+            rec->weights0[0] = 1.0f - t;
+            rec->weights0[1] = t;
+            rec->weights0[2] = 0.0f;
+            rec->weights0[3] = 0.0f;
+            memset(rec->joints1, 0, sizeof(rec->joints1));
+            memset(rec->weights1, 0, sizeof(rec->weights1));
         }
     }
 
