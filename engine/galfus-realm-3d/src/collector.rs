@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use galfus_realm_3d_resources::frustum::Frustum;
 use galfus_realm_3d_resources::geometry::{Geometry3D, PrimitiveTopology3D};
-use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D};
+use galfus_realm_3d_resources::material::{Material3D, MaterialSide3D, SurfaceType3D};
 use glam::Vec3;
 
 use crate::pipeline::SurfacePipelineState;
@@ -17,6 +17,7 @@ pub struct CollectedDrawItem<'a> {
     pub material_id: u32,
     pub depth: f32,
     pub surface_type: SurfaceType3D,
+    pub side: MaterialSide3D,
     pub model_bg: &'a wgpu::BindGroup,
     pub material_bg: &'a wgpu::BindGroup,
     pub vertex_buffer: &'a wgpu::Buffer,
@@ -92,6 +93,7 @@ impl<'a> DrawCollector<'a> {
                 .unwrap_or(SurfaceType3D::Opaque);
 
             let shader_effect = mat_entry.and_then(|m| m.0.shader_effect.as_deref());
+            let side = mat_entry.map_or_default(|m| m.0.side);
 
             // Euclidean distance squared from camera to model center
             let depth = (model_transform.position - camera_pos).length_squared();
@@ -103,6 +105,7 @@ impl<'a> DrawCollector<'a> {
                 material_id: model.material_id,
                 depth,
                 surface_type,
+                side,
                 model_bg,
                 material_bg,
                 vertex_buffer: v_buf,
@@ -153,6 +156,7 @@ impl<'a> DrawCollector<'a> {
                 .unwrap_or(SurfaceType3D::Opaque);
 
             let shader_effect = mat_entry.and_then(|m| m.0.shader_effect.as_deref());
+            let side = mat_entry.map_or_default(|m| m.0.side);
 
             let depth = if let Some(first) = instances.first() {
                 let p = glam::Vec3::new(
@@ -172,6 +176,7 @@ impl<'a> DrawCollector<'a> {
                 material_id: inst_model.material_id,
                 depth,
                 surface_type,
+                side,
                 model_bg,
                 material_bg,
                 vertex_buffer: v_buf,
@@ -257,6 +262,7 @@ pub fn render_draw_items<'a>(
             item.shader_effect,
             item.topology,
             surface_state,
+            item.side,
             is_instanced,
         );
         if curr_pipe != Some(key) {
@@ -264,6 +270,7 @@ pub fn render_draw_items<'a>(
                 item.shader_effect,
                 item.topology,
                 surface_state,
+                item.side,
                 is_instanced,
             ));
             curr_pipe = Some(key);

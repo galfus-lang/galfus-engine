@@ -211,6 +211,7 @@ impl Realm for Realm3DContext {
                 &self.lights,
                 &self.models,
                 &self.instanced_models,
+                &self.materials,
                 &self.geometries,
                 self.total_time,
             );

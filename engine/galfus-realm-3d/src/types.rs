@@ -312,6 +312,7 @@ pub fn sync_realm_resources<'a>(
             device,
             mat.shader_effect.as_deref(),
             crate::pipeline::SurfacePipelineState::from_surface_type(mat.surface_type),
+            mat.side,
         );
     }
 

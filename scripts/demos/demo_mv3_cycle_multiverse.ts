@@ -162,6 +162,7 @@ export async function runDemoMv3(): Promise<void> {
   galfus.realm3dCreateMaterial(REALM_3D, MAT_CUBE_CYCLE_ID, {
     surfaceType: 'opaque',
     textureSlots: [TARGET_2D_RTT],
+    textureUvSets: ['uv1'],
     baseColor: [1.0, 1.0, 1.0, 1.0],
     roughness: 0.2,
     metallic: 0.1

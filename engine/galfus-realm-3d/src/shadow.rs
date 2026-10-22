@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 use galfus_realm_3d_resources::geometry::{PrimitiveTopology3D, Vertex3D};
+use galfus_realm_3d_resources::material::{Material3D, MaterialSide3D};
 
 /// WGSL shader for the shadow depth pass.
 pub const SHADOW_SHADER: &str = r#"
@@ -115,8 +116,34 @@ fn vs_instanced_main(in: VertexInput, @builtin(instance_index) instance_index: u
 
 /// Dedicated depth-only pipeline for rendering shadow maps.
 pub struct ShadowPipeline3D {
-    pipelines: HashMap<(PrimitiveTopology3D, bool), wgpu::RenderPipeline>,
+    pipelines: HashMap<(PrimitiveTopology3D, MaterialSide3D, bool), wgpu::RenderPipeline>,
     pub vp_layout: wgpu::BindGroupLayout,
+}
+
+#[derive(Clone, Copy)]
+struct ShadowPipelineOptions {
+    topology: PrimitiveTopology3D,
+    side: MaterialSide3D,
+    instanced: bool,
+}
+
+fn effective_side(topology: PrimitiveTopology3D, side: MaterialSide3D) -> MaterialSide3D {
+    if topology.is_triangle() {
+        side
+    } else {
+        MaterialSide3D::Front
+    }
+}
+
+fn shadow_cull_mode(topology: PrimitiveTopology3D, side: MaterialSide3D) -> Option<wgpu::Face> {
+    if !topology.is_triangle() {
+        return None;
+    }
+    match side {
+        MaterialSide3D::Front => Some(wgpu::Face::Back),
+        MaterialSide3D::Back => Some(wgpu::Face::Front),
+        MaterialSide3D::Double => None,
+    }
 }
 
 fn create_shadow_render_pipeline(
@@ -125,11 +152,10 @@ fn create_shadow_render_pipeline(
     shader: &wgpu::ShaderModule,
     vertex_buffer_layout: &wgpu::VertexBufferLayout<'_>,
     depth_stencil: &wgpu::DepthStencilState,
-    topology: PrimitiveTopology3D,
-    instanced: bool,
+    options: ShadowPipelineOptions,
 ) -> wgpu::RenderPipeline {
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some(if instanced {
+        label: Some(if options.instanced {
             "Realm3D Shadow Instanced Render Pipeline"
         } else {
             "Realm3D Shadow Render Pipeline"
@@ -137,7 +163,7 @@ fn create_shadow_render_pipeline(
         layout: Some(layout),
         vertex: wgpu::VertexState {
             module: shader,
-            entry_point: Some(if instanced {
+            entry_point: Some(if options.instanced {
                 "vs_instanced_main"
             } else {
                 "vs_main"
@@ -147,10 +173,13 @@ fn create_shadow_render_pipeline(
         },
         fragment: None,
         primitive: wgpu::PrimitiveState {
-            topology: crate::pipeline::to_wgpu_topology(topology),
-            strip_index_format: topology.is_strip().then_some(wgpu::IndexFormat::Uint32),
+            topology: crate::pipeline::to_wgpu_topology(options.topology),
+            strip_index_format: options
+                .topology
+                .is_strip()
+                .then_some(wgpu::IndexFormat::Uint32),
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: None,
+            cull_mode: shadow_cull_mode(options.topology, options.side),
             polygon_mode: wgpu::PolygonMode::Fill,
             unclipped_depth: false,
             conservative: false,
@@ -254,19 +283,27 @@ impl ShadowPipeline3D {
 
         let mut pipelines = HashMap::new();
         for topology in PrimitiveTopology3D::ALL {
-            for &instanced in &[false, true] {
-                pipelines.insert(
-                    (topology, instanced),
-                    create_shadow_render_pipeline(
-                        device,
-                        &pipeline_layout,
-                        &shader,
-                        &vertex_buffer_layout,
-                        &depth_stencil,
-                        topology,
-                        instanced,
-                    ),
-                );
+            for side in MaterialSide3D::ALL {
+                if effective_side(topology, side) != side {
+                    continue;
+                }
+                for &instanced in &[false, true] {
+                    pipelines.insert(
+                        (topology, side, instanced),
+                        create_shadow_render_pipeline(
+                            device,
+                            &pipeline_layout,
+                            &shader,
+                            &vertex_buffer_layout,
+                            &depth_stencil,
+                            ShadowPipelineOptions {
+                                topology,
+                                side,
+                                instanced,
+                            },
+                        ),
+                    );
+                }
             }
         }
 
@@ -276,9 +313,15 @@ impl ShadowPipeline3D {
         }
     }
 
-    fn pipeline(&self, topology: PrimitiveTopology3D, instanced: bool) -> &wgpu::RenderPipeline {
+    fn pipeline(
+        &self,
+        topology: PrimitiveTopology3D,
+        side: MaterialSide3D,
+        instanced: bool,
+    ) -> &wgpu::RenderPipeline {
+        let side = effective_side(topology, side);
         self.pipelines
-            .get(&(topology, instanced))
+            .get(&(topology, side, instanced))
             .expect("all shadow primitive topologies are precompiled")
     }
 }
@@ -455,6 +498,10 @@ fn render_single_shadow_layer(
     time: f32,
     models: &std::collections::BTreeMap<u32, crate::types::GpuModelEntry>,
     instanced_models: &std::collections::BTreeMap<u32, crate::types::GpuInstancedModelEntry>,
+    materials: &std::collections::BTreeMap<
+        u32,
+        (Material3D, Option<wgpu::Buffer>, Option<wgpu::BindGroup>),
+    >,
     geometries: &std::collections::BTreeMap<
         u32,
         (
@@ -501,7 +548,10 @@ fn render_single_shadow_layer(
         if !shadow_frustum.intersects_aabb(world_aabb.min, world_aabb.max) {
             continue;
         }
-        s_pass.set_pipeline(shadow_pipe.pipeline(geom.topology, false));
+        let side = materials
+            .get(&model.material_id)
+            .map_or_default(|entry| entry.0.side);
+        s_pass.set_pipeline(shadow_pipe.pipeline(geom.topology, side, false));
         s_pass.set_bind_group(1, model_bg, &[]);
         s_pass.set_vertex_buffer(0, v.slice(..));
         s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);
@@ -522,7 +572,10 @@ fn render_single_shadow_layer(
         let Some((geom, Some((v, i, count)))) = geometries.get(&inst_model.geometry_id) else {
             continue;
         };
-        s_pass.set_pipeline(shadow_pipe.pipeline(geom.topology, true));
+        let side = materials
+            .get(&inst_model.material_id)
+            .map_or_default(|entry| entry.0.side);
+        s_pass.set_pipeline(shadow_pipe.pipeline(geom.topology, side, true));
         s_pass.set_bind_group(1, model_bg, &[]);
         s_pass.set_vertex_buffer(0, v.slice(..));
         s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);
@@ -546,6 +599,10 @@ pub fn render_shadow_depth_pass(
     >,
     models: &std::collections::BTreeMap<u32, crate::types::GpuModelEntry>,
     instanced_models: &std::collections::BTreeMap<u32, crate::types::GpuInstancedModelEntry>,
+    materials: &std::collections::BTreeMap<
+        u32,
+        (Material3D, Option<wgpu::Buffer>, Option<wgpu::BindGroup>),
+    >,
     geometries: &std::collections::BTreeMap<
         u32,
         (
@@ -589,6 +646,7 @@ pub fn render_shadow_depth_pass(
                     time,
                     models,
                     instanced_models,
+                    materials,
                     geometries,
                 );
             }
@@ -608,6 +666,7 @@ pub fn render_shadow_depth_pass(
                 time,
                 models,
                 instanced_models,
+                materials,
                 geometries,
             );
             layer_idx += 1;

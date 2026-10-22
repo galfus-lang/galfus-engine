@@ -276,6 +276,8 @@ function pack(vertices: Vertex[]): Uint8Array {
     }
     view.setFloat32(offset + 24, source.uv[0], true);
     view.setFloat32(offset + 28, source.uv[1], true);
+    view.setFloat32(offset + 32, source.uv[0], true);
+    view.setFloat32(offset + 36, source.uv[1], true);
     view.setFloat32(offset + 40, 1, true);
     view.setFloat32(offset + 52, 1, true);
     for (let n = 0; n < 4; n++) view.setFloat32(offset + 56 + n * 4, 1, true);

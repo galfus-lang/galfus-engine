@@ -22,7 +22,9 @@ pub use environment::{BloomConfig3D, Environment3DUniform, EnvironmentRealm3D, F
 pub use frustum::Frustum;
 pub use geometry::{Geometry3D, PrimitiveTopology3D, Vertex3D};
 pub use light::{Light3D, Light3DUniform, LightKind3D};
-pub use material::{Material3D, Material3DUniform, SurfaceType3D, TextureSampler3D};
+pub use material::{
+    Material3D, Material3DUniform, MaterialSide3D, SurfaceType3D, TextureSampler3D, TextureUvSet3D,
+};
 pub use model::{InstanceData3D, InstancedModel3D, Model3D, Model3DUniform};
 pub use particle::{
     EmissionShape3D, Particle3D, Particle3DInstance, ParticleEmitter3D, ParticleEmitterState3D,

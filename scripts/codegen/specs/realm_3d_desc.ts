@@ -14,6 +14,18 @@ export const realm3dDescriptors: DescSpec[] = [
     variants: [{ ref: 'TextureSampler3D' }, 'null']
   },
   {
+    kind: 'enum',
+    name: 'TextureUvSet3D',
+    doc: 'Canonical vertex texture-coordinate set selected for a 3D material texture slot.',
+    values: ['uv0', 'uv1']
+  },
+  {
+    kind: 'enum',
+    name: 'MaterialSide3D',
+    doc: 'Triangle faces rendered by a 3D material.',
+    values: ['front', 'back', 'double']
+  },
+  {
     kind: 'object',
     name: 'CameraLookAt3DDesc',
     doc: 'World-space target and preferred up direction used to derive a 3D camera view.',
@@ -72,6 +84,11 @@ export const realm3dDescriptors: DescSpec[] = [
         optional: true,
         doc: 'Alpha threshold for masked surfaces. Defaults to 0.5.'
       },
+      side: {
+        type: { ref: 'MaterialSide3D' },
+        optional: true,
+        doc: 'Triangle faces to render. Defaults to front.'
+      },
       baseColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       emissiveColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       roughness: { type: 'number', optional: true },
@@ -81,6 +98,11 @@ export const realm3dDescriptors: DescSpec[] = [
       refractionDistortion: { type: 'number', optional: true },
       albedoTextureId: { type: 'number', optional: true },
       normalTextureId: { type: 'number', optional: true },
+      normalScale: {
+        type: 'number',
+        optional: true,
+        doc: 'Tangent-space normal map strength. Defaults to 1.0.'
+      },
       metallicRoughnessTextureId: { type: 'number', optional: true },
       occlusionTextureId: { type: 'number', optional: true },
       emissiveTextureId: { type: 'number', optional: true },
@@ -89,6 +111,11 @@ export const realm3dDescriptors: DescSpec[] = [
         type: { array: { ref: 'TextureSamplerSelection3D' } },
         optional: true,
         doc: 'Per-slot sampler presets. Omitted or null slots use linearRepeat.'
+      },
+      textureUvSets: {
+        type: { array: { ref: 'TextureUvSet3D' } },
+        optional: true,
+        doc: 'Per-slot canonical UV sets. Omitted entries use uv0.'
       },
       shaderEffect: { type: 'string', optional: true },
       customParams: {

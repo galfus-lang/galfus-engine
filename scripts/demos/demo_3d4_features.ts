@@ -183,6 +183,7 @@ Showcasing:
   });
   galfus.realm3dCreateMaterial(REALM_3D, MAT_CAPSULE, {
     surfaceType: 'transparent',
+    side: 'double',
     baseColor: [0.15, 0.75, 0.95, 0.58],
     metallic: 0.6,
     roughness: 0.25

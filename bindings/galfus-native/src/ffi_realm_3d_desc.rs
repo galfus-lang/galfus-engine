@@ -6,7 +6,9 @@ use galfus_realm_3d_resources::environment::{
     SsaoConfig3D,
 };
 use galfus_realm_3d_resources::light::Light3D;
-use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D, TextureSampler3D};
+use galfus_realm_3d_resources::material::{
+    Material3D, MaterialSide3D, SurfaceType3D, TextureSampler3D, TextureUvSet3D,
+};
 use galfus_realm_3d_resources::model::{InstancedModel3D, Model3D};
 use galfus_realm_3d_resources::particle::{EmissionShape3D, ParticleEmitter3D};
 use galfus_realm_3d_resources::transform::Transform3D;
@@ -127,6 +129,7 @@ impl From<Camera3DDesc> for Camera3D {
 pub struct Material3DDesc {
     pub surface_type: Option<String>,
     pub alpha_cutoff: Option<f32>,
+    pub side: Option<MaterialSide3D>,
     pub base_color: Option<[f32; 4]>,
     pub emissive_color: Option<[f32; 4]>,
     pub roughness: Option<f32>,
@@ -136,12 +139,14 @@ pub struct Material3DDesc {
     pub refraction_distortion: Option<f32>,
     pub albedo_texture_id: Option<u32>,
     pub normal_texture_id: Option<u32>,
+    pub normal_scale: Option<f32>,
     pub metallic_roughness_texture_id: Option<u32>,
     pub occlusion_texture_id: Option<u32>,
     pub emissive_texture_id: Option<u32>,
     pub texture_slots: Option<Vec<Option<u32>>>,
     /// Optional sampler overrides for individual texture slots. `null` uses the default sampler.
     pub texture_samplers: Option<Vec<Option<TextureSampler3D>>>,
+    pub texture_uv_sets: Option<Vec<TextureUvSet3D>>,
     pub shader_effect: Option<String>,
     pub custom_params: Option<Vec<[f32; 4]>>,
 }
@@ -175,9 +180,16 @@ impl From<Material3DDesc> for Material3D {
                 texture_samplers[idx] = sampler;
             }
         }
+        let mut texture_uv_sets = [TextureUvSet3D::Uv0; 8];
+        if let Some(uv_sets) = d.texture_uv_sets {
+            for (idx, uv_set) in uv_sets.into_iter().take(8).enumerate() {
+                texture_uv_sets[idx] = uv_set;
+            }
+        }
         Material3D {
             surface_type,
             alpha_cutoff: d.alpha_cutoff.unwrap_or(0.5),
+            side: d.side.unwrap_or_default(),
             base_color: d
                 .base_color
                 .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
@@ -193,11 +205,13 @@ impl From<Material3DDesc> for Material3D {
             refraction_distortion: d.refraction_distortion.unwrap_or(0.05),
             albedo_texture_id: d.albedo_texture_id,
             normal_texture_id: d.normal_texture_id,
+            normal_scale: d.normal_scale.unwrap_or(1.0),
             metallic_roughness_texture_id: d.metallic_roughness_texture_id,
             occlusion_texture_id: d.occlusion_texture_id,
             emissive_texture_id: d.emissive_texture_id,
             texture_slots,
             texture_samplers,
+            texture_uv_sets,
             shader_effect: d.shader_effect,
             custom_params,
             label: None,

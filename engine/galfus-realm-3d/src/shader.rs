@@ -90,8 +90,16 @@ fn material_sampler_index(slot: u32) -> u32 {
     return (material.flags.y >> (slot * 2u)) & 0x3u;
 }
 
-fn sample_material_texture(slot: u32, uv: vec2<f32>) -> vec4<f32> {
+fn material_texture_uv(slot: u32, uv0: vec2<f32>, uv1: vec2<f32>) -> vec2<f32> {
+    if (((material.flags.z >> slot) & 1u) == 1u) {
+        return uv1;
+    }
+    return uv0;
+}
+
+fn sample_material_texture(slot: u32, uv0: vec2<f32>, uv1: vec2<f32>) -> vec4<f32> {
     let sampler_idx = material_sampler_index(slot);
+    let uv = material_texture_uv(slot, uv0, uv1);
     switch (slot) {
         case 0u: { return sample_texture_with_sampler(mat_tex_0, uv, sampler_idx); }
         case 1u: { return sample_texture_with_sampler(mat_tex_1, uv, sampler_idx); }
@@ -134,13 +142,14 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) world_pos: vec3<f32>,
     @location(1) world_normal: vec3<f32>,
-    @location(2) uv0: vec2<f32>,
-    @location(3) uv1: vec2<f32>,
-    @location(4) vertex_color: vec4<f32>,
-    @location(5) instance_color: vec4<f32>,
-    @location(6) instance_emissive: vec4<f32>,
-    @location(7) instance_pbr: vec4<f32>,
-    @location(8) instance_custom: vec4<f32>,
+    @location(2) world_tangent: vec4<f32>,
+    @location(3) uv0: vec2<f32>,
+    @location(4) uv1: vec2<f32>,
+    @location(5) vertex_color: vec4<f32>,
+    @location(6) instance_color: vec4<f32>,
+    @location(7) instance_emissive: vec4<f32>,
+    @location(8) instance_pbr: vec4<f32>,
+    @location(9) instance_custom: vec4<f32>,
 };
 
 fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
@@ -175,7 +184,7 @@ fn skin_position(position: vec3<f32>, joints0: vec4<u32>, weights0: vec4<f32>, j
     return skinned.xyz;
 }
 
-fn skin_normal(normal: vec3<f32>, joints0: vec4<u32>, weights0: vec4<f32>, joints1: vec4<u32>, weights1: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
+fn skin_direction(direction: vec3<f32>, joints0: vec4<u32>, weights0: vec4<f32>, joints1: vec4<u32>, weights1: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
     let m0 = bone_at(joints0.x, bone_offset, bone_count);
     let m1 = bone_at(joints0.y, bone_offset, bone_count);
     let m2 = bone_at(joints0.z, bone_offset, bone_count);
@@ -184,15 +193,32 @@ fn skin_normal(normal: vec3<f32>, joints0: vec4<u32>, weights0: vec4<f32>, joint
     let m5 = bone_at(joints1.y, bone_offset, bone_count);
     let m6 = bone_at(joints1.z, bone_offset, bone_count);
     let m7 = bone_at(joints1.w, bone_offset, bone_count);
-    let skinned = (m0 * vec4<f32>(normal, 0.0)) * weights0.x
-                + (m1 * vec4<f32>(normal, 0.0)) * weights0.y
-                + (m2 * vec4<f32>(normal, 0.0)) * weights0.z
-                + (m3 * vec4<f32>(normal, 0.0)) * weights0.w
-                + (m4 * vec4<f32>(normal, 0.0)) * weights1.x
-                + (m5 * vec4<f32>(normal, 0.0)) * weights1.y
-                + (m6 * vec4<f32>(normal, 0.0)) * weights1.z
-                + (m7 * vec4<f32>(normal, 0.0)) * weights1.w;
+    let skinned = (m0 * vec4<f32>(direction, 0.0)) * weights0.x
+                + (m1 * vec4<f32>(direction, 0.0)) * weights0.y
+                + (m2 * vec4<f32>(direction, 0.0)) * weights0.z
+                + (m3 * vec4<f32>(direction, 0.0)) * weights0.w
+                + (m4 * vec4<f32>(direction, 0.0)) * weights1.x
+                + (m5 * vec4<f32>(direction, 0.0)) * weights1.y
+                + (m6 * vec4<f32>(direction, 0.0)) * weights1.z
+                + (m7 * vec4<f32>(direction, 0.0)) * weights1.w;
     return normalize(skinned.xyz);
+}
+
+fn inverse_transpose_mat3(matrix: mat3x3<f32>) -> mat3x3<f32> {
+    let column0 = matrix[0];
+    let column1 = matrix[1];
+    let column2 = matrix[2];
+    let cofactor0 = cross(column1, column2);
+    let cofactor1 = cross(column2, column0);
+    let cofactor2 = cross(column0, column1);
+    let determinant = dot(column0, cofactor0);
+    let determinant_sign = select(-1.0, 1.0, determinant >= 0.0);
+    let safe_determinant = determinant_sign * max(abs(determinant), 1e-6);
+    return mat3x3<f32>(
+        cofactor0 / safe_determinant,
+        cofactor1 / safe_determinant,
+        cofactor2 / safe_determinant,
+    );
 }
 
 @vertex
@@ -201,17 +227,20 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
     var local_pos = in.position;
     var local_norm = in.normal;
+    var local_tangent = in.tangent.xyz;
     let bone_offset = object.flags.y;
     let bone_count = object.flags.z;
     if (bone_count > 0u) {
         local_pos = skin_position(in.position, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
-        local_norm = skin_normal(in.normal, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+        local_norm = skin_direction(in.normal, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+        local_tangent = skin_direction(in.tangent.xyz, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
     }
 
     let world_pos4 = object.model * vec4<f32>(local_pos, 1.0);
     out.world_pos = world_pos4.xyz;
     out.clip_position = camera.view_projection * world_pos4;
     out.world_normal = normalize((object.normal_matrix * vec4<f32>(local_norm, 0.0)).xyz);
+    out.world_tangent = vec4<f32>(normalize((object.model * vec4<f32>(local_tangent, 0.0)).xyz), in.tangent.w);
     out.uv0 = in.uv0;
     out.uv1 = in.uv1;
     out.vertex_color = in.color;
@@ -229,11 +258,13 @@ fn vs_instanced_main(in: VertexInput, @builtin(instance_index) instance_index: u
 
     var local_pos = in.position;
     var local_norm = in.normal;
+    var local_tangent = in.tangent.xyz;
     let bone_offset = object.flags.y;
     let bone_count = object.flags.z;
     if (bone_count > 0u) {
         local_pos = skin_position(in.position, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
-        local_norm = skin_normal(in.normal, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+        local_norm = skin_direction(in.normal, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+        local_tangent = skin_direction(in.tangent.xyz, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
     }
     var world_pos4 = inst.transform * vec4<f32>(local_pos, 1.0);
 
@@ -251,9 +282,11 @@ fn vs_instanced_main(in: VertexInput, @builtin(instance_index) instance_index: u
     out.world_pos = world_pos4.xyz;
     out.clip_position = camera.view_projection * world_pos4;
 
-    // Normal transform via 3x3 rotational submatrix
-    let normal_mat = mat3x3<f32>(inst.transform[0].xyz, inst.transform[1].xyz, inst.transform[2].xyz);
+    // Tangents use the model linear transform; normals use its inverse transpose.
+    let instance_mat = mat3x3<f32>(inst.transform[0].xyz, inst.transform[1].xyz, inst.transform[2].xyz);
+    let normal_mat = inverse_transpose_mat3(instance_mat);
     out.world_normal = normalize(normal_mat * local_norm);
+    out.world_tangent = vec4<f32>(normalize(instance_mat * local_tangent), in.tangent.w);
 
     out.uv0 = in.uv0;
     out.uv1 = in.uv1;
@@ -372,15 +405,29 @@ fn sample_shadow_layer(
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let tex_albedo = sample_material_texture(0u, in.uv0);
-    let tex_mr = sample_material_texture(2u, in.uv0);
-    let tex_ao = sample_material_texture(3u, in.uv0);
-    let tex_emissive = sample_material_texture(4u, in.uv0);
+fn fs_main(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
+    let tex_albedo = sample_material_texture(0u, in.uv0, in.uv1);
+    let tex_mr = sample_material_texture(2u, in.uv0, in.uv1);
+    let tex_ao = sample_material_texture(3u, in.uv0, in.uv1);
+    let tex_emissive = sample_material_texture(4u, in.uv0, in.uv1);
 
     var s_in: SurfaceInput;
     s_in.world_pos = in.world_pos;
-    s_in.world_normal = normalize(in.world_normal);
+    let face_direction = select(-1.0, 1.0, front_facing);
+    var world_normal = normalize(in.world_normal) * face_direction;
+    if ((material.flags.x & (1u << 5u)) != 0u) {
+        let sampled_normal = sample_material_texture(1u, in.uv0, in.uv1).xyz * 2.0 - vec3<f32>(1.0);
+        let tangent = normalize(in.world_tangent.xyz - world_normal * dot(world_normal, in.world_tangent.xyz));
+        let bitangent = normalize(cross(world_normal, tangent)) * in.world_tangent.w;
+        let tangent_normal = vec3<f32>(
+            sampled_normal.x * material.refraction_params.z,
+            sampled_normal.y * material.refraction_params.z,
+            sampled_normal.z,
+        );
+        world_normal = normalize(mat3x3<f32>(tangent, bitangent, world_normal) * tangent_normal);
+    }
+
+    s_in.world_normal = world_normal;
     s_in.view_dir = normalize(camera.position.xyz - in.world_pos);
     s_in.uv = in.uv0;
     s_in.uv1 = in.uv1;
@@ -595,9 +642,28 @@ mod tests {
     #[test]
     fn canonical_vertex_attributes_reach_surface_shading() {
         let source = get_default_realm_3d_shader();
-        assert!(source.contains("@location(3) uv1: vec2<f32>"));
+        assert!(source.contains("@location(4) uv1: vec2<f32>"));
+        assert!(source.contains("@location(2) world_tangent: vec4<f32>"));
         assert!(source.contains("@location(5) color: vec4<f32>"));
         assert!(source.contains("@location(8) joints1: vec4<u32>"));
         assert!(source.contains("* in.vertex_color * in.instance_color"));
+    }
+
+    #[test]
+    fn material_texture_slots_select_uv_sets_internally() {
+        assert!(REALM_3D_SHADER.contains("(material.flags.z >> slot) & 1u"));
+        assert!(REALM_3D_SHADER.contains("return uv1;"));
+        assert!(REALM_3D_SHADER.contains("sample_material_texture(0u, in.uv0, in.uv1)"));
+    }
+
+    #[test]
+    fn normal_maps_use_tangent_space_and_face_orientation() {
+        assert!(REALM_3D_SHADER.contains("skin_direction(in.tangent.xyz"));
+        assert!(REALM_3D_SHADER.contains("out.world_tangent"));
+        assert!(REALM_3D_SHADER.contains("inverse_transpose_mat3(instance_mat)"));
+        assert!(REALM_3D_SHADER.contains("sample_material_texture(1u, in.uv0, in.uv1)"));
+        assert!(REALM_3D_SHADER.contains("cross(world_normal, tangent)"));
+        assert!(REALM_3D_SHADER.contains("material.refraction_params.z"));
+        assert!(REALM_3D_SHADER.contains("@builtin(front_facing) front_facing: bool"));
     }
 }
