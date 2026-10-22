@@ -1,5 +1,4 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
-import { createPrimitiveGeometry } from './geometry_3d.ts';
 import type { Transform3D } from '../../sdk/typescript/galfus.ts';
 import { extractKey, eulerToQuat, quatFromLookAt } from './utils.ts';
 
@@ -209,10 +208,7 @@ export async function runDemo3d8(): Promise<void> {
   });
 
   // Ground plane
-  createPrimitiveGeometry(galfus, REALM_3D, GEOM_GROUND_ID, {
-    primitive: 'plane',
-    size: 70.0
-  });
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_GROUND_ID, 70.0, 70.0);
   galfus.realm3dCreateMaterial(REALM_3D, MAT_GROUND_ID, {
     surfaceType: 'opaque',
     baseColor: [0.08, 0.09, 0.12, 1.0],
@@ -238,11 +234,7 @@ export async function runDemo3d8(): Promise<void> {
   );
 
   // Central Obelisk / Pillar
-  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PILLAR_ID, {
-    primitive: 'cylinder',
-    radius: 0.6,
-    size: 4.0
-  });
+  galfus.realm3dCreateCylinder(REALM_3D, GEOM_PILLAR_ID, 0.6, 4.0, 32);
   galfus.realm3dCreateMaterial(REALM_3D, MAT_PILLAR_ID, {
     surfaceType: 'opaque',
     baseColor: [0.15, 0.16, 0.22, 1.0],
@@ -268,10 +260,7 @@ export async function runDemo3d8(): Promise<void> {
   );
 
   // Instanced Blade / Crystal Geometry (slender pyramid)
-  createPrimitiveGeometry(galfus, REALM_3D, GEOM_CRYSTAL_ID, {
-    primitive: 'pyramid',
-    size: 1.0
-  });
+  galfus.realm3dCreatePyramid(REALM_3D, GEOM_CRYSTAL_ID, 1.0, 1.0, 1.0);
 
   // Instanced Material with Custom WGSL Shader Effect
   galfus.realm3dCreateMaterial(REALM_3D, MAT_CRYSTAL_ID, {

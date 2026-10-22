@@ -1,7 +1,6 @@
 /** Demo 3D-9 - Material sides and tangent-space normal mapping. */
 
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
-import { createPrimitiveGeometry } from './geometry_3d.ts';
 import { extractKey, quatFromLookAt } from './utils.ts';
 
 const WINDOW_ID = 1;
@@ -129,7 +128,7 @@ export async function runDemo3d9(): Promise<void> {
   );
 
   createPanelGeometry(galfus);
-  createPrimitiveGeometry(galfus, REALM_3D, GROUND_GEOMETRY_ID, { primitive: 'plane', size: 18 });
+  galfus.realm3dCreatePlane(REALM_3D, GROUND_GEOMETRY_ID, 18, 18);
 
   const normalMaterial = (
     side: 'front' | 'back' | 'double',

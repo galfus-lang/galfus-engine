@@ -1028,6 +1028,134 @@ pub fn realm_3d_create_geometry(
     })
 }
 
+#[napi(js_name = "realm3dCreateCube")]
+pub fn realm_3d_create_cube(realm_id: u32, geometry_id: u32, size: f32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_cube(
+        realm_id,
+        geometry_id,
+        size,
+    ))
+}
+
+#[napi(js_name = "realm3dCreatePlane")]
+pub fn realm_3d_create_plane(
+    realm_id: u32,
+    geometry_id: u32,
+    width: f32,
+    depth: f32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_plane(
+        realm_id,
+        geometry_id,
+        width,
+        depth,
+    ))
+}
+
+#[napi(js_name = "realm3dCreateQuad")]
+pub fn realm_3d_create_quad(
+    realm_id: u32,
+    geometry_id: u32,
+    width: f32,
+    height: f32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_quad(
+        realm_id,
+        geometry_id,
+        width,
+        height,
+    ))
+}
+
+#[napi(js_name = "realm3dCreateSphere")]
+pub fn realm_3d_create_sphere(
+    realm_id: u32,
+    geometry_id: u32,
+    radius: f32,
+    rings: u32,
+    sectors: u32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_sphere(
+        realm_id,
+        geometry_id,
+        radius,
+        rings,
+        sectors,
+    ))
+}
+
+#[napi(js_name = "realm3dCreateCylinder")]
+pub fn realm_3d_create_cylinder(
+    realm_id: u32,
+    geometry_id: u32,
+    radius: f32,
+    height: f32,
+    sectors: u32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_cylinder(
+        realm_id,
+        geometry_id,
+        radius,
+        height,
+        sectors,
+    ))
+}
+
+#[napi(js_name = "realm3dCreateCapsule")]
+pub fn realm_3d_create_capsule(
+    realm_id: u32,
+    geometry_id: u32,
+    radius: f32,
+    cylinder_height: f32,
+    rings: u32,
+    sectors: u32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_capsule(
+        realm_id,
+        geometry_id,
+        radius,
+        cylinder_height,
+        rings,
+        sectors,
+    ))
+}
+
+#[napi(js_name = "realm3dCreatePyramid")]
+pub fn realm_3d_create_pyramid(
+    realm_id: u32,
+    geometry_id: u32,
+    width: f32,
+    depth: f32,
+    height: f32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_pyramid(
+        realm_id,
+        geometry_id,
+        width,
+        depth,
+        height,
+    ))
+}
+
+#[napi(js_name = "realm3dCreateTorus")]
+pub fn realm_3d_create_torus(
+    realm_id: u32,
+    geometry_id: u32,
+    major_radius: f32,
+    minor_radius: f32,
+    major_segments: u32,
+    minor_segments: u32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_torus(
+        realm_id,
+        geometry_id,
+        major_radius,
+        minor_radius,
+        major_segments,
+        minor_segments,
+    ))
+}
+
 #[napi(js_name = "realm3dCreateMaterial")]
 pub fn realm_3d_create_material(
     env: Env,

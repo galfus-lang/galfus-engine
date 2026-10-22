@@ -353,12 +353,12 @@ impl Geometry3D {
                 let next = (r + 1) * (sectors + 1) + s;
 
                 indices.push(cur);
-                indices.push(cur + 1);
                 indices.push(next);
+                indices.push(cur + 1);
 
                 indices.push(cur + 1);
-                indices.push(next + 1);
                 indices.push(next);
+                indices.push(next + 1);
             }
         }
 
@@ -401,6 +401,30 @@ impl Geometry3D {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_outward_winding(geometry: &Geometry3D) {
+        let (triangles, _) = geometry.indices.as_chunks::<3>();
+        for triangle in triangles {
+            let vertices = [
+                geometry.vertices[triangle[0] as usize],
+                geometry.vertices[triangle[1] as usize],
+                geometry.vertices[triangle[2] as usize],
+            ];
+            let positions = vertices.map(|vertex| glam::Vec3::from(vertex.position));
+            let face_normal = (positions[1] - positions[0]).cross(positions[2] - positions[0]);
+            if face_normal.length_squared() <= f32::EPSILON {
+                continue;
+            }
+            let vertex_normal = vertices
+                .map(|vertex| glam::Vec3::from(vertex.normal))
+                .into_iter()
+                .sum::<glam::Vec3>();
+            assert!(
+                face_normal.dot(vertex_normal) > 0.0,
+                "triangle {triangle:?} has winding opposite to its vertex normal"
+            );
+        }
+    }
 
     #[test]
     fn canonical_layout_and_defaults_are_stable() {
@@ -519,5 +543,21 @@ mod tests {
         assert!(!tor.indices.is_empty());
         assert!(tor.aabb.max.x > 3.9);
         assert!(tor.aabb.min.x < -3.9);
+    }
+
+    #[test]
+    fn primitive_face_winding_matches_vertex_normals() {
+        for geometry in [
+            Geometry3D::cube(2.0),
+            Geometry3D::plane(2.0, 2.0),
+            Geometry3D::quad(2.0, 2.0),
+            Geometry3D::sphere(1.0, 8, 16),
+            Geometry3D::cylinder(1.0, 2.0, 16),
+            Geometry3D::capsule(1.0, 2.0, 4, 16),
+            Geometry3D::pyramid(2.0, 2.0, 3.0),
+            Geometry3D::torus(3.0, 1.0, 16, 8),
+        ] {
+            assert_outward_winding(&geometry);
+        }
     }
 }

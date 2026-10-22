@@ -553,7 +553,8 @@ fn fs_main(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @loca
         }
     }
 
-    let ambient = albedo.rgb * env.ambient_color.rgb * env.ambient_color.a * tex_ao.r * in.instance_pbr.w;
+    let occlusion = mix(1.0, tex_ao.r, material.refraction_params.w);
+    let ambient = albedo.rgb * env.ambient_color.rgb * env.ambient_color.a * occlusion * in.instance_pbr.w;
     var final_color = ambient + direct_light + s_out.emissive;
 
     // Refraction transmission for glass, water, crystals
@@ -665,5 +666,11 @@ mod tests {
         assert!(REALM_3D_SHADER.contains("cross(world_normal, tangent)"));
         assert!(REALM_3D_SHADER.contains("material.refraction_params.z"));
         assert!(REALM_3D_SHADER.contains("@builtin(front_facing) front_facing: bool"));
+    }
+
+    #[test]
+    fn occlusion_strength_only_modulates_ambient_lighting() {
+        assert!(REALM_3D_SHADER.contains("mix(1.0, tex_ao.r, material.refraction_params.w)"));
+        assert!(REALM_3D_SHADER.contains("* occlusion * in.instance_pbr.w"));
     }
 }

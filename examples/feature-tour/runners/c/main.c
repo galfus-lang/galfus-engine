@@ -32,7 +32,7 @@ typedef struct {
     float weights1[4];
 } Vertex3DRecord;
 
-/* Tour-only host helper. The renderer API receives only canonical binary geometry. */
+/* Tour shorthand that delegates primitive construction to the renderer. */
 static int32_t create_demo_primitive_geometry(uint32_t realm_id, uint32_t geometry_id,
                                               const char *description) {
     float size = 1.0f;
@@ -40,32 +40,34 @@ static int32_t create_demo_primitive_geometry(uint32_t realm_id, uint32_t geomet
     const char *radius_key = strstr(description, "\"radius\":");
     if (size_key)
         sscanf(size_key + 7, "%f", &size);
-    else if (radius_key)
-        sscanf(radius_key + 9, "%f", &size);
+    float radius = size;
+    if (radius_key)
+        sscanf(radius_key + 9, "%f", &radius);
 
-    const float h = size * 0.5f;
-    const bool horizontal = strstr(description, "\"plane\"") != NULL;
-    Vertex3DRecord vertices[4] = {0};
-    const float positions[4][3] = {{-h, 0.0f, h}, {h, 0.0f, h}, {h, 0.0f, -h}, {-h, 0.0f, -h}};
-    const float vertical_positions[4][3] = {
-        {-h, -h, 0.0f}, {h, -h, 0.0f}, {h, h, 0.0f}, {-h, h, 0.0f}};
-    const uint32_t indices[] = {0, 1, 2, 0, 2, 3};
-    for (size_t i = 0; i < 4; ++i) {
-        memcpy(vertices[i].pos, horizontal ? positions[i] : vertical_positions[i],
-               sizeof(vertices[i].pos));
-        vertices[i].norm[horizontal ? 1 : 2] = 1.0f;
-        vertices[i].uv0[0] = (i == 1 || i == 2) ? 1.0f : 0.0f;
-        vertices[i].uv0[1] = (i < 2) ? 1.0f : 0.0f;
-        vertices[i].tangent[0] = 1.0f;
-        vertices[i].tangent[3] = 1.0f;
-        for (size_t c = 0; c < 4; ++c)
-            vertices[i].color[c] = 1.0f;
-    }
-    return galfus_realm_3d_create_geometry(realm_id, geometry_id, 3, (const uint8_t *)vertices,
-                                           sizeof(vertices), indices, 6);
+    uint32_t segments = 24;
+    const char *segments_key = strstr(description, "\"subdivisions\":");
+    if (segments_key)
+        sscanf(segments_key + 15, "%u", &segments);
+
+    if (strstr(description, "\"cube\""))
+        return galfus_realm_3d_create_cube(realm_id, geometry_id, size);
+    if (strstr(description, "\"plane\""))
+        return galfus_realm_3d_create_plane(realm_id, geometry_id, size, size);
+    if (strstr(description, "\"quad\""))
+        return galfus_realm_3d_create_quad(realm_id, geometry_id, size, size);
+    if (strstr(description, "\"sphere\""))
+        return galfus_realm_3d_create_sphere(realm_id, geometry_id, radius, segments / 2, segments);
+    if (strstr(description, "\"cylinder\""))
+        return galfus_realm_3d_create_cylinder(realm_id, geometry_id, radius, size, segments);
+    if (strstr(description, "\"pyramid\""))
+        return galfus_realm_3d_create_pyramid(realm_id, geometry_id, size, size, size);
+    if (strstr(description, "\"torus\""))
+        return galfus_realm_3d_create_torus(realm_id, geometry_id, radius, radius * 0.3f, segments,
+                                            segments / 2);
+    return -1;
 }
 
-/* Local primitive descriptions are never sent to Galfus. */
+/* Local descriptions select a Galfus primitive; they never construct vertex data. */
 #define galfus_realm_3d_create_geometry(realm_id, geometry_id, description)                        \
     create_demo_primitive_geometry((realm_id), (geometry_id), (description))
 

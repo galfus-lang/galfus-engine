@@ -143,6 +143,9 @@ pub struct Material3D {
     pub metallic_roughness_texture_id: Option<u32>,
     /// Optional logical texture ID for ambient occlusion map (Slot 3).
     pub occlusion_texture_id: Option<u32>,
+    /// Ambient occlusion texture influence `0.0` (disabled) to `1.0` (full effect).
+    #[serde(default = "default_occlusion_strength")]
+    pub occlusion_strength: f32,
     /// Optional logical texture ID for emissive glow map (Slot 4).
     pub emissive_texture_id: Option<u32>,
     /// Universal 8-slot texture array `[Slot 0 .. Slot 7]`.
@@ -189,6 +192,10 @@ fn default_normal_scale() -> f32 {
     1.0
 }
 
+fn default_occlusion_strength() -> f32 {
+    1.0
+}
+
 fn default_custom_params() -> [Vec4; 4] {
     [Vec4::ZERO; 4]
 }
@@ -212,6 +219,7 @@ impl Default for Material3D {
             normal_scale: default_normal_scale(),
             metallic_roughness_texture_id: None,
             occlusion_texture_id: None,
+            occlusion_strength: default_occlusion_strength(),
             emissive_texture_id: None,
             texture_slots: [None; 8],
             texture_samplers: [None; 8],
@@ -316,7 +324,7 @@ impl Material3D {
                 self.refraction_index,
                 self.refraction_distortion,
                 self.normal_scale,
-                0.0,
+                self.occlusion_strength.clamp(0.0, 1.0),
             ),
             custom_v0: self.custom_params[0],
             custom_v1: self.custom_params[1],
@@ -338,7 +346,7 @@ pub struct Material3DUniform {
     pub pbr_params: Vec4,
     /// Surface flags (`x`), eight 2-bit sampler selectors (`y`), and eight UV-set selectors (`z`).
     pub flags: UVec4,
-    /// Refraction and normal-map parameters: `[index_of_refraction, distortion_strength, normal_scale, 0.0]`.
+    /// Refraction and texture parameters: `[index_of_refraction, distortion_strength, normal_scale, occlusion_strength]`.
     pub refraction_params: Vec4,
     /// Custom parameter vectors v0, v1, v2, v3 (64 bytes).
     pub custom_v0: Vec4,
@@ -430,5 +438,22 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(material.build_uniform().refraction_params.z, 0.35);
+    }
+
+    #[test]
+    fn occlusion_strength_defaults_to_one_and_is_clamped_in_the_uniform() {
+        assert_eq!(Material3D::default().occlusion_strength, 1.0);
+
+        let material = Material3D {
+            occlusion_strength: -1.0,
+            ..Default::default()
+        };
+        assert_eq!(material.build_uniform().refraction_params.w, 0.0);
+
+        let material = Material3D {
+            occlusion_strength: 2.0,
+            ..Default::default()
+        };
+        assert_eq!(material.build_uniform().refraction_params.w, 1.0);
     }
 }

@@ -9,7 +9,6 @@
  */
 
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
-import { createPrimitiveGeometry } from './geometry_3d.ts';
 import { extractKey, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
@@ -27,6 +26,25 @@ const GEOM_ORB = 203;
 
 const LIGHT_POINT = 301;
 const LIGHT_SUN = 302;
+const AO_TEXTURE_ID = 401;
+
+function createOcclusionTexture(size: number): Uint8Array {
+  const pixels = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / (size - 1) - 0.5;
+      const v = y / (size - 1) - 0.5;
+      const radial = Math.min(Math.sqrt(u * u + v * v) * 1.8, 1.0);
+      const value = Math.round((0.32 + radial * 0.68) * 255);
+      const offset = (y * size + x) * 4;
+      pixels[offset] = value;
+      pixels[offset + 1] = value;
+      pixels[offset + 2] = value;
+      pixels[offset + 3] = 255;
+    }
+  }
+  return pixels;
+}
 
 export async function runDemo3d3(): Promise<void> {
   console.log('=== Galfus Engine - Demo 3D-3: Point Shadows & SSAO ===');
@@ -34,6 +52,7 @@ export async function runDemo3d3(): Promise<void> {
   console.log('  [O]      : Toggle camera auto-orbit');
   console.log('  [S]      : Toggle SSAO on/off');
   console.log('  [1] / [2]: Decrease / Increase SSAO intensity');
+  console.log('  [3] / [4]: Decrease / Increase material occlusion texture strength');
   console.log('  [Space]  : Pause/Resume Point Light zigzag path');
   console.log('  [Escape] : Exit\n');
 
@@ -64,6 +83,7 @@ export async function runDemo3d3(): Promise<void> {
   let ssaoEnabled = true;
   let ssaoIntensity = 0.65;
   let ssaoRadius = 0.45;
+  let materialOcclusionStrength = 0.7;
   let lightOrbitPaused = false;
   let autoOrbit = true;
 
@@ -101,6 +121,20 @@ export async function runDemo3d3(): Promise<void> {
   };
   applyEnvironment();
 
+  const occlusionTexture = createOcclusionTexture(64);
+  galfus.resourceCreateTexture(
+    AO_TEXTURE_ID,
+    {
+      label: 'Demo 3D-3 Material Occlusion Texture',
+      width: 64,
+      height: 64,
+      format: 'rgba8Unorm',
+      usages: { copyDst: true, textureBinding: true }
+    },
+    occlusionTexture,
+    occlusionTexture.byteLength
+  );
+
   // Camera setup
   let camDistance = 14.0;
   let camAngle = 0.7;
@@ -120,21 +154,28 @@ export async function runDemo3d3(): Promise<void> {
     { position: curCamPos, rotation: curCamRot, scale: [1, 1, 1] }
   );
 
-  // Materials
-  galfus.realm3dCreateMaterial(REALM_3D, MAT_GROUND, {
-    baseColor: [0.65, 0.68, 0.7, 1.0],
-    metallic: 0.05,
-    roughness: 0.6,
-    reflectance: 0.3,
-    surfaceType: 'opaque'
-  });
-  galfus.realm3dCreateMaterial(REALM_3D, MAT_PILLAR, {
-    baseColor: [0.85, 0.45, 0.25, 1.0],
-    metallic: 0.2,
-    roughness: 0.4,
-    reflectance: 0.4,
-    surfaceType: 'opaque'
-  });
+  // Materials: ground and pillars use the same per-material occlusion texture.
+  const applyMaterialOcclusion = () => {
+    galfus.realm3dCreateMaterial(REALM_3D, MAT_GROUND, {
+      baseColor: [0.65, 0.68, 0.7, 1.0],
+      metallic: 0.05,
+      roughness: 0.6,
+      reflectance: 0.3,
+      occlusionTextureId: AO_TEXTURE_ID,
+      occlusionStrength: materialOcclusionStrength,
+      surfaceType: 'opaque'
+    });
+    galfus.realm3dCreateMaterial(REALM_3D, MAT_PILLAR, {
+      baseColor: [0.85, 0.45, 0.25, 1.0],
+      metallic: 0.2,
+      roughness: 0.4,
+      reflectance: 0.4,
+      occlusionTextureId: AO_TEXTURE_ID,
+      occlusionStrength: materialOcclusionStrength,
+      surfaceType: 'opaque'
+    });
+  };
+  applyMaterialOcclusion();
   galfus.realm3dCreateMaterial(REALM_3D, MAT_ORB, {
     baseColor: [1.0, 0.95, 0.6, 1.0],
     emissiveColor: [3.0, 2.5, 1.2, 1.0],
@@ -145,9 +186,9 @@ export async function runDemo3d3(): Promise<void> {
   });
 
   // Geometries
-  createPrimitiveGeometry(galfus, REALM_3D, GEOM_GROUND, { primitive: 'plane', size: 30.0 });
-  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PILLAR, { primitive: 'cube', size: 1.5 });
-  createPrimitiveGeometry(galfus, REALM_3D, GEOM_ORB, { primitive: 'cube', size: 0.5 });
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_GROUND, 30.0, 30.0);
+  galfus.realm3dCreateCube(REALM_3D, GEOM_PILLAR, 1.5);
+  galfus.realm3dCreateCube(REALM_3D, GEOM_ORB, 0.5);
 
   // Ground Model
   galfus.realm3dCreateModel(
@@ -332,6 +373,20 @@ export async function runDemo3d3(): Promise<void> {
             ssaoIntensity = Math.min(2.5, Number((ssaoIntensity + 0.1).toFixed(2)));
             console.log(`[Demo 3D-3] SSAO Intensity: ${ssaoIntensity}`);
             applyEnvironment(totalTime * 0.1);
+          } else if (key === '3') {
+            materialOcclusionStrength = Math.max(
+              0,
+              Number((materialOcclusionStrength - 0.1).toFixed(2))
+            );
+            console.log(`[Demo 3D-3] Material Occlusion Strength: ${materialOcclusionStrength}`);
+            applyMaterialOcclusion();
+          } else if (key === '4') {
+            materialOcclusionStrength = Math.min(
+              1,
+              Number((materialOcclusionStrength + 0.1).toFixed(2))
+            );
+            console.log(`[Demo 3D-3] Material Occlusion Strength: ${materialOcclusionStrength}`);
+            applyMaterialOcclusion();
           } else if (key === ' ' || key === 'space') {
             lightOrbitPaused = !lightOrbitPaused;
             console.log(`[Demo 3D-3] Light zigzag path: ${lightOrbitPaused ? 'PAUSED' : 'ACTIVE'}`);

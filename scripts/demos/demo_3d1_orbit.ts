@@ -1,5 +1,4 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
-import { createPrimitiveGeometry } from './geometry_3d.ts';
 import type { Transform3DDesc } from '../../sdk/typescript/galfus.ts';
 import { extractKey, eulerToQuat, quatFromLookAt } from './utils.ts';
 import {
@@ -103,14 +102,8 @@ export async function runDemo3d1(): Promise<void> {
   console.log('✔ Camera3D created');
 
   console.log('==> Creating Geometries (Cube #1, Plane #2)...');
-  createPrimitiveGeometry(galfus, REALM_3D, GEOM_CUBE_ID, {
-    primitive: 'cube',
-    size: 1.6
-  });
-  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PLANE_ID, {
-    primitive: 'plane',
-    size: 20.0
-  });
+  galfus.realm3dCreateCube(REALM_3D, GEOM_CUBE_ID, 1.6);
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_PLANE_ID, 20.0, 20.0);
   console.log('✔ Geometries created');
 
   console.log(

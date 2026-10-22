@@ -268,7 +268,7 @@ function procedural.compute_bone_palette(time_val, bone_count, height)
 end
 
 local function install_primitive_geometry_helper(galfus)
-    if galfus._feature_tour_binary_geometry then
+    if galfus._feature_tour_primitives then
         return
     end
     local upload_binary = galfus.realm3d_create_geometry
@@ -278,43 +278,40 @@ local function install_primitive_geometry_helper(galfus)
         if #args ~= 1 or type(description) ~= "string" then
             return upload_binary(realm_id, geometry_id, ...)
         end
-        local size = tonumber(description:match('"size":([%d%.]+)'))
-            or tonumber(description:match('"radius":([%d%.]+)'))
-            or 1.0
-        local half = size * 0.5
-        local horizontal = description:find('"plane"') ~= nil
-        local vertices = ffi.new("Vertex3DRecord[4]")
-        local positions = horizontal
-                and {
-                    { -half, 0, half },
-                    { half, 0, half },
-                    { half, 0, -half },
-                    { -half, 0, -half },
-                }
-            or { { -half, -half, 0 }, { half, -half, 0 }, { half, half, 0 }, { -half, half, 0 } }
-        for i = 0, 3 do
-            local position = positions[i + 1]
-            vertices[i].pos[0], vertices[i].pos[1], vertices[i].pos[2] =
-                position[1], position[2], position[3]
-            vertices[i].norm[horizontal and 1 or 2] = 1.0
-            vertices[i].uv0[0] = (i == 1 or i == 2) and 1.0 or 0.0
-            vertices[i].uv0[1] = i < 2 and 1.0 or 0.0
-            vertices[i].tangent[0], vertices[i].tangent[3] = 1.0, 1.0
-            vertices[i].color[0], vertices[i].color[1], vertices[i].color[2], vertices[i].color[3] =
-                1.0, 1.0, 1.0, 1.0
+        local size = tonumber(description:match('"size":([%d%.]+)')) or 1.0
+        local radius = tonumber(description:match('"radius":([%d%.]+)')) or size
+        local segments = tonumber(description:match('"subdivisions":(%d+)')) or 32
+        if description:find('"cube"') then
+            return galfus.realm3d_create_cube(realm_id, geometry_id, size)
+        elseif description:find('"plane"') then
+            return galfus.realm3d_create_plane(realm_id, geometry_id, size, size)
+        elseif description:find('"quad"') then
+            return galfus.realm3d_create_quad(realm_id, geometry_id, size, size)
+        elseif description:find('"sphere"') then
+            return galfus.realm3d_create_sphere(
+                realm_id,
+                geometry_id,
+                radius,
+                math.floor(segments / 2),
+                segments
+            )
+        elseif description:find('"cylinder"') then
+            return galfus.realm3d_create_cylinder(realm_id, geometry_id, radius, size, segments)
+        elseif description:find('"pyramid"') then
+            return galfus.realm3d_create_pyramid(realm_id, geometry_id, size, size, size)
+        elseif description:find('"torus"') then
+            return galfus.realm3d_create_torus(
+                realm_id,
+                geometry_id,
+                radius,
+                radius * 0.3,
+                segments,
+                math.floor(segments / 2)
+            )
         end
-        local indices = ffi.new("uint32_t[6]", { 0, 1, 2, 0, 2, 3 })
-        return upload_binary(
-            realm_id,
-            geometry_id,
-            3,
-            ffi.cast("uint8_t*", vertices),
-            ffi.sizeof(vertices),
-            indices,
-            6
-        )
+        error("Unsupported tour primitive description")
     end
-    galfus._feature_tour_binary_geometry = true
+    galfus._feature_tour_primitives = true
 end
 
 function procedural.build_room_scene(realm_id, room, seed, galfus)

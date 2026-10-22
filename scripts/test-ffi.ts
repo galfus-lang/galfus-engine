@@ -1,5 +1,4 @@
 import { GalfusBun, ViewportRect } from '../sdk/bun/galfus.ts';
-import { createPrimitiveGeometry } from './demos/geometry_3d.ts';
 import { resolve } from 'path';
 
 const libPath = resolve(import.meta.dir, '../build/cargo-target/debug/libgalfus_native.so');
@@ -126,7 +125,14 @@ if (clearedCameraLookAt.enabled || clearedCameraLookAt.target || clearedCameraLo
 }
 
 // Create Cube Geometry (size: 2.0 -> half-extent 1.0 -> min: [-1, -1, -1], max: [1, 1, 1])
-createPrimitiveGeometry(galfus, 20, 1, { primitive: 'cube', size: 2.0 });
+galfus.realm3dCreateCube(20, 1, 2.0);
+galfus.realm3dCreatePlane(20, 10, 2.0, 3.0);
+galfus.realm3dCreateQuad(20, 11, 2.0, 3.0);
+galfus.realm3dCreateSphere(20, 12, 1.0, 8, 16);
+galfus.realm3dCreateCylinder(20, 13, 1.0, 2.0, 16);
+galfus.realm3dCreateCapsule(20, 14, 1.0, 2.0, 4, 16);
+galfus.realm3dCreatePyramid(20, 15, 2.0, 3.0, 4.0);
+galfus.realm3dCreateTorus(20, 16, 3.0, 1.0, 16, 8);
 galfus.realm3dCreateMaterial(20, 1, { baseColor: [1, 0, 0, 1], albedoTextureId: 2 });
 
 // Create a custom triangle from canonical Vertex3D records (136 bytes per vertex) and u32 indices.

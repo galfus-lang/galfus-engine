@@ -1,5 +1,4 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
-import { createPrimitiveGeometry } from './geometry_3d.ts';
 import type { InvocationFilter, ViewportRect } from '../../sdk/typescript/galfus.ts';
 import { extractKey, eulerToQuat, quatFromLookAt } from './utils.ts';
 
@@ -138,14 +137,8 @@ export async function runDemoMv2(): Promise<void> {
   );
 
   // Cube Geometry & Pedestal Geometry
-  createPrimitiveGeometry(galfus, REALM_3D, GEOM_CUBE_ID, {
-    primitive: 'cube',
-    size: 1.8
-  });
-  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PEDESTAL_ID, {
-    primitive: 'plane',
-    size: 10.0
-  });
+  galfus.realm3dCreateCube(REALM_3D, GEOM_CUBE_ID, 1.8);
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_PEDESTAL_ID, 10.0, 10.0);
 
   // Cube Material: Uses TARGET_2D_RTT in slot 0 (albedo) with LinearRepeat sampler!
   console.log('==> Creating Realm 3D Cube Material bound to TARGET_2D_RTT texture slot...');

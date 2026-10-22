@@ -105,6 +105,11 @@ export const realm3dDescriptors: DescSpec[] = [
       },
       metallicRoughnessTextureId: { type: 'number', optional: true },
       occlusionTextureId: { type: 'number', optional: true },
+      occlusionStrength: {
+        type: 'number',
+        optional: true,
+        doc: 'Ambient occlusion texture influence from 0.0 to 1.0. Defaults to 1.0.'
+      },
       emissiveTextureId: { type: 'number', optional: true },
       textureSlots: { type: { array: 'number' }, optional: true },
       textureSamplers: {

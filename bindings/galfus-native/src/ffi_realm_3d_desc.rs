@@ -142,6 +142,7 @@ pub struct Material3DDesc {
     pub normal_scale: Option<f32>,
     pub metallic_roughness_texture_id: Option<u32>,
     pub occlusion_texture_id: Option<u32>,
+    pub occlusion_strength: Option<f32>,
     pub emissive_texture_id: Option<u32>,
     pub texture_slots: Option<Vec<Option<u32>>>,
     /// Optional sampler overrides for individual texture slots. `null` uses the default sampler.
@@ -208,6 +209,7 @@ impl From<Material3DDesc> for Material3D {
             normal_scale: d.normal_scale.unwrap_or(1.0),
             metallic_roughness_texture_id: d.metallic_roughness_texture_id,
             occlusion_texture_id: d.occlusion_texture_id,
+            occlusion_strength: d.occlusion_strength.unwrap_or(1.0),
             emissive_texture_id: d.emissive_texture_id,
             texture_slots,
             texture_samplers,

@@ -96,6 +96,108 @@ export const realm3dFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_realm_3d_create_cube',
+    methodName: 'realm3dCreateCube',
+    doc: 'Creates a cube primitive centered at the origin.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'size', type: 'f32', doc: 'Length of each cube edge.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_plane',
+    methodName: 'realm3dCreatePlane',
+    doc: 'Creates a horizontal plane primitive centered at the origin.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'width', type: 'f32', doc: 'Plane extent along X.' },
+      { name: 'depth', type: 'f32', doc: 'Plane extent along Z.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_quad',
+    methodName: 'realm3dCreateQuad',
+    doc: 'Creates a vertical quad primitive centered at the origin and facing +Z.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'width', type: 'f32', doc: 'Quad extent along X.' },
+      { name: 'height', type: 'f32', doc: 'Quad extent along Y.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_sphere',
+    methodName: 'realm3dCreateSphere',
+    doc: 'Creates a UV sphere primitive centered at the origin.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'radius', type: 'f32', doc: 'Sphere radius.' },
+      { name: 'rings', type: 'u32', doc: 'Latitude subdivisions.' },
+      { name: 'sectors', type: 'u32', doc: 'Longitude subdivisions.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_cylinder',
+    methodName: 'realm3dCreateCylinder',
+    doc: 'Creates a cylinder primitive centered at the origin along the Y axis.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'radius', type: 'f32', doc: 'Cylinder radius.' },
+      { name: 'height', type: 'f32', doc: 'Cylinder height.' },
+      { name: 'sectors', type: 'u32', doc: 'Radial subdivisions.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_capsule',
+    methodName: 'realm3dCreateCapsule',
+    doc: 'Creates a capsule primitive centered at the origin along the Y axis.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'radius', type: 'f32', doc: 'Hemisphere radius.' },
+      { name: 'cylinderHeight', type: 'f32', doc: 'Height between the two hemispheres.' },
+      { name: 'rings', type: 'u32', doc: 'Hemisphere latitude subdivisions.' },
+      { name: 'sectors', type: 'u32', doc: 'Radial subdivisions.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_pyramid',
+    methodName: 'realm3dCreatePyramid',
+    doc: 'Creates a pyramid primitive centered at the origin with its apex on +Y.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'width', type: 'f32', doc: 'Base extent along X.' },
+      { name: 'depth', type: 'f32', doc: 'Base extent along Z.' },
+      { name: 'height', type: 'f32', doc: 'Pyramid height.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_torus',
+    methodName: 'realm3dCreateTorus',
+    doc: 'Creates a torus primitive centered at the origin in the XZ plane.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'majorRadius', type: 'f32', doc: 'Distance from the center to the tube center.' },
+      { name: 'minorRadius', type: 'f32', doc: 'Tube radius.' },
+      { name: 'majorSegments', type: 'u32', doc: 'Subdivisions around the major ring.' },
+      { name: 'minorSegments', type: 'u32', doc: 'Subdivisions around the tube.' }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_realm_3d_create_material',
     methodName: 'realm3dCreateMaterial',
     doc: 'Registers or updates a 3D Material in the 3D Realm.',

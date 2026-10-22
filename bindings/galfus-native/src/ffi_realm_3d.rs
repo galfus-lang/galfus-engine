@@ -232,6 +232,133 @@ pub unsafe extern "C" fn galfus_realm_3d_create_geometry(
     }
 }
 
+fn register_primitive_geometry(realm_id: u32, geometry_id: u32, geometry: Geometry3D) -> i32 {
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm
+            .create_geometry(geometry_id, geometry)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Creates a cube primitive centered at the origin.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_create_cube(realm_id: u32, geometry_id: u32, size: f32) -> i32 {
+    register_primitive_geometry(realm_id, geometry_id, Geometry3D::cube(size))
+}
+
+/// Creates a horizontal plane primitive centered at the origin.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_create_plane(
+    realm_id: u32,
+    geometry_id: u32,
+    width: f32,
+    depth: f32,
+) -> i32 {
+    register_primitive_geometry(realm_id, geometry_id, Geometry3D::plane(width, depth))
+}
+
+/// Creates a vertical quad primitive centered at the origin and facing +Z.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_create_quad(
+    realm_id: u32,
+    geometry_id: u32,
+    width: f32,
+    height: f32,
+) -> i32 {
+    register_primitive_geometry(realm_id, geometry_id, Geometry3D::quad(width, height))
+}
+
+/// Creates a UV sphere primitive centered at the origin.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_create_sphere(
+    realm_id: u32,
+    geometry_id: u32,
+    radius: f32,
+    rings: u32,
+    sectors: u32,
+) -> i32 {
+    register_primitive_geometry(
+        realm_id,
+        geometry_id,
+        Geometry3D::sphere(radius, rings, sectors),
+    )
+}
+
+/// Creates a cylinder primitive centered at the origin along the Y axis.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_create_cylinder(
+    realm_id: u32,
+    geometry_id: u32,
+    radius: f32,
+    height: f32,
+    sectors: u32,
+) -> i32 {
+    register_primitive_geometry(
+        realm_id,
+        geometry_id,
+        Geometry3D::cylinder(radius, height, sectors),
+    )
+}
+
+/// Creates a capsule primitive centered at the origin along the Y axis.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_create_capsule(
+    realm_id: u32,
+    geometry_id: u32,
+    radius: f32,
+    cylinder_height: f32,
+    rings: u32,
+    sectors: u32,
+) -> i32 {
+    register_primitive_geometry(
+        realm_id,
+        geometry_id,
+        Geometry3D::capsule(radius, cylinder_height, rings, sectors),
+    )
+}
+
+/// Creates a pyramid primitive centered at the origin with its apex on +Y.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_create_pyramid(
+    realm_id: u32,
+    geometry_id: u32,
+    width: f32,
+    depth: f32,
+    height: f32,
+) -> i32 {
+    register_primitive_geometry(
+        realm_id,
+        geometry_id,
+        Geometry3D::pyramid(width, depth, height),
+    )
+}
+
+/// Creates a torus primitive centered at the origin in the XZ plane.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_create_torus(
+    realm_id: u32,
+    geometry_id: u32,
+    major_radius: f32,
+    minor_radius: f32,
+    major_segments: u32,
+    minor_segments: u32,
+) -> i32 {
+    register_primitive_geometry(
+        realm_id,
+        geometry_id,
+        Geometry3D::torus(major_radius, minor_radius, major_segments, minor_segments),
+    )
+}
+
 /// Registers or updates a 3D Material in the 3D Realm.
 ///
 /// # Safety

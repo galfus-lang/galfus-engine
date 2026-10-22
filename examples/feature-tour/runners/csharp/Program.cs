@@ -704,51 +704,31 @@ namespace FeatureTourRunner
         }
     }
 
-    /* Tour-only host helper. Descriptions are converted to canonical binary vertices locally. */
+    /* Tour compatibility helper that delegates primitive creation to Galfus. */
     static class PrimitiveGeometryExtensions
     {
         public static void Realm3dCreateGeometry(this GalfusEngine galfus, uint realmId,
             uint geometryId, string description)
         {
-            float size = ReadNumber(description, "\"size\":", ReadNumber(description, "\"radius\":", 1.0f));
-            float h = size * 0.5f;
-            bool horizontal = description.Contains("\"plane\"");
-            var vertices = new Vertex3DRecord[4];
-            for (int i = 0; i < vertices.Length; i++)
-            {
-                float x = (i == 1 || i == 2) ? h : -h;
-                float second = (i < 2) ? -h : h;
-                vertices[i] = new Vertex3DRecord
-                {
-                    posX = x,
-                    posY = horizontal ? 0.0f : second,
-                    posZ = horizontal ? -second : 0.0f,
-                    normY = horizontal ? 1.0f : 0.0f,
-                    normZ = horizontal ? 0.0f : 1.0f,
-                    uvU = (i == 1 || i == 2) ? 1.0f : 0.0f,
-                    uvV = (i < 2) ? 1.0f : 0.0f,
-                    tanX = 1.0f,
-                    tanW = 1.0f,
-                    colorR = 1.0f,
-                    colorG = 1.0f,
-                    colorB = 1.0f,
-                    colorA = 1.0f
-                };
-            }
-            uint[] indices = { 0, 1, 2, 0, 2, 3 };
-            var vertexHandle = GCHandle.Alloc(vertices, GCHandleType.Pinned);
-            var indexHandle = GCHandle.Alloc(indices, GCHandleType.Pinned);
-            try
-            {
-                galfus.Realm3dCreateGeometry(realmId, geometryId, 3, vertexHandle.AddrOfPinnedObject(),
-                    (ulong)(vertices.Length * Marshal.SizeOf<Vertex3DRecord>()), indexHandle.AddrOfPinnedObject(),
-                    (ulong)indices.Length);
-            }
-            finally
-            {
-                vertexHandle.Free();
-                indexHandle.Free();
-            }
+            float size = ReadNumber(description, "\"size\":", 1.0f);
+            float radius = ReadNumber(description, "\"radius\":", size);
+            uint segments = (uint)ReadNumber(description, "\"subdivisions\":", 32.0f);
+            if (description.Contains("\"cube\""))
+                galfus.Realm3dCreateCube(realmId, geometryId, size);
+            else if (description.Contains("\"plane\""))
+                galfus.Realm3dCreatePlane(realmId, geometryId, size, size);
+            else if (description.Contains("\"quad\""))
+                galfus.Realm3dCreateQuad(realmId, geometryId, size, size);
+            else if (description.Contains("\"sphere\""))
+                galfus.Realm3dCreateSphere(realmId, geometryId, radius, segments / 2, segments);
+            else if (description.Contains("\"cylinder\""))
+                galfus.Realm3dCreateCylinder(realmId, geometryId, radius, size, segments);
+            else if (description.Contains("\"pyramid\""))
+                galfus.Realm3dCreatePyramid(realmId, geometryId, size, size, size);
+            else if (description.Contains("\"torus\""))
+                galfus.Realm3dCreateTorus(realmId, geometryId, radius, radius * 0.3f, segments, segments / 2);
+            else
+                throw new ArgumentException($"Unsupported tour primitive: {description}");
         }
 
         static float ReadNumber(string value, string key, float fallback)

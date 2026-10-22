@@ -1,5 +1,4 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
-import { createPrimitiveGeometry } from './geometry_3d.ts';
 import { extractKey, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
@@ -288,10 +287,7 @@ export async function runDemo3d2(): Promise<void> {
     `✔ Skinned mesh uploaded: ${skinnedMesh.vertices.length} vertices, ${skinnedMesh.indices.length / 3} triangles, ${BONE_COUNT} bones.`
   );
 
-  createPrimitiveGeometry(galfus, REALM_3D, GEOM_FLOOR_ID, {
-    primitive: 'plane',
-    size: 40.0
-  });
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_FLOOR_ID, 40.0, 40.0);
 
   // Materials
   galfus.realm3dCreateMaterial(REALM_3D, MAT_TENTACLE_ID, {

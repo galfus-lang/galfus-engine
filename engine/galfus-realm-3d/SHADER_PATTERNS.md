@@ -20,7 +20,9 @@ must update the Rust uniform, the default WGSL template, and this document toget
 All unlisted bits are reserved and must be zero. `pbr_params.w` contains the
 masked-surface alpha cutoff, clamped to the inclusive `0.0..=1.0` range.
 `refraction_params` stores `[index_of_refraction, distortion_strength,
-normal_scale, 0]`.
+normal_scale, occlusion_strength]`. Occlusion strength is clamped to
+`0.0..=1.0` and blends the slot 3 red channel with `1.0`; it only modulates
+ambient lighting.
 
 ## Texture sampling
 
