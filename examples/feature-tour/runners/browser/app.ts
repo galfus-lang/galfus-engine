@@ -88,6 +88,7 @@ async function main(): Promise<void> {
   const progress = requiredElement<HTMLProgressElement>('[data-tour-progress]');
   const viewport = requiredElement<HTMLElement>('[data-tour-viewport]');
   const windowId = 1;
+  let renderedFrames = 0;
 
   await runFeatureTour({
     engine: galfus,
@@ -99,8 +100,10 @@ async function main(): Promise<void> {
     nextFrame: nextAnimationFrame,
     onReady: (controller) => bindControls(controller, galfus),
     onFrame: (state) => {
+      renderedFrames++;
       const [width, height] = galfus.windowGetSize(windowId);
       document.body.dataset.status = 'running';
+      document.body.dataset.renderedFrames = String(renderedFrames);
       document.body.dataset.roomIndex = String(state.roomIndex);
       document.body.dataset.paused = String(state.paused);
       document.body.dataset.viewport = `${width}x${height}`;
