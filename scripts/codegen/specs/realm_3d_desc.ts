@@ -67,6 +67,11 @@ export const realm3dDescriptors: DescSpec[] = [
         },
         optional: true
       },
+      alphaCutoff: {
+        type: 'number',
+        optional: true,
+        doc: 'Alpha threshold for masked surfaces. Defaults to 0.5.'
+      },
       baseColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       emissiveColor: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       roughness: { type: 'number', optional: true },

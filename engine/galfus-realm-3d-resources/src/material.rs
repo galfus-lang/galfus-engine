@@ -65,6 +65,9 @@ pub struct Material3D {
     pub label: Option<String>,
     /// Alpha / depth writing behavior.
     pub surface_type: SurfaceType3D,
+    /// Alpha threshold used by [`SurfaceType3D::Masked`] materials.
+    #[serde(default = "default_alpha_cutoff")]
+    pub alpha_cutoff: f32,
     /// Base surface RGBA albedo color tint.
     pub base_color: Vec4,
     /// RGB emissive glow color.
@@ -116,6 +119,10 @@ fn default_refraction_index() -> f32 {
     1.5
 }
 
+fn default_alpha_cutoff() -> f32 {
+    0.5
+}
+
 fn default_refraction_distortion() -> f32 {
     0.05
 }
@@ -129,6 +136,7 @@ impl Default for Material3D {
         Self {
             label: None,
             surface_type: SurfaceType3D::Opaque,
+            alpha_cutoff: default_alpha_cutoff(),
             base_color: Vec4::ONE,
             emissive_color: Vec4::ZERO,
             roughness: 0.5,
@@ -222,7 +230,12 @@ impl Material3D {
         Material3DUniform {
             base_color: self.base_color,
             emissive_color: self.emissive_color,
-            pbr_params: Vec4::new(self.roughness, self.metallic, self.reflectance, 0.5),
+            pbr_params: Vec4::new(
+                self.roughness,
+                self.metallic,
+                self.reflectance,
+                self.alpha_cutoff.clamp(0.0, 1.0),
+            ),
             flags: UVec4::new(flags, self.packed_texture_samplers(), 0, 0),
             refraction_params: Vec4::new(
                 self.refraction_index,
@@ -289,5 +302,21 @@ mod tests {
 
         assert_eq!(material.packed_texture_samplers(), 0xE4);
         assert_eq!(material.build_uniform().flags.y, 0xE4);
+    }
+
+    #[test]
+    fn alpha_cutoff_is_stable_and_clamped_in_the_uniform() {
+        let default_material = Material3D::default();
+        assert_eq!(default_material.alpha_cutoff, 0.5);
+        assert_eq!(default_material.build_uniform().pbr_params.w, 0.5);
+
+        let material = Material3D {
+            surface_type: SurfaceType3D::Masked,
+            alpha_cutoff: 2.0,
+            ..Default::default()
+        };
+        let uniform = material.build_uniform();
+        assert_eq!(uniform.pbr_params.w, 1.0);
+        assert_eq!(uniform.flags.x & 7, 2);
     }
 }

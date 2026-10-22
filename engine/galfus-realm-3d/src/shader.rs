@@ -401,6 +401,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     s_in.instance_custom = in.instance_custom;
 
     let s_out = surface_effect(s_in);
+    let surface_type = material.flags.x & 7u;
+    if (surface_type == 2u && s_out.albedo.a < material.pbr_params.w) {
+        discard;
+    }
 
     let N = normalize(s_out.normal);
     let V = s_in.view_dir;
@@ -506,7 +510,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var final_color = ambient + direct_light + s_out.emissive;
 
     // Refraction transmission for glass, water, crystals
-    let is_refractive = (material.flags.x & 7u) == 4u;
+    let is_refractive = surface_type == 4u;
     if (is_refractive) {
         let screen_dims = vec2<f32>(textureDimensions(opaque_screen_texture));
         let screen_uv = in.clip_position.xy / max(screen_dims, vec2<f32>(1.0));
@@ -522,15 +526,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Planar reflection for mirrors (5u) and optical portals (6u)
-    let is_mirror_or_portal = (material.flags.x & 7u) == 5u || (material.flags.x & 7u) == 6u;
+    let is_mirror_or_portal = surface_type == 5u || surface_type == 6u;
     if (is_mirror_or_portal) {
         let screen_dims = vec2<f32>(textureDimensions(opaque_screen_texture));
         var screen_uv = in.clip_position.xy / max(screen_dims, vec2<f32>(1.0));
-        if ((material.flags.x & 7u) == 5u) {
+        if (surface_type == 5u) {
             screen_uv.x = 1.0 - screen_uv.x;
         }
         let refl_color = textureSample(opaque_screen_texture, opaque_screen_sampler, screen_uv).rgb;
-        if ((material.flags.x & 7u) == 5u) {
+        if (surface_type == 5u) {
             let fresnel = pow(1.0 - max(dot(N, V), 0.0), 2.0);
             let tint = mix(albedo.rgb, vec3<f32>(1.0), fresnel * 0.4);
             let refl_strength = material.pbr_params.z;
@@ -558,8 +562,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         final_color = mix(final_color, env.fog_color.rgb, fog_factor);
     }
 
-    var out_alpha = albedo.a;
-    if (is_refractive || is_mirror_or_portal) {
+    var out_alpha = s_out.albedo.a;
+    if (surface_type == 0u || surface_type == 2u || is_refractive || is_mirror_or_portal) {
         out_alpha = 1.0;
     }
     return vec4<f32>(final_color, out_alpha);
@@ -580,6 +584,14 @@ pub fn get_default_realm_3d_shader() -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn masked_surfaces_discard_by_alpha_cutoff() {
+        assert!(
+            REALM_3D_SHADER
+                .contains("surface_type == 2u && s_out.albedo.a < material.pbr_params.w")
+        );
+        assert!(REALM_3D_SHADER.contains("discard;"));
+    }
     #[test]
     fn canonical_vertex_attributes_reach_surface_shading() {
         let source = get_default_realm_3d_shader();

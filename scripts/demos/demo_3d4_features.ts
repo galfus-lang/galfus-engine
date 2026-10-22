@@ -182,7 +182,8 @@ Showcasing:
     roughness: 0.18
   });
   galfus.realm3dCreateMaterial(REALM_3D, MAT_CAPSULE, {
-    baseColor: [0.15, 0.75, 0.95, 1.0],
+    surfaceType: 'transparent',
+    baseColor: [0.15, 0.75, 0.95, 0.58],
     metallic: 0.6,
     roughness: 0.25
   });
@@ -192,12 +193,15 @@ Showcasing:
     roughness: 0.22
   });
   galfus.realm3dCreateMaterial(REALM_3D, MAT_PYRAMID, {
-    baseColor: [0.95, 0.18, 0.28, 1.0],
+    surfaceType: 'masked',
+    alphaCutoff: 0.75,
+    baseColor: [0.95, 0.18, 0.28, 0.9],
     metallic: 0.3,
     roughness: 0.3
   });
   galfus.realm3dCreateMaterial(REALM_3D, MAT_GLOW_CORE, {
-    baseColor: [1.0, 1.0, 1.0, 1.0],
+    surfaceType: 'additive',
+    baseColor: [1.0, 1.0, 1.0, 0.45],
     emissiveColor: [4.0, 2.2, 8.5, 1.0]
   });
 

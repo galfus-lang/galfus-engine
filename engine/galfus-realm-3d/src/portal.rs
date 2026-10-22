@@ -197,7 +197,7 @@ impl PortalPipeline3D {
     pub fn render_portal_pass<'a>(
         &self,
         desc: PortalPassDesc<'a>,
-        items: impl IntoIterator<Item = (&'a crate::collector::CollectedDrawItem<'a>, bool)>,
+        items: impl IntoIterator<Item = &'a crate::collector::CollectedDrawItem<'a>>,
     ) {
         let mut pass = desc.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Realm3D Portal Pass"),

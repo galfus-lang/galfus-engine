@@ -311,7 +311,7 @@ pub fn sync_realm_resources<'a>(
         pipeline.ensure_pipeline(
             device,
             mat.shader_effect.as_deref(),
-            mat.surface_type == galfus_realm_3d_resources::material::SurfaceType3D::Transparent,
+            crate::pipeline::SurfacePipelineState::from_surface_type(mat.surface_type),
         );
     }
 

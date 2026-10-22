@@ -341,11 +341,7 @@ impl Realm for Realm3DContext {
                         mirror_transform.position,
                         mirror_normal,
                     );
-                    let opaque_draws = v_collector
-                        .opaque
-                        .iter()
-                        .chain(v_collector.masked.iter())
-                        .map(|i| (i, false));
+                    let opaque_draws = v_collector.opaque.iter().chain(v_collector.masked.iter());
                     let particle_draw = self
                         .particle_renderer
                         .as_ref()
@@ -404,11 +400,7 @@ impl Realm for Realm3DContext {
             }
 
             pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
-            let opaque_draws = collector
-                .opaque
-                .iter()
-                .chain(collector.masked.iter())
-                .map(|i| (i, false));
+            let opaque_draws = collector.opaque.iter().chain(collector.masked.iter());
             render_draw_items(
                 &mut pass,
                 pipeline,
@@ -441,8 +433,9 @@ impl Realm for Realm3DContext {
 
         // 3. Translucent, Refractive, Mirror, and Foreground Particle pass
         let has_trans = !collector.transparent.is_empty();
+        let has_additive = !collector.additive.is_empty();
         let has_front_particles = alpha_count > behind_alpha || additive_count > behind_additive;
-        if has_refr || has_mirrors || has_trans || has_front_particles {
+        if has_refr || has_mirrors || has_trans || has_additive || has_front_particles {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Realm3D Refractive & Transparent Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -476,12 +469,7 @@ impl Realm for Realm3DContext {
                         .get(&item.model_id)
                         .map(|p| p.bind_group())
                         .unwrap_or(&pipeline.dummy_refraction_bg);
-                    render_draw_items(
-                        &mut pass,
-                        pipeline,
-                        std::iter::once((item, false)),
-                        portal_bg,
-                    );
+                    render_draw_items(&mut pass, pipeline, std::iter::once(item), portal_bg);
                 }
             }
             if has_refr {
@@ -490,18 +478,21 @@ impl Realm for Realm3DContext {
                     .as_ref()
                     .map(|r| r.bind_group())
                     .unwrap_or(&pipeline.dummy_refraction_bg);
-                render_draw_items(
-                    &mut pass,
-                    pipeline,
-                    collector.refractive.iter().map(|i| (i, true)),
-                    refr_bg,
-                );
+                render_draw_items(&mut pass, pipeline, collector.refractive.iter(), refr_bg);
             }
             if has_trans {
                 render_draw_items(
                     &mut pass,
                     pipeline,
-                    collector.transparent.iter().map(|i| (i, true)),
+                    collector.transparent.iter(),
+                    &pipeline.dummy_refraction_bg,
+                );
+            }
+            if has_additive {
+                render_draw_items(
+                    &mut pass,
+                    pipeline,
+                    collector.additive.iter(),
                     &pipeline.dummy_refraction_bg,
                 );
             }

@@ -126,6 +126,7 @@ impl From<Camera3DDesc> for Camera3D {
 #[serde(rename_all = "camelCase")]
 pub struct Material3DDesc {
     pub surface_type: Option<String>,
+    pub alpha_cutoff: Option<f32>,
     pub base_color: Option<[f32; 4]>,
     pub emissive_color: Option<[f32; 4]>,
     pub roughness: Option<f32>,
@@ -176,6 +177,7 @@ impl From<Material3DDesc> for Material3D {
         }
         Material3D {
             surface_type,
+            alpha_cutoff: d.alpha_cutoff.unwrap_or(0.5),
             base_color: d
                 .base_color
                 .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
