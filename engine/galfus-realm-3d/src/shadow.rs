@@ -2,9 +2,10 @@
 
 use bytemuck::bytes_of;
 use glam::Mat4;
+use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
-use galfus_realm_3d_resources::geometry::Vertex3D;
+use galfus_realm_3d_resources::geometry::{PrimitiveTopology3D, Vertex3D};
 
 /// WGSL shader for the shadow depth pass.
 pub const SHADOW_SHADER: &str = r#"
@@ -114,9 +115,51 @@ fn vs_instanced_main(in: VertexInput, @builtin(instance_index) instance_index: u
 
 /// Dedicated depth-only pipeline for rendering shadow maps.
 pub struct ShadowPipeline3D {
-    pub render_pipeline: wgpu::RenderPipeline,
-    pub instanced_render_pipeline: wgpu::RenderPipeline,
+    pipelines: HashMap<(PrimitiveTopology3D, bool), wgpu::RenderPipeline>,
     pub vp_layout: wgpu::BindGroupLayout,
+}
+
+fn create_shadow_render_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    shader: &wgpu::ShaderModule,
+    vertex_buffer_layout: &wgpu::VertexBufferLayout<'_>,
+    depth_stencil: &wgpu::DepthStencilState,
+    topology: PrimitiveTopology3D,
+    instanced: bool,
+) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(if instanced {
+            "Realm3D Shadow Instanced Render Pipeline"
+        } else {
+            "Realm3D Shadow Render Pipeline"
+        }),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some(if instanced {
+                "vs_instanced_main"
+            } else {
+                "vs_main"
+            }),
+            buffers: std::slice::from_ref(vertex_buffer_layout),
+            compilation_options: Default::default(),
+        },
+        fragment: None,
+        primitive: wgpu::PrimitiveState {
+            topology: crate::pipeline::to_wgpu_topology(topology),
+            strip_index_format: topology.is_strip().then_some(wgpu::IndexFormat::Uint32),
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            unclipped_depth: false,
+            conservative: false,
+        },
+        depth_stencil: Some(depth_stencil.clone()),
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
 }
 
 impl ShadowPipeline3D {
@@ -209,62 +252,34 @@ impl ShadowPipeline3D {
             },
         };
 
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Realm3D Shadow Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                buffers: std::slice::from_ref(&vertex_buffer_layout),
-                compilation_options: Default::default(),
-            },
-            fragment: None,
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: Some(depth_stencil.clone()),
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
-
-        let instanced_render_pipeline =
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Realm3D Shadow Instanced Render Pipeline"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_instanced_main"),
-                    buffers: std::slice::from_ref(&vertex_buffer_layout),
-                    compilation_options: Default::default(),
-                },
-                fragment: None,
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    unclipped_depth: false,
-                    conservative: false,
-                },
-                depth_stencil: Some(depth_stencil),
-                multisample: wgpu::MultisampleState::default(),
-                multiview_mask: None,
-                cache: None,
-            });
+        let mut pipelines = HashMap::new();
+        for topology in PrimitiveTopology3D::ALL {
+            for &instanced in &[false, true] {
+                pipelines.insert(
+                    (topology, instanced),
+                    create_shadow_render_pipeline(
+                        device,
+                        &pipeline_layout,
+                        &shader,
+                        &vertex_buffer_layout,
+                        &depth_stencil,
+                        topology,
+                        instanced,
+                    ),
+                );
+            }
+        }
 
         Self {
-            render_pipeline,
-            instanced_render_pipeline,
+            pipelines,
             vp_layout,
         }
+    }
+
+    fn pipeline(&self, topology: PrimitiveTopology3D, instanced: bool) -> &wgpu::RenderPipeline {
+        self.pipelines
+            .get(&(topology, instanced))
+            .expect("all shadow primitive topologies are precompiled")
     }
 }
 
@@ -468,7 +483,6 @@ fn render_single_shadow_layer(
         multiview_mask: None,
     });
 
-    s_pass.set_pipeline(&shadow_pipe.render_pipeline);
     s_pass.set_bind_group(0, vp_bg, &[]);
 
     let shadow_frustum =
@@ -487,6 +501,7 @@ fn render_single_shadow_layer(
         if !shadow_frustum.intersects_aabb(world_aabb.min, world_aabb.max) {
             continue;
         }
+        s_pass.set_pipeline(shadow_pipe.pipeline(geom.topology, false));
         s_pass.set_bind_group(1, model_bg, &[]);
         s_pass.set_vertex_buffer(0, v.slice(..));
         s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);
@@ -494,7 +509,6 @@ fn render_single_shadow_layer(
     }
 
     // Instanced models depth pass
-    s_pass.set_pipeline(&shadow_pipe.instanced_render_pipeline);
     for (inst_model, instances, inst_buf_opt, _, model_bg_opt) in instanced_models.values() {
         if !inst_model.active || !inst_model.cast_shadow || instances.is_empty() {
             continue;
@@ -505,9 +519,10 @@ fn render_single_shadow_layer(
         let Some(model_bg) = model_bg_opt else {
             continue;
         };
-        let Some((_geom, Some((v, i, count)))) = geometries.get(&inst_model.geometry_id) else {
+        let Some((geom, Some((v, i, count)))) = geometries.get(&inst_model.geometry_id) else {
             continue;
         };
+        s_pass.set_pipeline(shadow_pipe.pipeline(geom.topology, true));
         s_pass.set_bind_group(1, model_bg, &[]);
         s_pass.set_vertex_buffer(0, v.slice(..));
         s_pass.set_index_buffer(i.slice(..), wgpu::IndexFormat::Uint32);

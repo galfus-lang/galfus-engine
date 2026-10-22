@@ -58,22 +58,6 @@ export const realm3dDescriptors: DescSpec[] = [
   },
   {
     kind: 'object',
-    name: 'Geometry3DDesc',
-    doc: 'Procedural 3D primitive configuration. Custom geometry uses binary vertex and index buffers.',
-    fields: {
-      primitive: {
-        type: {
-          enum: ['cube', 'plane', 'quad', 'sphere', 'cylinder', 'capsule', 'pyramid', 'torus']
-        },
-        optional: true
-      },
-      size: { type: 'number', optional: true },
-      radius: { type: 'number', optional: true },
-      subdivisions: { type: 'number', optional: true }
-    }
-  },
-  {
-    kind: 'object',
     name: 'Material3DDesc',
     doc: 'PBR 3D material properties and surface configuration.',
     fields: {

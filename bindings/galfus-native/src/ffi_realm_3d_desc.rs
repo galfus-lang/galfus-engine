@@ -5,7 +5,6 @@ use galfus_realm_3d_resources::environment::{
     BloomConfig3D, EnvironmentRealm3D, FogMode3D, OutlineConfig3D, SkyboxConfig3D, SkyboxMode3D,
     SsaoConfig3D,
 };
-use galfus_realm_3d_resources::geometry::Geometry3D;
 use galfus_realm_3d_resources::light::Light3D;
 use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D, TextureSampler3D};
 use galfus_realm_3d_resources::model::{InstancedModel3D, Model3D};
@@ -119,53 +118,6 @@ impl From<Camera3DDesc> for Camera3D {
             camera_slot: d.camera_slot.unwrap_or(0),
             active: true,
             look_at: None,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Geometry3DDesc {
-    pub primitive: Option<String>,
-    pub size: Option<f32>,
-    pub radius: Option<f32>,
-    pub subdivisions: Option<u32>,
-}
-
-impl From<Geometry3DDesc> for Geometry3D {
-    fn from(d: Geometry3DDesc) -> Self {
-        match d.primitive.as_deref() {
-            Some("cube") => Geometry3D::cube(d.size.unwrap_or(1.0)),
-            Some("plane") => Geometry3D::plane(d.size.unwrap_or(1.0), d.size.unwrap_or(1.0)),
-            Some("quad") => Geometry3D::quad(d.size.unwrap_or(1.0), d.size.unwrap_or(1.0)),
-            Some("sphere") => Geometry3D::sphere(
-                d.radius.unwrap_or(1.0),
-                d.subdivisions.unwrap_or(32),
-                d.subdivisions.unwrap_or(16),
-            ),
-            Some("cylinder") => Geometry3D::cylinder(
-                d.radius.unwrap_or(1.0),
-                d.size.unwrap_or(2.0),
-                d.subdivisions.unwrap_or(32),
-            ),
-            Some("capsule") => Geometry3D::capsule(
-                d.radius.unwrap_or(0.5),
-                d.size.unwrap_or(1.5),
-                d.subdivisions.unwrap_or(8),
-                d.subdivisions.unwrap_or(32),
-            ),
-            Some("pyramid") => Geometry3D::pyramid(
-                d.size.unwrap_or(1.0),
-                d.size.unwrap_or(1.0),
-                d.size.unwrap_or(1.5),
-            ),
-            Some("torus") => Geometry3D::torus(
-                d.radius.unwrap_or(1.0),
-                d.radius.unwrap_or(1.0) * 0.3,
-                d.subdivisions.unwrap_or(32),
-                d.subdivisions.unwrap_or(16),
-            ),
-            _ => Geometry3D::new(Vec::new(), Vec::new(), None),
         }
     }
 }

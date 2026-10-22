@@ -1,6 +1,63 @@
 use bytemuck::{Pod, Zeroable};
 use serde::{Deserialize, Serialize};
 
+/// GPU primitive topology for an indexed 3D geometry.
+///
+/// Importers normalize glTF `LINE_LOOP` and `TRIANGLE_FAN` to one of these modes before
+/// submitting a geometry to the renderer.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PrimitiveTopology3D {
+    /// Each index addresses an independent point.
+    Points = 0,
+    /// Each adjacent pair of indices defines an independent line.
+    Lines = 1,
+    /// Consecutive indices define a connected line strip.
+    LineStrip = 2,
+    /// Each consecutive triplet of indices defines an independent triangle.
+    #[default]
+    Triangles = 3,
+    /// Consecutive indices define a connected triangle strip.
+    TriangleStrip = 4,
+}
+
+impl PrimitiveTopology3D {
+    /// All topologies directly supported by the renderer.
+    pub const ALL: [Self; 5] = [
+        Self::Points,
+        Self::Lines,
+        Self::LineStrip,
+        Self::Triangles,
+        Self::TriangleStrip,
+    ];
+
+    /// Whether this topology requires a strip index format in the GPU pipeline.
+    pub const fn is_strip(self) -> bool {
+        matches!(self, Self::LineStrip | Self::TriangleStrip)
+    }
+
+    /// Whether this topology describes triangle surfaces.
+    pub const fn is_triangle(self) -> bool {
+        matches!(self, Self::Triangles | Self::TriangleStrip)
+    }
+}
+
+impl TryFrom<u32> for PrimitiveTopology3D {
+    type Error = &'static str;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Points),
+            1 => Ok(Self::Lines),
+            2 => Ok(Self::LineStrip),
+            3 => Ok(Self::Triangles),
+            4 => Ok(Self::TriangleStrip),
+            _ => Err("Invalid PrimitiveTopology3D value"),
+        }
+    }
+}
+
 /// Canonical glTF-compatible 3D vertex layout.
 ///
 /// All attributes are always present in GPU memory. Importers must use the documented defaults
@@ -113,7 +170,7 @@ impl Vertex3D {
 
 use crate::aabb::Aabb;
 
-/// 3D Geometry asset holding vertex attributes and indexed triangle topology.
+/// 3D Geometry asset holding vertex attributes, indices, and primitive topology.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Geometry3D {
@@ -124,19 +181,33 @@ pub struct Geometry3D {
     pub aabb: Aabb,
     /// Array of interleaved 3D vertices.
     pub vertices: Vec<Vertex3D>,
-    /// Indexed triangle list.
+    /// Indexed primitive sequence interpreted by [`Self::topology`].
     pub indices: Vec<u32>,
+    /// GPU interpretation of the indexed primitive sequence.
+    #[serde(default)]
+    pub topology: PrimitiveTopology3D,
 }
 
 impl Geometry3D {
     /// Creates a custom geometry from raw vertex and index slices.
     pub fn new(vertices: Vec<Vertex3D>, indices: Vec<u32>, label: Option<String>) -> Self {
+        Self::new_with_topology(vertices, indices, PrimitiveTopology3D::Triangles, label)
+    }
+
+    /// Creates custom geometry using an explicit primitive topology.
+    pub fn new_with_topology(
+        vertices: Vec<Vertex3D>,
+        indices: Vec<u32>,
+        topology: PrimitiveTopology3D,
+        label: Option<String>,
+    ) -> Self {
         let aabb = Aabb::from_vertices(&vertices);
         Self {
             label,
             aabb,
             vertices,
             indices,
+            topology,
         }
     }
 
@@ -197,6 +268,7 @@ impl Geometry3D {
             aabb,
             vertices,
             indices,
+            topology: PrimitiveTopology3D::Triangles,
         }
     }
 
@@ -220,6 +292,7 @@ impl Geometry3D {
             aabb,
             vertices,
             indices,
+            topology: PrimitiveTopology3D::Triangles,
         }
     }
 
@@ -243,6 +316,7 @@ impl Geometry3D {
             aabb,
             vertices,
             indices,
+            topology: PrimitiveTopology3D::Triangles,
         }
     }
 
@@ -294,6 +368,7 @@ impl Geometry3D {
             aabb,
             vertices,
             indices,
+            topology: PrimitiveTopology3D::Triangles,
         }
     }
 
@@ -352,6 +427,24 @@ mod tests {
         assert_eq!(vertex.joints0, [1, 2, 3, 4]);
         assert_eq!(vertex.joints1, [5, 6, 7, 8]);
         assert_eq!(vertex.weights1, [0.05; 4]);
+    }
+
+    #[test]
+    fn primitive_topology_codes_and_helpers_are_stable() {
+        assert_eq!(
+            PrimitiveTopology3D::try_from(0),
+            Ok(PrimitiveTopology3D::Points)
+        );
+        assert_eq!(
+            PrimitiveTopology3D::try_from(4),
+            Ok(PrimitiveTopology3D::TriangleStrip)
+        );
+        assert!(PrimitiveTopology3D::LineStrip.is_strip());
+        assert!(PrimitiveTopology3D::TriangleStrip.is_triangle());
+        assert!(PrimitiveTopology3D::try_from(5).is_err());
+
+        let geometry = Geometry3D::new(Vec::new(), Vec::new(), None);
+        assert_eq!(geometry.topology, PrimitiveTopology3D::Triangles);
     }
 
     #[test]

@@ -1,4 +1,5 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
+import { createPrimitiveGeometry } from './geometry_3d.ts';
 import { extractKey, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
@@ -70,9 +71,13 @@ export async function runDemoAnim1(): Promise<void> {
   });
 
   // Materials & Geometries
-  galfus.realm3dCreateGeometry(REALM_3D, 1, { primitive: 'cube', size: 1.5 });
-  galfus.realm3dCreateGeometry(REALM_3D, 2, { primitive: 'sphere', radius: 1.0, subdivisions: 24 });
-  galfus.realm3dCreateGeometry(REALM_3D, 3, { primitive: 'plane', size: 25.0 });
+  createPrimitiveGeometry(galfus, REALM_3D, 1, { primitive: 'cube', size: 1.5 });
+  createPrimitiveGeometry(galfus, REALM_3D, 2, {
+    primitive: 'sphere',
+    radius: 1.0,
+    subdivisions: 24
+  });
+  createPrimitiveGeometry(galfus, REALM_3D, 3, { primitive: 'plane', size: 25.0 });
 
   galfus.realm3dCreateMaterial(REALM_3D, 1, {
     baseColor: [0.2, 0.6, 1.0, 1.0],

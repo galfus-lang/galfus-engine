@@ -267,7 +267,58 @@ function procedural.compute_bone_palette(time_val, bone_count, height)
     return palette, bone_count * 16
 end
 
+local function install_primitive_geometry_helper(galfus)
+    if galfus._feature_tour_binary_geometry then
+        return
+    end
+    local upload_binary = galfus.realm3d_create_geometry
+    galfus.realm3d_create_geometry = function(realm_id, geometry_id, ...)
+        local args = { ... }
+        local description = args[1]
+        if #args ~= 1 or type(description) ~= "string" then
+            return upload_binary(realm_id, geometry_id, ...)
+        end
+        local size = tonumber(description:match('"size":([%d%.]+)'))
+            or tonumber(description:match('"radius":([%d%.]+)'))
+            or 1.0
+        local half = size * 0.5
+        local horizontal = description:find('"plane"') ~= nil
+        local vertices = ffi.new("Vertex3DRecord[4]")
+        local positions = horizontal
+                and {
+                    { -half, 0, half },
+                    { half, 0, half },
+                    { half, 0, -half },
+                    { -half, 0, -half },
+                }
+            or { { -half, -half, 0 }, { half, -half, 0 }, { half, half, 0 }, { -half, half, 0 } }
+        for i = 0, 3 do
+            local position = positions[i + 1]
+            vertices[i].pos[0], vertices[i].pos[1], vertices[i].pos[2] =
+                position[1], position[2], position[3]
+            vertices[i].norm[horizontal and 1 or 2] = 1.0
+            vertices[i].uv0[0] = (i == 1 or i == 2) and 1.0 or 0.0
+            vertices[i].uv0[1] = i < 2 and 1.0 or 0.0
+            vertices[i].tangent[0], vertices[i].tangent[3] = 1.0, 1.0
+            vertices[i].color[0], vertices[i].color[1], vertices[i].color[2], vertices[i].color[3] =
+                1.0, 1.0, 1.0, 1.0
+        end
+        local indices = ffi.new("uint32_t[6]", { 0, 1, 2, 0, 2, 3 })
+        return upload_binary(
+            realm_id,
+            geometry_id,
+            3,
+            ffi.cast("uint8_t*", vertices),
+            ffi.sizeof(vertices),
+            indices,
+            6
+        )
+    end
+    galfus._feature_tour_binary_geometry = true
+end
+
 function procedural.build_room_scene(realm_id, room, seed, galfus)
+    install_primitive_geometry_helper(galfus)
     local room_idx = room.roomIndex
     local base_id = (room_idx + 1) * 1000
     local fx = room.focusPoint[1]
@@ -724,7 +775,7 @@ function procedural.build_room_scene(realm_id, room, seed, galfus)
         local vbuf, vlen, ibuf, icount = procedural.build_procedural_skinned_mesh(24, 16, 5.0, 12)
         local v_raw = ffi.cast("const uint8_t*", vbuf)
         local i_raw = ffi.cast("const uint32_t*", ibuf)
-        galfus.realm3d_create_geometry_raw(realm_id, geom_skinned, v_raw, vlen, i_raw, icount)
+        galfus.realm3d_create_geometry(realm_id, geom_skinned, 3, v_raw, vlen, i_raw, icount)
         galfus.realm3d_create_material(
             realm_id,
             mat_skinned,

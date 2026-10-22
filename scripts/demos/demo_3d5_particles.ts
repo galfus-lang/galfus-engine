@@ -1,4 +1,5 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
+import { createPrimitiveGeometry } from './geometry_3d.ts';
 import { extractKey, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
@@ -126,19 +127,19 @@ export async function runDemo3d5(): Promise<void> {
   updateCamera();
 
   // 3. Geometries: Floor, Pedestal, and Occlusion Pillars
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PLANE_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PLANE_ID, {
     primitive: 'plane',
     size: 20.0
   });
 
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PEDESTAL_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PEDESTAL_ID, {
     primitive: 'cylinder',
     radius: 1.6,
     size: 0.6,
     subdivisions: 32
   });
 
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PILLAR_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PILLAR_ID, {
     primitive: 'cylinder',
     radius: 0.35,
     size: 4.5,

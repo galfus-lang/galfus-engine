@@ -1,4 +1,5 @@
 import { GalfusBun, ViewportRect } from '../sdk/bun/galfus.ts';
+import { createPrimitiveGeometry } from './demos/geometry_3d.ts';
 import { resolve } from 'path';
 
 const libPath = resolve(import.meta.dir, '../build/cargo-target/debug/libgalfus_native.so');
@@ -125,7 +126,7 @@ if (clearedCameraLookAt.enabled || clearedCameraLookAt.target || clearedCameraLo
 }
 
 // Create Cube Geometry (size: 2.0 -> half-extent 1.0 -> min: [-1, -1, -1], max: [1, 1, 1])
-galfus.realm3dCreateGeometry(20, 1, { primitive: 'cube', size: 2.0 });
+createPrimitiveGeometry(galfus, 20, 1, { primitive: 'cube', size: 2.0 });
 galfus.realm3dCreateMaterial(20, 1, { baseColor: [1, 0, 0, 1], albedoTextureId: 2 });
 
 // Create a custom triangle from canonical Vertex3D records (136 bytes per vertex) and u32 indices.
@@ -152,9 +153,10 @@ function writeVertex(
 writeVertex(0, [-1, -1, 0], [0, 0], [1, 0, 0, 1]);
 writeVertex(136, [1, -1, 0], [1, 0], [0, 1, 0, 1]);
 writeVertex(272, [0, 1, 0], [0.5, 1], [0, 0, 1, 1]);
-galfus.realm3dCreateGeometryRaw(
+galfus.realm3dCreateGeometry(
   20,
   2,
+  3,
   triangleVertices,
   triangleVertices.byteLength,
   new Uint32Array([0, 1, 2]),
@@ -164,12 +166,29 @@ console.log('✔ Created custom geometry through typed binary buffers');
 
 let rejectedInvalidCustomGeometry = false;
 try {
-  galfus.realm3dCreateGeometryRaw(20, 3, new Uint8Array(1), 1, new Uint32Array(), 0);
+  galfus.realm3dCreateGeometry(20, 3, 3, new Uint8Array(1), 1, new Uint32Array(), 0);
 } catch {
   rejectedInvalidCustomGeometry = true;
 }
 if (!rejectedInvalidCustomGeometry) {
   throw new Error('Expected invalid custom geometry buffer to be rejected');
+}
+let rejectedInvalidTopology = false;
+try {
+  galfus.realm3dCreateGeometry(
+    20,
+    4,
+    99,
+    triangleVertices,
+    triangleVertices.byteLength,
+    new Uint32Array([0, 1, 2]),
+    3
+  );
+} catch {
+  rejectedInvalidTopology = true;
+}
+if (!rejectedInvalidTopology) {
+  throw new Error('Expected invalid primitive topology to be rejected');
 }
 // Create Model at position [10, 20, 30] scaled by [2, 2, 2]
 galfus.realm3dCreateModel(

@@ -1,4 +1,5 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
+import { createPrimitiveGeometry } from './geometry_3d.ts';
 import { extractKey, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
@@ -274,9 +275,10 @@ export async function runDemo3d2(): Promise<void> {
   );
   const skinnedVertexData = packVertexData(skinnedMesh.vertices);
   const skinnedIndices = new Uint32Array(skinnedMesh.indices);
-  galfus.realm3dCreateGeometryRaw(
+  galfus.realm3dCreateGeometry(
     REALM_3D,
     GEOM_SKINNED_TENTACLE_ID,
+    3,
     skinnedVertexData,
     skinnedVertexData.byteLength,
     skinnedIndices,
@@ -286,7 +288,7 @@ export async function runDemo3d2(): Promise<void> {
     `✔ Skinned mesh uploaded: ${skinnedMesh.vertices.length} vertices, ${skinnedMesh.indices.length / 3} triangles, ${BONE_COUNT} bones.`
   );
 
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_FLOOR_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_FLOOR_ID, {
     primitive: 'plane',
     size: 40.0
   });

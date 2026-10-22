@@ -1,4 +1,5 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
+import { createPrimitiveGeometry } from './geometry_3d.ts';
 import type { Transform3D } from '../../sdk/typescript/galfus.ts';
 import { extractKey, eulerToQuat, quatFromLookAt } from './utils.ts';
 
@@ -208,7 +209,7 @@ export async function runDemo3d8(): Promise<void> {
   });
 
   // Ground plane
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_GROUND_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_GROUND_ID, {
     primitive: 'plane',
     size: 70.0
   });
@@ -237,7 +238,7 @@ export async function runDemo3d8(): Promise<void> {
   );
 
   // Central Obelisk / Pillar
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PILLAR_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PILLAR_ID, {
     primitive: 'cylinder',
     radius: 0.6,
     size: 4.0
@@ -267,7 +268,7 @@ export async function runDemo3d8(): Promise<void> {
   );
 
   // Instanced Blade / Crystal Geometry (slender pyramid)
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_CRYSTAL_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_CRYSTAL_ID, {
     primitive: 'pyramid',
     size: 1.0
   });

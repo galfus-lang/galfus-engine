@@ -1,4 +1,5 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
+import { createPrimitiveGeometry } from './geometry_3d.ts';
 import type { AntiAliasingMode } from '../../sdk/typescript/galfus.ts';
 import { extractKey, eulerToQuat, quatFromLookAt } from './utils.ts';
 
@@ -104,11 +105,11 @@ export async function runDemoMv4(): Promise<void> {
   );
 
   // Geometries
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_CUBE_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_CUBE_ID, {
     primitive: 'cube',
     size: 1.8
   });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PLANE_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PLANE_ID, {
     primitive: 'plane',
     size: 25.0
   });

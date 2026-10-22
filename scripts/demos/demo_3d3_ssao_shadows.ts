@@ -9,6 +9,7 @@
  */
 
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
+import { createPrimitiveGeometry } from './geometry_3d.ts';
 import { extractKey, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
@@ -144,9 +145,9 @@ export async function runDemo3d3(): Promise<void> {
   });
 
   // Geometries
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_GROUND, { primitive: 'plane', size: 30.0 });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PILLAR, { primitive: 'cube', size: 1.5 });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_ORB, { primitive: 'cube', size: 0.5 });
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_GROUND, { primitive: 'plane', size: 30.0 });
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PILLAR, { primitive: 'cube', size: 1.5 });
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_ORB, { primitive: 'cube', size: 0.5 });
 
   // Ground Model
   galfus.realm3dCreateModel(

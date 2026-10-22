@@ -1,4 +1,5 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
+import { createPrimitiveGeometry } from './geometry_3d.ts';
 import { extractKey, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
@@ -111,32 +112,32 @@ export async function runDemo3d6(): Promise<void> {
   applyEnvironment();
 
   // 2. Geometries
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PLANE_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PLANE_ID, {
     primitive: 'plane',
     size: 24.0
   });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PEDESTAL_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PEDESTAL_ID, {
     primitive: 'cylinder',
     radius: 1.8,
     size: 0.6,
     subdivisions: 32
   });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PILLAR_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PILLAR_ID, {
     primitive: 'cylinder',
     radius: 0.35,
     size: 4.5,
     subdivisions: 24
   });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_TORUS_SPHERE_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_TORUS_SPHERE_ID, {
     primitive: 'torus',
     radius: 0.85,
     subdivisions: 32
   });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PYRAMID_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PYRAMID_ID, {
     primitive: 'pyramid',
     size: 1.6
   });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_CYLINDER_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_CYLINDER_ID, {
     primitive: 'cylinder',
     radius: 0.7,
     size: 1.4,

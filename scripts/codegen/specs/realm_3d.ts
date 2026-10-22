@@ -79,21 +79,15 @@ export const realm3dFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_realm_3d_create_geometry',
     methodName: 'realm3dCreateGeometry',
-    doc: 'Registers or updates a procedural 3D Geometry mesh in the 3D Realm.',
+    doc: 'Registers or updates 3D geometry from canonical binary vertex and index buffers.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
-      { name: 'geometry', type: { json: 'Geometry3DDesc' }, doc: 'Geometry description' }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_3d_create_geometry_raw',
-    methodName: 'realm3dCreateGeometryRaw',
-    doc: 'Registers custom geometry from 136-byte canonical interleaved Vertex3D records and u32 indices.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
-      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      {
+        name: 'topology',
+        type: 'u32',
+        doc: 'Primitive topology: 0 points, 1 lines, 2 line strip, 3 triangles, 4 triangle strip.'
+      },
       { name: 'vertexData', type: { buffer: 'u8' }, doc: 'Interleaved Vertex3D bytes.' },
       { name: 'vertexDataLen', type: 'u64', doc: 'Length of vertexData in bytes.' },
       { name: 'indices', type: { buffer: 'u32' }, doc: 'Triangle indices.' },

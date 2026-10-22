@@ -1005,22 +1005,9 @@ pub fn realm_3d_set_camera_transform(
 
 #[napi(js_name = "realm3dCreateGeometry")]
 pub fn realm_3d_create_geometry(
-    env: Env,
     realm_id: u32,
     geometry_id: u32,
-    geometry_val: JsUnknown,
-) -> Result<()> {
-    let c_geom = js_to_c_string(&env, Some(geometry_val))?
-        .ok_or_else(|| Error::new(Status::InvalidArg, "geometry cannot be null"))?;
-    check_ffi_res(unsafe {
-        crate::ffi_realm_3d::galfus_realm_3d_create_geometry(realm_id, geometry_id, c_geom.as_ptr())
-    })
-}
-
-#[napi(js_name = "realm3dCreateGeometryRaw")]
-pub fn realm_3d_create_geometry_raw(
-    realm_id: u32,
-    geometry_id: u32,
+    topology: u32,
     vertex_data: Uint8Array,
     _vertex_data_len: Option<i64>,
     indices: Uint32Array,
@@ -1029,9 +1016,10 @@ pub fn realm_3d_create_geometry_raw(
     let v_slice: &[u8] = vertex_data.as_ref();
     let i_slice: &[u32] = indices.as_ref();
     check_ffi_res(unsafe {
-        crate::ffi_realm_3d::galfus_realm_3d_create_geometry_raw(
+        crate::ffi_realm_3d::galfus_realm_3d_create_geometry(
             realm_id,
             geometry_id,
+            topology,
             v_slice.as_ptr(),
             v_slice.len(),
             i_slice.as_ptr(),

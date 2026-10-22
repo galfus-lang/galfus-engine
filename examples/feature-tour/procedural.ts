@@ -1,4 +1,5 @@
 import type { RoomMarker } from './types.ts';
+import { createPrimitiveGeometry } from '../../scripts/demos/geometry_3d.ts';
 
 /**
  * Deterministic pseudo-random number generator (LCG).
@@ -253,7 +254,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
   const matFloor = baseId + 2;
   const modelFloor = baseId + 3;
 
-  galfus.realm3dCreateGeometry(realmId, geomFloor, { primitive: 'plane', size: 16.0 });
+  createPrimitiveGeometry(galfus, realmId, geomFloor, { primitive: 'plane', size: 16.0 });
   galfus.realm3dCreateMaterial(realmId, matFloor, {
     baseColor: [0.15, 0.17, 0.22, 1.0],
     roughness: 0.7,
@@ -271,7 +272,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
   const matPedestal = baseId + 11;
   const modelPedestal = baseId + 12;
 
-  galfus.realm3dCreateGeometry(realmId, geomPedestal, {
+  createPrimitiveGeometry(galfus, realmId, geomPedestal, {
     primitive: 'cylinder',
     radius: 1.8,
     size: 0.4,
@@ -312,7 +313,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       const matGold = baseId + 31;
       const modelCube = baseId + 32;
 
-      galfus.realm3dCreateGeometry(realmId, geomCube, { primitive: 'cube', size: 1.4 });
+      createPrimitiveGeometry(galfus, realmId, geomCube, { primitive: 'cube', size: 1.4 });
       galfus.realm3dCreateMaterial(realmId, matGold, {
         baseColor: [1.0, 0.82, 0.2, 1.0],
         roughness: 0.15,
@@ -331,7 +332,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       const geomHalo = baseId + 33;
       const matHalo = baseId + 34;
       const modelHalo = baseId + 35;
-      galfus.realm3dCreateGeometry(realmId, geomHalo, {
+      createPrimitiveGeometry(galfus, realmId, geomHalo, {
         primitive: 'torus',
         radius: 1.2,
         subdivisions: 24
@@ -378,7 +379,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
         const gid = baseId + 30 + idx * 3;
         const mid = baseId + 31 + idx * 3;
         const modId = baseId + 32 + idx * 3;
-        galfus.realm3dCreateGeometry(realmId, gid, {
+        createPrimitiveGeometry(galfus, realmId, gid, {
           primitive: item.prim,
           size: 0.9,
           radius: 0.5,
@@ -403,7 +404,11 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       // Occluder Pillars casting shadows + 3 RGB Dynamic Lights + Glowing Emissive Box
       const p1 = baseId + 40;
       const m1 = baseId + 41;
-      galfus.realm3dCreateGeometry(realmId, p1, { primitive: 'cylinder', radius: 0.25, size: 2.5 });
+      createPrimitiveGeometry(galfus, realmId, p1, {
+        primitive: 'cylinder',
+        radius: 0.25,
+        size: 2.5
+      });
       galfus.realm3dCreateMaterial(realmId, m1, {
         baseColor: [0.35, 0.38, 0.45, 1.0],
         roughness: 0.4,
@@ -422,7 +427,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       // Emissive Glowing Box
       const geomBox = baseId + 45;
       const matEmiss = baseId + 46;
-      galfus.realm3dCreateGeometry(realmId, geomBox, { primitive: 'cube', size: 0.8 });
+      createPrimitiveGeometry(galfus, realmId, geomBox, { primitive: 'cube', size: 0.8 });
       galfus.realm3dCreateMaterial(realmId, matEmiss, {
         baseColor: [1.0, 0.4, 0.1, 1.0],
         emissiveColor: [1.0, 0.5, 0.1, 1.0],
@@ -492,7 +497,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       const matBounce = baseId + 71;
       const modelBounce = baseId + 72;
 
-      galfus.realm3dCreateGeometry(realmId, geomCube, { primitive: 'cube', size: 1.0 });
+      createPrimitiveGeometry(galfus, realmId, geomCube, { primitive: 'cube', size: 1.0 });
       galfus.realm3dCreateMaterial(realmId, matBounce, {
         baseColor: [0.2, 0.7, 1.0, 1.0],
         roughness: 0.2,
@@ -529,7 +534,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       const geomSphere = baseId + 73;
       const matPulse = baseId + 74;
       const modelPulse = baseId + 75;
-      galfus.realm3dCreateGeometry(realmId, geomSphere, {
+      createPrimitiveGeometry(galfus, realmId, geomSphere, {
         primitive: 'sphere',
         radius: 0.6,
         subdivisions: 24
@@ -570,7 +575,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       const geomTorus = baseId + 76;
       const matTorus = baseId + 77;
       const modelTorus = baseId + 78;
-      galfus.realm3dCreateGeometry(realmId, geomTorus, {
+      createPrimitiveGeometry(galfus, realmId, geomTorus, {
         primitive: 'torus',
         radius: 0.7,
         subdivisions: 24
@@ -615,7 +620,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       const matMirror = baseId + 91;
       const modelMirror = baseId + 92;
 
-      galfus.realm3dCreateGeometry(realmId, geomMirror, { primitive: 'plane', size: 3.2 });
+      createPrimitiveGeometry(galfus, realmId, geomMirror, { primitive: 'plane', size: 3.2 });
       galfus.realm3dCreateMaterial(realmId, matMirror, {
         surfaceType: 'mirror',
         baseColor: [0.95, 0.97, 1.0, 1.0],
@@ -639,7 +644,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       // Decorative Mirror Frame
       const geomFrame = baseId + 94;
       const matFrame = baseId + 95;
-      galfus.realm3dCreateGeometry(realmId, geomFrame, {
+      createPrimitiveGeometry(galfus, realmId, geomFrame, {
         primitive: 'cylinder',
         radius: 0.1,
         size: 3.4
@@ -671,9 +676,10 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       const modelSkinned = baseId + 102;
 
       const skinnedMesh = buildProceduralSkinnedMesh(24, 16, 5.0, 12);
-      galfus.realm3dCreateGeometryRaw(
+      galfus.realm3dCreateGeometry(
         realmId,
         geomSkinned,
+        3,
         skinnedMesh.vertexBuffer,
         skinnedMesh.vertexBuffer.byteLength,
         skinnedMesh.indexBuffer,
@@ -709,7 +715,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       const matGlass = baseId + 111;
       const modelGlass = baseId + 112;
 
-      galfus.realm3dCreateGeometry(realmId, geomSphere, {
+      createPrimitiveGeometry(galfus, realmId, geomSphere, {
         primitive: 'sphere',
         radius: 1.0,
         subdivisions: 32
@@ -733,7 +739,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       // Background patterned pillar behind the glass to clearly see optical refraction
       const geomBack = baseId + 113;
       const matBack = baseId + 114;
-      galfus.realm3dCreateGeometry(realmId, geomBack, { primitive: 'cube', size: 1.2 });
+      createPrimitiveGeometry(galfus, realmId, geomBack, { primitive: 'cube', size: 1.2 });
       galfus.realm3dCreateMaterial(realmId, matBack, {
         baseColor: [0.95, 0.2, 0.35, 1.0],
         emissiveColor: [0.3, 0.05, 0.1, 1.0],
@@ -753,7 +759,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       // Post-Processing & Screen Effects Exhibit
       const geomPodium = baseId + 120;
       const matPodium = baseId + 121;
-      galfus.realm3dCreateGeometry(realmId, geomPodium, {
+      createPrimitiveGeometry(galfus, realmId, geomPodium, {
         primitive: 'torus',
         radius: 1.1,
         subdivisions: 32
@@ -777,7 +783,7 @@ export function buildRoomScene(realmId: number, room: RoomMarker, seed: number, 
       // Spatial Audio Beacon & Finale Room
       const geomBeacon = baseId + 130;
       const matBeacon = baseId + 131;
-      galfus.realm3dCreateGeometry(realmId, geomBeacon, {
+      createPrimitiveGeometry(galfus, realmId, geomBeacon, {
         primitive: 'cylinder',
         radius: 0.7,
         size: 2.0,

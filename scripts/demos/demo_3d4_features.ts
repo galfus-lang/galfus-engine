@@ -9,6 +9,7 @@
  */
 
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
+import { createPrimitiveGeometry } from './geometry_3d.ts';
 import { extractKey, quatFromEuler, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
@@ -144,26 +145,26 @@ Showcasing:
   applyCamera();
 
   console.log('==> Creating New 3D Geometry Primitives...');
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_GROUND, { primitive: 'plane', size: 36.0 });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_TORUS, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_GROUND, { primitive: 'plane', size: 36.0 });
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_TORUS, {
     primitive: 'torus',
     radius: 1.2,
     subdivisions: 36
   });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_CAPSULE, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_CAPSULE, {
     primitive: 'capsule',
     radius: 0.65,
     size: 1.6,
     subdivisions: 12
   });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_CYLINDER, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_CYLINDER, {
     primitive: 'cylinder',
     radius: 0.75,
     size: 2.2,
     subdivisions: 32
   });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PYRAMID, { primitive: 'pyramid', size: 1.8 });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_SPHERE, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PYRAMID, { primitive: 'pyramid', size: 1.8 });
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_SPHERE, {
     primitive: 'sphere',
     radius: 0.85,
     subdivisions: 32

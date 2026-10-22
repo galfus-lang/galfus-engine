@@ -15,9 +15,13 @@ namespace FeatureTourRunner
         public float posX, posY, posZ;
         public float normX, normY, normZ;
         public float uvU, uvV;
+        public float uv1U, uv1V;
         public float tanX, tanY, tanZ, tanW;
+        public float colorR, colorG, colorB, colorA;
         public uint joint0, joint1, joint2, joint3;
         public float weight0, weight1, weight2, weight3;
+        public uint joint4, joint5, joint6, joint7;
+        public float weight4, weight5, weight6, weight7;
     }
 
     class Program
@@ -336,6 +340,10 @@ namespace FeatureTourRunner
                                 tanY = 0.0f,
                                 tanZ = 0.0f,
                                 tanW = 1.0f,
+                                colorR = 1.0f,
+                                colorG = 1.0f,
+                                colorB = 1.0f,
+                                colorA = 1.0f,
                                 joint0 = (uint)b0,
                                 joint1 = (uint)b1,
                                 joint2 = 0,
@@ -368,7 +376,7 @@ namespace FeatureTourRunner
                     GCHandle iHandle = GCHandle.Alloc(indices, GCHandleType.Pinned);
                     try
                     {
-                        galfus.Realm3dCreateGeometryRaw(REALM_3D, baseId + 100, vHandle.AddrOfPinnedObject(), (ulong)(vertCount * Marshal.SizeOf<Vertex3DRecord>()), iHandle.AddrOfPinnedObject(), (ulong)idxCount);
+                        galfus.Realm3dCreateGeometry(REALM_3D, baseId + 100, 3, vHandle.AddrOfPinnedObject(), (ulong)(vertCount * Marshal.SizeOf<Vertex3DRecord>()), iHandle.AddrOfPinnedObject(), (ulong)idxCount);
                     }
                     finally
                     {
@@ -693,6 +701,65 @@ namespace FeatureTourRunner
             try { galfus.PlatformShutdown(); } catch { }
 
             Console.WriteLine("✔ C# feature tour finished gracefully.");
+        }
+    }
+
+    /* Tour-only host helper. Descriptions are converted to canonical binary vertices locally. */
+    static class PrimitiveGeometryExtensions
+    {
+        public static void Realm3dCreateGeometry(this GalfusEngine galfus, uint realmId,
+            uint geometryId, string description)
+        {
+            float size = ReadNumber(description, "\"size\":", ReadNumber(description, "\"radius\":", 1.0f));
+            float h = size * 0.5f;
+            bool horizontal = description.Contains("\"plane\"");
+            var vertices = new Vertex3DRecord[4];
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                float x = (i == 1 || i == 2) ? h : -h;
+                float second = (i < 2) ? -h : h;
+                vertices[i] = new Vertex3DRecord
+                {
+                    posX = x,
+                    posY = horizontal ? 0.0f : second,
+                    posZ = horizontal ? -second : 0.0f,
+                    normY = horizontal ? 1.0f : 0.0f,
+                    normZ = horizontal ? 0.0f : 1.0f,
+                    uvU = (i == 1 || i == 2) ? 1.0f : 0.0f,
+                    uvV = (i < 2) ? 1.0f : 0.0f,
+                    tanX = 1.0f,
+                    tanW = 1.0f,
+                    colorR = 1.0f,
+                    colorG = 1.0f,
+                    colorB = 1.0f,
+                    colorA = 1.0f
+                };
+            }
+            uint[] indices = { 0, 1, 2, 0, 2, 3 };
+            var vertexHandle = GCHandle.Alloc(vertices, GCHandleType.Pinned);
+            var indexHandle = GCHandle.Alloc(indices, GCHandleType.Pinned);
+            try
+            {
+                galfus.Realm3dCreateGeometry(realmId, geometryId, 3, vertexHandle.AddrOfPinnedObject(),
+                    (ulong)(vertices.Length * Marshal.SizeOf<Vertex3DRecord>()), indexHandle.AddrOfPinnedObject(),
+                    (ulong)indices.Length);
+            }
+            finally
+            {
+                vertexHandle.Free();
+                indexHandle.Free();
+            }
+        }
+
+        static float ReadNumber(string value, string key, float fallback)
+        {
+            int start = value.IndexOf(key, StringComparison.Ordinal);
+            if (start < 0) return fallback;
+            start += key.Length;
+            int end = start;
+            while (end < value.Length && (char.IsDigit(value[end]) || value[end] == '.')) end++;
+            return float.TryParse(value[start..end], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float number) ? number : fallback;
         }
     }
 }

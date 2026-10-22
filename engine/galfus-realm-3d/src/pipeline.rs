@@ -1,6 +1,6 @@
 //! Render pipeline definition for 3D forward rendering with Reverse-Z.
 
-use galfus_realm_3d_resources::geometry::Vertex3D;
+use galfus_realm_3d_resources::geometry::{PrimitiveTopology3D, Vertex3D};
 
 use std::collections::HashMap;
 
@@ -22,7 +22,18 @@ pub struct Pipeline3D {
     pub fallback_black_view: wgpu::TextureView,
     _fallback_textures: (wgpu::Texture, wgpu::Texture, wgpu::Texture),
     pub target_format: wgpu::TextureFormat,
-    custom_pipelines: HashMap<(u64, bool, bool), wgpu::RenderPipeline>,
+    standard_pipelines: HashMap<(PrimitiveTopology3D, bool, bool), wgpu::RenderPipeline>,
+    custom_pipelines: HashMap<(u64, PrimitiveTopology3D, bool, bool), wgpu::RenderPipeline>,
+}
+
+pub(crate) fn to_wgpu_topology(topology: PrimitiveTopology3D) -> wgpu::PrimitiveTopology {
+    match topology {
+        PrimitiveTopology3D::Points => wgpu::PrimitiveTopology::PointList,
+        PrimitiveTopology3D::Lines => wgpu::PrimitiveTopology::LineList,
+        PrimitiveTopology3D::LineStrip => wgpu::PrimitiveTopology::LineStrip,
+        PrimitiveTopology3D::Triangles => wgpu::PrimitiveTopology::TriangleList,
+        PrimitiveTopology3D::TriangleStrip => wgpu::PrimitiveTopology::TriangleStrip,
+    }
 }
 
 fn create_1x1_texture(
@@ -70,6 +81,7 @@ fn create_3d_render_pipeline(
     layout: &wgpu::PipelineLayout,
     shader: &wgpu::ShaderModule,
     target_format: wgpu::TextureFormat,
+    topology: PrimitiveTopology3D,
     depth_write_enabled: bool,
     instanced: bool,
 ) -> wgpu::RenderPipeline {
@@ -161,10 +173,10 @@ fn create_3d_render_pipeline(
             compilation_options: Default::default(),
         }),
         primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            strip_index_format: None,
+            topology: to_wgpu_topology(topology),
+            strip_index_format: topology.is_strip().then_some(wgpu::IndexFormat::Uint32),
             front_face: wgpu::FrontFace::Ccw,
-            cull_mode: Some(wgpu::Face::Back),
+            cull_mode: topology.is_triangle().then_some(wgpu::Face::Back),
             polygon_mode: wgpu::PolygonMode::Fill,
             unclipped_depth: false,
             conservative: false,
@@ -430,6 +442,7 @@ impl Pipeline3D {
             &pipeline_layout,
             &shader,
             target_format,
+            PrimitiveTopology3D::Triangles,
             true,
             false,
         );
@@ -438,19 +451,51 @@ impl Pipeline3D {
             &pipeline_layout,
             &shader,
             target_format,
+            PrimitiveTopology3D::Triangles,
             false,
             false,
         );
-        let instanced_render_pipeline =
-            create_3d_render_pipeline(device, &pipeline_layout, &shader, target_format, true, true);
+        let instanced_render_pipeline = create_3d_render_pipeline(
+            device,
+            &pipeline_layout,
+            &shader,
+            target_format,
+            PrimitiveTopology3D::Triangles,
+            true,
+            true,
+        );
         let instanced_transparent_pipeline = create_3d_render_pipeline(
             device,
             &pipeline_layout,
             &shader,
             target_format,
+            PrimitiveTopology3D::Triangles,
             false,
             true,
         );
+
+        let mut standard_pipelines = HashMap::new();
+        for topology in PrimitiveTopology3D::ALL {
+            if topology == PrimitiveTopology3D::Triangles {
+                continue;
+            }
+            for &transparent in &[false, true] {
+                for &instanced in &[false, true] {
+                    standard_pipelines.insert(
+                        (topology, transparent, instanced),
+                        create_3d_render_pipeline(
+                            device,
+                            &pipeline_layout,
+                            &shader,
+                            target_format,
+                            topology,
+                            !transparent,
+                            instanced,
+                        ),
+                    );
+                }
+            }
+        }
 
         Self {
             render_pipeline,
@@ -470,6 +515,7 @@ impl Pipeline3D {
             fallback_black_view,
             _fallback_textures: (white_tex, normal_tex, black_tex),
             target_format,
+            standard_pipelines,
             custom_pipelines: HashMap::new(),
         }
     }
@@ -489,22 +535,25 @@ impl Pipeline3D {
             return;
         };
         let hash = composed.content_id.as_u64();
-        for &instanced in &[false, true] {
-            let key = (hash, transparent, instanced);
-            self.custom_pipelines.entry(key).or_insert_with(|| {
-                let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                    label: Some("Realm3D Custom Surface Shader"),
-                    source: wgpu::ShaderSource::Wgsl(composed.source.clone().into()),
+        for topology in PrimitiveTopology3D::ALL {
+            for &instanced in &[false, true] {
+                let key = (hash, topology, transparent, instanced);
+                self.custom_pipelines.entry(key).or_insert_with(|| {
+                    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                        label: Some("Realm3D Custom Surface Shader"),
+                        source: wgpu::ShaderSource::Wgsl(composed.source.clone().into()),
+                    });
+                    create_3d_render_pipeline(
+                        device,
+                        &self.pipeline_layout,
+                        &shader,
+                        self.target_format,
+                        topology,
+                        !transparent,
+                        instanced,
+                    )
                 });
-                create_3d_render_pipeline(
-                    device,
-                    &self.pipeline_layout,
-                    &shader,
-                    self.target_format,
-                    !transparent,
-                    instanced,
-                )
-            });
+            }
         }
     }
 
@@ -512,15 +561,11 @@ impl Pipeline3D {
     pub fn get_pipeline(
         &self,
         snippet: Option<&str>,
+        topology: PrimitiveTopology3D,
         transparent: bool,
         instanced: bool,
     ) -> &wgpu::RenderPipeline {
-        let fallback = match (transparent, instanced) {
-            (false, false) => &self.render_pipeline,
-            (true, false) => &self.transparent_pipeline,
-            (false, true) => &self.instanced_render_pipeline,
-            (true, true) => &self.instanced_transparent_pipeline,
-        };
+        let fallback = self.get_standard_pipeline(topology, transparent, instanced);
         let Some(snippet) = snippet else {
             return fallback;
         };
@@ -531,7 +576,31 @@ impl Pipeline3D {
             return fallback;
         };
         self.custom_pipelines
-            .get(&(composed.content_id.as_u64(), transparent, instanced))
+            .get(&(
+                composed.content_id.as_u64(),
+                topology,
+                transparent,
+                instanced,
+            ))
             .unwrap_or(fallback)
+    }
+
+    fn get_standard_pipeline(
+        &self,
+        topology: PrimitiveTopology3D,
+        transparent: bool,
+        instanced: bool,
+    ) -> &wgpu::RenderPipeline {
+        if topology == PrimitiveTopology3D::Triangles {
+            return match (transparent, instanced) {
+                (false, false) => &self.render_pipeline,
+                (true, false) => &self.transparent_pipeline,
+                (false, true) => &self.instanced_render_pipeline,
+                (true, true) => &self.instanced_transparent_pipeline,
+            };
+        }
+        self.standard_pipelines
+            .get(&(topology, transparent, instanced))
+            .expect("all standard primitive topologies are precompiled")
     }
 }

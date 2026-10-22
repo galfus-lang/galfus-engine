@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use galfus_realm_3d_resources::frustum::Frustum;
-use galfus_realm_3d_resources::geometry::Geometry3D;
+use galfus_realm_3d_resources::geometry::{Geometry3D, PrimitiveTopology3D};
 use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D};
 use glam::Vec3;
 
@@ -12,6 +12,7 @@ use crate::types::{GpuInstancedModelEntry, GpuMeshBuffers, GpuModelEntry};
 pub struct CollectedDrawItem<'a> {
     pub model_id: u32,
     pub geometry_id: u32,
+    pub topology: PrimitiveTopology3D,
     pub material_id: u32,
     pub depth: f32,
     pub surface_type: SurfaceType3D,
@@ -95,6 +96,7 @@ impl<'a> DrawCollector<'a> {
             let item = CollectedDrawItem {
                 model_id,
                 geometry_id: model.geometry_id,
+                topology: geom.topology,
                 material_id: model.material_id,
                 depth,
                 surface_type,
@@ -133,7 +135,7 @@ impl<'a> DrawCollector<'a> {
                 continue;
             };
 
-            let Some((_geom, Some((v_buf, i_buf, index_count)))) =
+            let Some((geom, Some((v_buf, i_buf, index_count)))) =
                 geometries.get(&inst_model.geometry_id)
             else {
                 continue;
@@ -164,6 +166,7 @@ impl<'a> DrawCollector<'a> {
             let item = CollectedDrawItem {
                 model_id: inst_id,
                 geometry_id: inst_model.geometry_id,
+                topology: geom.topology,
                 material_id: inst_model.material_id,
                 depth,
                 surface_type,
@@ -243,9 +246,14 @@ pub fn render_draw_items<'a>(
 
     for (item, transparent) in items {
         let is_instanced = item.instance_buffer.is_some() && item.instance_count > 0;
-        let key = (item.shader_effect, transparent, is_instanced);
+        let key = (item.shader_effect, item.topology, transparent, is_instanced);
         if curr_pipe != Some(key) {
-            pass.set_pipeline(pipeline.get_pipeline(item.shader_effect, transparent, is_instanced));
+            pass.set_pipeline(pipeline.get_pipeline(
+                item.shader_effect,
+                item.topology,
+                transparent,
+                is_instanced,
+            ));
             curr_pipe = Some(key);
         }
         if curr_mat != Some(item.material_id) {

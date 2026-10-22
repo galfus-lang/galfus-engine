@@ -20,7 +20,7 @@ pub use aabb::Aabb;
 pub use camera::{Camera3D, Camera3DUniform, CameraKind3D};
 pub use environment::{BloomConfig3D, Environment3DUniform, EnvironmentRealm3D, FogMode3D};
 pub use frustum::Frustum;
-pub use geometry::{Geometry3D, Vertex3D};
+pub use geometry::{Geometry3D, PrimitiveTopology3D, Vertex3D};
 pub use light::{Light3D, Light3DUniform, LightKind3D};
 pub use material::{Material3D, Material3DUniform, SurfaceType3D, TextureSampler3D};
 pub use model::{InstanceData3D, InstancedModel3D, Model3D, Model3DUniform};

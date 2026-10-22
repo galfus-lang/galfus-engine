@@ -2,7 +2,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use galfus_realm_3d_resources::environment::OutlineConfig3D;
-use galfus_realm_3d_resources::geometry::Vertex3D;
+use galfus_realm_3d_resources::geometry::{PrimitiveTopology3D, Vertex3D};
 use glam::UVec2;
 use wgpu::util::DeviceExt;
 
@@ -166,6 +166,7 @@ struct OutlineParamsUniform {
 /// Pipeline for rendering screen-space model outline silhouettes and dilation.
 pub struct OutlinePipeline3D {
     silhouette_pipeline: wgpu::RenderPipeline,
+    triangle_strip_silhouette_pipeline: wgpu::RenderPipeline,
     composite_pipeline: wgpu::RenderPipeline,
     composite_bgl: wgpu::BindGroupLayout,
     params_buffer: wgpu::Buffer,
@@ -230,7 +231,7 @@ impl OutlinePipeline3D {
             vertex: wgpu::VertexState {
                 module: &sil_shader,
                 entry_point: Some("vs_main"),
-                buffers: &[vertex_layout],
+                buffers: std::slice::from_ref(&vertex_layout),
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -263,6 +264,47 @@ impl OutlinePipeline3D {
             multiview_mask: None,
             cache: None,
         });
+
+        let triangle_strip_silhouette_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Realm3D Triangle Strip Outline Silhouette Pipeline"),
+                layout: Some(&sil_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &sil_shader,
+                    entry_point: Some("vs_main"),
+                    buffers: std::slice::from_ref(&vertex_layout),
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &sil_shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    strip_index_format: Some(wgpu::IndexFormat::Uint32),
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: Some(wgpu::Face::Back),
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: false,
+                    depth_compare: wgpu::CompareFunction::GreaterEqual,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                multiview_mask: None,
+                cache: None,
+            });
 
         let comp_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Realm3D Outline Composite Shader"),
@@ -362,6 +404,7 @@ impl OutlinePipeline3D {
 
         Self {
             silhouette_pipeline,
+            triangle_strip_silhouette_pipeline,
             composite_pipeline,
             composite_bgl,
             params_buffer,
@@ -389,8 +432,15 @@ impl OutlinePipeline3D {
     pub fn render<'a>(
         &'a mut self,
         desc: OutlineRenderDesc<'a>,
-        models: impl Iterator<Item = (&'a wgpu::BindGroup, &'a wgpu::Buffer, &'a wgpu::Buffer, u32)>
-        + Clone,
+        models: impl Iterator<
+            Item = (
+                &'a wgpu::BindGroup,
+                &'a wgpu::Buffer,
+                &'a wgpu::Buffer,
+                u32,
+                PrimitiveTopology3D,
+            ),
+        > + Clone,
     ) {
         if !desc.config.enabled || desc.config.strength <= 0.001 {
             return;
@@ -484,9 +534,14 @@ impl OutlinePipeline3D {
                 multiview_mask: None,
             });
 
-            sil_pass.set_pipeline(&self.silhouette_pipeline);
             sil_pass.set_bind_group(0, desc.scene_bind_group, &[]);
-            for (model_bg, v_buf, i_buf, idx_count) in models {
+            for (model_bg, v_buf, i_buf, idx_count, topology) in models {
+                let silhouette_pipeline = match topology {
+                    PrimitiveTopology3D::Triangles => &self.silhouette_pipeline,
+                    PrimitiveTopology3D::TriangleStrip => &self.triangle_strip_silhouette_pipeline,
+                    _ => continue,
+                };
+                sil_pass.set_pipeline(silhouette_pipeline);
                 sil_pass.set_bind_group(1, model_bg, &[]);
                 sil_pass.set_vertex_buffer(0, v_buf.slice(..));
                 sil_pass.set_index_buffer(i_buf.slice(..), wgpu::IndexFormat::Uint32);

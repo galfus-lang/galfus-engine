@@ -1,4 +1,5 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
+import { createPrimitiveGeometry } from './geometry_3d.ts';
 import type { InvocationFilter, ViewportRect } from '../../sdk/typescript/galfus.ts';
 import { extractKey, eulerToQuat, quatFromLookAt } from './utils.ts';
 
@@ -137,11 +138,11 @@ export async function runDemoMv2(): Promise<void> {
   );
 
   // Cube Geometry & Pedestal Geometry
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_CUBE_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_CUBE_ID, {
     primitive: 'cube',
     size: 1.8
   });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PEDESTAL_ID, {
+  createPrimitiveGeometry(galfus, REALM_3D, GEOM_PEDESTAL_ID, {
     primitive: 'plane',
     size: 10.0
   });

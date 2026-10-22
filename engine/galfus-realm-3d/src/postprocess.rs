@@ -72,6 +72,9 @@ impl PostProcessPipelines {
                     return None;
                 }
                 let (geom, gpu_mesh) = desc.geometries.get(&m.geometry_id)?;
+                if !geom.topology.is_triangle() {
+                    return None;
+                }
                 let (v, i, count) = gpu_mesh.as_ref()?;
                 let world_aabb = geom.aabb.transform(&trans.matrix());
                 if !desc
@@ -80,7 +83,7 @@ impl PostProcessPipelines {
                 {
                     return None;
                 }
-                Some((bg_opt.as_ref()?, v, i, *count))
+                Some((bg_opt.as_ref()?, v, i, *count, geom.topology))
             });
             outline_pipe.render(
                 crate::outline::OutlineRenderDesc {

@@ -32,6 +32,43 @@ typedef struct {
     float weights1[4];
 } Vertex3DRecord;
 
+/* Tour-only host helper. The renderer API receives only canonical binary geometry. */
+static int32_t create_demo_primitive_geometry(uint32_t realm_id, uint32_t geometry_id,
+                                              const char *description) {
+    float size = 1.0f;
+    const char *size_key = strstr(description, "\"size\":");
+    const char *radius_key = strstr(description, "\"radius\":");
+    if (size_key)
+        sscanf(size_key + 7, "%f", &size);
+    else if (radius_key)
+        sscanf(radius_key + 9, "%f", &size);
+
+    const float h = size * 0.5f;
+    const bool horizontal = strstr(description, "\"plane\"") != NULL;
+    Vertex3DRecord vertices[4] = {0};
+    const float positions[4][3] = {{-h, 0.0f, h}, {h, 0.0f, h}, {h, 0.0f, -h}, {-h, 0.0f, -h}};
+    const float vertical_positions[4][3] = {
+        {-h, -h, 0.0f}, {h, -h, 0.0f}, {h, h, 0.0f}, {-h, h, 0.0f}};
+    const uint32_t indices[] = {0, 1, 2, 0, 2, 3};
+    for (size_t i = 0; i < 4; ++i) {
+        memcpy(vertices[i].pos, horizontal ? positions[i] : vertical_positions[i],
+               sizeof(vertices[i].pos));
+        vertices[i].norm[horizontal ? 1 : 2] = 1.0f;
+        vertices[i].uv0[0] = (i == 1 || i == 2) ? 1.0f : 0.0f;
+        vertices[i].uv0[1] = (i < 2) ? 1.0f : 0.0f;
+        vertices[i].tangent[0] = 1.0f;
+        vertices[i].tangent[3] = 1.0f;
+        for (size_t c = 0; c < 4; ++c)
+            vertices[i].color[c] = 1.0f;
+    }
+    return galfus_realm_3d_create_geometry(realm_id, geometry_id, 3, (const uint8_t *)vertices,
+                                           sizeof(vertices), indices, 6);
+}
+
+/* Local primitive descriptions are never sent to Galfus. */
+#define galfus_realm_3d_create_geometry(realm_id, geometry_id, description)                        \
+    create_demo_primitive_geometry((realm_id), (geometry_id), (description))
+
 static const char *ROOM_NAMES[10] = {"Welcome & Engine Overview", "PBR Primitives & Materials",
                                      "Dynamic Lights & Shadows",  "3D GPU Particle Systems",
                                      "Animation & Motion Paths",  "Planar Mirrors & Portals",
@@ -684,9 +721,9 @@ static void build_all_rooms(void) {
             uint32_t geom_skin = base_id + 100;
             uint32_t mat_skin = base_id + 101;
             uint32_t mod_skin = 7102; // Matches tour_runner model ID
-            galfus_realm_3d_create_geometry_raw(REALM_3D, geom_skin, (const uint8_t *)verts,
-                                                vert_count * sizeof(Vertex3DRecord), indices,
-                                                idx_count);
+            (galfus_realm_3d_create_geometry)(REALM_3D, geom_skin, 3, (const uint8_t *)verts,
+                                              vert_count * sizeof(Vertex3DRecord), indices,
+                                              idx_count);
             galfus_realm_3d_create_material(
                 REALM_3D, mat_skin,
                 "{\"baseColor\":[0.15,0.85,0.95,1.0],\"emissiveColor\":[0.05,0.25,0.35,1.0],"

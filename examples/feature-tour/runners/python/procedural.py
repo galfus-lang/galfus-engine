@@ -204,8 +204,68 @@ def compute_bone_palette(time_val: float, bone_count: int = 12, height: float = 
     return palette
 
 
+def install_primitive_geometry_helper(galfus: Any) -> None:
+    """Converts tour-only primitive descriptions into canonical binary geometry."""
+    if getattr(galfus, "_feature_tour_binary_geometry", False):
+        return
+    upload_binary = galfus.realm3d_create_geometry
+
+    def upload_primitive(realm_id: int, geometry_id: int, description: Dict[str, Any]) -> None:
+        size = float(description.get("size", description.get("radius", 1.0)))
+        half = size * 0.5
+        horizontal = description.get("primitive") == "plane"
+        positions = [(-half, 0.0, half), (half, 0.0, half), (half, 0.0, -half), (-half, 0.0, -half)]
+        if not horizontal:
+            positions = [
+                (-half, -half, 0.0),
+                (half, -half, 0.0),
+                (half, half, 0.0),
+                (-half, half, 0.0),
+            ]
+        vertex_data = bytearray(4 * 136)
+        for index, position in enumerate(positions):
+            offset = index * 136
+            normal = (0.0, 1.0, 0.0) if horizontal else (0.0, 0.0, 1.0)
+            uv = (1.0 if index in (1, 2) else 0.0, 1.0 if index < 2 else 0.0)
+            struct.pack_into(
+                "<3f3f2f2f4f4f4I4f4I4f",
+                vertex_data,
+                offset,
+                *position,
+                *normal,
+                *uv,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                *(0 for _ in range(4)),
+                *(0.0 for _ in range(4)),
+                *(0 for _ in range(4)),
+                *(0.0 for _ in range(4)),
+            )
+        vertices = (ctypes.c_uint8 * len(vertex_data)).from_buffer(vertex_data)
+        indices = (ctypes.c_uint32 * 6)(0, 1, 2, 0, 2, 3)
+        upload_binary(realm_id, geometry_id, 3, vertices, len(vertex_data), indices, 6)
+
+    def create_geometry(*args: Any) -> None:
+        if len(args) == 3 and isinstance(args[2], dict):
+            upload_primitive(args[0], args[1], args[2])
+            return
+        upload_binary(*args)
+
+    galfus.realm3d_create_geometry = create_geometry
+    galfus._feature_tour_binary_geometry = True
+
+
 def build_room_scene(realm_id: int, room: Dict[str, Any], seed: int, galfus: Any) -> None:
     """Populates rich procedural 3D scene elements for each room exhibit matching procedural.ts 1:1."""
+    install_primitive_geometry_helper(galfus)
     room_idx = room["roomIndex"]
     base_id = (room_idx + 1) * 1000
     fx, fy, fz = room["focusPoint"]
@@ -678,8 +738,8 @@ def build_room_scene(realm_id: int, room: Dict[str, Any], seed: int, galfus: Any
         c_vbytes = (ctypes.c_uint8 * len(v_bytes)).from_buffer_copy(v_bytes)
         c_indices = (ctypes.c_uint32 * len(indices))(*indices)
 
-        galfus.realm3d_create_geometry_raw(
-            realm_id, geom_skinned, c_vbytes, len(v_bytes), c_indices, len(indices)
+        galfus.realm3d_create_geometry(
+            realm_id, geom_skinned, 3, c_vbytes, len(v_bytes), c_indices, len(indices)
         )
 
         galfus.realm3d_create_material(

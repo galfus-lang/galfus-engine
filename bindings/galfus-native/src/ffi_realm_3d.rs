@@ -2,7 +2,7 @@ use std::os::raw::c_char;
 
 use galfus_realm_3d::Realm3DContext;
 use galfus_realm_3d_resources::camera::Camera3D;
-use galfus_realm_3d_resources::geometry::{Geometry3D, Vertex3D};
+use galfus_realm_3d_resources::geometry::{Geometry3D, PrimitiveTopology3D, Vertex3D};
 use galfus_realm_3d_resources::model::InstanceData3D;
 
 use crate::ffi::{from_c_str, from_c_str_optional, set_last_error};
@@ -155,65 +155,21 @@ pub unsafe extern "C" fn galfus_realm_3d_set_camera_transform(
     }
 }
 
-/// Registers or updates a 3D Geometry in the 3D Realm.
-///
-/// # Safety
-/// `geometry_json` must be a valid, null-terminated UTF-8 string.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_3d_create_geometry(
-    realm_id: u32,
-    geometry_id: u32,
-    geometry_json: *const c_char,
-) -> i32 {
-    let geom_desc: Geometry3DDesc =
-        match serde_json::from_str(match unsafe { from_c_str(geometry_json) } {
-            Ok(s) => s,
-            Err(e) => {
-                set_last_error(&e);
-                return -1;
-            }
-        }) {
-            Ok(d) => d,
-            Err(e) => {
-                set_last_error(&format!("Invalid Geometry3DDesc: {e}"));
-                return -1;
-            }
-        };
-
-    if geom_desc.primitive.is_none() || geom_desc.primitive.as_deref() == Some("custom") {
-        set_last_error("Custom geometry must be uploaded with galfus_realm_3d_create_geometry_raw");
-        return -1;
-    }
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm3DContext>(realm_id)
-            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
-        realm
-            .create_geometry(geometry_id, geom_desc.into())
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Registers or updates custom 3D geometry from interleaved binary vertex data and u32 indices.
+/// Registers or updates 3D geometry from interleaved binary vertex data and u32 indices.
 ///
 /// Vertex data uses the 136-byte canonical `Vertex3D` C layout: position, normal, `uv0`, `uv1`,
-/// tangent, color, `joints0`, `weights0`, `joints1`, and `weights1`.
+/// tangent, color, `joints0`, `weights0`, `joints1`, and `weights1`. `topology` is one of:
+/// `0` points, `1` lines, `2` line strip, `3` triangles, or `4` triangle strip.
 /// Indices must reference an existing vertex.
 ///
 /// # Safety
 /// `vertices_ptr` must be valid for `vertices_len` bytes and `indices_ptr` must be valid for
 /// `indices_len` u32 elements when their respective lengths are non-zero.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_3d_create_geometry_raw(
+pub unsafe extern "C" fn galfus_realm_3d_create_geometry(
     realm_id: u32,
     geometry_id: u32,
+    topology: u32,
     vertices_ptr: *const u8,
     vertices_len: usize,
     indices_ptr: *const u32,
@@ -221,12 +177,20 @@ pub unsafe extern "C" fn galfus_realm_3d_create_geometry_raw(
 ) -> i32 {
     const VERTEX3D_BYTES: usize = std::mem::size_of::<Vertex3D>();
 
+    let topology = match PrimitiveTopology3D::try_from(topology) {
+        Ok(topology) => topology,
+        Err(e) => {
+            set_last_error(e);
+            return -1;
+        }
+    };
+
     if vertices_len == 0 || !vertices_len.is_multiple_of(VERTEX3D_BYTES) {
         set_last_error("Vertex data length must be a non-zero multiple of 136 bytes");
         return -1;
     }
     if vertices_ptr.is_null() || (indices_len != 0 && indices_ptr.is_null()) {
-        set_last_error("Null custom geometry data pointer");
+        set_last_error("Null geometry data pointer");
         return -1;
     }
 
@@ -247,11 +211,11 @@ pub unsafe extern "C" fn galfus_realm_3d_create_geometry_raw(
         .iter()
         .any(|&index| index as usize >= vertices.len())
     {
-        set_last_error("Custom geometry index is outside the vertex buffer");
+        set_last_error("Geometry index is outside the vertex buffer");
         return -1;
     }
 
-    let geometry = Geometry3D::new(vertices, indices, None);
+    let geometry = Geometry3D::new_with_topology(vertices, indices, topology, None);
     match with_multiverse_mut(|mv| {
         let realm = mv
             .get_realm_mut::<Realm3DContext>(realm_id)
