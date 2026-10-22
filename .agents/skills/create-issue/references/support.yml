@@ -1,0 +1,72 @@
+name: Support / Question
+description: Ask a question or request support
+title: '[Support] '
+labels: ['question', 'needs-triage']
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reaching out! Use this form if you need help, clarification, or have general questions.  
+        If this is a **bug** or a **feature request**, please use the corresponding template.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Question Summary
+      description: A short title for your question.
+      placeholder: How can I configure Galfus Script with custom settings?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Describe what you are trying to achieve, and why you need help.
+      placeholder: I'm trying to import a module in Galfus Script, but I'm not sure...
+    validations:
+      required: true
+
+  - type: textarea
+    id: attempts
+    attributes:
+      label: What Have You Tried?
+      description: Explain what you already tried or researched before asking.
+      placeholder: I looked at the reference docs and tried using the parser, but it fails...
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Share details about your setup to help others reproduce or understand the context.
+      placeholder: |
+        OS: Linux / Ubuntu 24.04
+        Environment: Rust 1.85 / Bun 1.1 / Chrome 120
+        Project version: v0.0.0
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Checks
+      options:
+        - label: I have searched existing issues and Discussions
+          required: true
+        - label: I have read the documentation
+          required: false
+        - label: I agree to follow the Code of Conduct
+          required: true
+
+  - type: input
+    id: contact
+    attributes:
+      label: Contact Details (optional)
+      description: How can we reach you if we need clarification?
+      placeholder: email or @handle
+    validations:
+      required: false

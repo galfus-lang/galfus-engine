@@ -1,0 +1,119 @@
+name: Feature Request
+description: Suggest an improvement or new feature
+title: '[Feature] '
+labels: ['enhancement', 'needs-triage']
+assignees: []
+type: feature
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement! Please provide as much detail as possible so we can evaluate it properly.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: A short description of the feature or improvement.
+      placeholder: Dark mode toggle for the dashboard
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to Solve
+      description: What problem or limitation does this improvement address?
+      placeholder: It's hard to work at night because the UI is too bright.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: Describe how you think the improvement should work.
+      placeholder: Add a dark mode option in settings with automatic system detection.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you thought of other possible solutions?
+      placeholder: Using a browser extension to invert colors, but it's not ideal.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope of Impact
+      description: Which area does this improvement affect?
+      multiple: true
+      options:
+        - Core / Runtime
+        - CLI
+        - Web / Frontend
+        - Performance
+        - Security
+        - Documentation
+        - Tooling
+        - Ecosystem (Packages, Integrations)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this improvement to you?
+      options:
+        - Critical (blocks usage)
+        - High (strongly improves workflow)
+        - Medium (nice to have)
+        - Low (minor enhancement)
+    validations:
+      required: true
+
+  - type: textarea
+    id: benefits
+    attributes:
+      label: Expected Benefits
+      description: What positive outcomes would this improvement bring?
+      placeholder: More comfortable for users working at night, improves accessibility.
+    validations:
+      required: false
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks / Drawbacks
+      description: Any potential negative side effects?
+      placeholder: Increased maintenance due to supporting multiple themes.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Checks
+      options:
+        - label: I have searched existing issues and Discussions
+          required: true
+        - label: I have read the contributing guidelines
+          required: false
+        - label: I agree to follow the Code of Conduct
+          required: true
+
+  - type: input
+    id: contact
+    attributes:
+      label: Contact Details (optional)
+      description: How can we reach you if we need clarification?
+      placeholder: email or @handle
+    validations:
+      required: false
