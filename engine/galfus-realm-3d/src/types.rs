@@ -6,36 +6,6 @@ use galfus_realm_3d_resources::transform::Transform3D;
 use galfus_realm_core::error::{RealmError, RealmResult};
 use wgpu::util::DeviceExt;
 
-/// Creates a GPU uniform buffer with its single-binding bind group.
-pub fn create_uniform_bg(
-    device: &wgpu::Device,
-    label: &str,
-    layout: &wgpu::BindGroupLayout,
-    contents: &[u8],
-    instance_buffer: &wgpu::Buffer,
-) -> (wgpu::Buffer, wgpu::BindGroup) {
-    let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some(label),
-        contents,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
-    let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some(label),
-        layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buf.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: instance_buffer.as_entire_binding(),
-            },
-        ],
-    });
-    (buf, bg)
-}
-
 /// Validates a host logical identifier against core engine policy.
 pub fn validate_id(id: u32) -> RealmResult<()> {
     validate_host_logical_id(id)
@@ -147,21 +117,29 @@ impl SceneGpuBuffers {
     }
 }
 
-/// Vertex buffer, index buffer, and index count tuple for GPU meshes.
-pub type GpuMeshBuffers = (wgpu::Buffer, wgpu::Buffer, u32);
+/// GPU buffers associated with one geometry.
+pub struct GpuMeshBuffers {
+    pub vertices: wgpu::Buffer,
+    pub indices: wgpu::Buffer,
+    pub index_count: u32,
+    pub morph_targets: Option<wgpu::Buffer>,
+}
 
-/// Model entity state tuple: model, transform, uniform buffer, and bind group.
+/// Model entity state: model, transform, deformed local bounds, uniform, morph weights, and bind group.
 pub type GpuModelEntry = (
     Model3D,
     Transform3D,
+    galfus_realm_3d_resources::Aabb,
+    Option<wgpu::Buffer>,
     Option<wgpu::Buffer>,
     Option<wgpu::BindGroup>,
 );
 
-/// Instanced model entity state tuple: model, instances, storage buffer, model uniform buffer, model bind group.
+/// Instanced model state: model, instances, instance storage, model uniform, morph weights, and bind group.
 pub type GpuInstancedModelEntry = (
     galfus_realm_3d_resources::model::InstancedModel3D,
     Vec<galfus_realm_3d_resources::model::InstanceData3D>,
+    Option<wgpu::Buffer>,
     Option<wgpu::Buffer>,
     Option<wgpu::Buffer>,
     Option<wgpu::BindGroup>,
@@ -283,7 +261,24 @@ pub fn sync_realm_resources<'a>(
                 contents: bytemuck::cast_slice(&geom.indices),
                 usage: wgpu::BufferUsages::INDEX,
             });
-            *gpu_buffers = Some((v, i, geom.indices.len() as u32));
+            let morph_targets = (!geom.morph_targets.is_empty()).then(|| {
+                let deltas: Vec<_> = geom
+                    .morph_targets
+                    .iter()
+                    .flat_map(|target| target.deltas.iter().copied())
+                    .collect();
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Morph Targets Storage Buffer"),
+                    contents: bytemuck::cast_slice(&deltas),
+                    usage: wgpu::BufferUsages::STORAGE,
+                })
+            });
+            *gpu_buffers = Some(GpuMeshBuffers {
+                vertices: v,
+                indices: i,
+                index_count: geom.indices.len() as u32,
+                morph_targets,
+            });
         }
     }
 
@@ -317,47 +312,118 @@ pub fn sync_realm_resources<'a>(
     }
 
     // 3. Sync Models
-    for (model, transform, buf_opt, bg_opt) in models.values_mut() {
+    for (model, transform, _, buf_opt, morph_weights_opt, bg_opt) in models.values_mut() {
         let uniform = model.build_uniform(transform);
         if let Some(buf) = buf_opt {
             queue.write_buffer(buf, 0, bytemuck::bytes_of(&uniform));
         } else {
-            let (buf, bg) = create_uniform_bg(
-                device,
-                "Model",
-                &pipeline.model_layout,
-                bytemuck::bytes_of(&uniform),
-                &pipeline.dummy_instance_buffer,
-            );
+            let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Model Uniform Buffer"),
+                contents: bytemuck::bytes_of(&uniform),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
             *buf_opt = Some(buf);
-            *bg_opt = Some(bg);
+        }
+
+        if !model.morph_weights.is_empty() {
+            let required_bytes = std::mem::size_of_val(&model.morph_weights[..]) as u64;
+            let needs_alloc = match morph_weights_opt {
+                Some(buffer) => buffer.size() < required_bytes,
+                None => true,
+            };
+            if needs_alloc {
+                *morph_weights_opt = Some(device.create_buffer_init(
+                    &wgpu::util::BufferInitDescriptor {
+                        label: Some("Model Morph Weights Storage Buffer"),
+                        contents: bytemuck::cast_slice(&model.morph_weights),
+                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    },
+                ));
+                *bg_opt = None;
+            } else if let Some(buffer) = morph_weights_opt {
+                queue.write_buffer(buffer, 0, bytemuck::cast_slice(&model.morph_weights));
+            }
+        }
+
+        if bg_opt.is_none() {
+            let morph_targets = geometries
+                .get(&model.geometry_id)
+                .and_then(|(_, buffers)| buffers.as_ref())
+                .and_then(|buffers| buffers.morph_targets.as_ref())
+                .unwrap_or(&pipeline.dummy_morph_targets_buffer);
+            let morph_weights = morph_weights_opt
+                .as_ref()
+                .unwrap_or(&pipeline.dummy_morph_weights_buffer);
+            let model_buf = buf_opt.as_ref().expect("model uniform was allocated");
+            *bg_opt = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Model Bind Group"),
+                layout: &pipeline.model_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: model_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: pipeline.dummy_instance_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: morph_weights.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: morph_targets.as_entire_binding(),
+                    },
+                ],
+            }));
         }
     }
 
     // 4. Sync Instanced Models
-    for (inst_model, instances, inst_buf_opt, model_buf_opt, model_bg_opt) in
+    for (inst_model, instances, inst_buf_opt, model_buf_opt, morph_weights_opt, model_bg_opt) in
         instanced_models.values_mut()
     {
-        if model_buf_opt.is_none() || model_bg_opt.is_none() {
-            let mut flags = 0u32;
-            if inst_model.receive_shadow {
-                flags |= 1 << 0;
-            }
-            let uniform = galfus_realm_3d_resources::model::Model3DUniform {
-                model: glam::Mat4::IDENTITY,
-                normal_matrix: glam::Mat4::IDENTITY,
-                outline_color: glam::Vec4::ZERO,
-                flags: glam::UVec4::new(flags, 0, 0, 0),
-            };
-            let (buf, bg) = create_uniform_bg(
-                device,
-                "Instanced Model",
-                &pipeline.model_layout,
-                bytemuck::bytes_of(&uniform),
-                &pipeline.dummy_instance_buffer,
+        let mut flags = 0u32;
+        if inst_model.receive_shadow {
+            flags |= 1 << 0;
+        }
+        let uniform = galfus_realm_3d_resources::model::Model3DUniform {
+            model: glam::Mat4::IDENTITY,
+            normal_matrix: glam::Mat4::IDENTITY,
+            outline_color: glam::Vec4::ZERO,
+            flags: glam::UVec4::new(flags, 0, 0, inst_model.morph_weights.len() as u32),
+        };
+        if let Some(buf) = model_buf_opt {
+            queue.write_buffer(buf, 0, bytemuck::bytes_of(&uniform));
+        } else {
+            *model_buf_opt = Some(
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Instanced Model Uniform Buffer"),
+                    contents: bytemuck::bytes_of(&uniform),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                }),
             );
-            *model_buf_opt = Some(buf);
-            *model_bg_opt = Some(bg);
+        }
+
+        if !inst_model.morph_weights.is_empty() {
+            let required_bytes = std::mem::size_of_val(&inst_model.morph_weights[..]) as u64;
+            let needs_alloc = match morph_weights_opt {
+                Some(buffer) => buffer.size() < required_bytes,
+                None => true,
+            };
+            if needs_alloc {
+                *morph_weights_opt = Some(device.create_buffer_init(
+                    &wgpu::util::BufferInitDescriptor {
+                        label: Some("Instanced Morph Weights Storage Buffer"),
+                        contents: bytemuck::cast_slice(&inst_model.morph_weights),
+                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    },
+                ));
+                *model_bg_opt = None;
+            } else if let Some(buffer) = morph_weights_opt {
+                queue.write_buffer(buffer, 0, bytemuck::cast_slice(&inst_model.morph_weights));
+            }
         }
 
         if !instances.is_empty() {
@@ -373,120 +439,54 @@ pub fn sync_realm_resources<'a>(
                     usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
                 });
                 *inst_buf_opt = Some(buf);
+                *model_bg_opt = None;
             } else if let Some(buf) = inst_buf_opt {
                 queue.write_buffer(buf, 0, bytemuck::cast_slice(instances));
             }
+        }
 
-            if let (Some(model_buf), Some(inst_buf)) =
-                (model_buf_opt.as_ref(), inst_buf_opt.as_ref())
-            {
-                *model_bg_opt = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Realm3D Instance Bind Group"),
-                    layout: &pipeline.model_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: model_buf.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: inst_buf.as_entire_binding(),
-                        },
-                    ],
-                }));
-            }
+        if model_bg_opt.is_none() {
+            let model_buf = model_buf_opt.as_ref().expect("model uniform was allocated");
+            let instance_buf = inst_buf_opt
+                .as_ref()
+                .unwrap_or(&pipeline.dummy_instance_buffer);
+            let morph_weights = morph_weights_opt
+                .as_ref()
+                .unwrap_or(&pipeline.dummy_morph_weights_buffer);
+            let morph_targets = geometries
+                .get(&inst_model.geometry_id)
+                .and_then(|(_, buffers)| buffers.as_ref())
+                .and_then(|buffers| buffers.morph_targets.as_ref())
+                .unwrap_or(&pipeline.dummy_morph_targets_buffer);
+            *model_bg_opt = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Realm3D Instance Bind Group"),
+                layout: &pipeline.model_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: model_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: instance_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: morph_weights.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: morph_targets.as_entire_binding(),
+                    },
+                ],
+            }));
         }
     }
 }
 
-/// Synchronizes scene-wide uniform buffers, shadow maps, and directional/point/spot lights.
-#[allow(clippy::too_many_arguments)]
-pub fn sync_scene_buffers(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    pipeline: &crate::pipeline::Pipeline3D,
-    shadow_pipe: &crate::shadow::ShadowPipeline3D,
-    shadow_map_opt: &mut Option<crate::shadow::ShadowMap3D>,
-    scene_buffers: &mut Option<SceneGpuBuffers>,
-    environment: &galfus_realm_3d_resources::environment::EnvironmentRealm3D,
-    lights: &std::collections::BTreeMap<
-        u32,
-        (galfus_realm_3d_resources::light::Light3D, Transform3D),
-    >,
-    bones: &[glam::Mat4],
-    dirty: &mut bool,
-) {
-    if scene_buffers.is_none() || *dirty {
-        let bones_data = if bones.is_empty() {
-            vec![glam::Mat4::IDENTITY]
-        } else {
-            bones.to_vec()
-        };
-        let bones_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Bones Storage Buffer"),
-            contents: bytemuck::cast_slice(&bones_data),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let shadow_map = match shadow_map_opt.as_mut() {
-            Some(sm) => {
-                sm.update_bones(device, shadow_pipe, &bones_buf);
-                sm
-            }
-            None => {
-                *shadow_map_opt = Some(crate::shadow::ShadowMap3D::new(
-                    device,
-                    shadow_pipe,
-                    &bones_buf,
-                ));
-                shadow_map_opt.as_mut().unwrap()
-            }
-        };
-
-        let env_uniform = environment.build_uniform(0.0);
-        let mut shadow_counter = 0u32;
-        let mut lights_data: Vec<galfus_realm_3d_resources::light::Light3DUniform> = lights
-            .values()
-            .map(|(l, t)| {
-                if l.cast_shadow && l.active {
-                    let layers_needed =
-                        if l.kind == galfus_realm_3d_resources::light::LightKind3D::Point {
-                            6
-                        } else {
-                            1
-                        };
-                    if shadow_counter + layers_needed <= crate::shadow::MAX_SHADOW_LIGHTS {
-                        let base_layer = shadow_counter;
-                        shadow_counter += layers_needed;
-                        l.build_uniform_with_layer(t, base_layer)
-                    } else {
-                        l.build_uniform(t)
-                    }
-                } else {
-                    l.build_uniform(t)
-                }
-            })
-            .collect();
-        if lights_data.is_empty() {
-            lights_data.push(bytemuck::Zeroable::zeroed());
-        }
-
-        *scene_buffers = Some(SceneGpuBuffers::build(
-            device,
-            pipeline,
-            shadow_map,
-            &env_uniform,
-            &lights_data,
-            lights.len() as u32,
-            bones_buf,
-        ));
-        *dirty = false;
-    } else if let Some(scene) = scene_buffers {
-        let env_uniform = environment.build_uniform(0.0);
-        queue.write_buffer(&scene.env_buf, 0, bytemuck::bytes_of(&env_uniform));
-    }
-}
-
+#[path = "types_scene.rs"]
+mod types_scene;
+pub use types_scene::sync_scene_buffers;
 /// Ensures the Reverse-Z depth texture matches the current invocation viewport size.
 pub fn ensure_depth_texture<'a>(
     device: &wgpu::Device,

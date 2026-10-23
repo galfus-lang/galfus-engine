@@ -59,7 +59,7 @@ impl<'a> DrawCollector<'a> {
     ) -> Self {
         let mut collector = Self::default();
 
-        for (&model_id, (model, model_transform, _, model_bg_opt)) in models {
+        for (&model_id, (model, model_transform, local_aabb, _, _, model_bg_opt)) in models {
             if !model.active {
                 continue;
             }
@@ -68,14 +68,12 @@ impl<'a> DrawCollector<'a> {
                 continue;
             };
 
-            let Some((geom, Some((v_buf, i_buf, index_count)))) =
-                geometries.get(&model.geometry_id)
-            else {
+            let Some((geom, Some(mesh))) = geometries.get(&model.geometry_id) else {
                 continue;
             };
 
             // Frustum Culling
-            let world_aabb = geom.aabb.transform(&model_transform.matrix());
+            let world_aabb = local_aabb.transform(&model_transform.matrix());
             if let Some(f) = frustum
                 && !f.intersects_aabb(world_aabb.min, world_aabb.max)
             {
@@ -108,9 +106,9 @@ impl<'a> DrawCollector<'a> {
                 side,
                 model_bg,
                 material_bg,
-                vertex_buffer: v_buf,
-                index_buffer: i_buf,
-                index_count: *index_count,
+                vertex_buffer: &mesh.vertices,
+                index_buffer: &mesh.indices,
+                index_count: mesh.index_count,
                 shader_effect,
                 instance_buffer: None,
                 instance_count: 1,
@@ -127,7 +125,9 @@ impl<'a> DrawCollector<'a> {
         }
 
         // Collect instanced models
-        for (&inst_id, (inst_model, instances, inst_buf_opt, _, model_bg_opt)) in instanced_models {
+        for (&inst_id, (inst_model, instances, inst_buf_opt, _, _, model_bg_opt)) in
+            instanced_models
+        {
             if !inst_model.active || instances.is_empty() {
                 continue;
             }
@@ -140,9 +140,7 @@ impl<'a> DrawCollector<'a> {
                 continue;
             };
 
-            let Some((geom, Some((v_buf, i_buf, index_count)))) =
-                geometries.get(&inst_model.geometry_id)
-            else {
+            let Some((geom, Some(mesh))) = geometries.get(&inst_model.geometry_id) else {
                 continue;
             };
 
@@ -179,9 +177,9 @@ impl<'a> DrawCollector<'a> {
                 side,
                 model_bg,
                 material_bg,
-                vertex_buffer: v_buf,
-                index_buffer: i_buf,
-                index_count: *index_count,
+                vertex_buffer: &mesh.vertices,
+                index_buffer: &mesh.indices,
+                index_count: mesh.index_count,
                 shader_effect,
                 instance_buffer: Some(inst_buf),
                 instance_count: instances.len() as u32,

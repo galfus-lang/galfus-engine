@@ -29,6 +29,9 @@ pub struct Model3D {
     /// Number of bones in this model's palette.
     #[serde(default)]
     pub bone_count: u32,
+    /// Per-target blend weights for the bound geometry. An empty vector disables morphing.
+    #[serde(skip, default)]
+    pub morph_weights: Vec<f32>,
 }
 
 impl Default for Model3D {
@@ -43,6 +46,7 @@ impl Default for Model3D {
             active: true,
             bone_offset: 0,
             bone_count: 0,
+            morph_weights: Vec::new(),
         }
     }
 }
@@ -75,7 +79,12 @@ impl Model3D {
             model: model_matrix,
             normal_matrix,
             outline_color: srgb_to_linear_rgba(self.outline_color),
-            flags: UVec4::new(flags, self.bone_offset, self.bone_count, 0),
+            flags: UVec4::new(
+                flags,
+                self.bone_offset,
+                self.bone_count,
+                self.morph_weights.len() as u32,
+            ),
         }
     }
 }
@@ -90,7 +99,7 @@ pub struct Model3DUniform {
     pub normal_matrix: Mat4,
     /// Outline silhouette color `[r, g, b, a]`.
     pub outline_color: Vec4,
-    /// Bit flags: `[bit 0: receive_shadow, bit 1: cast_outline, unused, unused]`.
+    /// Flags and offsets: `[flags, bone_offset, bone_count, morph_target_count]`.
     pub flags: UVec4,
 }
 
@@ -152,6 +161,9 @@ pub struct InstancedModel3D {
     /// Whether this instanced model collection is actively drawn.
     #[serde(default = "default_true")]
     pub active: bool,
+    /// Per-target blend weights shared by every instance in this draw batch.
+    #[serde(skip, default)]
+    pub morph_weights: Vec<f32>,
 }
 
 fn default_true() -> bool {
@@ -167,6 +179,7 @@ impl Default for InstancedModel3D {
             cast_shadow: true,
             receive_shadow: true,
             active: true,
+            morph_weights: Vec::new(),
         }
     }
 }
@@ -222,5 +235,15 @@ mod tests {
         assert!((instance.color.x - 0.214_041_14).abs() < 1e-6);
         assert_eq!(instance.color.w, 0.25);
         assert_eq!(instance.emissive.w, 3.0);
+    }
+
+    #[test]
+    fn model_uniform_exposes_morph_target_count() {
+        let model = Model3D {
+            morph_weights: vec![0.25, 0.75],
+            ..Default::default()
+        };
+        let uniform = model.build_uniform(&Transform3D::default());
+        assert_eq!(uniform.flags.w, 2);
     }
 }

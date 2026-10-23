@@ -28,6 +28,13 @@ struct ModelUniform {
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
 @group(0) @binding(6) var<storage, read> bones: array<mat4x4<f32>>;
 @group(1) @binding(0) var<uniform> object: ModelUniform;
+struct MorphVertex {
+    position: vec4<f32>,
+    normal: vec4<f32>,
+    tangent: vec4<f32>,
+};
+@group(1) @binding(2) var<storage, read> morph_weights: array<f32>;
+@group(1) @binding(3) var<storage, read> morph_targets: array<MorphVertex>;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -74,9 +81,21 @@ fn skin_position(position: vec3<f32>, joints0: vec4<u32>, weights0: vec4<f32>, j
     return skinned.xyz;
 }
 
+fn apply_morph_position(vertex_index: u32, position: ptr<function, vec3<f32>>) {
+    let target_count = object.flags.w;
+    if (target_count == 0u) {
+        return;
+    }
+    let vertex_count = arrayLength(&morph_targets) / target_count;
+    for (var target_index = 0u; target_index < target_count; target_index++) {
+        *position = *position + morph_targets[target_index * vertex_count + vertex_index].position.xyz * morph_weights[target_index];
+    }
+}
+
 @vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput, @builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     var local_pos = in.position;
+    apply_morph_position(vertex_index, &local_pos);
     let bone_offset = object.flags.y;
     let bone_count = object.flags.z;
     if (bone_count > 0u) {

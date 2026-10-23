@@ -96,6 +96,23 @@ export const realm3dFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_realm_3d_set_geometry_morph_targets',
+    methodName: 'realm3dSetGeometryMorphTargets',
+    doc: 'Uploads target-major packed MorphVertex3D records (48 bytes each) for an existing geometry.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      {
+        name: 'targetData',
+        type: { buffer: 'u8' },
+        doc: 'Packed target-major MorphVertex3D bytes.'
+      },
+      { name: 'targetDataLen', type: 'u64', doc: 'Length of targetData in bytes.' },
+      { name: 'targetCount', type: 'u64', doc: 'Number of morph targets in targetData.' }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_realm_3d_create_cube',
     methodName: 'realm3dCreateCube',
     doc: 'Creates a cube primitive centered at the origin.',
@@ -263,6 +280,30 @@ export const realm3dFunctions: FunctionSpec[] = [
         type: 'u64',
         doc: 'Number of f32 values; must be a multiple of 32.'
       }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_set_model_morph_weights',
+    methodName: 'realm3dSetModelMorphWeights',
+    doc: 'Uploads the current f32 blend weights for an existing model.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'modelId', type: 'u32', doc: 'Logical ID of the Model.' },
+      { name: 'weights', type: { buffer: 'f32' }, doc: 'One weight per geometry morph target.' },
+      { name: 'weightCount', type: 'u64', doc: 'Number of f32 weights.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_set_instanced_model_morph_weights',
+    methodName: 'realm3dSetInstancedModelMorphWeights',
+    doc: 'Uploads the f32 blend weights shared by every instance in an instanced model batch.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'instancedModelId', type: 'u32', doc: 'Logical ID of the Instanced Model.' },
+      { name: 'weights', type: { buffer: 'f32' }, doc: 'One weight per geometry morph target.' },
+      { name: 'weightCount', type: 'u64', doc: 'Number of f32 weights.' }
     ],
     returnType: 'i32'
   },

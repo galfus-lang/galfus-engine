@@ -89,6 +89,7 @@ pub fn cylinder(radius: f32, height: f32, sectors: u32) -> Geometry3D {
         vertices,
         indices,
         topology: PrimitiveTopology3D::Triangles,
+        morph_targets: Vec::new(),
     }
 }
 
@@ -164,6 +165,7 @@ pub fn capsule(radius: f32, cylinder_height: f32, rings: u32, sectors: u32) -> G
         vertices,
         indices,
         topology: PrimitiveTopology3D::Triangles,
+        morph_targets: Vec::new(),
     }
 }
 
@@ -264,6 +266,7 @@ pub fn pyramid(width: f32, depth: f32, height: f32) -> Geometry3D {
         vertices,
         indices,
         topology: PrimitiveTopology3D::Triangles,
+        morph_targets: Vec::new(),
     }
 }
 
@@ -325,5 +328,6 @@ pub fn torus(
         vertices,
         indices,
         topology: PrimitiveTopology3D::Triangles,
+        morph_targets: Vec::new(),
     }
 }

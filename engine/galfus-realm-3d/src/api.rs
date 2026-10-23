@@ -2,7 +2,7 @@
 
 use galfus_realm_3d_resources::camera::{Camera3D, CameraLookAt3D};
 use galfus_realm_3d_resources::environment::EnvironmentRealm3D;
-use galfus_realm_3d_resources::geometry::Geometry3D;
+use galfus_realm_3d_resources::geometry::{Geometry3D, MorphTarget3D};
 use galfus_realm_3d_resources::light::Light3D;
 use galfus_realm_3d_resources::material::Material3D;
 use galfus_realm_3d_resources::model::{InstanceData3D, InstancedModel3D, Model3D};
@@ -13,6 +13,21 @@ use galfus_realm_core::error::RealmResult;
 
 use crate::context::{Realm3DContext, not_found};
 use crate::types::validate_id;
+
+fn validate_morph_weights(weights: &[f32], target_count: usize) -> RealmResult<()> {
+    if !weights.is_empty() && weights.len() != target_count {
+        return Err(galfus_realm_core::error::RealmError::Internal(format!(
+            "Morph weight count {} does not match geometry target count {target_count}",
+            weights.len()
+        )));
+    }
+    if weights.iter().any(|weight| !weight.is_finite()) {
+        return Err(galfus_realm_core::error::RealmError::Internal(
+            "Morph weights must be finite".into(),
+        ));
+    }
+    Ok(())
+}
 
 impl Realm3DContext {
     /// Registers or updates a `Camera3D` with its `Transform3D`.
@@ -102,6 +117,82 @@ impl Realm3DContext {
     pub fn create_geometry(&mut self, id: u32, geometry: Geometry3D) -> RealmResult<()> {
         validate_id(id)?;
         self.geometries.insert(id, (geometry, None));
+        let geometry = self.geometries[&id].0.clone();
+        let target_count = geometry.morph_targets.len();
+        for entry in self
+            .models
+            .values_mut()
+            .filter(|entry| entry.0.geometry_id == id)
+        {
+            if !entry.0.morph_weights.is_empty() && entry.0.morph_weights.len() != target_count {
+                entry.0.morph_weights.clear();
+                entry.4 = None;
+            }
+            entry.2 = geometry.aabb_for_morph_weights(&entry.0.morph_weights);
+            entry.5 = None;
+        }
+        for entry in self
+            .instanced_models
+            .values_mut()
+            .filter(|entry| entry.0.geometry_id == id)
+        {
+            if !entry.0.morph_weights.is_empty() && entry.0.morph_weights.len() != target_count {
+                entry.0.morph_weights.clear();
+                entry.4 = None;
+            }
+            entry.5 = None;
+        }
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Replaces the direct binary morph-target data of an existing geometry.
+    pub fn set_geometry_morph_targets(
+        &mut self,
+        id: u32,
+        morph_targets: Vec<MorphTarget3D>,
+    ) -> RealmResult<()> {
+        let realm_id = self.id;
+        let geometry = self
+            .geometries
+            .get_mut(&id)
+            .ok_or_else(|| not_found(realm_id, "Geometry", id))?;
+        geometry
+            .0
+            .set_morph_targets(morph_targets)
+            .map_err(galfus_realm_core::error::RealmError::Internal)?;
+        geometry.1 = None;
+        let geometry = geometry.0.clone();
+
+        let target_count = geometry.morph_targets.len();
+        let aabb = geometry.aabb;
+        for entry in self
+            .models
+            .values_mut()
+            .filter(|entry| entry.0.geometry_id == id)
+        {
+            if !entry.0.morph_weights.is_empty() && entry.0.morph_weights.len() != target_count {
+                entry.0.morph_weights.clear();
+                entry.4 = None;
+            }
+            entry.2 = if entry.0.morph_weights.is_empty() {
+                aabb
+            } else {
+                geometry.aabb_for_morph_weights(&entry.0.morph_weights)
+            };
+            entry.5 = None;
+        }
+        for entry in self
+            .instanced_models
+            .values_mut()
+            .filter(|entry| entry.0.geometry_id == id)
+        {
+            if !entry.0.morph_weights.is_empty() && entry.0.morph_weights.len() != target_count {
+                entry.0.morph_weights.clear();
+                entry.4 = None;
+            }
+            entry.5 = None;
+        }
         self.dirty = true;
         Ok(())
     }
@@ -114,7 +205,13 @@ impl Realm3DContext {
         transform: Transform3D,
     ) -> RealmResult<()> {
         validate_id(id)?;
-        self.models.insert(id, (model, transform, None, None));
+        let aabb = self
+            .geometries
+            .get(&model.geometry_id)
+            .map(|(geometry, _)| geometry.aabb_for_morph_weights(&model.morph_weights))
+            .unwrap_or_default();
+        self.models
+            .insert(id, (model, transform, aabb, None, None, None));
         self.dirty = true;
         Ok(())
     }
@@ -123,7 +220,7 @@ impl Realm3DContext {
     pub fn create_instanced_model(&mut self, id: u32, model: InstancedModel3D) -> RealmResult<()> {
         validate_id(id)?;
         self.instanced_models
-            .insert(id, (model, Vec::new(), None, None, None));
+            .insert(id, (model, Vec::new(), None, None, None, None));
         self.dirty = true;
         Ok(())
     }
@@ -142,6 +239,53 @@ impl Realm3DContext {
             .into_iter()
             .map(InstanceData3D::into_linear_gpu)
             .collect();
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the blend weights of an existing model.
+    pub fn set_model_morph_weights(&mut self, id: u32, weights: Vec<f32>) -> RealmResult<()> {
+        let geometry_id = self
+            .models
+            .get(&id)
+            .ok_or_else(|| not_found(self.id, "Model", id))?
+            .0
+            .geometry_id;
+        let geometry = self
+            .geometries
+            .get(&geometry_id)
+            .ok_or_else(|| not_found(self.id, "Geometry", geometry_id))?;
+        validate_morph_weights(weights.as_slice(), geometry.0.morph_targets.len())?;
+        let aabb = geometry.0.aabb_for_morph_weights(&weights);
+        let entry = self.models.get_mut(&id).expect("model was checked above");
+        entry.0.morph_weights = weights;
+        entry.2 = aabb;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the blend weights shared by every instance in an instanced draw batch.
+    pub fn set_instanced_model_morph_weights(
+        &mut self,
+        id: u32,
+        weights: Vec<f32>,
+    ) -> RealmResult<()> {
+        let geometry_id = self
+            .instanced_models
+            .get(&id)
+            .ok_or_else(|| not_found(self.id, "InstancedModel", id))?
+            .0
+            .geometry_id;
+        let geometry = self
+            .geometries
+            .get(&geometry_id)
+            .ok_or_else(|| not_found(self.id, "Geometry", geometry_id))?;
+        validate_morph_weights(weights.as_slice(), geometry.0.morph_targets.len())?;
+        let entry = self
+            .instanced_models
+            .get_mut(&id)
+            .expect("instanced model was checked above");
+        entry.0.morph_weights = weights;
         self.dirty = true;
         Ok(())
     }
@@ -180,11 +324,11 @@ impl Realm3DContext {
             .get(&id)
             .ok_or_else(|| not_found(self.id, "Model", id))?;
         let geom_id = model_entry.0.geometry_id;
-        let geom = self
+        let _geom = self
             .geometries
             .get(&geom_id)
             .ok_or_else(|| not_found(self.id, "Geometry", geom_id))?;
-        let world_aabb = geom.0.aabb.transform(&model_entry.1.matrix());
+        let world_aabb = model_entry.2.transform(&model_entry.1.matrix());
         Ok((world_aabb.min, world_aabb.max))
     }
 
@@ -214,8 +358,8 @@ impl Realm3DContext {
                 entry.0.bone_offset = self.bones.len() as u32;
                 entry.0.bone_count = matrices.len() as u32;
                 self.bones.extend_from_slice(matrices);
-                entry.2 = None;
                 entry.3 = None;
+                entry.5 = None;
             }
         }
     }

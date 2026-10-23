@@ -69,6 +69,26 @@ regular, instanced, and shadow draws. glTF `doubleSided: true` maps to `side:
 "double"`; a missing or false value maps to `side: "front"` in an external
 serializer.
 
+## Morph targets
+
+Morphing is optional. A geometry with no targets and a model with no weights binds shared neutral
+storage buffers and sets `ModelUniform.flags.w` to zero, so the single standard shader path leaves
+the canonical vertex unchanged.
+
+When present, the geometry owns target-major `MorphVertex3D` records: every target has one
+48-byte record for each `Vertex3D`, with padded `position`, `normal`, and `tangent` deltas. An
+omitted glTF target `NORMAL` or `TANGENT` accessor is represented by zero deltas. A model owns a
+matching contiguous `f32` weight buffer; instanced models share one weight buffer per draw batch.
+External serializers upload these buffers directly through
+`realm3dSetGeometryMorphTargets`, `realm3dSetModelMorphWeights`, and
+`realm3dSetInstancedModelMorphWeights`.
+
+The vertex operation order is mandatory: **base vertex → weighted morph deltas → skinning → model
+transform**. Position, normal, and tangent all receive morph deltas before skinning; normals and
+tangents are normalized by the existing lighting path. Shadow and outline passes apply the same
+position deformation. The renderer recalculates a model's local AABB whenever its weights change,
+so frustum culling and shadow culling use the deformed bounds.
+
 ## Shadow alpha test
 
 Shadow maps keep opaque, mirror, and portal materials fully solid. Masked,

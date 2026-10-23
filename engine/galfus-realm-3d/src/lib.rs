@@ -47,7 +47,7 @@ mod tests {
     use super::*;
     use galfus_realm_3d_resources::camera::Camera3D;
     use galfus_realm_3d_resources::environment::EnvironmentRealm3D;
-    use galfus_realm_3d_resources::geometry::Geometry3D;
+    use galfus_realm_3d_resources::geometry::{Geometry3D, MorphTarget3D, MorphVertex3D};
     use galfus_realm_3d_resources::light::Light3D;
     use galfus_realm_3d_resources::material::Material3D;
     use galfus_realm_3d_resources::model::Model3D;
@@ -105,6 +105,31 @@ mod tests {
         let mut env = EnvironmentRealm3D::default();
         env.bloom.enabled = true;
         realm.set_environment(env);
+    }
+
+    #[test]
+    fn morph_weight_updates_validate_targets_and_refresh_model_bounds() {
+        let mut realm = Realm3DContext::new(11);
+        let mut geometry = Geometry3D::quad(2.0, 2.0);
+        geometry
+            .set_morph_targets(vec![MorphTarget3D::new(vec![
+                MorphVertex3D::new(
+                    [0.0, 0.0, 3.0],
+                    [0.0; 3],
+                    [0.0; 3]
+                );
+                4
+            ])])
+            .unwrap();
+        realm.create_geometry(1, geometry).unwrap();
+        realm
+            .create_model(1, Model3D::new(1, 1), Transform3D::default())
+            .unwrap();
+        realm.set_model_morph_weights(1, vec![1.0]).unwrap();
+        let (min, max) = realm.get_model_aabb(1).unwrap();
+        assert_eq!(min.z, 3.0);
+        assert_eq!(max.z, 3.0);
+        assert!(realm.set_model_morph_weights(1, vec![0.5, 0.5]).is_err());
     }
 
     #[test]
@@ -208,13 +233,24 @@ mod tests {
                 Transform3D::from_position(Vec3::new(0.0, 1.0, -3.0)),
             )
             .unwrap();
-        realm.create_geometry(1, Geometry3D::cube(1.0)).unwrap();
+        let mut cube = Geometry3D::cube(1.0);
+        cube.set_morph_targets(vec![MorphTarget3D::new(vec![
+            MorphVertex3D::new(
+                [0.0, 0.0, 0.1],
+                [0.0, 0.0, 0.1],
+                [0.0; 3]
+            );
+            cube.vertices.len()
+        ])])
+        .unwrap();
+        realm.create_geometry(1, cube).unwrap();
         realm
             .create_material(1, Material3D::solid_color(Vec4::new(0.2, 0.6, 1.0, 1.0)))
             .unwrap();
         realm
             .create_model(1, Model3D::new(1, 1), Transform3D::default())
             .unwrap();
+        realm.set_model_morph_weights(1, vec![1.0]).unwrap();
         realm
             .create_light(
                 1,
@@ -290,8 +326,8 @@ mod tests {
         assert!(realm.render(&inv).is_ok());
 
         // Verify buffers are allocated
-        assert!(realm.models.get(&1).unwrap().2.is_some());
         assert!(realm.models.get(&1).unwrap().3.is_some());
+        assert!(realm.models.get(&1).unwrap().5.is_some());
         assert!(realm.materials.get(&1).unwrap().1.is_some());
 
         // Frame 2: Update model transform and material in-place (must stay persistent)
@@ -299,8 +335,8 @@ mod tests {
             .set_model_transform(1, Transform3D::from_position(Vec3::new(5.0, 0.0, 0.0)))
             .unwrap();
         // Model GPU buffer and bind group remain persistent (not dropped to None)
-        assert!(realm.models.get(&1).unwrap().2.is_some());
         assert!(realm.models.get(&1).unwrap().3.is_some());
+        assert!(realm.models.get(&1).unwrap().5.is_some());
 
         // Modify material property dynamically
         realm.materials.get_mut(&1).unwrap().0.base_color = Vec4::new(0.9, 0.1, 0.1, 1.0);

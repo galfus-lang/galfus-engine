@@ -11,6 +11,9 @@ use crate::error::{MultiverseError, MultiverseResult};
 use crate::postprocess::FilterPassDesc;
 use crate::types::TargetKind;
 
+#[path = "executor_resources.rs"]
+mod executor_resources;
+
 /// Executes a single dispatched frame across realms, targets, and invocations.
 pub(crate) fn execute_frame(
     ctx: &mut MultiverseContext,
@@ -190,42 +193,14 @@ pub(crate) fn execute_frame(
             let height = vp.w.max(1) * ssaa_scale;
             let needed_size = UVec2::new(width, height);
 
-            // Ensure invocation scratch texture matches its viewport size
-            let needs_scratch_realloc = match ctx.scratch_textures.get(&step.invocation_id) {
-                Some((_, _, size)) => *size != needed_size,
-                None => true,
-            };
-            if needs_scratch_realloc {
-                if let Some((old_tex, _, _)) = ctx.scratch_textures.remove(&step.invocation_id) {
-                    let _ = gpu.textures.destroy_texture(old_tex);
-                }
-                let tex_desc = GpuTextureDesc {
-                    label: Some(format!(
-                        "Multiverse Invocation #{} Scratch",
-                        step.invocation_id
-                    )),
-                    width,
-                    height,
-                    depth_or_layers: 1,
-                    mip_levels: 1,
-                    sample_count: 1,
-                    dimension: TextureDimension::D2,
-                    format: NormalizedTextureFormat::Rgba8Unorm,
-                    usages: TextureUsageFlags::default(),
-                };
-                let device = gpu.context.device_arc();
-                let tex_h = gpu
-                    .textures
-                    .create_texture(&device, &tex_desc)
-                    .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
-                let view_h = gpu
-                    .textures
-                    .get_texture(tex_h)
-                    .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
-                    .default_view();
-                ctx.scratch_textures
-                    .insert(step.invocation_id, (tex_h, view_h, needed_size));
-            }
+            executor_resources::ensure_scratch_texture(
+                &mut ctx.scratch_textures,
+                gpu,
+                step.invocation_id,
+                width,
+                height,
+                needed_size,
+            )?;
 
             let (_, scratch_view_h, _) = ctx.scratch_textures.get(&step.invocation_id).unwrap();
             let scratch_view = gpu
@@ -320,165 +295,24 @@ pub(crate) fn execute_frame(
                     .any(|f| matches!(f, crate::types::InvocationFilter::Taa));
             filters.retain(|f| !matches!(f, crate::types::InvocationFilter::Taa));
 
-            // Ensure SMAA intermediate textures if SMAA is active
-            if is_smaa {
-                let smaa_size = UVec2::new(width, height);
-                let needs_smaa_realloc = match &ctx.smaa_intermediates {
-                    Some((_, _, _, _, size)) => *size != smaa_size,
-                    None => true,
-                };
-                if needs_smaa_realloc {
-                    if let Some((old_e, _, old_w, _, _)) = ctx.smaa_intermediates.take() {
-                        let _ = gpu.textures.destroy_texture(old_e);
-                        let _ = gpu.textures.destroy_texture(old_w);
-                    }
-                    let edge_desc = GpuTextureDesc {
-                        label: Some("Multiverse SMAA Edge Texture".to_string()),
-                        width,
-                        height,
-                        depth_or_layers: 1,
-                        mip_levels: 1,
-                        sample_count: 1,
-                        dimension: TextureDimension::D2,
-                        format: NormalizedTextureFormat::Rg8Unorm,
-                        usages: TextureUsageFlags::default(),
-                    };
-                    let weight_desc = GpuTextureDesc {
-                        label: Some("Multiverse SMAA Weight Texture".to_string()),
-                        width,
-                        height,
-                        depth_or_layers: 1,
-                        mip_levels: 1,
-                        sample_count: 1,
-                        dimension: TextureDimension::D2,
-                        format: NormalizedTextureFormat::Rgba8Unorm,
-                        usages: TextureUsageFlags::default(),
-                    };
-                    let device = gpu.context.device_arc();
-                    let e_h = gpu
-                        .textures
-                        .create_texture(&device, &edge_desc)
-                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
-                    let e_v = gpu
-                        .textures
-                        .get_texture(e_h)
-                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
-                        .default_view();
-                    let w_h = gpu
-                        .textures
-                        .create_texture(&device, &weight_desc)
-                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
-                    let w_v = gpu
-                        .textures
-                        .get_texture(w_h)
-                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
-                        .default_view();
-                    ctx.smaa_intermediates = Some((e_h, e_v, w_h, w_v, smaa_size));
-                }
-            }
-
-            // Ensure TAA double-buffered history textures if TAA is active
-            if is_taa {
-                let taa_size = UVec2::new(width, height);
-                let needs_taa_realloc = match ctx.taa_history.get(&step.invocation_id) {
-                    Some(entry) => entry.size != taa_size,
-                    None => true,
-                };
-                if needs_taa_realloc {
-                    if let Some(old) = ctx.taa_history.remove(&step.invocation_id) {
-                        let _ = gpu.textures.destroy_texture(old.tex_a);
-                        let _ = gpu.textures.destroy_texture(old.tex_b);
-                    }
-                    let desc_a = GpuTextureDesc {
-                        label: Some(format!("Multiverse TAA History A #{}", step.invocation_id)),
-                        width,
-                        height,
-                        depth_or_layers: 1,
-                        mip_levels: 1,
-                        sample_count: 1,
-                        dimension: TextureDimension::D2,
-                        format: NormalizedTextureFormat::Rgba8Unorm,
-                        usages: TextureUsageFlags::default(),
-                    };
-                    let desc_b = GpuTextureDesc {
-                        label: Some(format!("Multiverse TAA History B #{}", step.invocation_id)),
-                        width,
-                        height,
-                        depth_or_layers: 1,
-                        mip_levels: 1,
-                        sample_count: 1,
-                        dimension: TextureDimension::D2,
-                        format: NormalizedTextureFormat::Rgba8Unorm,
-                        usages: TextureUsageFlags::default(),
-                    };
-                    let device = gpu.context.device_arc();
-                    let t_a = gpu
-                        .textures
-                        .create_texture(&device, &desc_a)
-                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
-                    let v_a = gpu
-                        .textures
-                        .get_texture(t_a)
-                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
-                        .default_view();
-                    let t_b = gpu
-                        .textures
-                        .create_texture(&device, &desc_b)
-                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
-                    let v_b = gpu
-                        .textures
-                        .get_texture(t_b)
-                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
-                        .default_view();
-                    ctx.taa_history.insert(
-                        step.invocation_id,
-                        crate::context::TaaHistoryEntry {
-                            tex_a: t_a,
-                            view_a: v_a,
-                            tex_b: t_b,
-                            view_b: v_b,
-                            size: taa_size,
-                            flip: false,
-                            has_history: false,
-                        },
-                    );
-                }
-            }
-
             let needs_pp = filters.len() > 1 || (filters.len() == 1 && (is_smaa || is_taa));
-            if needs_pp {
-                let needs_pp_realloc = match ctx.ping_pong_texture {
-                    Some((_, _, size)) => size != needed_size,
-                    None => true,
-                };
-                if needs_pp_realloc {
-                    if let Some((old_tex, _, _)) = ctx.ping_pong_texture.take() {
-                        let _ = gpu.textures.destroy_texture(old_tex);
-                    }
-                    let pp_desc = GpuTextureDesc {
-                        label: Some("Multiverse Filter PingPong Texture".to_string()),
-                        width,
-                        height,
-                        depth_or_layers: 1,
-                        mip_levels: 1,
-                        sample_count: 1,
-                        dimension: TextureDimension::D2,
-                        format: NormalizedTextureFormat::Rgba8Unorm,
-                        usages: TextureUsageFlags::default(),
-                    };
-                    let device = gpu.context.device_arc();
-                    let pp_tex_h = gpu
-                        .textures
-                        .create_texture(&device, &pp_desc)
-                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
-                    let pp_view_h = gpu
-                        .textures
-                        .get_texture(pp_tex_h)
-                        .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
-                        .default_view();
-                    ctx.ping_pong_texture = Some((pp_tex_h, pp_view_h, needed_size));
-                }
-            }
+            executor_resources::ensure_postprocess_resources(
+                executor_resources::PostprocessResources {
+                    smaa_intermediates: &mut ctx.smaa_intermediates,
+                    taa_history: &mut ctx.taa_history,
+                    ping_pong_texture: &mut ctx.ping_pong_texture,
+                },
+                gpu,
+                executor_resources::PostprocessResourceRequest {
+                    invocation_id: step.invocation_id,
+                    width,
+                    height,
+                    needed_size,
+                    is_smaa,
+                    is_taa,
+                    needs_ping_pong: needs_pp,
+                },
+            )?;
 
             // Composite scratch texture into target_view with filter chain at viewport vp
             if let (Some(target_v), Some(target_fmt), Some(post_proc)) =
@@ -731,40 +565,13 @@ pub(crate) fn execute_frame(
 
         rendered_targets.insert(block.target_id);
 
-        // If target has an allocated history texture (for cycle soft cuts), copy current rendered texture to history
-        if let (Some((target_tex_h, _, _)), Some((hist_tex_h, _, _))) = (
-            ctx.target_textures.get(&block.target_id),
-            ctx.target_history_textures.get(&block.target_id),
-        ) && let (Ok(src_entry), Ok(dst_entry)) = (
-            gpu.textures.get_texture(*target_tex_h),
-            gpu.textures.get_texture(*hist_tex_h),
-        ) {
-            let mut copy_encoder =
-                gpu.device()
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("Multiverse Target Soft-Cut History Copy"),
-                    });
-            copy_encoder.copy_texture_to_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: src_entry.raw(),
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                wgpu::TexelCopyTextureInfo {
-                    texture: dst_entry.raw(),
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                wgpu::Extent3d {
-                    width: target_size.x,
-                    height: target_size.y,
-                    depth_or_array_layers: 1,
-                },
-            );
-            gpu.queue().submit(Some(copy_encoder.finish()));
-        }
+        executor_resources::copy_target_history(
+            &ctx.target_textures,
+            &ctx.target_history_textures,
+            gpu,
+            block.target_id,
+            target_size,
+        );
     }
 
     // Present all active window swapchains

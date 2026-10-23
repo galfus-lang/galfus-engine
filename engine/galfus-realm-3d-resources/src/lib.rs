@@ -16,6 +16,7 @@ pub mod particle;
 pub mod portal;
 pub mod primitives;
 pub mod transform;
+pub mod vertex;
 
 pub use aabb::Aabb;
 pub use camera::{Camera3D, Camera3DUniform, CameraKind3D};
@@ -25,7 +26,7 @@ pub use color::{
 };
 pub use environment::{BloomConfig3D, Environment3DUniform, EnvironmentRealm3D, FogMode3D};
 pub use frustum::Frustum;
-pub use geometry::{Geometry3D, PrimitiveTopology3D, Vertex3D};
+pub use geometry::Geometry3D;
 pub use light::{Light3D, Light3DUniform, LightKind3D};
 pub use material::{
     Material3D, Material3DUniform, MaterialSide3D, SurfaceType3D, TextureSampler3D, TextureUvSet3D,
@@ -36,3 +37,4 @@ pub use particle::{
 };
 pub use portal::Portal3D;
 pub use transform::Transform3D;
+pub use vertex::{MorphTarget3D, MorphVertex3D, PrimitiveTopology3D, Vertex3D};

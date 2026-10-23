@@ -1,172 +1,6 @@
-use bytemuck::{Pod, Zeroable};
+pub use crate::vertex::{MorphTarget3D, MorphVertex3D, PrimitiveTopology3D, Vertex3D};
+use glam::Vec3;
 use serde::{Deserialize, Serialize};
-
-/// GPU primitive topology for an indexed 3D geometry.
-///
-/// Importers normalize glTF `LINE_LOOP` and `TRIANGLE_FAN` to one of these modes before
-/// submitting a geometry to the renderer.
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum PrimitiveTopology3D {
-    /// Each index addresses an independent point.
-    Points = 0,
-    /// Each adjacent pair of indices defines an independent line.
-    Lines = 1,
-    /// Consecutive indices define a connected line strip.
-    LineStrip = 2,
-    /// Each consecutive triplet of indices defines an independent triangle.
-    #[default]
-    Triangles = 3,
-    /// Consecutive indices define a connected triangle strip.
-    TriangleStrip = 4,
-}
-
-impl PrimitiveTopology3D {
-    /// All topologies directly supported by the renderer.
-    pub const ALL: [Self; 5] = [
-        Self::Points,
-        Self::Lines,
-        Self::LineStrip,
-        Self::Triangles,
-        Self::TriangleStrip,
-    ];
-
-    /// Whether this topology requires a strip index format in the GPU pipeline.
-    pub const fn is_strip(self) -> bool {
-        matches!(self, Self::LineStrip | Self::TriangleStrip)
-    }
-
-    /// Whether this topology describes triangle surfaces.
-    pub const fn is_triangle(self) -> bool {
-        matches!(self, Self::Triangles | Self::TriangleStrip)
-    }
-}
-
-impl TryFrom<u32> for PrimitiveTopology3D {
-    type Error = &'static str;
-
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(Self::Points),
-            1 => Ok(Self::Lines),
-            2 => Ok(Self::LineStrip),
-            3 => Ok(Self::Triangles),
-            4 => Ok(Self::TriangleStrip),
-            _ => Err("Invalid PrimitiveTopology3D value"),
-        }
-    }
-}
-
-/// Canonical glTF-compatible 3D vertex layout.
-///
-/// All attributes are always present in GPU memory. Importers must use the documented defaults
-/// when a source primitive omits an optional glTF attribute.
-#[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Serialize, Deserialize)]
-#[repr(C)]
-pub struct Vertex3D {
-    /// 3D position vector in local space.
-    pub position: [f32; 3],
-    /// Unit surface normal vector.
-    pub normal: [f32; 3],
-    /// Primary texture mapping coordinate (`TEXCOORD_0`) `[u, v]`.
-    #[serde(default, alias = "uv")]
-    pub uv0: [f32; 2],
-    /// Secondary texture mapping coordinate (`TEXCOORD_1`) `[u, v]`.
-    #[serde(default)]
-    pub uv1: [f32; 2],
-    /// 4D tangent vector with sign for bitangent calculation `[x, y, z, w]`.
-    #[serde(default = "default_tangent")]
-    pub tangent: [f32; 4],
-    /// Linear RGBA vertex color (`COLOR_0`).
-    #[serde(default = "default_color")]
-    pub color: [f32; 4],
-    /// First four bone joint indices (`JOINTS_0`).
-    #[serde(default, alias = "joints")]
-    pub joints0: [u32; 4],
-    /// First four bone influence weights (`WEIGHTS_0`).
-    #[serde(default, alias = "weights")]
-    pub weights0: [f32; 4],
-    /// Second four bone joint indices (`JOINTS_1`).
-    #[serde(default)]
-    pub joints1: [u32; 4],
-    /// Second four bone influence weights (`WEIGHTS_1`).
-    #[serde(default)]
-    pub weights1: [f32; 4],
-}
-
-const fn default_tangent() -> [f32; 4] {
-    [1.0, 0.0, 0.0, 1.0]
-}
-
-const fn default_color() -> [f32; 4] {
-    [1.0; 4]
-}
-
-impl Vertex3D {
-    /// Helper to construct a static vertex with default tangent and zero skinning weights.
-    pub const fn new(position: [f32; 3], normal: [f32; 3], uv0: [f32; 2]) -> Self {
-        Self {
-            position,
-            normal,
-            uv0,
-            uv1: [0.0; 2],
-            tangent: default_tangent(),
-            color: default_color(),
-            joints0: [0; 4],
-            weights0: [0.0; 4],
-            joints1: [0; 4],
-            weights1: [0.0; 4],
-        }
-    }
-
-    /// Constructs a skinned vertex with explicit bone joint indices and weights.
-    pub const fn skinned(
-        position: [f32; 3],
-        normal: [f32; 3],
-        uv0: [f32; 2],
-        joints0: [u32; 4],
-        weights0: [f32; 4],
-    ) -> Self {
-        Self {
-            position,
-            normal,
-            uv0,
-            uv1: [0.0; 2],
-            tangent: default_tangent(),
-            color: default_color(),
-            joints0,
-            weights0,
-            joints1: [0; 4],
-            weights1: [0.0; 4],
-        }
-    }
-
-    /// Constructs a skinned vertex with up to eight explicit bone influences.
-    #[allow(clippy::too_many_arguments)]
-    pub const fn skinned8(
-        position: [f32; 3],
-        normal: [f32; 3],
-        uv0: [f32; 2],
-        joints0: [u32; 4],
-        weights0: [f32; 4],
-        joints1: [u32; 4],
-        weights1: [f32; 4],
-    ) -> Self {
-        Self {
-            position,
-            normal,
-            uv0,
-            uv1: [0.0; 2],
-            tangent: default_tangent(),
-            color: default_color(),
-            joints0,
-            weights0,
-            joints1,
-            weights1,
-        }
-    }
-}
 
 use crate::aabb::Aabb;
 
@@ -186,6 +20,9 @@ pub struct Geometry3D {
     /// GPU interpretation of the indexed primitive sequence.
     #[serde(default)]
     pub topology: PrimitiveTopology3D,
+    /// Optional glTF-compatible blend-shape targets.
+    #[serde(skip, default)]
+    pub morph_targets: Vec<MorphTarget3D>,
 }
 
 impl Geometry3D {
@@ -208,7 +45,44 @@ impl Geometry3D {
             vertices,
             indices,
             topology,
+            morph_targets: Vec::new(),
         }
+    }
+
+    /// Replaces all blend-shape targets after validating their vertex counts.
+    pub fn set_morph_targets(&mut self, morph_targets: Vec<MorphTarget3D>) -> Result<(), String> {
+        if let Some((index, target)) = morph_targets
+            .iter()
+            .enumerate()
+            .find(|(_, target)| target.deltas.len() != self.vertices.len())
+        {
+            return Err(format!(
+                "Morph target {index} has {} deltas but geometry has {} vertices",
+                target.deltas.len(),
+                self.vertices.len()
+            ));
+        }
+        self.morph_targets = morph_targets;
+        Ok(())
+    }
+
+    /// Returns the exact local AABB after applying the supplied morph weights.
+    pub fn aabb_for_morph_weights(&self, weights: &[f32]) -> Aabb {
+        if self.morph_targets.is_empty() || weights.iter().all(|weight| *weight == 0.0) {
+            return self.aabb;
+        }
+
+        Aabb::from_points(self.vertices.iter().enumerate().map(|(index, vertex)| {
+            let mut position = Vec3::from_array(vertex.position);
+            for (target, weight) in self.morph_targets.iter().zip(weights) {
+                position += Vec3::from_array([
+                    target.deltas[index].position[0],
+                    target.deltas[index].position[1],
+                    target.deltas[index].position[2],
+                ]) * *weight;
+            }
+            position
+        }))
     }
 
     /// Generates a centered unit cube with the specified side length.
@@ -269,6 +143,7 @@ impl Geometry3D {
             vertices,
             indices,
             topology: PrimitiveTopology3D::Triangles,
+            morph_targets: Vec::new(),
         }
     }
 
@@ -293,6 +168,7 @@ impl Geometry3D {
             vertices,
             indices,
             topology: PrimitiveTopology3D::Triangles,
+            morph_targets: Vec::new(),
         }
     }
 
@@ -317,6 +193,7 @@ impl Geometry3D {
             vertices,
             indices,
             topology: PrimitiveTopology3D::Triangles,
+            morph_targets: Vec::new(),
         }
     }
 
@@ -369,6 +246,7 @@ impl Geometry3D {
             vertices,
             indices,
             topology: PrimitiveTopology3D::Triangles,
+            morph_targets: Vec::new(),
         }
     }
 
@@ -400,6 +278,8 @@ impl Geometry3D {
 
 #[cfg(test)]
 mod tests {
+    use bytemuck::Zeroable;
+
     use super::*;
 
     fn assert_outward_winding(geometry: &Geometry3D) {
@@ -451,6 +331,33 @@ mod tests {
         assert_eq!(vertex.joints0, [1, 2, 3, 4]);
         assert_eq!(vertex.joints1, [5, 6, 7, 8]);
         assert_eq!(vertex.weights1, [0.05; 4]);
+    }
+
+    #[test]
+    fn morph_targets_validate_layout_and_produce_deformed_bounds() {
+        assert_eq!(std::mem::size_of::<MorphVertex3D>(), 48);
+        let mut geometry = Geometry3D::new(
+            vec![
+                Vertex3D::new([-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0]),
+                Vertex3D::new([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0]),
+            ],
+            vec![0, 1],
+            None,
+        );
+        geometry
+            .set_morph_targets(vec![MorphTarget3D::new(vec![
+                MorphVertex3D::new([0.0, 2.0, 0.0], [0.0; 3], [0.0; 3]),
+                MorphVertex3D::new([0.0, 4.0, 0.0], [0.0; 3], [0.0; 3]),
+            ])])
+            .unwrap();
+        let bounds = geometry.aabb_for_morph_weights(&[0.5]);
+        assert_eq!(bounds.min, glam::Vec3::new(-1.0, 1.0, 0.0));
+        assert_eq!(bounds.max, glam::Vec3::new(1.0, 2.0, 0.0));
+        assert!(
+            geometry
+                .set_morph_targets(vec![MorphTarget3D::new(vec![MorphVertex3D::zeroed()])])
+                .is_err()
+        );
     }
 
     #[test]
