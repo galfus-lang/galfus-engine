@@ -1,5 +1,5 @@
 use crate::GpuShared;
-use crate::bind_group::BindGroupManager;
+use crate::bind_group::{BindGroupManager, BindResourceHandle};
 use crate::buffer::BufferManager;
 use crate::context::GpuContext;
 use crate::error::GpuResult;
@@ -121,7 +121,8 @@ impl GpuManager {
 
     /// Disposes a logical texture.
     pub fn dispose_logical_texture(&mut self, logical_id: u32) -> GpuResult<()> {
-        self.textures.dispose_logical_texture(logical_id)
+        let handle = self.textures.get_logical_handle(logical_id)?;
+        self.destroy_texture(handle)
     }
 
     /// Allocates and initializes a buffer mapped to a host logical ID.
@@ -146,6 +147,30 @@ impl GpuManager {
 
     /// Disposes a logical buffer.
     pub fn dispose_logical_buffer(&mut self, logical_id: u32) -> GpuResult<()> {
-        self.buffers.dispose_logical_buffer(logical_id)
+        let handle = self.buffers.get_logical_handle(logical_id)?;
+        self.destroy_buffer(handle)
+    }
+
+    /// Destroys a texture after invalidating bind groups that reference any of its views.
+    pub fn destroy_texture(&mut self, handle: crate::handle::GpuTextureHandle) -> GpuResult<()> {
+        for view_handle in self.textures.view_handles_for_texture(handle)? {
+            self.bind_groups
+                .destroy_referencing(BindResourceHandle::TextureView(view_handle));
+        }
+        self.textures.destroy_texture(handle)
+    }
+
+    /// Destroys a buffer after invalidating bind groups that reference it.
+    pub fn destroy_buffer(&mut self, handle: crate::handle::GpuBufferHandle) -> GpuResult<()> {
+        self.bind_groups
+            .destroy_referencing(BindResourceHandle::Buffer(handle));
+        self.buffers.destroy(handle)
+    }
+
+    /// Destroys a sampler after invalidating bind groups that reference it.
+    pub fn destroy_sampler(&mut self, handle: crate::handle::GpuSamplerHandle) -> GpuResult<()> {
+        self.bind_groups
+            .destroy_referencing(BindResourceHandle::Sampler(handle));
+        self.samplers.destroy(handle)
     }
 }

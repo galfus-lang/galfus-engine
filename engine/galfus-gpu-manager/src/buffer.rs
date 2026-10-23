@@ -111,11 +111,13 @@ impl BufferManager {
         data: &[u8],
     ) -> GpuResult<()> {
         let entry = self.get(handle)?;
-        if offset + (data.len() as u64) > entry.size {
+        let end = offset
+            .checked_add(data.len() as u64)
+            .ok_or_else(|| GpuError::InvalidArgument("Buffer write offset overflow".into()))?;
+        if end > entry.size {
             return Err(GpuError::InvalidArgument(format!(
                 "Buffer overflow: size={}, requested offset+len={}",
-                entry.size,
-                offset + data.len() as u64
+                entry.size, end
             )));
         }
         queue.write_buffer(&entry.buffer, offset, data);
@@ -141,6 +143,8 @@ impl BufferManager {
                 slot: handle.slot(),
                 generation: handle.generation().get(),
             })?;
+        self.logical_map
+            .retain(|_, mapped_handle| *mapped_handle != handle);
         entry.buffer.destroy();
         Ok(())
     }

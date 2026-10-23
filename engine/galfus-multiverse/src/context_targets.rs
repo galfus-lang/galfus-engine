@@ -66,13 +66,13 @@ impl MultiverseContext {
             self.target_textures.remove(&target_id),
             &mut self.gpu_manager,
         ) {
-            let _ = gpu.textures.destroy_texture(tex_handle);
+            let _ = gpu.destroy_texture(tex_handle);
         }
         if let (Some((hist_handle, _, _)), Some(gpu)) = (
             self.target_history_textures.remove(&target_id),
             &mut self.gpu_manager,
         ) {
-            let _ = gpu.textures.destroy_texture(hist_handle);
+            let _ = gpu.destroy_texture(hist_handle);
         }
         let removed_invs: Vec<u32> = self
             .invocations
@@ -85,13 +85,13 @@ impl MultiverseContext {
             if let (Some((tex_h, _, _)), Some(gpu)) =
                 (self.scratch_textures.remove(&inv_id), &mut self.gpu_manager)
             {
-                let _ = gpu.textures.destroy_texture(tex_h);
+                let _ = gpu.destroy_texture(tex_h);
             }
             if let (Some(entry), Some(gpu)) =
                 (self.taa_history.remove(&inv_id), &mut self.gpu_manager)
             {
-                let _ = gpu.textures.destroy_texture(entry.tex_a);
-                let _ = gpu.textures.destroy_texture(entry.tex_b);
+                let _ = gpu.destroy_texture(entry.tex_a);
+                let _ = gpu.destroy_texture(entry.tex_b);
             }
         }
         self.bindings.retain(|b| b.source_target_id != target_id);

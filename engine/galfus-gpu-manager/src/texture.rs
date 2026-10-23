@@ -4,14 +4,13 @@ use crate::handle::{
     TextureResource, TextureViewResource,
 };
 use crate::types::{GpuTextureDesc, TextureColorSpace};
-use galfus_core::{GenerationalPool, Handle};
-use std::num::NonZeroU32;
+use galfus_core::GenerationalPool;
 
 /// An allocated GPU Texture resource.
 pub struct GpuTexture {
     texture: wgpu::Texture,
     desc: GpuTextureDesc,
-    default_view: GpuTextureViewHandle,
+    default_view: Option<GpuTextureViewHandle>,
 }
 
 impl GpuTexture {
@@ -25,6 +24,7 @@ impl GpuTexture {
 
     pub fn default_view(&self) -> GpuTextureViewHandle {
         self.default_view
+            .expect("texture must always have a default view after construction")
     }
 
     pub fn format(&self) -> wgpu::TextureFormat {
@@ -73,6 +73,7 @@ use std::collections::HashMap;
 pub struct TextureManager {
     textures: GenerationalPool<GpuTexture>,
     views: GenerationalPool<GpuTextureView>,
+    views_by_texture: HashMap<GpuTextureHandle, Vec<GpuTextureViewHandle>>,
     logical_map: HashMap<u32, GpuTextureHandle>,
 }
 
@@ -87,6 +88,7 @@ impl TextureManager {
         Self {
             textures: GenerationalPool::new(NAMESPACE_TEXTURE),
             views: GenerationalPool::new(NAMESPACE_TEXTURE_VIEW),
+            views_by_texture: HashMap::new(),
             logical_map: HashMap::new(),
         }
     }
@@ -97,15 +99,16 @@ impl TextureManager {
         device: &wgpu::Device,
         desc: &GpuTextureDesc,
     ) -> GpuResult<GpuTextureHandle> {
+        validate_texture_desc(desc)?;
         let wgpu_desc = wgpu::TextureDescriptor {
             label: desc.label.as_deref(),
             size: wgpu::Extent3d {
-                width: desc.width.max(1),
-                height: desc.height.max(1),
-                depth_or_array_layers: desc.depth_or_layers.max(1),
+                width: desc.width,
+                height: desc.height,
+                depth_or_array_layers: desc.depth_or_layers,
             },
-            mip_level_count: desc.mip_levels.max(1),
-            sample_count: desc.sample_count.max(1),
+            mip_level_count: desc.mip_levels,
+            sample_count: desc.sample_count,
             dimension: desc.dimension.to_wgpu(),
             format: desc.format.to_wgpu(),
             usage: desc.usages.to_wgpu(),
@@ -113,37 +116,44 @@ impl TextureManager {
         };
 
         let texture = device.create_texture(&wgpu_desc);
-        let raw_view = texture.create_view(&wgpu::TextureViewDescriptor {
-            label: desc
-                .label
-                .as_ref()
-                .map(|l| format!("{l} Default View"))
-                .as_deref(),
-            ..Default::default()
-        });
-
-        // Placeholder parent texture handle that will be updated immediately
-        let dummy_parent: GpuTextureHandle =
-            Handle::new(0, NonZeroU32::new(1).unwrap(), NAMESPACE_TEXTURE);
-
-        let view_entry = GpuTextureView {
-            view: raw_view,
-            parent_texture: dummy_parent,
-            label: desc.label.clone(),
-        };
-        let view_handle = self.views.insert(view_entry)?.cast::<TextureViewResource>();
-
         let tex_entry = GpuTexture {
             texture,
             desc: desc.clone(),
-            default_view: view_handle,
+            default_view: None,
         };
         let tex_handle = self.textures.insert(tex_entry)?.cast::<TextureResource>();
 
-        // Update the view's parent_texture handle
-        if let Ok(view_mut) = self.views.get_mut(view_handle.cast()) {
-            view_mut.parent_texture = tex_handle;
-        }
+        let raw_view =
+            self.get_texture(tex_handle)?
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor {
+                    label: desc
+                        .label
+                        .as_ref()
+                        .map(|label| format!("{label} Default View"))
+                        .as_deref(),
+                    ..Default::default()
+                });
+        let view_handle = match self.views.insert(GpuTextureView {
+            view: raw_view,
+            parent_texture: tex_handle,
+            label: desc.label.clone(),
+        }) {
+            Ok(handle) => handle.cast::<TextureViewResource>(),
+            Err(error) => {
+                let texture = self
+                    .textures
+                    .remove(tex_handle.cast())
+                    .expect("new texture handle must remain valid");
+                texture.texture.destroy();
+                return Err(error.into());
+            }
+        };
+        self.views_by_texture.insert(tex_handle, vec![view_handle]);
+        self.textures
+            .get_mut(tex_handle.cast())
+            .expect("new texture handle must remain valid")
+            .default_view = Some(view_handle);
 
         Ok(tex_handle)
     }
@@ -158,28 +168,14 @@ impl TextureManager {
     ) -> GpuResult<GpuTextureHandle> {
         let mut upload_desc = desc.clone();
         upload_desc.usages.copy_dst = true;
-
-        let handle = self.create_texture(device, &upload_desc)?;
-        let entry = self.get_texture(handle)?;
-
-        let bytes_per_pixel: u32 = match desc.format.to_wgpu() {
-            wgpu::TextureFormat::R8Unorm => 1,
-            wgpu::TextureFormat::Rg8Unorm | wgpu::TextureFormat::R16Float => 2,
-            wgpu::TextureFormat::Rgba8Unorm
-            | wgpu::TextureFormat::Rgba8UnormSrgb
-            | wgpu::TextureFormat::Bgra8Unorm
-            | wgpu::TextureFormat::Bgra8UnormSrgb
-            | wgpu::TextureFormat::Depth32Float
-            | wgpu::TextureFormat::R32Float => 4,
-            wgpu::TextureFormat::Rgba16Float => 8,
-            wgpu::TextureFormat::Rgba32Float => 16,
-            _ => 4,
-        };
-
-        let expected_bytes = (desc.width as usize)
-            * (desc.height as usize)
-            * (desc.depth_or_layers.max(1) as usize)
-            * (bytes_per_pixel as usize);
+        validate_texture_desc(&upload_desc)?;
+        let bytes_per_pixel = bytes_per_pixel(desc.format)?;
+        let expected_bytes = expected_byte_len(
+            desc.width,
+            desc.height,
+            desc.depth_or_layers,
+            bytes_per_pixel,
+        )?;
         if data.len() < expected_bytes {
             return Err(GpuError::InvalidArgument(format!(
                 "Texture data underflow: expected at least {expected_bytes} bytes, got {}",
@@ -187,7 +183,12 @@ impl TextureManager {
             )));
         }
 
-        let bytes_per_row = desc.width * bytes_per_pixel;
+        let bytes_per_row = desc
+            .width
+            .checked_mul(bytes_per_pixel)
+            .ok_or_else(|| GpuError::InvalidArgument("Texture row byte size overflow".into()))?;
+        let handle = self.create_texture(device, &upload_desc)?;
+        let entry = self.get_texture(handle)?;
 
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -228,6 +229,10 @@ impl TextureManager {
         };
 
         let view_handle = self.views.insert(view_entry)?.cast::<TextureViewResource>();
+        self.views_by_texture
+            .entry(texture_handle)
+            .or_default()
+            .push(view_handle);
         Ok(view_handle)
     }
 
@@ -261,16 +266,36 @@ impl TextureManager {
                 generation: handle.generation().get(),
             })?;
 
-        let _ = self.views.remove(entry.default_view.cast());
+        let view_handles = self
+            .views_by_texture
+            .remove(&handle)
+            .unwrap_or_else(|| vec![entry.default_view()]);
+        for view_handle in view_handles {
+            let _ = self.views.remove(view_handle.cast());
+        }
+        self.logical_map
+            .retain(|_, mapped_handle| *mapped_handle != handle);
         entry.texture.destroy();
         Ok(())
     }
 
     /// Destroys an explicit texture view.
     pub fn destroy_view(&mut self, handle: GpuTextureViewHandle) -> GpuResult<()> {
+        let parent_handle = self.get_view(handle)?.parent();
+        let texture = self.get_texture(parent_handle)?;
+        if texture.default_view() == handle {
+            return Err(GpuError::InvalidArgument(
+                "The default texture view is owned by its texture".into(),
+            ));
+        }
+
         self.views
             .remove(handle.cast())
-            .map(|_| ())
+            .map(|_| {
+                if let Some(view_handles) = self.views_by_texture.get_mut(&parent_handle) {
+                    view_handles.retain(|view_handle| *view_handle != handle);
+                }
+            })
             .map_err(|_| GpuError::TextureViewNotFound {
                 slot: handle.slot(),
                 generation: handle.generation().get(),
@@ -330,27 +355,35 @@ impl TextureManager {
         data: &[u8],
     ) -> GpuResult<()> {
         let tex = self.get_logical_texture(logical_id)?;
-        let bytes_per_pixel: u32 = match tex.desc.format.to_wgpu() {
-            wgpu::TextureFormat::R8Unorm => 1,
-            wgpu::TextureFormat::Rg8Unorm | wgpu::TextureFormat::R16Float => 2,
-            wgpu::TextureFormat::Rgba8Unorm
-            | wgpu::TextureFormat::Rgba8UnormSrgb
-            | wgpu::TextureFormat::Bgra8Unorm
-            | wgpu::TextureFormat::Bgra8UnormSrgb
-            | wgpu::TextureFormat::Depth32Float
-            | wgpu::TextureFormat::R32Float => 4,
-            wgpu::TextureFormat::Rgba16Float => 8,
-            wgpu::TextureFormat::Rgba32Float => 16,
-            _ => 4,
-        };
-        let expected_bytes = (width as usize) * (height as usize) * (bytes_per_pixel as usize);
+        if width == 0 || height == 0 {
+            return Err(GpuError::InvalidArgument(
+                "Texture write dimensions must be greater than zero".into(),
+            ));
+        }
+        let end_x = x
+            .checked_add(width)
+            .ok_or_else(|| GpuError::InvalidArgument("Texture write X range overflow".into()))?;
+        let end_y = y
+            .checked_add(height)
+            .ok_or_else(|| GpuError::InvalidArgument("Texture write Y range overflow".into()))?;
+        if end_x > tex.width() || end_y > tex.height() {
+            return Err(GpuError::InvalidArgument(format!(
+                "Texture write region [{x}, {y}, {width}, {height}] exceeds texture {}x{}",
+                tex.width(),
+                tex.height()
+            )));
+        }
+        let bytes_per_pixel = bytes_per_pixel(tex.desc.format)?;
+        let expected_bytes = expected_byte_len(width, height, 1, bytes_per_pixel)?;
         if data.len() < expected_bytes {
             return Err(GpuError::InvalidArgument(format!(
                 "Texture sub-region data underflow: expected at least {expected_bytes} bytes, got {}",
                 data.len()
             )));
         }
-        let bytes_per_row = width * bytes_per_pixel;
+        let bytes_per_row = width
+            .checked_mul(bytes_per_pixel)
+            .ok_or_else(|| GpuError::InvalidArgument("Texture row byte size overflow".into()))?;
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &tex.texture,
@@ -380,4 +413,68 @@ impl TextureManager {
         })?;
         self.destroy_texture(handle)
     }
+
+    pub(crate) fn view_handles_for_texture(
+        &self,
+        handle: GpuTextureHandle,
+    ) -> GpuResult<Vec<GpuTextureViewHandle>> {
+        self.get_texture(handle)?;
+        Ok(self
+            .views_by_texture
+            .get(&handle)
+            .cloned()
+            .unwrap_or_default())
+    }
+}
+
+fn validate_texture_desc(desc: &GpuTextureDesc) -> GpuResult<()> {
+    if desc.width == 0 || desc.height == 0 || desc.depth_or_layers == 0 {
+        return Err(GpuError::InvalidArgument(
+            "Texture dimensions must be greater than zero".into(),
+        ));
+    }
+    if desc.mip_levels == 0 || desc.sample_count == 0 {
+        return Err(GpuError::InvalidArgument(
+            "Texture mip level and sample count must be greater than zero".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn bytes_per_pixel(format: crate::types::NormalizedTextureFormat) -> GpuResult<u32> {
+    use crate::types::NormalizedTextureFormat;
+
+    match format {
+        NormalizedTextureFormat::R8Unorm => Ok(1),
+        NormalizedTextureFormat::Rg8Unorm | NormalizedTextureFormat::R16Float => Ok(2),
+        NormalizedTextureFormat::Rgba8Unorm
+        | NormalizedTextureFormat::Rgba8UnormSrgb
+        | NormalizedTextureFormat::Bgra8Unorm
+        | NormalizedTextureFormat::Bgra8UnormSrgb
+        | NormalizedTextureFormat::Depth32Float
+        | NormalizedTextureFormat::R32Float => Ok(4),
+        NormalizedTextureFormat::Rg16Float | NormalizedTextureFormat::Rg32Float => Ok(8),
+        NormalizedTextureFormat::Rgba16Float => Ok(8),
+        NormalizedTextureFormat::Rgba32Float => Ok(16),
+        NormalizedTextureFormat::Depth24Plus | NormalizedTextureFormat::Depth24PlusStencil8 => {
+            Err(GpuError::InvalidArgument(
+                "CPU texture uploads are unsupported for opaque depth formats".into(),
+            ))
+        }
+    }
+}
+
+fn expected_byte_len(
+    width: u32,
+    height: u32,
+    depth: u32,
+    bytes_per_pixel: u32,
+) -> GpuResult<usize> {
+    let byte_len = u64::from(width)
+        .checked_mul(u64::from(height))
+        .and_then(|value| value.checked_mul(u64::from(depth)))
+        .and_then(|value| value.checked_mul(u64::from(bytes_per_pixel)))
+        .ok_or_else(|| GpuError::InvalidArgument("Texture byte size overflow".into()))?;
+    usize::try_from(byte_len)
+        .map_err(|_| GpuError::InvalidArgument("Texture byte size exceeds address space".into()))
 }

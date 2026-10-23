@@ -164,7 +164,7 @@ pub struct GpuTextureDesc {
     pub height: u32,
     #[serde(default = "default_depth")]
     pub depth_or_layers: u32,
-    #[serde(default)]
+    #[serde(default = "default_mip_levels")]
     pub mip_levels: u32,
     #[serde(default = "default_sample_count")]
     pub sample_count: u32,
@@ -204,6 +204,10 @@ mod tests {
 }
 
 fn default_depth() -> u32 {
+    1
+}
+
+fn default_mip_levels() -> u32 {
     1
 }
 

@@ -366,7 +366,7 @@ impl MultiverseContext {
             if let (Some((tex_h, _, _)), Some(gpu)) =
                 (self.scratch_textures.remove(&inv_id), &mut self.gpu_manager)
             {
-                let _ = gpu.textures.destroy_texture(tex_h);
+                let _ = gpu.destroy_texture(tex_h);
             }
         }
         self.bindings.retain(|b| b.realm_id != realm_id);
@@ -404,14 +404,14 @@ impl MultiverseContext {
             self.scratch_textures.remove(&invocation_id),
             &mut self.gpu_manager,
         ) {
-            let _ = gpu.textures.destroy_texture(tex_h);
+            let _ = gpu.destroy_texture(tex_h);
         }
         if let (Some(entry), Some(gpu)) = (
             self.taa_history.remove(&invocation_id),
             &mut self.gpu_manager,
         ) {
-            let _ = gpu.textures.destroy_texture(entry.tex_a);
-            let _ = gpu.textures.destroy_texture(entry.tex_b);
+            let _ = gpu.destroy_texture(entry.tex_a);
+            let _ = gpu.destroy_texture(entry.tex_b);
         }
         self.dirty = true;
         Ok(())

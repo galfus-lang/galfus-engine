@@ -51,7 +51,7 @@ pub(crate) fn ensure_scratch_texture(
     };
     if needs_scratch_realloc {
         if let Some((old_tex, _, _)) = scratch_textures.remove(&invocation_id) {
-            let _ = gpu.textures.destroy_texture(old_tex);
+            let _ = gpu.destroy_texture(old_tex);
         }
         let tex_desc = GpuTextureDesc {
             label: Some(format!("Multiverse Invocation #{} Scratch", invocation_id)),
@@ -109,8 +109,8 @@ pub(crate) fn ensure_postprocess_resources(
         };
         if needs_smaa_realloc {
             if let Some((old_e, _, old_w, _, _)) = smaa_intermediates.take() {
-                let _ = gpu.textures.destroy_texture(old_e);
-                let _ = gpu.textures.destroy_texture(old_w);
+                let _ = gpu.destroy_texture(old_e);
+                let _ = gpu.destroy_texture(old_w);
             }
             let edge_desc = GpuTextureDesc {
                 label: Some("Multiverse SMAA Edge Texture".to_string()),
@@ -166,8 +166,8 @@ pub(crate) fn ensure_postprocess_resources(
         };
         if needs_taa_realloc {
             if let Some(old) = taa_history.remove(&invocation_id) {
-                let _ = gpu.textures.destroy_texture(old.tex_a);
-                let _ = gpu.textures.destroy_texture(old.tex_b);
+                let _ = gpu.destroy_texture(old.tex_a);
+                let _ = gpu.destroy_texture(old.tex_b);
             }
             let desc_a = GpuTextureDesc {
                 label: Some(format!("Multiverse TAA History A #{}", invocation_id)),
@@ -232,7 +232,7 @@ pub(crate) fn ensure_postprocess_resources(
         };
         if needs_pp_realloc {
             if let Some((old_tex, _, _)) = ping_pong_texture.take() {
-                let _ = gpu.textures.destroy_texture(old_tex);
+                let _ = gpu.destroy_texture(old_tex);
             }
             let pp_desc = GpuTextureDesc {
                 label: Some("Multiverse Filter PingPong Texture".to_string()),

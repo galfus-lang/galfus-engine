@@ -71,11 +71,13 @@ pub struct BufferArena {
 
     records: Vec<AllocRecord>,
     free_indices: Vec<u32>,
+    free_ranges: Vec<ArenaSlice>,
     live_bytes: u64,
     dead_bytes: u64,
 
     garbage: Vec<GarbageEntry>,
     keep_frames: u64,
+    current_frame: u64,
 
     device: GpuShared<wgpu::Device>,
     queue: GpuShared<wgpu::Queue>,
@@ -112,10 +114,12 @@ impl BufferArena {
             alignment: desc.alignment,
             records: Vec::new(),
             free_indices: Vec::new(),
+            free_ranges: Vec::new(),
             live_bytes: 0,
             dead_bytes: 0,
             garbage: Vec::new(),
             keep_frames: desc.keep_frames.max(1),
+            current_frame: 0,
             device,
             queue,
         }
@@ -123,29 +127,28 @@ impl BufferArena {
 
     /// Advances the frame counter, retiring deferred old GPU buffers.
     pub fn begin_frame(&mut self, current_frame: u64) {
+        self.current_frame = self.current_frame.max(current_frame);
         self.garbage
-            .retain(|g| g.retire_after_frame > current_frame);
+            .retain(|g| g.retire_after_frame > self.current_frame);
     }
 
     /// Allocates `size_bytes` aligned to the arena alignment.
     pub fn allocate(&mut self, size_bytes: u64) -> ArenaAllocHandle {
         assert!(size_bytes > 0, "cannot allocate 0 bytes");
-        assert!(
-            size_bytes.is_multiple_of(self.alignment),
-            "size must be multiple of alignment ({})",
-            self.alignment
-        );
+        let size_bytes = Self::align_up_to(size_bytes, self.alignment);
+        let offset = self.take_free_range(size_bytes).unwrap_or_else(|| {
+            let offset = Self::align_up_to(self.cursor, self.alignment);
+            let end = offset
+                .checked_add(size_bytes)
+                .expect("arena offset overflow");
 
-        let offset = Self::align_up_to(self.cursor, self.alignment);
-        let end = offset
-            .checked_add(size_bytes)
-            .expect("arena offset overflow");
+            if end > self.capacity {
+                self.grow_to_fit(end);
+            }
 
-        if end > self.capacity {
-            self.grow_to_fit(end);
-        }
-
-        self.cursor = end;
+            self.cursor = end;
+            offset
+        });
         self.live_bytes = self.live_bytes.saturating_add(size_bytes);
 
         if let Some(idx) = self.free_indices.pop() {
@@ -214,9 +217,14 @@ impl BufferArena {
         }
 
         rec.alive = false;
-        self.dead_bytes = self.dead_bytes.saturating_add(rec.size);
-        self.live_bytes = self.live_bytes.saturating_sub(rec.size);
+        let freed_slice = ArenaSlice {
+            offset: rec.offset,
+            size: rec.size,
+        };
+        self.dead_bytes = self.dead_bytes.saturating_add(freed_slice.size);
+        self.live_bytes = self.live_bytes.saturating_sub(freed_slice.size);
         self.free_indices.push(handle.index);
+        self.insert_free_range(freed_slice);
         true
     }
 
@@ -250,6 +258,11 @@ impl BufferArena {
         self.live_bytes
     }
 
+    /// Returns the number of retired backing buffers still held for in-flight GPU work.
+    pub fn retired_buffer_count(&self) -> usize {
+        self.garbage.len()
+    }
+
     fn grow_to_fit(&mut self, required_bytes: u64) {
         let mut new_cap = (self.capacity * 2).max(1024);
         while new_cap < required_bytes {
@@ -278,13 +291,55 @@ impl BufferArena {
         self.capacity = new_cap;
         self.garbage.push(GarbageEntry {
             _buffer: old_buf,
-            retire_after_frame: self.keep_frames,
+            retire_after_frame: self.current_frame.saturating_add(self.keep_frames),
         });
+    }
+
+    fn take_free_range(&mut self, size: u64) -> Option<u64> {
+        let index = self
+            .free_ranges
+            .iter()
+            .position(|range| range.size >= size)?;
+        let range = &mut self.free_ranges[index];
+        let offset = range.offset;
+        range.offset += size;
+        range.size -= size;
+        if range.size == 0 {
+            self.free_ranges.remove(index);
+        }
+        self.dead_bytes = self.dead_bytes.saturating_sub(size);
+        Some(offset)
+    }
+
+    fn insert_free_range(&mut self, range: ArenaSlice) {
+        let index = self
+            .free_ranges
+            .partition_point(|existing| existing.offset < range.offset);
+        self.free_ranges.insert(index, range);
+
+        let mut merged_index = index;
+        if merged_index > 0 {
+            let previous = self.free_ranges[merged_index - 1];
+            if previous.offset.checked_add(previous.size) == Some(range.offset) {
+                self.free_ranges[merged_index - 1].size = previous.size + range.size;
+                self.free_ranges.remove(merged_index);
+                merged_index -= 1;
+            }
+        }
+
+        if merged_index + 1 < self.free_ranges.len() {
+            let current = self.free_ranges[merged_index];
+            let next = self.free_ranges[merged_index + 1];
+            if current.offset.checked_add(current.size) == Some(next.offset) {
+                self.free_ranges[merged_index].size = current.size + next.size;
+                self.free_ranges.remove(merged_index + 1);
+            }
+        }
     }
 
     #[inline]
     fn align_up_to(value: u64, alignment: u64) -> u64 {
         let mask = alignment - 1;
-        (value + mask) & !mask
+        value.checked_add(mask).expect("arena alignment overflow") & !mask
     }
 }
