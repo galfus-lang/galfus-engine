@@ -212,6 +212,7 @@ impl Realm3DContext {
             .unwrap_or_default();
         self.models
             .insert(id, (model, transform, aabb, None, None, None));
+        self.bones_dirty |= self.model_bones.contains_key(&id);
         self.dirty = true;
         Ok(())
     }
@@ -342,24 +343,41 @@ impl Realm3DContext {
         if !self.models.contains_key(&model_id) {
             return Err(not_found(realm_id, "Model", model_id));
         }
-        self.model_bones.insert(model_id, matrices.to_vec());
-        self.dirty = true;
+        let changed = match self.model_bones.entry(model_id) {
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                if entry.get().as_slice() == matrices {
+                    false
+                } else {
+                    let palette = entry.get_mut();
+                    palette.clear();
+                    palette.extend_from_slice(matrices);
+                    true
+                }
+            }
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(matrices.to_vec());
+                true
+            }
+        };
+        self.bones_dirty |= changed;
         Ok(())
     }
 
     /// Rebuilds the unified skeletal bone buffer from per-model bone states.
     pub(crate) fn rebuild_bones(&mut self) {
-        if self.model_bones.is_empty() {
+        if !self.bones_dirty {
             return;
         }
         self.bones.clear();
+        for entry in self.models.values_mut() {
+            entry.0.bone_offset = 0;
+            entry.0.bone_count = 0;
+        }
         for (model_id, matrices) in &self.model_bones {
             if let Some(entry) = self.models.get_mut(model_id) {
                 entry.0.bone_offset = self.bones.len() as u32;
                 entry.0.bone_count = matrices.len() as u32;
                 self.bones.extend_from_slice(matrices);
-                entry.3 = None;
-                entry.5 = None;
             }
         }
     }
@@ -396,7 +414,7 @@ impl Realm3DContext {
 
     /// Destroys an existing `Model3D` and its skeletal bone palette if present.
     pub fn destroy_model(&mut self, id: u32) -> RealmResult<()> {
-        self.model_bones.remove(&id);
+        self.bones_dirty |= self.model_bones.remove(&id).is_some();
         self.models
             .remove(&id)
             .map(|_| {
@@ -421,6 +439,7 @@ impl Realm3DContext {
         self.lights
             .remove(&id)
             .map(|_| {
+                self.lights_dirty = true;
                 self.dirty = true;
             })
             .ok_or_else(|| not_found(self.id, "Light", id))
@@ -435,6 +454,7 @@ impl Realm3DContext {
     ) -> RealmResult<()> {
         validate_id(id)?;
         self.lights.insert(id, (light, transform));
+        self.lights_dirty = true;
         self.dirty = true;
         Ok(())
     }
@@ -445,6 +465,31 @@ impl Realm3DContext {
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "Light", id))?
             .1 = transform;
+        self.lights_dirty = true;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the sRGB color of an existing `Light3D`.
+    pub fn set_light_color(&mut self, id: u32, color: glam::Vec3) -> RealmResult<()> {
+        self.lights
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "Light", id))?
+            .0
+            .color = color;
+        self.lights_dirty = true;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the intensity of an existing `Light3D`.
+    pub fn set_light_intensity(&mut self, id: u32, intensity: f32) -> RealmResult<()> {
+        self.lights
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "Light", id))?
+            .0
+            .intensity = intensity;
+        self.lights_dirty = true;
         self.dirty = true;
         Ok(())
     }
@@ -504,6 +549,7 @@ impl Realm3DContext {
     pub fn create_portal(&mut self, id: u32, portal: Portal3D) -> RealmResult<()> {
         validate_id(id)?;
         self.portals.insert(id, portal);
+        self.prune_portal_pipelines();
         self.dirty = true;
         Ok(())
     }
@@ -514,6 +560,7 @@ impl Realm3DContext {
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "Portal", id))?
             .active = active;
+        self.prune_portal_pipelines();
         self.dirty = true;
         Ok(())
     }
@@ -522,8 +569,9 @@ impl Realm3DContext {
     pub fn destroy_portal(&mut self, id: u32) -> RealmResult<()> {
         self.portals
             .remove(&id)
-            .map(|_| ())
-            .ok_or_else(|| not_found(self.id, "Portal", id))
+            .ok_or_else(|| not_found(self.id, "Portal", id))?;
+        self.prune_portal_pipelines();
+        Ok(())
     }
 
     /// Queues debug gizmo drawing primitives.

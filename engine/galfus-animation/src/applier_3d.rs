@@ -183,15 +183,11 @@ pub(super) fn apply_target_value(
                 .ok_or_else(|| {
                     AnimationError::General(format!("Realm 3D #{realm_id} not found"))
                 })?;
-            let entry = r3d
-                .lights
-                .get_mut(light_id)
-                .ok_or_else(|| AnimationError::General(format!("Light #{light_id} not found")))?;
-            entry.0.color = value.as_vec3().ok_or_else(|| {
+            let color = value.as_vec3().ok_or_else(|| {
                 AnimationError::InvalidValue("Expected Vec3 for Light3DColor".into())
             })?;
-            r3d.dirty = true;
-            Ok(())
+            r3d.set_light_color(*light_id, color)
+                .map_err(|error| AnimationError::General(error.to_string()))
         }
         AnimationTarget::Light3DIntensity { realm_id, light_id } => {
             let r3d = multiverse
@@ -199,15 +195,11 @@ pub(super) fn apply_target_value(
                 .ok_or_else(|| {
                     AnimationError::General(format!("Realm 3D #{realm_id} not found"))
                 })?;
-            let entry = r3d
-                .lights
-                .get_mut(light_id)
-                .ok_or_else(|| AnimationError::General(format!("Light #{light_id} not found")))?;
-            entry.0.intensity = value.as_scalar().ok_or_else(|| {
+            let intensity = value.as_scalar().ok_or_else(|| {
                 AnimationError::InvalidValue("Expected Scalar for Light3DIntensity".into())
             })?;
-            r3d.dirty = true;
-            Ok(())
+            r3d.set_light_intensity(*light_id, intensity)
+                .map_err(|error| AnimationError::General(error.to_string()))
         }
         AnimationTarget::Light3DTransform { realm_id, light_id } => {
             let r3d = multiverse
@@ -215,17 +207,21 @@ pub(super) fn apply_target_value(
                 .ok_or_else(|| {
                     AnimationError::General(format!("Realm 3D #{realm_id} not found"))
                 })?;
-            let entry = r3d
-                .lights
-                .get_mut(light_id)
-                .ok_or_else(|| AnimationError::General(format!("Light #{light_id} not found")))?;
-            if let Some(pos) = value.as_vec3() {
-                entry.1.position = pos;
+            let transform = if let Some(position) = value.as_vec3() {
+                let current = r3d
+                    .lights
+                    .get(light_id)
+                    .ok_or_else(|| AnimationError::General(format!("Light #{light_id} not found")))?
+                    .1;
+                galfus_realm_3d_resources::transform::Transform3D {
+                    position,
+                    ..current
+                }
             } else {
-                entry.1 = value.to_transform3d()?;
-            }
-            r3d.dirty = true;
-            Ok(())
+                value.to_transform3d()?
+            };
+            r3d.set_light_transform(*light_id, transform)
+                .map_err(|error| AnimationError::General(error.to_string()))
         }
         AnimationTarget::EnvironmentSunColor { realm_id } => {
             let r3d = multiverse

@@ -6,7 +6,7 @@ use galfus_realm_3d_resources::camera::Camera3D;
 use galfus_realm_3d_resources::environment::EnvironmentRealm3D;
 use galfus_realm_3d_resources::geometry::Geometry3D;
 use galfus_realm_3d_resources::light::Light3D;
-use galfus_realm_3d_resources::material::Material3D;
+use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D};
 use galfus_realm_3d_resources::particle::{ParticleEmitter3D, ParticleEmitterState3D};
 use galfus_realm_3d_resources::transform::Transform3D;
 use galfus_realm_core::error::RealmError;
@@ -48,6 +48,9 @@ pub struct Realm3DContext {
     pub(crate) depth_texture: Option<(wgpu::Texture, wgpu::TextureView, UVec2)>,
     pub(crate) model_bones: BTreeMap<u32, Vec<glam::Mat4>>,
     pub(crate) bones: Vec<glam::Mat4>,
+    pub(crate) lights_dirty: bool,
+    pub(crate) bones_dirty: bool,
+    pub(crate) scene_bindings_generation: u64,
     pub(crate) total_time: f32,
     pub dirty: bool,
 }
@@ -80,8 +83,47 @@ impl Realm3DContext {
             depth_texture: None,
             model_bones: BTreeMap::new(),
             bones: Vec::new(),
+            lights_dirty: true,
+            bones_dirty: true,
+            scene_bindings_generation: 0,
             total_time: 0.0,
             dirty: true,
         }
+    }
+
+    /// Drops offscreen pipelines whose model no longer owns an active mirror/portal surface.
+    pub(crate) fn prune_portal_pipelines(&mut self) {
+        let has_active_portal = |model_id| {
+            self.portals
+                .values()
+                .any(|portal| portal.model_id == model_id && portal.active)
+        };
+        let is_retained_surface = |model_id: u32, material_id: u32, active: bool| {
+            if !active {
+                return false;
+            }
+            match self
+                .materials
+                .get(&material_id)
+                .map(|entry| entry.0.surface_type)
+            {
+                Some(SurfaceType3D::Mirror) => true,
+                Some(SurfaceType3D::Portal) => has_active_portal(model_id),
+                _ => false,
+            }
+        };
+        let mut retained_models = std::collections::BTreeSet::new();
+        for (&model_id, (model, _, _, _, _, _)) in &self.models {
+            if is_retained_surface(model_id, model.material_id, model.active) {
+                retained_models.insert(model_id);
+            }
+        }
+        for (&model_id, (model, _, _, _, _, _)) in &self.instanced_models {
+            if is_retained_surface(model_id, model.material_id, model.active) {
+                retained_models.insert(model_id);
+            }
+        }
+        self.portal_pipelines
+            .retain(|model_id, _| retained_models.contains(model_id));
     }
 }

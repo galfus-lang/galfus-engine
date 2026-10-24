@@ -24,6 +24,37 @@ pub struct SceneGpuBuffers {
 }
 
 impl SceneGpuBuffers {
+    #[allow(clippy::too_many_arguments)]
+    fn build_bind_group(
+        device: &wgpu::Device,
+        pipeline: &crate::pipeline::Pipeline3D,
+        shadow_map: &crate::shadow::ShadowMap3D,
+        camera_buf: &wgpu::Buffer,
+        env_buf: &wgpu::Buffer,
+        lights_buf: &wgpu::Buffer,
+        lights_header_buf: &wgpu::Buffer,
+        bones_buf: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        let b_entry = |binding, resource| wgpu::BindGroupEntry { binding, resource };
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Scene Bind Group"),
+            layout: &pipeline.scene_layout,
+            entries: &[
+                b_entry(0, camera_buf.as_entire_binding()),
+                b_entry(1, env_buf.as_entire_binding()),
+                b_entry(2, lights_buf.as_entire_binding()),
+                b_entry(3, lights_header_buf.as_entire_binding()),
+                b_entry(
+                    4,
+                    wgpu::BindingResource::TextureView(&shadow_map.array_view),
+                ),
+                b_entry(5, wgpu::BindingResource::Sampler(&shadow_map.sampler)),
+                b_entry(6, bones_buf.as_entire_binding()),
+                b_entry(7, shadow_map.matrices_buffer.as_entire_binding()),
+            ],
+        })
+    }
+
     pub fn build(
         device: &wgpu::Device,
         pipeline: &crate::pipeline::Pipeline3D,
@@ -59,24 +90,16 @@ impl SceneGpuBuffers {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let b_entry = |binding, resource| wgpu::BindGroupEntry { binding, resource };
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Scene Bind Group"),
-            layout: &pipeline.scene_layout,
-            entries: &[
-                b_entry(0, camera_buf.as_entire_binding()),
-                b_entry(1, env_buf.as_entire_binding()),
-                b_entry(2, lights_buf.as_entire_binding()),
-                b_entry(3, lights_header_buf.as_entire_binding()),
-                b_entry(
-                    4,
-                    wgpu::BindingResource::TextureView(&shadow_map.array_view),
-                ),
-                b_entry(5, wgpu::BindingResource::Sampler(&shadow_map.sampler)),
-                b_entry(6, bones_buf.as_entire_binding()),
-                b_entry(7, shadow_map.matrices_buffer.as_entire_binding()),
-            ],
-        });
+        let bind_group = Self::build_bind_group(
+            device,
+            pipeline,
+            shadow_map,
+            &camera_buf,
+            &env_buf,
+            &lights_buf,
+            &lights_header_buf,
+            &bones_buf,
+        );
 
         Self {
             camera_buf,
@@ -86,6 +109,24 @@ impl SceneGpuBuffers {
             _bones_buf: bones_buf,
             bind_group,
         }
+    }
+
+    pub fn rebuild_bind_group(
+        &mut self,
+        device: &wgpu::Device,
+        pipeline: &crate::pipeline::Pipeline3D,
+        shadow_map: &crate::shadow::ShadowMap3D,
+    ) {
+        self.bind_group = Self::build_bind_group(
+            device,
+            pipeline,
+            shadow_map,
+            &self.camera_buf,
+            &self.env_buf,
+            &self.lights_buf,
+            &self._lights_header_buf,
+            &self._bones_buf,
+        );
     }
 
     /// Creates a scene bind group referencing a custom virtual camera buffer (e.g. for mirrors and portals).

@@ -21,6 +21,8 @@ pub struct PortalPipeline3D {
     pub sampler: wgpu::Sampler,
     pub bind_group: wgpu::BindGroup,
     pub virtual_camera_buf: wgpu::Buffer,
+    virtual_scene_bind_group: Option<wgpu::BindGroup>,
+    scene_bindings_generation: u64,
     pub width: u32,
     pub height: u32,
     pub target_format: wgpu::TextureFormat,
@@ -92,6 +94,8 @@ impl PortalPipeline3D {
             sampler,
             bind_group,
             virtual_camera_buf,
+            virtual_scene_bind_group: None,
+            scene_bindings_generation: 0,
             width: w,
             height: h,
             target_format,
@@ -191,6 +195,34 @@ impl PortalPipeline3D {
     /// Returns the active bind group for @group(3) containing the rendered reflection.
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
+    }
+
+    /// Returns a cached scene bind group for this portal's virtual camera.
+    pub fn ensure_virtual_scene_bind_group(
+        &mut self,
+        device: &wgpu::Device,
+        pipeline: &crate::pipeline::Pipeline3D,
+        scene: &crate::types::SceneGpuBuffers,
+        shadow_map: &crate::shadow::ShadowMap3D,
+        scene_bindings_generation: u64,
+    ) {
+        if self.virtual_scene_bind_group.is_none()
+            || self.scene_bindings_generation != scene_bindings_generation
+        {
+            self.virtual_scene_bind_group = Some(scene.create_camera_bind_group(
+                device,
+                pipeline,
+                shadow_map,
+                &self.virtual_camera_buf,
+            ));
+            self.scene_bindings_generation = scene_bindings_generation;
+        }
+    }
+
+    pub fn virtual_scene_bind_group(&self) -> &wgpu::BindGroup {
+        self.virtual_scene_bind_group
+            .as_ref()
+            .expect("virtual portal scene bind group was initialized")
     }
 
     /// Renders the scene from the virtual camera perspective into the offscreen portal texture.

@@ -108,6 +108,32 @@ mod tests {
     }
 
     #[test]
+    fn light_updates_invalidate_the_incremental_light_buffer() {
+        let mut realm = Realm3DContext::new(10);
+        realm
+            .create_light(
+                1,
+                Light3D::point(Vec3::ONE, 1.0, 10.0, true),
+                Transform3D::default(),
+            )
+            .unwrap();
+
+        realm.lights_dirty = false;
+        realm
+            .set_light_transform(1, Transform3D::from_position(Vec3::X))
+            .unwrap();
+        assert!(realm.lights_dirty);
+
+        realm.lights_dirty = false;
+        realm.set_light_color(1, Vec3::new(0.2, 0.4, 0.6)).unwrap();
+        assert!(realm.lights_dirty);
+
+        realm.lights_dirty = false;
+        realm.set_light_intensity(1, 3.0).unwrap();
+        assert!(realm.lights_dirty);
+    }
+
+    #[test]
     fn morph_weight_updates_validate_targets_and_refresh_model_bounds() {
         let mut realm = Realm3DContext::new(11);
         let mut geometry = Geometry3D::quad(2.0, 2.0);
@@ -293,6 +319,15 @@ mod tests {
         };
         assert!(realm.prepare(&prep).is_ok());
 
+        // Same-size skeletal animation updates write into the existing storage buffer and keep
+        // scene bindings stable.
+        let scene_generation = realm.scene_bindings_generation;
+        realm
+            .update_model_bones(1, &[glam::Mat4::IDENTITY])
+            .unwrap();
+        assert!(realm.prepare(&prep).is_ok());
+        assert_eq!(realm.scene_bindings_generation, scene_generation);
+
         // 2. Render target texture
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Test Realm3D Render Target"),
@@ -364,6 +399,41 @@ mod tests {
             target_format: wgpu::TextureFormat::Rgba8Unorm,
         };
         assert!(realm.render(&inv2).is_ok());
+
+        // Portal resources are tied to their active portal surface and are released when the
+        // logical portal disappears or the realm is cleared.
+        realm.materials.get_mut(&1).unwrap().0.surface_type =
+            galfus_realm_3d_resources::material::SurfaceType3D::Portal;
+        realm
+            .create_portal(9, galfus_realm_3d_resources::portal::Portal3D::mirror(1))
+            .unwrap();
+        let portal_pipeline = {
+            let pipeline = realm.pipeline.as_ref().unwrap();
+            PortalPipeline3D::new(
+                &device,
+                wgpu::TextureFormat::Rgba8Unorm,
+                &pipeline.refraction_layout,
+                16,
+                16,
+            )
+        };
+        realm.portal_pipelines.insert(1, portal_pipeline);
+        realm.destroy_portal(9).unwrap();
+        assert!(realm.portal_pipelines.is_empty());
+
+        let portal_pipeline = {
+            let pipeline = realm.pipeline.as_ref().unwrap();
+            PortalPipeline3D::new(
+                &device,
+                wgpu::TextureFormat::Rgba8Unorm,
+                &pipeline.refraction_layout,
+                16,
+                16,
+            )
+        };
+        realm.portal_pipelines.insert(1, portal_pipeline);
+        realm.clear().unwrap();
+        assert!(realm.portal_pipelines.is_empty());
     }
 
     #[test]
@@ -400,6 +470,7 @@ mod tests {
             realm.instanced_models.is_empty(),
             "instanced_models must be empty after clear()"
         );
+        assert!(realm.portal_pipelines.is_empty());
     }
 
     #[test]

@@ -29,7 +29,10 @@ impl Realm for Realm3DContext {
         self.portals.clear();
         self.model_bones.clear();
         self.bones.clear();
+        self.lights_dirty = true;
+        self.bones_dirty = true;
         self.gizmos.clear();
+        self.portal_pipelines.clear();
         self.dirty = true;
         Ok(())
     }
@@ -73,6 +76,7 @@ impl Realm for Realm3DContext {
                 wgpu::TextureFormat::Rgba8Unorm,
             ));
         }
+        self.prune_portal_pipelines();
         let pipeline = self.pipeline.as_mut().unwrap();
 
         // 1-3. Sync Geometries, Materials, and Models
@@ -92,7 +96,7 @@ impl Realm for Realm3DContext {
             ShadowPipeline3D::new(device, &pipeline.material_layout, &pipeline.model_layout)
         });
 
-        crate::types::sync_scene_buffers(
+        if crate::types::sync_scene_buffers(
             device,
             queue,
             pipeline,
@@ -102,8 +106,11 @@ impl Realm for Realm3DContext {
             &self.environment,
             &self.lights,
             &self.bones,
-            &mut self.dirty,
-        );
+            &mut self.lights_dirty,
+            &mut self.bones_dirty,
+        ) {
+            self.scene_bindings_generation = self.scene_bindings_generation.wrapping_add(1);
+        }
 
         Ok(())
     }
@@ -256,6 +263,22 @@ impl Realm for Realm3DContext {
         let has_mirrors = !collector.mirrors.is_empty();
         if has_mirrors {
             for mirror_item in &collector.mirrors {
+                let portal_config = self
+                    .portals
+                    .values()
+                    .find(|portal| portal.model_id == mirror_item.model_id);
+                if mirror_item.surface_type
+                    == galfus_realm_3d_resources::material::SurfaceType3D::Portal
+                    && !portal_config.is_some_and(|portal| portal.active)
+                {
+                    continue;
+                }
+                let mirror_portal = portal_config.filter(|portal| portal.active);
+                let portal_scale = mirror_portal
+                    .map(|portal| portal.resolution_scale.max(0.01))
+                    .unwrap_or(1.0);
+                let portal_width = ((width as f32 * portal_scale).round() as u32).max(1);
+                let portal_height = ((height as f32 * portal_scale).round() as u32).max(1);
                 let portal_pipe = self
                     .portal_pipelines
                     .entry(mirror_item.model_id)
@@ -264,22 +287,17 @@ impl Realm for Realm3DContext {
                             device,
                             ctx.target_format,
                             &pipeline.refraction_layout,
-                            width,
-                            height,
+                            portal_width,
+                            portal_height,
                         )
                     });
                 portal_pipe.resize(
                     device,
                     &pipeline.refraction_layout,
                     ctx.target_format,
-                    width,
-                    height,
+                    portal_width,
+                    portal_height,
                 );
-
-                let mirror_portal = self
-                    .portals
-                    .values()
-                    .find(|p| p.model_id == mirror_item.model_id && p.active);
                 let mirror_transform = self
                     .models
                     .get(&mirror_item.model_id)
@@ -326,12 +344,14 @@ impl Realm for Realm3DContext {
                 );
 
                 if let Some(shadow_map) = &self.shadow_map {
-                    let v_bg = scene_buffers.create_camera_bind_group(
+                    portal_pipe.ensure_virtual_scene_bind_group(
                         device,
                         pipeline,
+                        scene_buffers,
                         shadow_map,
-                        &portal_pipe.virtual_camera_buf,
+                        self.scene_bindings_generation,
                     );
+                    let v_bg = portal_pipe.virtual_scene_bind_group();
                     let v_collector = crate::portal::PortalPipeline3D::collect_virtual_items(
                         &self.models,
                         &self.instanced_models,
@@ -352,7 +372,7 @@ impl Realm for Realm3DContext {
                         crate::portal::PortalPassDesc {
                             encoder: &mut encoder,
                             pipeline,
-                            virtual_scene_bg: &v_bg,
+                            virtual_scene_bg: v_bg,
                             sky_pipe: self.skybox_pipeline.as_ref(),
                             sky_mode: self.environment.skybox.mode,
                             particles: particle_draw,
@@ -465,6 +485,15 @@ impl Realm for Realm3DContext {
 
             if has_mirrors {
                 for item in &collector.mirrors {
+                    if item.surface_type
+                        == galfus_realm_3d_resources::material::SurfaceType3D::Portal
+                        && !self
+                            .portals
+                            .values()
+                            .any(|portal| portal.model_id == item.model_id && portal.active)
+                    {
+                        continue;
+                    }
                     let portal_bg = self
                         .portal_pipelines
                         .get(&item.model_id)
