@@ -1,7 +1,8 @@
 //! Realm 2D context tests.
 
 use super::*;
-use galfus_realm_2d_resources::Svg2D;
+use crate::svg_manager::{SvgGeometry2D, SvgInstance2D, SvgManager2D};
+use galfus_realm_2d_resources::{Sprite2D, Svg2D};
 
 #[test]
 fn test_strict_camera_resolution_no_fallback() {
@@ -96,4 +97,77 @@ fn test_realm2d_crud_and_not_found_errors() {
     assert!(realm.clear().is_ok());
     assert!(realm.lights.is_empty());
     assert!(realm.sprites.is_empty());
+}
+
+#[test]
+fn replacing_an_svg_reclaims_its_previous_geometry() {
+    let instance = wgpu::Instance::default();
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::LowPower,
+        compatible_surface: None,
+        force_fallback_adapter: false,
+    }));
+    let Ok(adapter) = adapter else {
+        return;
+    };
+    let Ok((device, _queue)) =
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+    else {
+        return;
+    };
+
+    let mut manager = SvgManager2D::new();
+    let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("svg-replacement-test-vertex"),
+        size: 16,
+        usage: wgpu::BufferUsages::VERTEX,
+        mapped_at_creation: false,
+    });
+    let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("svg-replacement-test-index"),
+        size: 16,
+        usage: wgpu::BufferUsages::INDEX,
+        mapped_at_creation: false,
+    });
+    let handle = manager
+        .pool
+        .insert(SvgGeometry2D {
+            vertex_buffer,
+            index_buffer,
+            index_count: 0,
+            dimensions: Vec2::ONE,
+        })
+        .expect("the empty pool accepts the test geometry");
+    manager.instances.insert(
+        7,
+        SvgInstance2D {
+            svg: Svg2D::default(),
+            transform: Transform2D::default(),
+            geometry_handle: Some(handle),
+        },
+    );
+
+    manager.insert(7, Svg2D::default(), Transform2D::default());
+
+    assert!(manager.pool.is_empty());
+    assert!(!manager.pool.contains(handle));
+}
+
+#[test]
+fn shadow_caster_mutations_invalidate_the_shadow_cache() {
+    let mut realm = Realm2DContext::new(1);
+    realm.shadow_manager.is_dirty = false;
+
+    realm
+        .set_sprite(1, Sprite2D::default(), Transform2D::default())
+        .unwrap();
+    assert!(realm.shadow_manager.is_dirty);
+
+    realm.shadow_manager.is_dirty = false;
+    realm.set_sprite_transform(1, Transform2D::from_translation(Vec2::ONE));
+    assert!(realm.shadow_manager.is_dirty);
+
+    realm.shadow_manager.is_dirty = false;
+    realm.destroy_sprite(1).unwrap();
+    assert!(realm.shadow_manager.is_dirty);
 }

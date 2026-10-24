@@ -1,10 +1,8 @@
+use crate::types::ShadowSample2DRaw;
 use galfus_realm_2d_resources::{
     Light2D, Occluder2D, OccluderEdge2D, OccluderSilhouette2D, Shadow2DConfig,
 };
 use glam::Vec2;
-use std::collections::HashMap;
-
-use crate::types::ShadowSample2DRaw;
 
 pub const SHADOW_SAMPLES_PER_DIRECTION: usize = 8;
 const TAU: f32 = std::f32::consts::TAU;
@@ -23,12 +21,26 @@ struct OccluderLightCone {
     penumbra_interval: Vec2,
 }
 
-#[derive(Clone)]
-struct OccluderConeCandidate<'a> {
+#[derive(Clone, Debug)]
+struct OccluderConeCandidate {
     cone: OccluderLightCone,
     support_depth: f32,
-    occluder: &'a Occluder2D,
+    occluder: Occluder2D,
     shadow_height: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DirectionCandidate {
+    precedence_depth: f32,
+    blocker_depth: f32,
+    cone: OccluderLightCone,
+    occluder_index: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ShadowRasterScratch {
+    cones: Vec<OccluderConeCandidate>,
+    candidates: Vec<DirectionCandidate>,
 }
 
 fn unwrap_angle_near(angle: f32, reference: f32) -> f32 {
@@ -174,20 +186,40 @@ fn ray_hit_distance_for_occluder(
     (min_t.is_finite()).then_some(min_t)
 }
 
-/// Rasterizes polar shadow samples for a single light given a list of candidate occluders.
-pub fn rasterize_shadow_samples_for_light(
+fn angle_is_inside_interval(angle: f32, interval: Vec2) -> bool {
+    let center = (interval.x + interval.y) * 0.5;
+    let unwrapped = unwrap_angle_near(angle, center);
+    unwrapped >= interval.x && unwrapped <= interval.y
+}
+
+fn append_shadow_samples_for_light(
+    scratch: &mut ShadowRasterScratch,
     angular_resolution: u32,
     light: &Light2D,
-    occluders: &[&Occluder2D],
-) -> Vec<ShadowSample2DRaw> {
+    occluders: &[Occluder2D],
+    output: &mut Vec<ShadowSample2DRaw>,
+) {
     let resolution = angular_resolution.max(1) as usize;
-    let mut samples = vec![ShadowSample2DRaw::default(); resolution * SHADOW_SAMPLES_PER_DIRECTION];
+    let sample_start = output.len();
+    output.resize(
+        sample_start + resolution * SHADOW_SAMPLES_PER_DIRECTION,
+        ShadowSample2DRaw::default(),
+    );
+    if !light.active || !light.cast_shadow {
+        return;
+    }
+
+    scratch.cones.clear();
+    scratch.candidates.clear();
+    scratch.candidates.reserve(SHADOW_SAMPLES_PER_DIRECTION);
     let light_pos = light.position;
     let light_range = light.range.max(0.0001);
     let light_radius = light.light_radius.max(0.0);
 
-    let mut cones = Vec::with_capacity(occluders.len());
     for occluder in occluders {
+        if light.shadow_layer_mask & occluder.shadow_layer_mask == 0 {
+            continue;
+        }
         if let Some([min_z, max_z]) = occluder.height_range
             && (light.z < min_z || light.z > max_z)
         {
@@ -201,10 +233,10 @@ pub fn rasterize_shadow_samples_for_light(
                 .map(|point| point.distance(light_pos))
                 .fold(f32::INFINITY, f32::min)
                 + occluder.shadow_height * 1e-4;
-            cones.push(OccluderConeCandidate {
+            scratch.cones.push(OccluderConeCandidate {
                 cone,
                 support_depth,
-                occluder,
+                occluder: occluder.clone(),
                 shadow_height: occluder.shadow_height,
             });
         }
@@ -216,13 +248,14 @@ pub fn rasterize_shadow_samples_for_light(
         let reference = angle;
         let ray_dir = Vec2::new(angle.cos(), angle.sin());
 
-        let mut candidates: Vec<(f32, f32, OccluderLightCone, &OccluderConeCandidate)> =
-            Vec::with_capacity(SHADOW_SAMPLES_PER_DIRECTION);
-
-        for candidate in &cones {
+        scratch.candidates.clear();
+        for (occluder_index, candidate) in scratch.cones.iter().enumerate() {
             let cone = candidate.cone;
+            if !angle_is_inside_interval(reference, cone.penumbra_interval) {
+                continue;
+            }
             let ray_hit_depth =
-                ray_hit_distance_for_occluder(light_pos, ray_dir, candidate.occluder);
+                ray_hit_distance_for_occluder(light_pos, ray_dir, &candidate.occluder);
             let blocker_depth = ray_hit_depth.unwrap_or(candidate.support_depth);
             let only_penumbra = ray_hit_depth.is_none();
             let precedence_depth = blocker_depth
@@ -232,19 +265,38 @@ pub fn rasterize_shadow_samples_for_light(
                 } else {
                     0.0
                 };
-            candidates.push((precedence_depth, blocker_depth, cone, candidate));
+            let direction_candidate = DirectionCandidate {
+                precedence_depth,
+                blocker_depth,
+                cone,
+                occluder_index,
+            };
+            if scratch.candidates.len() < SHADOW_SAMPLES_PER_DIRECTION {
+                scratch.candidates.push(direction_candidate);
+            } else if let Some((farthest_index, _)) =
+                scratch
+                    .candidates
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, left), (_, right)| {
+                        left.precedence_depth.total_cmp(&right.precedence_depth)
+                    })
+                && precedence_depth < scratch.candidates[farthest_index].precedence_depth
+            {
+                scratch.candidates[farthest_index] = direction_candidate;
+            }
         }
 
-        candidates.sort_by(|a, b| a.0.total_cmp(&b.0));
+        scratch
+            .candidates
+            .sort_by(|left, right| left.precedence_depth.total_cmp(&right.precedence_depth));
 
-        for (slot, (_, blocker_depth, cone, candidate)) in candidates
-            .into_iter()
-            .take(SHADOW_SAMPLES_PER_DIRECTION)
-            .enumerate()
-        {
-            let sample = &mut samples[x * SHADOW_SAMPLES_PER_DIRECTION + slot];
+        for (slot, candidate) in scratch.candidates.iter().enumerate() {
+            let sample = &mut output[sample_start + x * SHADOW_SAMPLES_PER_DIRECTION + slot];
+            let cone = candidate.cone;
+            let occluder = &scratch.cones[candidate.occluder_index];
             sample.flags = 1.0;
-            sample.blocker_distance = (blocker_depth / light_range).clamp(0.0, 1.0);
+            sample.blocker_distance = (candidate.blocker_depth / light_range).clamp(0.0, 1.0);
             sample.blocker_left = unwrap_angle_near(cone.blocker_interval.x, reference);
             sample.blocker_right = unwrap_angle_near(cone.blocker_interval.y, reference);
             sample.penumbra_left = unwrap_angle_near(cone.penumbra_interval.x, reference);
@@ -253,13 +305,36 @@ pub fn rasterize_shadow_samples_for_light(
                 (cone.support_points[0].distance(light_pos) / light_range).clamp(0.0, 1.0);
             sample.support_right_distance =
                 (cone.support_points[1].distance(light_pos) / light_range).clamp(0.0, 1.0);
-            sample.occluder_v0 = candidate.occluder.silhouette.vertices[0];
-            sample.occluder_v1 = candidate.occluder.silhouette.vertices[1];
-            sample.occluder_v2 = candidate.occluder.silhouette.vertices[2];
-            sample.occluder_v3 = candidate.occluder.silhouette.vertices[3];
+            sample.occluder_v0 = occluder.occluder.silhouette.vertices[0];
+            sample.occluder_v1 = occluder.occluder.silhouette.vertices[1];
+            sample.occluder_v2 = occluder.occluder.silhouette.vertices[2];
+            sample.occluder_v3 = occluder.occluder.silhouette.vertices[3];
         }
     }
+}
 
+/// Rasterizes polar shadow samples for a single light.
+///
+/// Prefer [`ShadowManager2D::append_samples_for_light`] in a render loop so its
+/// reusable scratch storage can avoid per-frame allocations.
+pub fn rasterize_shadow_samples_for_light(
+    angular_resolution: u32,
+    light: &Light2D,
+    occluders: &[&Occluder2D],
+) -> Vec<ShadowSample2DRaw> {
+    let mut scratch = ShadowRasterScratch::default();
+    let owned_occluders: Vec<_> = occluders
+        .iter()
+        .map(|occluder| (*occluder).clone())
+        .collect();
+    let mut samples = Vec::new();
+    append_shadow_samples_for_light(
+        &mut scratch,
+        angular_resolution,
+        light,
+        &owned_occluders,
+        &mut samples,
+    );
     samples
 }
 
@@ -268,7 +343,7 @@ pub fn rasterize_shadow_samples_for_light(
 pub struct ShadowManager2D {
     pub config: Shadow2DConfig,
     pub is_dirty: bool,
-    pub camera_light_hashes: HashMap<u32, Vec<u64>>,
+    raster_scratch: ShadowRasterScratch,
 }
 
 impl Default for ShadowManager2D {
@@ -276,7 +351,7 @@ impl Default for ShadowManager2D {
         Self {
             config: Shadow2DConfig::default(),
             is_dirty: true,
-            camera_light_hashes: HashMap::new(),
+            raster_scratch: ShadowRasterScratch::default(),
         }
     }
 }
@@ -286,12 +361,27 @@ impl ShadowManager2D {
         Self {
             config: config.sanitized(),
             is_dirty: true,
-            camera_light_hashes: HashMap::new(),
+            raster_scratch: ShadowRasterScratch::default(),
         }
     }
 
     pub fn mark_dirty(&mut self) {
         self.is_dirty = true;
+    }
+
+    pub fn append_samples_for_light(
+        &mut self,
+        light: &Light2D,
+        occluders: &[Occluder2D],
+        output: &mut Vec<ShadowSample2DRaw>,
+    ) {
+        append_shadow_samples_for_light(
+            &mut self.raster_scratch,
+            self.config.angular_resolution,
+            light,
+            occluders,
+            output,
+        );
     }
 }
 
@@ -313,5 +403,54 @@ mod tests {
         let cone = cone.unwrap();
         assert!(cone.penumbra_interval.x < cone.blocker_interval.x);
         assert!(cone.penumbra_interval.y > cone.blocker_interval.y);
+    }
+
+    #[test]
+    fn shadow_samples_respect_layers_and_reuse_output_capacity() {
+        let silhouette = OccluderSilhouette2D::from_quad([
+            Vec2::new(10.0, -1.0),
+            Vec2::new(12.0, -1.0),
+            Vec2::new(12.0, 1.0),
+            Vec2::new(10.0, 1.0),
+        ]);
+        let occluder = Occluder2D {
+            entity_id: 1,
+            silhouette,
+            shadow_layer_mask: 0b01,
+            shadow_height: 1.0,
+            height_range: None,
+        };
+        let light = Light2D {
+            position: Vec2::ZERO,
+            range: 32.0,
+            shadow_layer_mask: 0b01,
+            ..Default::default()
+        };
+        let mut manager = ShadowManager2D::new(Shadow2DConfig {
+            angular_resolution: 128,
+            ..Default::default()
+        });
+        let mut samples = Vec::new();
+
+        manager.append_samples_for_light(&light, std::slice::from_ref(&occluder), &mut samples);
+        assert_eq!(samples.len(), 128 * SHADOW_SAMPLES_PER_DIRECTION);
+        assert!(samples.iter().any(|sample| sample.flags > 0.5));
+        let output_ptr = samples.as_ptr();
+
+        samples.clear();
+        manager.append_samples_for_light(&light, std::slice::from_ref(&occluder), &mut samples);
+        assert_eq!(samples.as_ptr(), output_ptr);
+
+        let mismatched_light = Light2D {
+            shadow_layer_mask: 0b10,
+            ..light
+        };
+        samples.clear();
+        manager.append_samples_for_light(
+            &mismatched_light,
+            std::slice::from_ref(&occluder),
+            &mut samples,
+        );
+        assert!(samples.iter().all(|sample| sample.flags == 0.0));
     }
 }

@@ -112,6 +112,11 @@ impl SvgManager2D {
     }
 
     pub fn insert(&mut self, id: u32, svg: Svg2D, transform: Transform2D) {
+        if let Some(previous) = self.instances.remove(&id)
+            && let Some(handle) = previous.geometry_handle
+        {
+            let _ = self.pool.remove(handle);
+        }
         self.instances
             .insert(id, SvgInstance2D::new(svg, transform));
     }

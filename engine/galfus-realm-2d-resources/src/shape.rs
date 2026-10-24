@@ -131,6 +131,16 @@ impl Shape2D {
         &self,
         transform: &Transform2D,
     ) -> Vec<crate::shadow::OccluderSilhouette2D> {
+        let mut silhouettes = Vec::new();
+        self.append_world_silhouettes(transform, |silhouette| silhouettes.push(silhouette));
+        silhouettes
+    }
+
+    /// Appends world-space occluder silhouettes without allocating an intermediate vector.
+    pub fn append_world_silhouettes<F>(&self, transform: &Transform2D, mut append: F)
+    where
+        F: FnMut(crate::shadow::OccluderSilhouette2D),
+    {
         match &self.kind {
             ShapeKind2D::Rectangle { size } => {
                 let half = *size * 0.5;
@@ -140,7 +150,7 @@ impl Shape2D {
                     transform.transform_point(Vec2::new(half.x, half.y)),
                     transform.transform_point(Vec2::new(-half.x, half.y)),
                 ];
-                vec![crate::shadow::OccluderSilhouette2D::from_quad(quad)]
+                append(crate::shadow::OccluderSilhouette2D::from_quad(quad));
             }
             ShapeKind2D::Circle { radius, .. } => {
                 let r = *radius;
@@ -150,7 +160,7 @@ impl Shape2D {
                     transform.transform_point(Vec2::new(r, r)),
                     transform.transform_point(Vec2::new(-r, r)),
                 ];
-                vec![crate::shadow::OccluderSilhouette2D::from_quad(quad)]
+                append(crate::shadow::OccluderSilhouette2D::from_quad(quad));
             }
             ShapeKind2D::Polygon { vertices } => {
                 let count = vertices.len();
@@ -158,9 +168,9 @@ impl Shape2D {
                     let v0 = transform.transform_point(vertices[0]);
                     let v1 = transform.transform_point(vertices[1]);
                     let v2 = transform.transform_point(vertices[2]);
-                    vec![crate::shadow::OccluderSilhouette2D::from_quad([
+                    append(crate::shadow::OccluderSilhouette2D::from_quad([
                         v0, v1, v2, v0,
-                    ])]
+                    ]));
                 } else if count == 4 {
                     let quad = [
                         transform.transform_point(vertices[0]),
@@ -168,20 +178,16 @@ impl Shape2D {
                         transform.transform_point(vertices[2]),
                         transform.transform_point(vertices[3]),
                     ];
-                    vec![crate::shadow::OccluderSilhouette2D::from_quad(quad)]
+                    append(crate::shadow::OccluderSilhouette2D::from_quad(quad));
                 } else if count > 4 {
                     let v0 = transform.transform_point(vertices[0]);
-                    let mut silhouettes = Vec::with_capacity(count - 2);
                     for i in 1..(count - 1) {
                         let vi = transform.transform_point(vertices[i]);
                         let vnext = transform.transform_point(vertices[i + 1]);
-                        silhouettes.push(crate::shadow::OccluderSilhouette2D::from_quad([
+                        append(crate::shadow::OccluderSilhouette2D::from_quad([
                             v0, vi, vnext, v0,
                         ]));
                     }
-                    silhouettes
-                } else {
-                    Vec::new()
                 }
             }
         }

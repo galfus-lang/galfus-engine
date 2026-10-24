@@ -63,6 +63,7 @@ impl Realm2DContext {
     ) -> RealmResult<()> {
         self.validate_id(sprite_id)?;
         self.sprites.insert(sprite_id, (sprite, transform));
+        self.shadow_manager.mark_dirty();
         self.dirty = true;
         Ok(())
     }
@@ -70,6 +71,7 @@ impl Realm2DContext {
     pub fn set_sprite_transform(&mut self, sprite_id: u32, transform: Transform2D) {
         if let Some((_, t)) = self.sprites.get_mut(&sprite_id) {
             *t = transform;
+            self.shadow_manager.mark_dirty();
             self.dirty = true;
         }
     }
@@ -87,6 +89,7 @@ impl Realm2DContext {
     ) -> RealmResult<()> {
         self.validate_id(shape_id)?;
         self.shapes.insert(shape_id, (shape, transform));
+        self.shadow_manager.mark_dirty();
         self.dirty = true;
         Ok(())
     }
@@ -94,6 +97,7 @@ impl Realm2DContext {
     pub fn set_shape_transform(&mut self, shape_id: u32, transform: Transform2D) {
         if let Some((_, t)) = self.shapes.get_mut(&shape_id) {
             *t = transform;
+            self.shadow_manager.mark_dirty();
             self.dirty = true;
         }
     }
@@ -191,6 +195,7 @@ impl Realm2DContext {
         self.sprites
             .remove(&sprite_id)
             .map(|_| {
+                self.shadow_manager.mark_dirty();
                 self.dirty = true;
             })
             .ok_or_else(|| {
@@ -206,6 +211,7 @@ impl Realm2DContext {
         self.shapes
             .remove(&shape_id)
             .map(|_| {
+                self.shadow_manager.mark_dirty();
                 self.dirty = true;
             })
             .ok_or_else(|| {
@@ -236,6 +242,7 @@ impl Realm2DContext {
     pub fn set_svg(&mut self, svg_id: u32, svg: Svg2D, transform: Transform2D) -> RealmResult<()> {
         self.validate_id(svg_id)?;
         self.svg_manager.insert(svg_id, svg, transform);
+        self.shadow_manager.mark_dirty();
         self.dirty = true;
         Ok(())
     }
@@ -246,6 +253,7 @@ impl Realm2DContext {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
         })?;
         instance.svg.set_source(source);
+        self.shadow_manager.mark_dirty();
         self.dirty = true;
         Ok(())
     }
@@ -262,6 +270,7 @@ impl Realm2DContext {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
         })?;
         if instance.svg.set_attribute(element_id, name, value) {
+            self.shadow_manager.mark_dirty();
             self.dirty = true;
             Ok(())
         } else {
@@ -282,6 +291,7 @@ impl Realm2DContext {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
         })?;
         if instance.svg.remove_attribute(element_id, name) {
+            self.shadow_manager.mark_dirty();
             self.dirty = true;
             Ok(())
         } else {
@@ -297,6 +307,7 @@ impl Realm2DContext {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
         })?;
         if instance.svg.set_text(element_id, text) {
+            self.shadow_manager.mark_dirty();
             self.dirty = true;
             Ok(())
         } else {
@@ -312,6 +323,7 @@ impl Realm2DContext {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
         })?;
         instance.transform = transform;
+        self.shadow_manager.mark_dirty();
         self.dirty = true;
         Ok(())
     }
@@ -326,6 +338,7 @@ impl Realm2DContext {
         let _ = self.svg_manager.remove(svg_id).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
         })?;
+        self.shadow_manager.mark_dirty();
         self.dirty = true;
         Ok(())
     }
@@ -334,8 +347,11 @@ impl Realm2DContext {
     ///
     /// Returns the detected font family name on success.
     pub fn load_font_data(&mut self, data: &[u8]) -> RealmResult<String> {
-        self.svg_manager.load_font_data(data).map_err(|e| {
+        let family = self.svg_manager.load_font_data(data).map_err(|e| {
             galfus_realm_core::RealmError::Internal(format!("Font loading failed: {e}"))
-        })
+        })?;
+        self.shadow_manager.mark_dirty();
+        self.dirty = true;
+        Ok(family)
     }
 }

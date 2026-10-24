@@ -1,11 +1,10 @@
 use crate::batch::{BatchBuilder2D, PreparedItem2D};
 use crate::gpu::GpuResources2D;
 use crate::pipeline::{PipelineKey2D, PipelineManager2D};
-use crate::shadow::{ShadowManager2D, rasterize_shadow_samples_for_light};
+use crate::shadow::ShadowManager2D;
 use crate::types::{
-    BatchKey2D, Camera2D, Item2DInstanceRaw, Light2D, Light2DUniform, Material2D,
-    Material2DUniform, Occluder2D, OccluderSilhouette2D, ParticleEmitter2D, ParticleEmitterState2D,
-    ShadowSample2DRaw, Shape2D, Sprite2D, Transform2D,
+    BatchKey2D, Camera2D, Item2DInstanceRaw, Light2D, Material2D, Material2DUniform,
+    ParticleEmitter2D, ParticleEmitterState2D, Shape2D, Sprite2D, Transform2D,
 };
 use bytemuck::cast_slice;
 use galfus_realm_core::{
@@ -29,6 +28,7 @@ pub struct Realm2DContext {
     pub pipeline_manager: Option<PipelineManager2D>,
     pub batch_builder: BatchBuilder2D,
     pub shadow_manager: ShadowManager2D,
+    pub(crate) shadow_data: crate::context_shadows::ShadowFrameData,
     pub gpu_res: Option<GpuResources2D>,
 
     pub(crate) total_time: f32,
@@ -52,6 +52,7 @@ impl Realm2DContext {
             pipeline_manager: None,
             batch_builder: BatchBuilder2D::new(),
             shadow_manager: ShadowManager2D::default(),
+            shadow_data: crate::context_shadows::ShadowFrameData::default(),
             gpu_res: None,
             total_time: 0.0,
             material_bind_groups: HashMap::new(),
@@ -98,6 +99,8 @@ impl Realm for Realm2DContext {
         self.material_bind_groups.clear();
         self.material_uniform_buffers.clear();
         self.material_texture_slots.clear();
+        self.shadow_data = crate::context_shadows::ShadowFrameData::default();
+        self.shadow_manager.mark_dirty();
         self.dirty = true;
         Ok(())
     }
@@ -169,129 +172,7 @@ impl Realm for Realm2DContext {
             &mut self.material_bind_groups,
         );
 
-        // Collect occluders from sprites and shapes
-        let mut occluders = Vec::new();
-        for (&id, (sprite, transform)) in &self.sprites {
-            if sprite.cast_shadow {
-                let corners = sprite.compute_world_corners(transform);
-                occluders.push(Occluder2D {
-                    entity_id: id,
-                    silhouette: OccluderSilhouette2D::from_quad(corners),
-                    shadow_layer_mask: sprite.shadow_layer_mask,
-                    shadow_height: sprite.shadow_height,
-                    height_range: sprite.height_range,
-                });
-            }
-        }
-
-        for (&id, (shape, transform)) in &self.shapes {
-            if shape.cast_shadow {
-                for silhouette in shape.compute_world_silhouettes(transform) {
-                    occluders.push(Occluder2D {
-                        entity_id: id,
-                        silhouette,
-                        shadow_layer_mask: shape.shadow_layer_mask,
-                        shadow_height: shape.shadow_height,
-                        height_range: shape.height_range,
-                    });
-                }
-            }
-        }
-
-        for (&id, instance) in &self.svg_manager.instances {
-            if instance.svg.cast_shadow {
-                let fallback_size = instance
-                    .geometry_handle
-                    .and_then(|h| self.svg_manager.pool.get(h).ok().map(|g| g.dimensions))
-                    .unwrap_or(Vec2::splat(100.0));
-                let corners = instance
-                    .svg
-                    .compute_world_corners(&instance.transform, fallback_size);
-                occluders.push(Occluder2D {
-                    entity_id: id,
-                    silhouette: OccluderSilhouette2D::from_quad(corners),
-                    shadow_layer_mask: instance.svg.shadow_layer_mask,
-                    shadow_height: instance.svg.shadow_height,
-                    height_range: instance.svg.height_range,
-                });
-            }
-        }
-
-        // Update lights & polar shadow samples
-        let occluder_refs: Vec<&Occluder2D> = occluders.iter().collect();
-        let mut light_uniforms = Vec::with_capacity(self.lights.len());
-        let mut all_shadow_samples = Vec::new();
-        let angular_res = self.shadow_manager.config.angular_resolution;
-
-        let mut shadow_idx = 0_u32;
-        for light in self.lights.values() {
-            let current_shadow_idx = if light.cast_shadow {
-                shadow_idx += 1;
-                shadow_idx - 1
-            } else {
-                0
-            };
-            light_uniforms.push(light.build_uniform(current_shadow_idx));
-            if light.cast_shadow {
-                let samples =
-                    rasterize_shadow_samples_for_light(angular_res, light, &occluder_refs);
-                all_shadow_samples.extend(samples);
-            }
-        }
-
-        let gpu = self.gpu_res.as_mut().unwrap();
-
-        let mut bind_group_dirty = false;
-        let required_light_bytes =
-            (std::mem::size_of::<Light2DUniform>() * light_uniforms.len().max(1)) as u64;
-        if gpu.light_buffer.size() < required_light_bytes {
-            let new_size =
-                required_light_bytes.max(64 * std::mem::size_of::<Light2DUniform>() as u64);
-            gpu.light_buffer = crate::gpu::create_gpu_buffer(
-                device,
-                "galfus_2d_light_buffer",
-                new_size,
-                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            );
-            bind_group_dirty = true;
-        }
-
-        let required_shadow_bytes =
-            (std::mem::size_of::<ShadowSample2DRaw>() * all_shadow_samples.len().max(1)) as u64;
-        if gpu.shadow_sample_buffer.size() < required_shadow_bytes {
-            let new_size =
-                required_shadow_bytes.max(512 * std::mem::size_of::<ShadowSample2DRaw>() as u64);
-            gpu.shadow_sample_buffer = crate::gpu::create_gpu_buffer(
-                device,
-                "galfus_2d_shadow_sample_buffer",
-                new_size,
-                wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            );
-            bind_group_dirty = true;
-        }
-
-        if bind_group_dirty {
-            gpu.global_bind_group = crate::gpu::GpuResources2D::build_global_bind_group(
-                device,
-                pipeline_manager,
-                &gpu.camera_buffer,
-                &gpu.point_sampler,
-                &gpu.linear_sampler,
-                &gpu.light_buffer,
-                &gpu.shadow_sample_buffer,
-            );
-        }
-
-        if !light_uniforms.is_empty() {
-            queue.write_buffer(&gpu.light_buffer, 0, cast_slice(&light_uniforms));
-        }
-        if !all_shadow_samples.is_empty() {
-            queue.write_buffer(
-                &gpu.shadow_sample_buffer,
-                0,
-                cast_slice(&all_shadow_samples),
-            );
-        }
+        self.prepare_shadows(device, queue);
 
         // Build item batches
         self.batch_builder.clear();

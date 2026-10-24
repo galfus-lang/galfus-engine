@@ -6,6 +6,7 @@
 pub mod api;
 pub mod batch;
 pub mod context;
+mod context_shadows;
 pub mod gpu;
 pub mod pipeline;
 pub mod shader;
