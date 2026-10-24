@@ -37,8 +37,7 @@ pub fn window_create(env: Env, config_val: JsUnknown) -> Result<u32> {
 
 #[napi]
 pub fn window_close(window_id: u32) -> Result<()> {
-    with_context_mut(|ctx| ctx.close_window(window_id).map_err(|e| e.to_string()))
-        .map_err(|e| Error::new(Status::GenericFailure, e))
+    close_window(window_id).map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
 #[napi]

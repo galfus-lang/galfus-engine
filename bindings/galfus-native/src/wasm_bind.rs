@@ -8,8 +8,8 @@ use galfus_realm_3d::Realm3DContext;
 
 use crate::ffi_realm_3d_desc::{CameraLookAt3DDesc, CameraLookAt3DStateDesc};
 use crate::state::{
-    init_context, init_context_headless, shutdown_context, with_animation, with_animation_mut,
-    with_context, with_context_mut, with_multiverse_mut,
+    close_window, init_context, init_context_headless, shutdown_context, with_animation,
+    with_animation_mut, with_context, with_context_mut, with_multiverse_mut,
 };
 use galfus_animation::{
     AnimValue, AnimationTarget, LoopMode, PathCommand, PathFollowConfig, TransitionConfig,
@@ -72,8 +72,7 @@ pub fn window_create(config_val: JsUnknown) -> Result<u32> {
 
 #[wasm_bindgen(js_name = "windowClose")]
 pub fn window_close(window_id: u32) -> Result<()> {
-    with_context_mut(|ctx| ctx.close_window(window_id).map_err(|e| e.to_string()))
-        .map_err(|e| Error::from_reason(Status::GenericFailure, e))
+    close_window(window_id).map_err(|e| Error::from_reason(Status::GenericFailure, e))
 }
 
 #[wasm_bindgen(js_name = "windowSetTitle")]

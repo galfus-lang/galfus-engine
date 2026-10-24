@@ -197,6 +197,21 @@ impl MultiverseContext {
         Ok(())
     }
 
+    /// Detaches the rendering surface associated with a platform window.
+    ///
+    /// The Window target remains registered so a replacement surface can be attached later.
+    /// Returns whether any window state was detached.
+    pub fn detach_window(&mut self, window_id: u32) -> MultiverseResult<bool> {
+        validate_host_logical_id(window_id)?;
+        let detached_surface = self.surfaces.remove(&window_id).is_some();
+        let detached_size = self.window_sizes.remove(&window_id).is_some();
+        let detached = detached_surface || detached_size;
+        if detached {
+            self.dirty = true;
+        }
+        Ok(detached)
+    }
+
     /// Registers a custom WGSL post-processing shader with an ID.
     pub fn register_shader(&mut self, shader_id: u32, source: &str) -> MultiverseResult<()> {
         validate_host_logical_id(shader_id)?;
@@ -285,41 +300,15 @@ impl MultiverseContext {
     }
 }
 
+#[path = "context_realms.rs"]
+mod context_realms;
 #[path = "context_targets.rs"]
 mod context_targets;
+#[cfg(test)]
+#[path = "context_windows_test.rs"]
+mod context_windows_test;
 
 impl MultiverseContext {
-    /// Registers a Realm implementation under its logical ID.
-    pub fn register_realm(&mut self, realm: Box<dyn Realm>) -> MultiverseResult<()> {
-        let realm_id = realm.id();
-        validate_host_logical_id(realm_id)?;
-        if self.realms.contains_key(&realm_id) {
-            return Err(MultiverseError::RealmAlreadyRegistered(realm_id));
-        }
-        self.realms.insert(realm_id, realm);
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Registers a builtin ColorRealm for solid clear/tinting under its logical ID.
-    pub fn register_color_realm(&mut self, realm_id: u32, color: [f32; 4]) -> MultiverseResult<()> {
-        let realm = galfus_realm_core::ColorRealm::new(realm_id, color);
-        self.register_realm(Box::new(realm))
-    }
-
-    /// Returns a downcasted reference to a registered Realm.
-    pub fn get_realm<T: 'static>(&self, realm_id: u32) -> Option<&T> {
-        self.realms.get(&realm_id)?.as_any().downcast_ref::<T>()
-    }
-
-    /// Returns a downcasted mutable reference to a registered Realm.
-    pub fn get_realm_mut<T: 'static>(&mut self, realm_id: u32) -> Option<&mut T> {
-        self.realms
-            .get_mut(&realm_id)?
-            .as_any_mut()
-            .downcast_mut::<T>()
-    }
-
     /// Returns the resolved pixel size of a Target, if registered.
     pub fn target_size(&self, target_id: u32) -> Option<glam::UVec2> {
         let target = self.targets.get(&target_id)?;
@@ -333,45 +322,6 @@ impl MultiverseContext {
                 Some(glam::UVec2::new(*width, *height))
             }
         }
-    }
-
-    /// Clears a Realm's entities and scene resources without unregistering it.
-    pub fn clear_realm(&mut self, realm_id: u32) -> MultiverseResult<()> {
-        let realm = self
-            .realms
-            .get_mut(&realm_id)
-            .ok_or(MultiverseError::RealmNotFound(realm_id))?;
-        realm
-            .clear()
-            .map_err(|e| MultiverseError::RealmError(realm_id, e.to_string()))?;
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Unregisters a Realm, destroys its GPU resources, and clears associated invocations.
-    pub fn unregister_realm(&mut self, realm_id: u32) -> MultiverseResult<()> {
-        let mut realm = match self.realms.remove(&realm_id) {
-            Some(r) => r,
-            None => return Err(MultiverseError::RealmNotFound(realm_id)),
-        };
-        let _ = realm.destroy();
-        let removed_invs: Vec<u32> = self
-            .invocations
-            .iter()
-            .filter(|(_, inv)| inv.realm_id == realm_id)
-            .map(|(&id, _)| id)
-            .collect();
-        for inv_id in removed_invs {
-            self.invocations.remove(&inv_id);
-            if let (Some((tex_h, _, _)), Some(gpu)) =
-                (self.scratch_textures.remove(&inv_id), &mut self.gpu_manager)
-            {
-                let _ = gpu.destroy_texture(tex_h);
-            }
-        }
-        self.bindings.retain(|b| b.realm_id != realm_id);
-        self.dirty = true;
-        Ok(())
     }
 
     /// Creates an invocation linking a Realm to a Target.
@@ -494,8 +444,20 @@ impl MultiverseContext {
 
     /// Binds a Target's output texture to a Realm slot (e.g. portal surface material).
     pub fn bind_target_texture(&mut self, binding: TargetTextureBinding) -> MultiverseResult<()> {
-        if !self.targets.contains_key(&binding.source_target_id) {
-            return Err(MultiverseError::TargetNotFound(binding.source_target_id));
+        match self.targets.get(&binding.source_target_id) {
+            Some(TargetDesc {
+                kind: TargetKind::Texture { .. },
+                ..
+            }) => {}
+            Some(TargetDesc {
+                kind: TargetKind::Window { .. },
+                ..
+            }) => {
+                return Err(MultiverseError::InvalidConfig(
+                    "Window targets cannot be bound as sampled textures".into(),
+                ));
+            }
+            None => return Err(MultiverseError::TargetNotFound(binding.source_target_id)),
         }
         if !self.realms.contains_key(&binding.realm_id) {
             return Err(MultiverseError::RealmNotFound(binding.realm_id));

@@ -36,8 +36,14 @@ pub fn init_context_headless() -> Result<(), String> {
 
 /// Shuts down and drops the global platform context and multiverse context.
 pub fn shutdown_context() -> Result<(), String> {
+    let mv_dropped = MULTIVERSE.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        if let Some(multiverse) = borrow.as_mut() {
+            multiverse.shutdown().map_err(|e| e.to_string())?;
+        }
+        Ok::<bool, String>(borrow.take().is_some())
+    })?;
     let anim_dropped = ANIMATION.with(|cell| cell.borrow_mut().take().is_some());
-    let mv_dropped = MULTIVERSE.with(|cell| cell.borrow_mut().take().is_some());
     let ctx_dropped = CONTEXT.with(|cell| cell.borrow_mut().take().is_some());
     if anim_dropped || mv_dropped || ctx_dropped {
         Ok(())
@@ -83,6 +89,9 @@ where
 pub fn init_multiverse() -> Result<(), String> {
     MULTIVERSE.with(|cell| {
         let mut borrow = cell.borrow_mut();
+        if let Some(multiverse) = borrow.as_mut() {
+            multiverse.shutdown().map_err(|e| e.to_string())?;
+        }
         *borrow = Some(galfus_multiverse::MultiverseContext::new());
         Ok(())
     })
@@ -117,6 +126,31 @@ where
             None => Err("MultiverseContext is not initialized".into()),
         }
     })
+}
+
+/// Detaches a window surface if a Multiverse context exists without initializing a new one.
+fn detach_window_from_multiverse(window_id: u32) -> Result<(), String> {
+    MULTIVERSE.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        if let Some(multiverse) = borrow.as_mut() {
+            multiverse
+                .detach_window(window_id)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
+}
+
+/// Detaches a window from rendering before releasing the platform-owned window.
+pub fn close_window(window_id: u32) -> Result<(), String> {
+    with_context(|context| {
+        context
+            .get_window(window_id)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })?;
+    detach_window_from_multiverse(window_id)?;
+    with_context_mut(|context| context.close_window(window_id).map_err(|e| e.to_string()))
 }
 
 /// Attaches a window created in the platform context to the multiverse context.

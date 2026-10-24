@@ -37,13 +37,18 @@ pub trait Realm: RealmThreadBound + 'static {
     fn render(&mut self, context: &RealmInvocationContext<'_>) -> RealmResult<()>;
 
     /// Clears all entities, lights, emitters, and scene resources, resetting the realm to an empty state.
+    ///
+    /// Implementations must make this operation idempotent.
     fn clear(&mut self) -> RealmResult<()> {
         Ok(())
     }
 
     /// Releases all GPU resources, pipelines, and allocations held by the realm.
+    ///
+    /// The default implementation clears the realm. Implementations that own additional
+    /// resources must release them and remain idempotent so failed shutdowns can be retried.
     fn destroy(&mut self) -> RealmResult<()> {
-        Ok(())
+        self.clear()
     }
 
     /// Returns a list of logical texture IDs currently referenced by the realm's materials or entities.
@@ -56,4 +61,53 @@ pub trait Realm: RealmThreadBound + 'static {
 
     /// Returns a mutable reference for downcasting to a concrete Realm type.
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct ClearOnlyRealm {
+        clear_calls: u32,
+    }
+
+    impl Realm for ClearOnlyRealm {
+        fn id(&self) -> u32 {
+            1
+        }
+
+        fn kind(&self) -> RealmKind {
+            RealmKind::Custom
+        }
+
+        fn prepare(&mut self, _context: &RealmPrepareContext<'_>) -> RealmResult<()> {
+            Ok(())
+        }
+
+        fn render(&mut self, _context: &RealmInvocationContext<'_>) -> RealmResult<()> {
+            Ok(())
+        }
+
+        fn clear(&mut self) -> RealmResult<()> {
+            self.clear_calls += 1;
+            Ok(())
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
+    }
+
+    #[test]
+    fn default_destroy_clears_the_realm() {
+        let mut realm = ClearOnlyRealm { clear_calls: 0 };
+
+        realm.destroy().unwrap();
+
+        assert_eq!(realm.clear_calls, 1);
+    }
 }

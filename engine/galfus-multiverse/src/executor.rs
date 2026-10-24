@@ -24,11 +24,18 @@ pub(crate) fn execute_frame(
 
     ctx.ensure_gpu_manager()?;
 
-    let soft_cut_sources: HashSet<u32> = schedule
-        .soft_cut_edges
-        .iter()
-        .map(|(src, _)| *src)
-        .collect();
+    let soft_cut_sources = {
+        let default_aa = ctx.anti_aliasing;
+        let gpu = ctx.gpu_manager.as_mut().unwrap();
+        executor_resources::prune_resources_for_schedule(
+            &mut ctx.target_history_textures,
+            &mut ctx.scratch_textures,
+            &mut ctx.taa_history,
+            gpu,
+            &schedule,
+            default_aa,
+        )?
+    };
 
     for src_id in &soft_cut_sources {
         if !ctx.target_history_textures.contains_key(src_id)

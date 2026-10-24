@@ -4,6 +4,8 @@ use glam::UVec2;
 
 #[path = "context_test/errors.rs"]
 mod context_test_errors;
+#[path = "context_test/realm_lifecycle.rs"]
+mod context_test_realm_lifecycle;
 
 struct MockRealm {
     id: u32,

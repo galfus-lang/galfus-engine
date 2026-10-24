@@ -5,7 +5,8 @@ use std::os::raw::c_char;
 use galfus_platform::{CursorGrabMode, CursorIcon, WindowConfig};
 
 use crate::state::{
-    init_context, init_context_headless, shutdown_context, with_context, with_context_mut,
+    close_window, init_context, init_context_headless, shutdown_context, with_context,
+    with_context_mut,
 };
 
 thread_local! {
@@ -176,7 +177,7 @@ pub unsafe extern "C" fn galfus_window_create(config_json: *const c_char) -> i32
 /// Closes and destroys a window by its logical ID. Returns 0 on success, -1 on failure.
 #[unsafe(no_mangle)]
 pub extern "C" fn galfus_window_close(window_id: u32) -> i32 {
-    let result = with_context_mut(|ctx| ctx.close_window(window_id).map_err(|e| e.to_string()));
+    let result = close_window(window_id);
 
     match result {
         Ok(()) => 0,

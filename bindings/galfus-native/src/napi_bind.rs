@@ -7,8 +7,9 @@ use galfus_realm_3d::Realm3DContext;
 
 use crate::ffi_realm_3d_desc::{CameraLookAt3DDesc, CameraLookAt3DStateDesc};
 use crate::state::{
-    attach_window_to_multiverse, init_context, init_context_headless, shutdown_context,
-    with_animation, with_animation_mut, with_context, with_context_mut, with_multiverse_mut,
+    attach_window_to_multiverse, close_window, init_context, init_context_headless,
+    shutdown_context, with_animation, with_animation_mut, with_context, with_context_mut,
+    with_multiverse_mut,
 };
 use galfus_animation::{
     AnimValue, AnimationTarget, LoopMode, PathCommand, PathFollowConfig, TransitionConfig,
