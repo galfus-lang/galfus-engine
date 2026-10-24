@@ -31,7 +31,10 @@ pub use value::AnimValue;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use galfus_realm_2d::Realm2DContext;
+    use galfus_realm_2d_resources::{Sprite2D, Transform2D};
     use glam::Quat;
+    use std::collections::HashMap;
     use std::f32::consts::PI;
 
     #[test]
@@ -278,6 +281,33 @@ mod tests {
             res.is_err(),
             "Targeting non-existent realm must return an error"
         );
+    }
+
+    #[test]
+    fn sprite_animation_invalidates_the_realm_shadow_cache() {
+        let mut realm = Realm2DContext::new(1);
+        realm
+            .set_sprite(1, Sprite2D::default(), Transform2D::default())
+            .unwrap();
+        realm.shadow_manager.is_dirty = false;
+
+        let mut multiverse = galfus_multiverse::MultiverseContext::new();
+        multiverse.register_realm(Box::new(realm)).unwrap();
+        let mut custom_channels = HashMap::new();
+        apply_target_value(
+            &AnimationTarget::SpriteTransform2D {
+                realm_id: 1,
+                sprite_id: 1,
+            },
+            &AnimValue::Vec2(glam::Vec2::X),
+            &mut multiverse,
+            &mut custom_channels,
+        )
+        .unwrap();
+
+        let realm = multiverse.get_realm::<Realm2DContext>(1).unwrap();
+        assert!(realm.shadow_manager.is_dirty);
+        assert_eq!(realm.sprites[&1].1.position, glam::Vec2::X);
     }
 
     #[test]

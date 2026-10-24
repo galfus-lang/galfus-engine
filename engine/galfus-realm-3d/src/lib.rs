@@ -4,6 +4,7 @@
 //! Reverse-Z rendering, PBR-like lighting, and declarative entity management.
 
 pub mod api;
+mod api_animation;
 pub mod bloom;
 pub mod collector;
 pub mod context;
@@ -51,6 +52,7 @@ mod tests {
     use galfus_realm_3d_resources::light::Light3D;
     use galfus_realm_3d_resources::material::Material3D;
     use galfus_realm_3d_resources::model::Model3D;
+    use galfus_realm_3d_resources::particle::ParticleEmitter3D;
     use galfus_realm_3d_resources::transform::Transform3D;
     use galfus_realm_core::realm::Realm;
     use galfus_realm_core::types::{RealmInvocationContext, RealmKind, RealmPrepareContext};
@@ -131,6 +133,37 @@ mod tests {
         realm.lights_dirty = false;
         realm.set_light_intensity(1, 3.0).unwrap();
         assert!(realm.lights_dirty);
+    }
+
+    #[test]
+    fn animation_property_setters_mark_the_realm_dirty() {
+        let mut realm = Realm3DContext::new(10);
+        realm
+            .create_camera(1, Camera3D::default(), Transform3D::default())
+            .unwrap();
+        realm.create_material(1, Material3D::default()).unwrap();
+        realm
+            .create_model(1, Model3D::new(1, 1), Transform3D::default())
+            .unwrap();
+        realm
+            .create_particle_emitter(1, ParticleEmitter3D::default(), Transform3D::default())
+            .unwrap();
+
+        realm.dirty = false;
+        realm.set_model_position(1, Vec3::X).unwrap();
+        assert!(realm.dirty);
+
+        realm.dirty = false;
+        realm.set_material_roughness(1, 0.2).unwrap();
+        assert!(realm.dirty);
+
+        realm.dirty = false;
+        realm.set_environment_sun_intensity(2.0);
+        assert!(realm.dirty);
+
+        realm.dirty = false;
+        realm.set_particle_emitter_speed(1, 4.0).unwrap();
+        assert!(realm.dirty);
     }
 
     #[test]

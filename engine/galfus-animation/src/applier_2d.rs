@@ -1,4 +1,4 @@
-//! Applies animated values to Realm 2D and SVG targets.
+//! Applies animated values through the Realm 2D mutation API.
 
 use galfus_multiverse::MultiverseContext;
 use galfus_realm_2d::Realm2DContext;
@@ -7,453 +7,272 @@ use crate::error::{AnimationError, AnimationResult};
 use crate::target::AnimationTarget;
 use crate::value::AnimValue;
 
+fn realm(
+    multiverse: &mut MultiverseContext,
+    realm_id: u32,
+) -> AnimationResult<&mut Realm2DContext> {
+    multiverse
+        .get_realm_mut::<Realm2DContext>(realm_id)
+        .ok_or_else(|| AnimationError::General(format!("Realm 2D #{realm_id} not found")))
+}
+
+fn realm_error(error: impl std::fmt::Display) -> AnimationError {
+    AnimationError::General(error.to_string())
+}
+
 pub(super) fn apply_target_value(
     target: &AnimationTarget,
     value: &AnimValue,
     multiverse: &mut MultiverseContext,
 ) -> AnimationResult<()> {
     match target {
-        // === Realm 2D Targets ===
         AnimationTarget::SpriteTransform2D {
             realm_id,
             sprite_id,
         } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let entry = r2d
-                .sprites
-                .get_mut(sprite_id)
-                .ok_or_else(|| AnimationError::General(format!("Sprite #{sprite_id} not found")))?;
-            if let Some(pos) = value.as_vec2() {
-                entry.1.position = pos;
+            let realm = realm(multiverse, *realm_id)?;
+            if let Some(position) = value.as_vec2() {
+                realm
+                    .set_sprite_position(*sprite_id, position)
+                    .map_err(realm_error)
             } else {
-                entry.1 = value.to_transform2d()?;
+                realm
+                    .set_sprite_transform_checked(*sprite_id, value.to_transform2d()?)
+                    .map_err(realm_error)
             }
-            r2d.dirty = true;
-            Ok(())
         }
         AnimationTarget::SpriteColor {
             realm_id,
             sprite_id,
-        } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let mat_id = {
-                let entry = r2d.sprites.get(sprite_id).ok_or_else(|| {
-                    AnimationError::General(format!("Sprite #{sprite_id} not found"))
-                })?;
-                entry.0.material_id
-            };
-            if let Some(mid) = mat_id {
-                let mat = r2d
-                    .materials
-                    .get_mut(&mid)
-                    .ok_or_else(|| AnimationError::General(format!("Material #{mid} not found")))?;
-                mat.base_color = value.as_vec4().ok_or_else(|| {
+        } => realm(multiverse, *realm_id)?
+            .set_sprite_color(
+                *sprite_id,
+                value.as_vec4().ok_or_else(|| {
                     AnimationError::InvalidValue("Expected Vec4 for SpriteColor".into())
-                })?;
-                r2d.dirty = true;
-            }
-            Ok(())
-        }
+                })?,
+            )
+            .map_err(realm_error),
         AnimationTarget::SpriteSize {
             realm_id,
             sprite_id,
-        } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let entry = r2d
-                .sprites
-                .get_mut(sprite_id)
-                .ok_or_else(|| AnimationError::General(format!("Sprite #{sprite_id} not found")))?;
-            entry.0.dimensions = value.as_vec2().ok_or_else(|| {
-                AnimationError::InvalidValue("Expected Vec2 for SpriteSize".into())
-            })?;
-            r2d.dirty = true;
-            Ok(())
-        }
+        } => realm(multiverse, *realm_id)?
+            .set_sprite_dimensions(
+                *sprite_id,
+                value.as_vec2().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Vec2 for SpriteSize".into())
+                })?,
+            )
+            .map_err(realm_error),
         AnimationTarget::Camera2DTransform {
             realm_id,
             camera_id,
         } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let entry = r2d
-                .cameras
-                .get_mut(camera_id)
-                .ok_or_else(|| AnimationError::General(format!("Camera #{camera_id} not found")))?;
-            if let Some(pos) = value.as_vec2() {
-                entry.1.position = pos;
+            let realm = realm(multiverse, *realm_id)?;
+            if let Some(position) = value.as_vec2() {
+                realm
+                    .set_camera_position(*camera_id, position)
+                    .map_err(realm_error)
             } else {
-                entry.1 = value.to_transform2d()?;
+                realm
+                    .set_camera_transform_checked(*camera_id, value.to_transform2d()?)
+                    .map_err(realm_error)
             }
-            r2d.dirty = true;
-            Ok(())
         }
         AnimationTarget::Camera2DZoom {
             realm_id,
             camera_id,
-        } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let entry = r2d
-                .cameras
-                .get_mut(camera_id)
-                .ok_or_else(|| AnimationError::General(format!("Camera #{camera_id} not found")))?;
-            entry.0.ortho_scale = value.as_scalar().ok_or_else(|| {
-                AnimationError::InvalidValue("Expected Scalar for Camera2DZoom".into())
-            })?;
-            r2d.dirty = true;
-            Ok(())
-        }
+        } => realm(multiverse, *realm_id)?
+            .set_camera_ortho_scale(
+                *camera_id,
+                value.as_scalar().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Scalar for Camera2DZoom".into())
+                })?,
+            )
+            .map_err(realm_error),
         AnimationTarget::Material2DColor {
             realm_id,
             material_id,
-        } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let mat = r2d.materials.get_mut(material_id).ok_or_else(|| {
-                AnimationError::General(format!("Material #{material_id} not found"))
-            })?;
-            mat.base_color = value.as_vec4().ok_or_else(|| {
-                AnimationError::InvalidValue("Expected Vec4 for Material2DColor".into())
-            })?;
-            r2d.dirty = true;
-            Ok(())
-        }
+        } => realm(multiverse, *realm_id)?
+            .set_material_base_color(
+                *material_id,
+                value.as_vec4().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Vec4 for Material2DColor".into())
+                })?,
+            )
+            .map_err(realm_error),
         AnimationTarget::ShapeTransform2D { realm_id, shape_id } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let entry = r2d
-                .shapes
-                .get_mut(shape_id)
-                .ok_or_else(|| AnimationError::General(format!("Shape #{shape_id} not found")))?;
-            if let Some(pos) = value.as_vec2() {
-                entry.1.position = pos;
+            let realm = realm(multiverse, *realm_id)?;
+            if let Some(position) = value.as_vec2() {
+                realm
+                    .set_shape_position(*shape_id, position)
+                    .map_err(realm_error)
             } else {
-                entry.1 = value.to_transform2d()?;
+                realm
+                    .set_shape_transform_checked(*shape_id, value.to_transform2d()?)
+                    .map_err(realm_error)
             }
-            r2d.dirty = true;
-            Ok(())
         }
-        AnimationTarget::ShapeFillColor { realm_id, shape_id } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let mat_id = {
-                let entry = r2d.shapes.get(shape_id).ok_or_else(|| {
-                    AnimationError::General(format!("Shape #{shape_id} not found"))
-                })?;
-                entry.0.material_id
-            };
-            if let Some(mid) = mat_id {
-                let mat = r2d
-                    .materials
-                    .get_mut(&mid)
-                    .ok_or_else(|| AnimationError::General(format!("Material #{mid} not found")))?;
-                mat.base_color = value.as_vec4().ok_or_else(|| {
+        AnimationTarget::ShapeFillColor { realm_id, shape_id } => realm(multiverse, *realm_id)?
+            .set_shape_fill_color(
+                *shape_id,
+                value.as_vec4().ok_or_else(|| {
                     AnimationError::InvalidValue("Expected Vec4 for ShapeFillColor".into())
-                })?;
-                r2d.dirty = true;
-            }
-            Ok(())
-        }
+                })?,
+            )
+            .map_err(realm_error),
         AnimationTarget::ShapeStrokeColor { .. } => Ok(()),
-        AnimationTarget::ShapeRadius { realm_id, shape_id } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let entry = r2d
-                .shapes
-                .get_mut(shape_id)
-                .ok_or_else(|| AnimationError::General(format!("Shape #{shape_id} not found")))?;
-            if let galfus_realm_2d_resources::shape::ShapeKind2D::Circle { radius, .. } =
-                &mut entry.0.kind
-            {
-                *radius = value.as_scalar().ok_or_else(|| {
+        AnimationTarget::ShapeRadius { realm_id, shape_id } => realm(multiverse, *realm_id)?
+            .set_shape_radius(
+                *shape_id,
+                value.as_scalar().ok_or_else(|| {
                     AnimationError::InvalidValue("Expected Scalar for ShapeRadius".into())
-                })?;
-                r2d.dirty = true;
-            }
-            Ok(())
-        }
-        AnimationTarget::ShapeDimensions { realm_id, shape_id } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let entry = r2d
-                .shapes
-                .get_mut(shape_id)
-                .ok_or_else(|| AnimationError::General(format!("Shape #{shape_id} not found")))?;
-            if let galfus_realm_2d_resources::shape::ShapeKind2D::Rectangle { size } =
-                &mut entry.0.kind
-            {
-                *size = value.as_vec2().ok_or_else(|| {
+                })?,
+            )
+            .map_err(realm_error),
+        AnimationTarget::ShapeDimensions { realm_id, shape_id } => realm(multiverse, *realm_id)?
+            .set_shape_dimensions(
+                *shape_id,
+                value.as_vec2().ok_or_else(|| {
                     AnimationError::InvalidValue("Expected Vec2 for ShapeDimensions".into())
-                })?;
-                r2d.dirty = true;
-            }
-            Ok(())
-        }
+                })?,
+            )
+            .map_err(realm_error),
         AnimationTarget::Light2DTransform { realm_id, light_id } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let light = r2d
-                .lights
-                .get_mut(light_id)
-                .ok_or_else(|| AnimationError::General(format!("Light #{light_id} not found")))?;
-            if let Some(pos) = value.as_vec2() {
-                light.position = pos;
-            } else {
-                light.position = value.to_transform2d()?.position;
-            }
-            r2d.dirty = true;
-            Ok(())
+            let realm = realm(multiverse, *realm_id)?;
+            let position = value
+                .as_vec2()
+                .map(Ok)
+                .unwrap_or_else(|| value.to_transform2d().map(|transform| transform.position))?;
+            realm
+                .set_light_position(*light_id, position)
+                .map_err(realm_error)
         }
-        AnimationTarget::Light2DColor { realm_id, light_id } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let light = r2d
-                .lights
-                .get_mut(light_id)
-                .ok_or_else(|| AnimationError::General(format!("Light #{light_id} not found")))?;
-            light.color = value.as_vec3().ok_or_else(|| {
-                AnimationError::InvalidValue("Expected Vec3 for Light2DColor".into())
-            })?;
-            r2d.dirty = true;
-            Ok(())
-        }
-        AnimationTarget::Light2DIntensity { realm_id, light_id } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let light = r2d
-                .lights
-                .get_mut(light_id)
-                .ok_or_else(|| AnimationError::General(format!("Light #{light_id} not found")))?;
-            light.intensity = value.as_scalar().ok_or_else(|| {
-                AnimationError::InvalidValue("Expected Scalar for Light2DIntensity".into())
-            })?;
-            r2d.dirty = true;
-            Ok(())
-        }
-        AnimationTarget::Light2DRadius { realm_id, light_id } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let light = r2d
-                .lights
-                .get_mut(light_id)
-                .ok_or_else(|| AnimationError::General(format!("Light #{light_id} not found")))?;
-            light.light_radius = value.as_scalar().ok_or_else(|| {
-                AnimationError::InvalidValue("Expected Scalar for Light2DRadius".into())
-            })?;
-            r2d.dirty = true;
-            Ok(())
-        }
+        AnimationTarget::Light2DColor { realm_id, light_id } => realm(multiverse, *realm_id)?
+            .set_light_color(
+                *light_id,
+                value.as_vec3().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Vec3 for Light2DColor".into())
+                })?,
+            )
+            .map_err(realm_error),
+        AnimationTarget::Light2DIntensity { realm_id, light_id } => realm(multiverse, *realm_id)?
+            .set_light_intensity(
+                *light_id,
+                value.as_scalar().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Scalar for Light2DIntensity".into())
+                })?,
+            )
+            .map_err(realm_error),
+        AnimationTarget::Light2DRadius { realm_id, light_id } => realm(multiverse, *realm_id)?
+            .set_light_radius(
+                *light_id,
+                value.as_scalar().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Scalar for Light2DRadius".into())
+                })?,
+            )
+            .map_err(realm_error),
         AnimationTarget::Particle2DTransform {
             realm_id,
             emitter_id,
-        } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let entry = r2d.emitters.get_mut(emitter_id).ok_or_else(|| {
-                AnimationError::General(format!("Emitter #{emitter_id} not found"))
-            })?;
-            entry.1 = value.to_transform2d()?;
-            r2d.dirty = true;
-            Ok(())
-        }
+        } => realm(multiverse, *realm_id)?
+            .set_particle_emitter_transform_checked(*emitter_id, value.to_transform2d()?)
+            .map_err(realm_error),
         AnimationTarget::Particle2DColorStart {
             realm_id,
             emitter_id,
-        } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let entry = r2d.emitters.get_mut(emitter_id).ok_or_else(|| {
-                AnimationError::General(format!("Emitter #{emitter_id} not found"))
-            })?;
-            entry.0.start_color = value.as_vec4().ok_or_else(|| {
-                AnimationError::InvalidValue("Expected Vec4 for Particle2DColorStart".into())
-            })?;
-            r2d.dirty = true;
-            Ok(())
-        }
+        } => realm(multiverse, *realm_id)?
+            .set_particle_emitter_start_color(
+                *emitter_id,
+                value.as_vec4().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Vec4 for Particle2DColorStart".into())
+                })?,
+            )
+            .map_err(realm_error),
         AnimationTarget::Particle2DColorEnd {
             realm_id,
             emitter_id,
-        } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let entry = r2d.emitters.get_mut(emitter_id).ok_or_else(|| {
-                AnimationError::General(format!("Emitter #{emitter_id} not found"))
-            })?;
-            entry.0.end_color = value.as_vec4().ok_or_else(|| {
-                AnimationError::InvalidValue("Expected Vec4 for Particle2DColorEnd".into())
-            })?;
-            r2d.dirty = true;
-            Ok(())
-        }
-        AnimationTarget::SvgTransform2D { realm_id, svg_id } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let inst = r2d
-                .svg_manager
-                .instances
-                .get_mut(svg_id)
-                .ok_or_else(|| AnimationError::General(format!("SVG #{svg_id} not found")))?;
-            inst.transform = value.to_transform2d()?;
-            r2d.dirty = true;
-            Ok(())
-        }
-        AnimationTarget::SvgOpacity { realm_id, svg_id } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let inst = r2d
-                .svg_manager
-                .instances
-                .get_mut(svg_id)
-                .ok_or_else(|| AnimationError::General(format!("SVG #{svg_id} not found")))?;
-            let opacity = value.as_scalar().ok_or_else(|| {
-                AnimationError::InvalidValue("Expected Scalar for SvgOpacity".into())
-            })?;
-            inst.svg
-                .set_attribute("root", "opacity", &format!("{opacity:.4}"));
-            r2d.dirty = true;
-            Ok(())
-        }
+        } => realm(multiverse, *realm_id)?
+            .set_particle_emitter_end_color(
+                *emitter_id,
+                value.as_vec4().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Vec4 for Particle2DColorEnd".into())
+                })?,
+            )
+            .map_err(realm_error),
+        AnimationTarget::SvgTransform2D { realm_id, svg_id } => realm(multiverse, *realm_id)?
+            .set_svg_transform(*svg_id, value.to_transform2d()?)
+            .map_err(realm_error),
+        AnimationTarget::SvgOpacity { realm_id, svg_id } => realm(multiverse, *realm_id)?
+            .set_svg_attribute(
+                *svg_id,
+                "root",
+                "opacity",
+                &format!(
+                    "{:.4}",
+                    value.as_scalar().ok_or_else(|| {
+                        AnimationError::InvalidValue("Expected Scalar for SvgOpacity".into())
+                    })?
+                ),
+            )
+            .map_err(realm_error),
         AnimationTarget::SvgAttributeColor {
             realm_id,
             svg_id,
             element_id,
             attribute,
         } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let inst = r2d
-                .svg_manager
-                .instances
-                .get_mut(svg_id)
-                .ok_or_else(|| AnimationError::General(format!("SVG #{svg_id} not found")))?;
-            let c = value.as_vec4().ok_or_else(|| {
+            let color = value.as_vec4().ok_or_else(|| {
                 AnimationError::InvalidValue("Expected Vec4 for SvgAttributeColor".into())
             })?;
-            let r = (c.x.clamp(0.0, 1.0) * 255.0).round() as u8;
-            let g = (c.y.clamp(0.0, 1.0) * 255.0).round() as u8;
-            let b = (c.z.clamp(0.0, 1.0) * 255.0).round() as u8;
-            let a = (c.w.clamp(0.0, 1.0) * 255.0).round() as u8;
-            let color_str = if a == 255 {
-                format!("#{r:02x}{g:02x}{b:02x}")
+            let red = (color.x.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let green = (color.y.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let blue = (color.z.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let value = if color.w >= 1.0 {
+                format!("#{red:02x}{green:02x}{blue:02x}")
             } else {
-                let alpha_f = c.w.clamp(0.0, 1.0);
-                format!("rgba({r},{g},{b},{alpha_f:.3})")
+                format!("rgba({red},{green},{blue},{:.3})", color.w.clamp(0.0, 1.0))
             };
-            inst.svg.set_attribute(element_id, attribute, &color_str);
-            r2d.dirty = true;
-            Ok(())
+            realm(multiverse, *realm_id)?
+                .set_svg_attribute(*svg_id, element_id, attribute, &value)
+                .map_err(realm_error)
         }
         AnimationTarget::SvgAttributeScalar {
             realm_id,
             svg_id,
             element_id,
             attribute,
-        } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let inst = r2d
-                .svg_manager
-                .instances
-                .get_mut(svg_id)
-                .ok_or_else(|| AnimationError::General(format!("SVG #{svg_id} not found")))?;
-            let val = value.as_scalar().ok_or_else(|| {
-                AnimationError::InvalidValue("Expected Scalar for SvgAttributeScalar".into())
-            })?;
-            inst.svg
-                .set_attribute(element_id, attribute, &format!("{val:.4}"));
-            r2d.dirty = true;
-            Ok(())
-        }
+        } => realm(multiverse, *realm_id)?
+            .set_svg_attribute(
+                *svg_id,
+                element_id,
+                attribute,
+                &format!(
+                    "{:.4}",
+                    value.as_scalar().ok_or_else(|| {
+                        AnimationError::InvalidValue(
+                            "Expected Scalar for SvgAttributeScalar".into(),
+                        )
+                    })?
+                ),
+            )
+            .map_err(realm_error),
         AnimationTarget::SvgAttributeVec2 {
             realm_id,
             svg_id,
             element_id,
             attribute,
         } => {
-            let r2d = multiverse
-                .get_realm_mut::<Realm2DContext>(*realm_id)
-                .ok_or_else(|| {
-                    AnimationError::General(format!("Realm 2D #{realm_id} not found"))
-                })?;
-            let inst = r2d
-                .svg_manager
-                .instances
-                .get_mut(svg_id)
-                .ok_or_else(|| AnimationError::General(format!("SVG #{svg_id} not found")))?;
-            let v = value.as_vec2().ok_or_else(|| {
+            let vector = value.as_vec2().ok_or_else(|| {
                 AnimationError::InvalidValue("Expected Vec2 for SvgAttributeVec2".into())
             })?;
-            inst.svg
-                .set_attribute(element_id, attribute, &format!("{:.4} {:.4}", v.x, v.y));
-            r2d.dirty = true;
-            Ok(())
+            realm(multiverse, *realm_id)?
+                .set_svg_attribute(
+                    *svg_id,
+                    element_id,
+                    attribute,
+                    &format!("{:.4} {:.4}", vector.x, vector.y),
+                )
+                .map_err(realm_error)
         }
         _ => unreachable!("Realm 2D dispatcher received a non-2D target"),
     }

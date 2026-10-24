@@ -510,6 +510,7 @@ impl Realm3DContext {
         validate_id(id)?;
         self.emitters
             .insert(id, (emitter, transform, ParticleEmitterState3D::new()));
+        self.dirty = true;
         Ok(())
     }
 
@@ -524,6 +525,7 @@ impl Realm3DContext {
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))?;
         entry.1 = transform;
+        self.dirty = true;
         Ok(())
     }
 
@@ -541,7 +543,9 @@ impl Realm3DContext {
     pub fn destroy_particle_emitter(&mut self, id: u32) -> RealmResult<()> {
         self.emitters
             .remove(&id)
-            .map(|_| ())
+            .map(|_| {
+                self.dirty = true;
+            })
             .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))
     }
 
