@@ -1,13 +1,10 @@
 use std::f32::consts::FRAC_PI_4;
 
 use galfus_realm_3d_resources::camera::{Camera3D, CameraKind3D, CameraLookAt3D};
-use galfus_realm_3d_resources::environment::{
-    BloomConfig3D, EnvironmentRealm3D, FogMode3D, OutlineConfig3D, SkyboxConfig3D, SkyboxMode3D,
-    SsaoConfig3D,
-};
-use galfus_realm_3d_resources::geometry::Geometry3D;
 use galfus_realm_3d_resources::light::Light3D;
-use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D};
+use galfus_realm_3d_resources::material::{
+    Material3D, MaterialSide3D, SurfaceType3D, TextureSampler3D, TextureUvSet3D,
+};
 use galfus_realm_3d_resources::model::{InstancedModel3D, Model3D};
 use galfus_realm_3d_resources::particle::{EmissionShape3D, ParticleEmitter3D};
 use galfus_realm_3d_resources::transform::Transform3D;
@@ -124,56 +121,11 @@ impl From<Camera3DDesc> for Camera3D {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Geometry3DDesc {
-    pub primitive: Option<String>,
-    pub size: Option<f32>,
-    pub radius: Option<f32>,
-    pub subdivisions: Option<u32>,
-}
-
-impl From<Geometry3DDesc> for Geometry3D {
-    fn from(d: Geometry3DDesc) -> Self {
-        match d.primitive.as_deref() {
-            Some("cube") => Geometry3D::cube(d.size.unwrap_or(1.0)),
-            Some("plane") => Geometry3D::plane(d.size.unwrap_or(1.0), d.size.unwrap_or(1.0)),
-            Some("quad") => Geometry3D::quad(d.size.unwrap_or(1.0), d.size.unwrap_or(1.0)),
-            Some("sphere") => Geometry3D::sphere(
-                d.radius.unwrap_or(1.0),
-                d.subdivisions.unwrap_or(32),
-                d.subdivisions.unwrap_or(16),
-            ),
-            Some("cylinder") => Geometry3D::cylinder(
-                d.radius.unwrap_or(1.0),
-                d.size.unwrap_or(2.0),
-                d.subdivisions.unwrap_or(32),
-            ),
-            Some("capsule") => Geometry3D::capsule(
-                d.radius.unwrap_or(0.5),
-                d.size.unwrap_or(1.5),
-                d.subdivisions.unwrap_or(8),
-                d.subdivisions.unwrap_or(32),
-            ),
-            Some("pyramid") => Geometry3D::pyramid(
-                d.size.unwrap_or(1.0),
-                d.size.unwrap_or(1.0),
-                d.size.unwrap_or(1.5),
-            ),
-            Some("torus") => Geometry3D::torus(
-                d.radius.unwrap_or(1.0),
-                d.radius.unwrap_or(1.0) * 0.3,
-                d.subdivisions.unwrap_or(32),
-                d.subdivisions.unwrap_or(16),
-            ),
-            _ => Geometry3D::new(Vec::new(), Vec::new(), None),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Material3DDesc {
     pub surface_type: Option<String>,
+    pub alpha_cutoff: Option<f32>,
+    pub side: Option<MaterialSide3D>,
     pub base_color: Option<[f32; 4]>,
     pub emissive_color: Option<[f32; 4]>,
     pub roughness: Option<f32>,
@@ -183,11 +135,15 @@ pub struct Material3DDesc {
     pub refraction_distortion: Option<f32>,
     pub albedo_texture_id: Option<u32>,
     pub normal_texture_id: Option<u32>,
+    pub normal_scale: Option<f32>,
     pub metallic_roughness_texture_id: Option<u32>,
     pub occlusion_texture_id: Option<u32>,
+    pub occlusion_strength: Option<f32>,
     pub emissive_texture_id: Option<u32>,
     pub texture_slots: Option<Vec<Option<u32>>>,
-    pub sampler_index: Option<u32>,
+    /// Optional sampler overrides for individual texture slots. `null` uses the default sampler.
+    pub texture_samplers: Option<Vec<Option<TextureSampler3D>>>,
+    pub texture_uv_sets: Option<Vec<TextureUvSet3D>>,
     pub shader_effect: Option<String>,
     pub custom_params: Option<Vec<[f32; 4]>>,
 }
@@ -215,8 +171,22 @@ impl From<Material3DDesc> for Material3D {
                 texture_slots[idx] = slot;
             }
         }
+        let mut texture_samplers = [None; 8];
+        if let Some(samplers) = d.texture_samplers {
+            for (idx, sampler) in samplers.into_iter().take(8).enumerate() {
+                texture_samplers[idx] = sampler;
+            }
+        }
+        let mut texture_uv_sets = [TextureUvSet3D::Uv0; 8];
+        if let Some(uv_sets) = d.texture_uv_sets {
+            for (idx, uv_set) in uv_sets.into_iter().take(8).enumerate() {
+                texture_uv_sets[idx] = uv_set;
+            }
+        }
         Material3D {
             surface_type,
+            alpha_cutoff: d.alpha_cutoff.unwrap_or(0.5),
+            side: d.side.unwrap_or_default(),
             base_color: d
                 .base_color
                 .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
@@ -232,11 +202,14 @@ impl From<Material3DDesc> for Material3D {
             refraction_distortion: d.refraction_distortion.unwrap_or(0.05),
             albedo_texture_id: d.albedo_texture_id,
             normal_texture_id: d.normal_texture_id,
+            normal_scale: d.normal_scale.unwrap_or(1.0),
             metallic_roughness_texture_id: d.metallic_roughness_texture_id,
             occlusion_texture_id: d.occlusion_texture_id,
+            occlusion_strength: d.occlusion_strength.unwrap_or(1.0),
             emissive_texture_id: d.emissive_texture_id,
             texture_slots,
-            sampler_index: d.sampler_index.unwrap_or(0),
+            texture_samplers,
+            texture_uv_sets,
             shader_effect: d.shader_effect,
             custom_params,
             label: None,
@@ -273,6 +246,7 @@ impl From<Model3DDesc> for Model3D {
             bone_offset: d.bone_offset.unwrap_or(0),
             bone_count: d.bone_count.unwrap_or(0),
             active: d.active.unwrap_or(true),
+            morph_weights: Vec::new(),
         }
     }
 }
@@ -297,6 +271,7 @@ impl From<InstancedModel3DDesc> for InstancedModel3D {
             cast_shadow: d.cast_shadow.unwrap_or(true),
             receive_shadow: d.receive_shadow.unwrap_or(true),
             active: d.active.unwrap_or(true),
+            morph_weights: Vec::new(),
         }
     }
 }
@@ -338,173 +313,9 @@ impl From<Light3DDesc> for Light3D {
     }
 }
 
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct SkyboxConfig3DDesc {
-    pub mode: Option<String>,
-    pub sky_color: Option<[f32; 4]>,
-    pub horizon_color: Option<[f32; 4]>,
-    pub ground_color: Option<[f32; 4]>,
-    pub sun_direction: Option<[f32; 4]>,
-    pub sun_color: Option<[f32; 4]>,
-    pub intensity: Option<f32>,
-    pub sun_size: Option<f32>,
-    pub rotation: Option<f32>,
-    pub texture_id: Option<u32>,
-}
-
-impl From<SkyboxConfig3DDesc> for SkyboxConfig3D {
-    fn from(d: SkyboxConfig3DDesc) -> Self {
-        let mode = match d.mode.as_deref() {
-            Some("procedural") => SkyboxMode3D::Procedural,
-            Some("cubemap") | Some("panoramic") => SkyboxMode3D::Cubemap,
-            _ => SkyboxMode3D::None,
-        };
-        Self {
-            mode,
-            sky_color: d
-                .sky_color
-                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
-                .unwrap_or(Vec4::new(0.2, 0.45, 0.8, 1.0)),
-            horizon_color: d
-                .horizon_color
-                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
-                .unwrap_or(Vec4::new(0.65, 0.75, 0.85, 1.0)),
-            ground_color: d
-                .ground_color
-                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
-                .unwrap_or(Vec4::new(0.08, 0.08, 0.1, 1.0)),
-            sun_direction: d
-                .sun_direction
-                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
-                .unwrap_or(Vec4::new(0.5, 0.75, 0.4, 0.0)),
-            sun_color: d
-                .sun_color
-                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
-                .unwrap_or(Vec4::new(1.0, 0.95, 0.8, 2.0)),
-            rotation: d.rotation.unwrap_or(0.0),
-            texture_id: d.texture_id,
-            intensity: d.intensity.unwrap_or(1.0),
-            sun_size: d.sun_size.unwrap_or(0.04),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OutlineConfig3DDesc {
-    pub enabled: Option<bool>,
-    pub width: Option<f32>,
-    pub threshold: Option<f32>,
-    pub strength: Option<f32>,
-}
-
-impl From<OutlineConfig3DDesc> for OutlineConfig3D {
-    fn from(d: OutlineConfig3DDesc) -> Self {
-        OutlineConfig3D {
-            enabled: d.enabled.unwrap_or(true),
-            width: d.width.unwrap_or(1.5),
-            threshold: d.threshold.unwrap_or(0.2),
-            strength: d.strength.unwrap_or(1.0),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SsaoConfig3DDesc {
-    pub enabled: Option<bool>,
-    pub radius: Option<f32>,
-    pub bias: Option<f32>,
-    pub power: Option<f32>,
-    pub intensity: Option<f32>,
-    pub blur_radius: Option<u32>,
-}
-
-impl From<SsaoConfig3DDesc> for SsaoConfig3D {
-    fn from(d: SsaoConfig3DDesc) -> Self {
-        Self {
-            enabled: d.enabled.unwrap_or(false),
-            radius: d.radius.unwrap_or(0.5),
-            bias: d.bias.unwrap_or(0.025),
-            power: d.power.unwrap_or(1.5),
-            intensity: d.intensity.unwrap_or(1.0),
-            blur_radius: d.blur_radius.unwrap_or(2),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BloomConfig3DDesc {
-    pub enabled: Option<bool>,
-    pub threshold: Option<f32>,
-    pub knee: Option<f32>,
-    pub intensity: Option<f32>,
-    pub scatter: Option<f32>,
-}
-
-impl From<BloomConfig3DDesc> for BloomConfig3D {
-    fn from(d: BloomConfig3DDesc) -> Self {
-        Self {
-            enabled: d.enabled.unwrap_or(false),
-            threshold: d.threshold.unwrap_or(1.0),
-            knee: d.knee.unwrap_or(0.5),
-            intensity: d.intensity.unwrap_or(0.8),
-            scatter: d.scatter.unwrap_or(0.7),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EnvironmentRealm3DDesc {
-    pub ambient_color: Option<[f32; 4]>,
-    pub clear_color: Option<[f32; 4]>,
-    pub fog_color: Option<[f32; 4]>,
-    pub fog_mode: Option<String>,
-    pub fog_start: Option<f32>,
-    pub fog_end: Option<f32>,
-    pub fog_density: Option<f32>,
-    pub exposure: Option<f32>,
-    pub skybox: Option<SkyboxConfig3DDesc>,
-    pub outline: Option<OutlineConfig3DDesc>,
-    pub ssao: Option<SsaoConfig3DDesc>,
-    pub bloom: Option<BloomConfig3DDesc>,
-}
-
-impl From<EnvironmentRealm3DDesc> for EnvironmentRealm3D {
-    fn from(d: EnvironmentRealm3DDesc) -> Self {
-        let fog_mode = match d.fog_mode.as_deref() {
-            Some("linear") => FogMode3D::Linear,
-            Some("exponential") => FogMode3D::Exponential,
-            _ => FogMode3D::None,
-        };
-        EnvironmentRealm3D {
-            ambient_color: d
-                .ambient_color
-                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
-                .unwrap_or(Vec4::new(0.05, 0.05, 0.05, 1.0)),
-            clear_color: d
-                .clear_color
-                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
-                .unwrap_or(Vec4::new(0.01, 0.01, 0.02, 1.0)),
-            fog_color: d
-                .fog_color
-                .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
-                .unwrap_or(Vec4::new(0.5, 0.6, 0.7, 1.0)),
-            fog_mode,
-            fog_start: d.fog_start.unwrap_or(10.0),
-            fog_end: d.fog_end.unwrap_or(100.0),
-            fog_density: d.fog_density.unwrap_or(0.02),
-            exposure: d.exposure.unwrap_or(1.0),
-            skybox: d.skybox.map(Into::into).unwrap_or_default(),
-            outline: d.outline.map(Into::into).unwrap_or_default(),
-            ssao: d.ssao.map(Into::into).unwrap_or_default(),
-            bloom: d.bloom.map(Into::into).unwrap_or_default(),
-        }
-    }
-}
+#[path = "ffi_realm_3d_desc_environment.rs"]
+mod ffi_realm_3d_desc_environment;
+pub use ffi_realm_3d_desc_environment::*;
 
 #[derive(Debug, Deserialize)]
 pub struct EmissionShape3DDesc {

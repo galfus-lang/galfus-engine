@@ -125,29 +125,44 @@ if (clearedCameraLookAt.enabled || clearedCameraLookAt.target || clearedCameraLo
 }
 
 // Create Cube Geometry (size: 2.0 -> half-extent 1.0 -> min: [-1, -1, -1], max: [1, 1, 1])
-galfus.realm3dCreateGeometry(20, 1, { primitive: 'cube', size: 2.0 });
+galfus.realm3dCreateCube(20, 1, 2.0);
+galfus.realm3dCreatePlane(20, 10, 2.0, 3.0);
+galfus.realm3dCreateQuad(20, 11, 2.0, 3.0);
+galfus.realm3dCreateSphere(20, 12, 1.0, 8, 16);
+galfus.realm3dCreateCylinder(20, 13, 1.0, 2.0, 16);
+galfus.realm3dCreateCapsule(20, 14, 1.0, 2.0, 4, 16);
+galfus.realm3dCreatePyramid(20, 15, 2.0, 3.0, 4.0);
+galfus.realm3dCreateTorus(20, 16, 3.0, 1.0, 16, 8);
 galfus.realm3dCreateMaterial(20, 1, { baseColor: [1, 0, 0, 1], albedoTextureId: 2 });
 
-// Create a custom triangle from binary Vertex3D records (80 bytes per vertex) and u32 indices.
-const triangleVertices = new Uint8Array(3 * 80);
+// Create a custom triangle from canonical Vertex3D records (136 bytes per vertex) and u32 indices.
+const triangleVertices = new Uint8Array(3 * 136);
 const triangleView = new DataView(triangleVertices.buffer);
-function writeVertex(offset: number, position: [number, number, number], uv: [number, number]) {
+function writeVertex(
+  offset: number,
+  position: [number, number, number],
+  uv: [number, number],
+  color: [number, number, number, number]
+) {
   for (let i = 0; i < 3; i++) triangleView.setFloat32(offset + i * 4, position[i]!, true);
   triangleView.setFloat32(offset + 12, 0, true);
   triangleView.setFloat32(offset + 16, 0, true);
   triangleView.setFloat32(offset + 20, 1, true);
   triangleView.setFloat32(offset + 24, uv[0], true);
   triangleView.setFloat32(offset + 28, uv[1], true);
-  triangleView.setFloat32(offset + 32, 1, true);
-  triangleView.setFloat32(offset + 44, 1, true);
-  triangleView.setFloat32(offset + 64, 1, true);
+  triangleView.setFloat32(offset + 40, 1, true);
+  triangleView.setFloat32(offset + 52, 1, true);
+  color.forEach((component, index) =>
+    triangleView.setFloat32(offset + 56 + index * 4, component, true)
+  );
 }
-writeVertex(0, [-1, -1, 0], [0, 0]);
-writeVertex(80, [1, -1, 0], [1, 0]);
-writeVertex(160, [0, 1, 0], [0.5, 1]);
-galfus.realm3dCreateGeometryRaw(
+writeVertex(0, [-1, -1, 0], [0, 0], [1, 0, 0, 1]);
+writeVertex(136, [1, -1, 0], [1, 0], [0, 1, 0, 1]);
+writeVertex(272, [0, 1, 0], [0.5, 1], [0, 0, 1, 1]);
+galfus.realm3dCreateGeometry(
   20,
   2,
+  3,
   triangleVertices,
   triangleVertices.byteLength,
   new Uint32Array([0, 1, 2]),
@@ -157,12 +172,29 @@ console.log('✔ Created custom geometry through typed binary buffers');
 
 let rejectedInvalidCustomGeometry = false;
 try {
-  galfus.realm3dCreateGeometryRaw(20, 3, new Uint8Array(1), 1, new Uint32Array(), 0);
+  galfus.realm3dCreateGeometry(20, 3, 3, new Uint8Array(1), 1, new Uint32Array(), 0);
 } catch {
   rejectedInvalidCustomGeometry = true;
 }
 if (!rejectedInvalidCustomGeometry) {
   throw new Error('Expected invalid custom geometry buffer to be rejected');
+}
+let rejectedInvalidTopology = false;
+try {
+  galfus.realm3dCreateGeometry(
+    20,
+    4,
+    99,
+    triangleVertices,
+    triangleVertices.byteLength,
+    new Uint32Array([0, 1, 2]),
+    3
+  );
+} catch {
+  rejectedInvalidTopology = true;
+}
+if (!rejectedInvalidTopology) {
+  throw new Error('Expected invalid primitive topology to be rejected');
 }
 // Create Model at position [10, 20, 30] scaled by [2, 2, 2]
 galfus.realm3dCreateModel(

@@ -9,55 +9,42 @@
  */
 
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
+import { createDemo3d4Environment } from './demo_3d4_environment.ts';
 import { extractKey, quatFromEuler, quatFromLookAt } from './utils.ts';
 
-const TARGET_WINDOW = 1;
-const REALM_3D = 50;
-const INVOCATION_MAIN = 500;
-const CAMERA_ID = 1;
-
-// Model, Geometry & Material IDs
-const MODEL_GROUND = 10;
-const MODEL_TORUS = 11;
-const MODEL_CAPSULE = 12;
-const MODEL_CYLINDER = 13;
-const MODEL_PYRAMID = 14;
-const MODEL_GLOW_CORE = 15;
-
-const GEOM_GROUND = 100;
-const GEOM_TORUS = 101;
-const GEOM_CAPSULE = 102;
-const GEOM_CYLINDER = 103;
-const GEOM_PYRAMID = 104;
-const GEOM_SPHERE = 105;
-
-const MAT_GROUND = 200;
-const MAT_TORUS = 201;
-const MAT_CAPSULE = 202;
-const MAT_CYLINDER = 203;
-const MAT_PYRAMID = 204;
-const MAT_GLOW_CORE = 205;
-
-const LIGHT_SUN = 300;
-const LIGHT_ORBIT_START = 301;
-const NUM_ORBIT_LIGHTS = 8;
-
-const LIGHT_PALETTE: [number, number, number][] = [
-  [1.0, 0.25, 0.2],
-  [0.2, 0.85, 1.0],
-  [1.0, 0.8, 0.15],
-  [0.85, 0.2, 0.95],
-  [0.2, 1.0, 0.45],
-  [0.3, 0.5, 1.0],
-  [1.0, 0.5, 0.1],
-  [0.9, 0.95, 1.0]
-];
-
-const POS_TORUS: [number, number, number] = [-4.5, 1.5, 0.0];
-const POS_CAPSULE: [number, number, number] = [4.5, 1.5, 0.0];
-const POS_CYLINDER: [number, number, number] = [0.0, 1.5, -4.5];
-const POS_PYRAMID: [number, number, number] = [0.0, 1.2, 4.5];
-const POS_CORE: [number, number, number] = [0.0, 2.8, 0.0];
+import {
+  TARGET_WINDOW,
+  REALM_3D,
+  INVOCATION_MAIN,
+  CAMERA_ID,
+  MODEL_GROUND,
+  MODEL_TORUS,
+  MODEL_CAPSULE,
+  MODEL_CYLINDER,
+  MODEL_PYRAMID,
+  MODEL_GLOW_CORE,
+  GEOM_GROUND,
+  GEOM_TORUS,
+  GEOM_CAPSULE,
+  GEOM_CYLINDER,
+  GEOM_PYRAMID,
+  GEOM_SPHERE,
+  MAT_GROUND,
+  MAT_TORUS,
+  MAT_CAPSULE,
+  MAT_CYLINDER,
+  MAT_PYRAMID,
+  MAT_GLOW_CORE,
+  LIGHT_SUN,
+  LIGHT_ORBIT_START,
+  NUM_ORBIT_LIGHTS,
+  LIGHT_PALETTE,
+  POS_TORUS,
+  POS_CAPSULE,
+  POS_CYLINDER,
+  POS_PYRAMID,
+  POS_CORE
+} from './demo_3d4_scene.ts';
 
 export async function runDemo3d4(): Promise<void> {
   console.log(`================================================================
@@ -97,30 +84,14 @@ Showcasing:
   let isPaused = false;
 
   const updateEnvironment = () => {
-    galfus.realm3dSetEnvironment(REALM_3D, {
-      ambientColor: [0.06, 0.07, 0.09, 1.0],
-      clearColor: [0.015, 0.015, 0.025, 1.0],
-      exposure: 1.0,
-      skybox: {
-        mode: 'procedural',
-        skyColor: [0.15, 0.25, 0.55, 1.0],
-        horizonColor: [0.45, 0.55, 0.7, 1.0],
-        groundColor: [0.04, 0.05, 0.07, 1.0],
-        sunDirection: [0.5, 0.75, 0.4, 0.0],
-        sunColor: [1.0, 0.96, 0.88, 2.0],
-        intensity: 0.9,
-        sunSize: 0.03
-      },
-      outline: { enabled: true, width: 1.2, threshold: 0.2, strength: 0.6 },
-      ssao: { enabled: true, radius: 0.45, bias: 0.025, power: 1.0, intensity: 0.5, blurRadius: 2 },
-      bloom: {
-        enabled: bloomEnabled,
-        threshold: bloomThreshold,
-        knee: 0.5,
-        intensity: bloomIntensity,
-        scatter: 0.7
-      }
-    });
+    galfus.realm3dSetEnvironment(
+      REALM_3D,
+      createDemo3d4Environment({
+        bloomEnabled,
+        bloomIntensity,
+        bloomThreshold
+      })
+    );
   };
   updateEnvironment();
 
@@ -144,30 +115,12 @@ Showcasing:
   applyCamera();
 
   console.log('==> Creating New 3D Geometry Primitives...');
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_GROUND, { primitive: 'plane', size: 36.0 });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_TORUS, {
-    primitive: 'torus',
-    radius: 1.2,
-    subdivisions: 36
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_CAPSULE, {
-    primitive: 'capsule',
-    radius: 0.65,
-    size: 1.6,
-    subdivisions: 12
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_CYLINDER, {
-    primitive: 'cylinder',
-    radius: 0.75,
-    size: 2.2,
-    subdivisions: 32
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PYRAMID, { primitive: 'pyramid', size: 1.8 });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_SPHERE, {
-    primitive: 'sphere',
-    radius: 0.85,
-    subdivisions: 32
-  });
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_GROUND, 36.0, 36.0);
+  galfus.realm3dCreateTorus(REALM_3D, GEOM_TORUS, 1.2, 0.36, 36, 18);
+  galfus.realm3dCreateCapsule(REALM_3D, GEOM_CAPSULE, 0.65, 0.3, 6, 12);
+  galfus.realm3dCreateCylinder(REALM_3D, GEOM_CYLINDER, 0.75, 2.2, 32);
+  galfus.realm3dCreatePyramid(REALM_3D, GEOM_PYRAMID, 1.8, 1.8, 1.8);
+  galfus.realm3dCreateSphere(REALM_3D, GEOM_SPHERE, 0.85, 16, 32);
 
   console.log('==> Creating PBR Materials & High-Intensity HDR Emissives...');
   galfus.realm3dCreateMaterial(REALM_3D, MAT_GROUND, {
@@ -181,7 +134,9 @@ Showcasing:
     roughness: 0.18
   });
   galfus.realm3dCreateMaterial(REALM_3D, MAT_CAPSULE, {
-    baseColor: [0.15, 0.75, 0.95, 1.0],
+    surfaceType: 'transparent',
+    side: 'double',
+    baseColor: [0.15, 0.75, 0.95, 0.58],
     metallic: 0.6,
     roughness: 0.25
   });
@@ -191,12 +146,15 @@ Showcasing:
     roughness: 0.22
   });
   galfus.realm3dCreateMaterial(REALM_3D, MAT_PYRAMID, {
-    baseColor: [0.95, 0.18, 0.28, 1.0],
+    surfaceType: 'masked',
+    alphaCutoff: 0.75,
+    baseColor: [0.95, 0.18, 0.28, 0.9],
     metallic: 0.3,
     roughness: 0.3
   });
   galfus.realm3dCreateMaterial(REALM_3D, MAT_GLOW_CORE, {
-    baseColor: [1.0, 1.0, 1.0, 1.0],
+    surfaceType: 'additive',
+    baseColor: [1.0, 1.0, 1.0, 0.45],
     emissiveColor: [4.0, 2.2, 8.5, 1.0]
   });
 

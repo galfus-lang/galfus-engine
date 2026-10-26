@@ -2,7 +2,7 @@
 
 use bytemuck::{Pod, Zeroable};
 use galfus_realm_3d_resources::environment::OutlineConfig3D;
-use galfus_realm_3d_resources::geometry::Vertex3D;
+use galfus_realm_3d_resources::geometry::{PrimitiveTopology3D, Vertex3D};
 use glam::UVec2;
 use wgpu::util::DeviceExt;
 
@@ -28,11 +28,20 @@ struct ModelUniform {
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
 @group(0) @binding(6) var<storage, read> bones: array<mat4x4<f32>>;
 @group(1) @binding(0) var<uniform> object: ModelUniform;
+struct MorphVertex {
+    position: vec4<f32>,
+    normal: vec4<f32>,
+    tangent: vec4<f32>,
+};
+@group(1) @binding(2) var<storage, read> morph_weights: array<f32>;
+@group(1) @binding(3) var<storage, read> morph_targets: array<MorphVertex>;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
-    @location(1) joints: vec4<u32>,
-    @location(2) weights: vec4<f32>,
+    @location(1) joints0: vec4<u32>,
+    @location(2) weights0: vec4<f32>,
+    @location(3) joints1: vec4<u32>,
+    @location(4) weights1: vec4<f32>,
 };
 
 struct VertexOutput {
@@ -52,25 +61,45 @@ fn bone_at(index: u32, bone_offset: u32, bone_count: u32) -> mat4x4<f32> {
     );
 }
 
-fn skin_position(position: vec3<f32>, joints: vec4<u32>, weights: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
-    let m0 = bone_at(joints.x, bone_offset, bone_count);
-    let m1 = bone_at(joints.y, bone_offset, bone_count);
-    let m2 = bone_at(joints.z, bone_offset, bone_count);
-    let m3 = bone_at(joints.w, bone_offset, bone_count);
-    let skinned = (m0 * vec4<f32>(position, 1.0)) * weights.x
-                + (m1 * vec4<f32>(position, 1.0)) * weights.y
-                + (m2 * vec4<f32>(position, 1.0)) * weights.z
-                + (m3 * vec4<f32>(position, 1.0)) * weights.w;
+fn skin_position(position: vec3<f32>, joints0: vec4<u32>, weights0: vec4<f32>, joints1: vec4<u32>, weights1: vec4<f32>, bone_offset: u32, bone_count: u32) -> vec3<f32> {
+    let m0 = bone_at(joints0.x, bone_offset, bone_count);
+    let m1 = bone_at(joints0.y, bone_offset, bone_count);
+    let m2 = bone_at(joints0.z, bone_offset, bone_count);
+    let m3 = bone_at(joints0.w, bone_offset, bone_count);
+    let m4 = bone_at(joints1.x, bone_offset, bone_count);
+    let m5 = bone_at(joints1.y, bone_offset, bone_count);
+    let m6 = bone_at(joints1.z, bone_offset, bone_count);
+    let m7 = bone_at(joints1.w, bone_offset, bone_count);
+    let skinned = (m0 * vec4<f32>(position, 1.0)) * weights0.x
+                + (m1 * vec4<f32>(position, 1.0)) * weights0.y
+                + (m2 * vec4<f32>(position, 1.0)) * weights0.z
+                + (m3 * vec4<f32>(position, 1.0)) * weights0.w
+                + (m4 * vec4<f32>(position, 1.0)) * weights1.x
+                + (m5 * vec4<f32>(position, 1.0)) * weights1.y
+                + (m6 * vec4<f32>(position, 1.0)) * weights1.z
+                + (m7 * vec4<f32>(position, 1.0)) * weights1.w;
     return skinned.xyz;
 }
 
+fn apply_morph_position(vertex_index: u32, position: ptr<function, vec3<f32>>) {
+    let target_count = object.flags.w;
+    if (target_count == 0u) {
+        return;
+    }
+    let vertex_count = arrayLength(&morph_targets) / target_count;
+    for (var target_index = 0u; target_index < target_count; target_index++) {
+        *position = *position + morph_targets[target_index * vertex_count + vertex_index].position.xyz * morph_weights[target_index];
+    }
+}
+
 @vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput, @builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     var local_pos = in.position;
+    apply_morph_position(vertex_index, &local_pos);
     let bone_offset = object.flags.y;
     let bone_count = object.flags.z;
     if (bone_count > 0u) {
-        local_pos = skin_position(in.position, in.joints, in.weights, bone_offset, bone_count);
+        local_pos = skin_position(in.position, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
     }
     let world_pos = object.model * vec4<f32>(local_pos, 1.0);
     var out: VertexOutput;
@@ -156,6 +185,7 @@ struct OutlineParamsUniform {
 /// Pipeline for rendering screen-space model outline silhouettes and dilation.
 pub struct OutlinePipeline3D {
     silhouette_pipeline: wgpu::RenderPipeline,
+    triangle_strip_silhouette_pipeline: wgpu::RenderPipeline,
     composite_pipeline: wgpu::RenderPipeline,
     composite_bgl: wgpu::BindGroupLayout,
     params_buffer: wgpu::Buffer,
@@ -193,13 +223,23 @@ impl OutlinePipeline3D {
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Uint32x4,
-                    offset: 48,
+                    offset: 72,
                     shader_location: 1,
                 },
                 wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float32x4,
-                    offset: 64,
+                    offset: 88,
                     shader_location: 2,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Uint32x4,
+                    offset: 104,
+                    shader_location: 3,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 120,
+                    shader_location: 4,
                 },
             ],
         };
@@ -210,7 +250,7 @@ impl OutlinePipeline3D {
             vertex: wgpu::VertexState {
                 module: &sil_shader,
                 entry_point: Some("vs_main"),
-                buffers: &[vertex_layout],
+                buffers: std::slice::from_ref(&vertex_layout),
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -227,7 +267,7 @@ impl OutlinePipeline3D {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
+                cull_mode: None,
                 polygon_mode: wgpu::PolygonMode::Fill,
                 unclipped_depth: false,
                 conservative: false,
@@ -243,6 +283,47 @@ impl OutlinePipeline3D {
             multiview_mask: None,
             cache: None,
         });
+
+        let triangle_strip_silhouette_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Realm3D Triangle Strip Outline Silhouette Pipeline"),
+                layout: Some(&sil_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &sil_shader,
+                    entry_point: Some("vs_main"),
+                    buffers: std::slice::from_ref(&vertex_layout),
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &sil_shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    strip_index_format: Some(wgpu::IndexFormat::Uint32),
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: false,
+                    depth_compare: wgpu::CompareFunction::GreaterEqual,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                multiview_mask: None,
+                cache: None,
+            });
 
         let comp_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Realm3D Outline Composite Shader"),
@@ -342,6 +423,7 @@ impl OutlinePipeline3D {
 
         Self {
             silhouette_pipeline,
+            triangle_strip_silhouette_pipeline,
             composite_pipeline,
             composite_bgl,
             params_buffer,
@@ -369,8 +451,15 @@ impl OutlinePipeline3D {
     pub fn render<'a>(
         &'a mut self,
         desc: OutlineRenderDesc<'a>,
-        models: impl Iterator<Item = (&'a wgpu::BindGroup, &'a wgpu::Buffer, &'a wgpu::Buffer, u32)>
-        + Clone,
+        models: impl Iterator<
+            Item = (
+                &'a wgpu::BindGroup,
+                &'a wgpu::Buffer,
+                &'a wgpu::Buffer,
+                u32,
+                PrimitiveTopology3D,
+            ),
+        > + Clone,
     ) {
         if !desc.config.enabled || desc.config.strength <= 0.001 {
             return;
@@ -464,9 +553,14 @@ impl OutlinePipeline3D {
                 multiview_mask: None,
             });
 
-            sil_pass.set_pipeline(&self.silhouette_pipeline);
             sil_pass.set_bind_group(0, desc.scene_bind_group, &[]);
-            for (model_bg, v_buf, i_buf, idx_count) in models {
+            for (model_bg, v_buf, i_buf, idx_count, topology) in models {
+                let silhouette_pipeline = match topology {
+                    PrimitiveTopology3D::Triangles => &self.silhouette_pipeline,
+                    PrimitiveTopology3D::TriangleStrip => &self.triangle_strip_silhouette_pipeline,
+                    _ => continue,
+                };
+                sil_pass.set_pipeline(silhouette_pipeline);
                 sil_pass.set_bind_group(1, model_bg, &[]);
                 sil_pass.set_vertex_buffer(0, v_buf.slice(..));
                 sil_pass.set_index_buffer(i_buf.slice(..), wgpu::IndexFormat::Uint32);

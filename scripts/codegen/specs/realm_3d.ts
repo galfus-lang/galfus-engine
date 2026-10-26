@@ -79,25 +79,138 @@ export const realm3dFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_realm_3d_create_geometry',
     methodName: 'realm3dCreateGeometry',
-    doc: 'Registers or updates a procedural 3D Geometry mesh in the 3D Realm.',
+    doc: 'Registers or updates 3D geometry from canonical binary vertex and index buffers.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
-      { name: 'geometry', type: { json: 'Geometry3DDesc' }, doc: 'Geometry description' }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_3d_create_geometry_raw',
-    methodName: 'realm3dCreateGeometryRaw',
-    doc: 'Registers custom geometry from 80-byte interleaved Vertex3D records and u32 indices.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
-      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      {
+        name: 'topology',
+        type: 'u32',
+        doc: 'Primitive topology: 0 points, 1 lines, 2 line strip, 3 triangles, 4 triangle strip.'
+      },
       { name: 'vertexData', type: { buffer: 'u8' }, doc: 'Interleaved Vertex3D bytes.' },
       { name: 'vertexDataLen', type: 'u64', doc: 'Length of vertexData in bytes.' },
       { name: 'indices', type: { buffer: 'u32' }, doc: 'Triangle indices.' },
       { name: 'indexCount', type: 'u64', doc: 'Number of u32 indices.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_set_geometry_morph_targets',
+    methodName: 'realm3dSetGeometryMorphTargets',
+    doc: 'Uploads target-major packed MorphVertex3D records (48 bytes each) for an existing geometry.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      {
+        name: 'targetData',
+        type: { buffer: 'u8' },
+        doc: 'Packed target-major MorphVertex3D bytes.'
+      },
+      { name: 'targetDataLen', type: 'u64', doc: 'Length of targetData in bytes.' },
+      { name: 'targetCount', type: 'u64', doc: 'Number of morph targets in targetData.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_cube',
+    methodName: 'realm3dCreateCube',
+    doc: 'Creates a cube primitive centered at the origin.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'size', type: 'f32', doc: 'Length of each cube edge.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_plane',
+    methodName: 'realm3dCreatePlane',
+    doc: 'Creates a horizontal plane primitive centered at the origin.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'width', type: 'f32', doc: 'Plane extent along X.' },
+      { name: 'depth', type: 'f32', doc: 'Plane extent along Z.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_quad',
+    methodName: 'realm3dCreateQuad',
+    doc: 'Creates a vertical quad primitive centered at the origin and facing +Z.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'width', type: 'f32', doc: 'Quad extent along X.' },
+      { name: 'height', type: 'f32', doc: 'Quad extent along Y.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_sphere',
+    methodName: 'realm3dCreateSphere',
+    doc: 'Creates a UV sphere primitive centered at the origin.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'radius', type: 'f32', doc: 'Sphere radius.' },
+      { name: 'rings', type: 'u32', doc: 'Latitude subdivisions.' },
+      { name: 'sectors', type: 'u32', doc: 'Longitude subdivisions.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_cylinder',
+    methodName: 'realm3dCreateCylinder',
+    doc: 'Creates a cylinder primitive centered at the origin along the Y axis.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'radius', type: 'f32', doc: 'Cylinder radius.' },
+      { name: 'height', type: 'f32', doc: 'Cylinder height.' },
+      { name: 'sectors', type: 'u32', doc: 'Radial subdivisions.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_capsule',
+    methodName: 'realm3dCreateCapsule',
+    doc: 'Creates a capsule primitive centered at the origin along the Y axis.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'radius', type: 'f32', doc: 'Hemisphere radius.' },
+      { name: 'cylinderHeight', type: 'f32', doc: 'Height between the two hemispheres.' },
+      { name: 'rings', type: 'u32', doc: 'Hemisphere latitude subdivisions.' },
+      { name: 'sectors', type: 'u32', doc: 'Radial subdivisions.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_pyramid',
+    methodName: 'realm3dCreatePyramid',
+    doc: 'Creates a pyramid primitive centered at the origin with its apex on +Y.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'width', type: 'f32', doc: 'Base extent along X.' },
+      { name: 'depth', type: 'f32', doc: 'Base extent along Z.' },
+      { name: 'height', type: 'f32', doc: 'Pyramid height.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_create_torus',
+    methodName: 'realm3dCreateTorus',
+    doc: 'Creates a torus primitive centered at the origin in the XZ plane.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'geometryId', type: 'u32', doc: 'Logical ID of the Geometry.' },
+      { name: 'majorRadius', type: 'f32', doc: 'Distance from the center to the tube center.' },
+      { name: 'minorRadius', type: 'f32', doc: 'Tube radius.' },
+      { name: 'majorSegments', type: 'u32', doc: 'Subdivisions around the major ring.' },
+      { name: 'minorSegments', type: 'u32', doc: 'Subdivisions around the tube.' }
     ],
     returnType: 'i32'
   },
@@ -167,6 +280,30 @@ export const realm3dFunctions: FunctionSpec[] = [
         type: 'u64',
         doc: 'Number of f32 values; must be a multiple of 32.'
       }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_set_model_morph_weights',
+    methodName: 'realm3dSetModelMorphWeights',
+    doc: 'Uploads the current f32 blend weights for an existing model.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'modelId', type: 'u32', doc: 'Logical ID of the Model.' },
+      { name: 'weights', type: { buffer: 'f32' }, doc: 'One weight per geometry morph target.' },
+      { name: 'weightCount', type: 'u64', doc: 'Number of f32 weights.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_set_instanced_model_morph_weights',
+    methodName: 'realm3dSetInstancedModelMorphWeights',
+    doc: 'Uploads the f32 blend weights shared by every instance in an instanced model batch.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'instancedModelId', type: 'u32', doc: 'Logical ID of the Instanced Model.' },
+      { name: 'weights', type: { buffer: 'f32' }, doc: 'One weight per geometry morph target.' },
+      { name: 'weightCount', type: 'u64', doc: 'Number of f32 weights.' }
     ],
     returnType: 'i32'
   },

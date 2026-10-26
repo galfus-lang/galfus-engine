@@ -486,6 +486,14 @@ export class BunFfiStrategy implements CodegenStrategy {
           lines.push(`    }`);
           lines.push(`    return 0;`);
         }
+      } else if (fn.errorSentinel !== undefined) {
+        lines.push(`    const result = ${callExpr};`);
+        lines.push(`    if (result === ${fn.errorSentinel}) {`);
+        lines.push(
+          `      throw new GalfusError(\`${fn.methodName} failed: \${this.getLastError()}\`);`
+        );
+        lines.push(`    }`);
+        lines.push(`    return result;`);
       } else {
         lines.push(`    return ${callExpr};`);
       }

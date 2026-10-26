@@ -2,6 +2,8 @@ use bytemuck::{Pod, Zeroable};
 use glam::Vec4;
 use serde::{Deserialize, Serialize};
 
+use crate::color::{linear_to_srgb_rgba, srgb_to_linear_rgba};
+
 /// Fog attenuation mode in the 3D environment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,15 +56,15 @@ impl SkyboxMode3D {
 pub struct SkyboxConfig3D {
     /// Skybox mode.
     pub mode: SkyboxMode3D,
-    /// Zenith sky tint `[r, g, b, 1.0]`.
+    /// sRGB zenith sky tint `[r, g, b, 1.0]`.
     pub sky_color: Vec4,
-    /// Horizon transition tint `[r, g, b, 1.0]`.
+    /// sRGB horizon transition tint `[r, g, b, 1.0]`.
     pub horizon_color: Vec4,
-    /// Ground hemisphere tint `[r, g, b, 1.0]`.
+    /// sRGB ground hemisphere tint `[r, g, b, 1.0]`.
     pub ground_color: Vec4,
     /// Normalized direction towards the main sun `[x, y, z, 0.0]`.
     pub sun_direction: Vec4,
-    /// Sun disc emissive tint and intensity multiplier `[r, g, b, intensity]`.
+    /// sRGB sun-disc tint and linear intensity multiplier `[r, g, b, intensity]`.
     pub sun_color: Vec4,
     /// Rotation around the vertical Y-axis in radians.
     pub rotation: f32,
@@ -78,11 +80,11 @@ impl Default for SkyboxConfig3D {
     fn default() -> Self {
         Self {
             mode: SkyboxMode3D::None,
-            sky_color: Vec4::new(0.2, 0.45, 0.8, 1.0),
-            horizon_color: Vec4::new(0.65, 0.75, 0.85, 1.0),
-            ground_color: Vec4::new(0.08, 0.08, 0.1, 1.0),
+            sky_color: linear_to_srgb_rgba(Vec4::new(0.2, 0.45, 0.8, 1.0)),
+            horizon_color: linear_to_srgb_rgba(Vec4::new(0.65, 0.75, 0.85, 1.0)),
+            ground_color: linear_to_srgb_rgba(Vec4::new(0.08, 0.08, 0.1, 1.0)),
             sun_direction: Vec4::new(0.5, 0.75, 0.4, 0.0),
-            sun_color: Vec4::new(1.0, 0.95, 0.8, 2.0),
+            sun_color: linear_to_srgb_rgba(Vec4::new(1.0, 0.95, 0.8, 2.0)),
             rotation: 0.0,
             texture_id: None,
             intensity: 1.0,
@@ -179,11 +181,11 @@ impl Default for BloomConfig3D {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvironmentRealm3D {
-    /// Ambient illumination baseline `[r, g, b, intensity]`.
+    /// sRGB ambient illumination baseline `[r, g, b, intensity]`.
     pub ambient_color: Vec4,
-    /// Background clear color `[r, g, b, a]`.
+    /// sRGB background clear color `[r, g, b, a]`.
     pub clear_color: Vec4,
-    /// Atmospheric fog color `[r, g, b, 1.0]`.
+    /// sRGB atmospheric fog color `[r, g, b, 1.0]`.
     pub fog_color: Vec4,
     /// Distance fog mode.
     pub fog_mode: FogMode3D,
@@ -212,9 +214,9 @@ pub struct EnvironmentRealm3D {
 impl Default for EnvironmentRealm3D {
     fn default() -> Self {
         Self {
-            ambient_color: Vec4::new(0.05, 0.05, 0.08, 1.0),
-            clear_color: Vec4::new(0.02, 0.02, 0.03, 1.0),
-            fog_color: Vec4::new(0.5, 0.6, 0.7, 1.0),
+            ambient_color: linear_to_srgb_rgba(Vec4::new(0.05, 0.05, 0.08, 1.0)),
+            clear_color: linear_to_srgb_rgba(Vec4::new(0.02, 0.02, 0.03, 1.0)),
+            fog_color: linear_to_srgb_rgba(Vec4::new(0.5, 0.6, 0.7, 1.0)),
             fog_mode: FogMode3D::None,
             fog_start: 10.0,
             fog_end: 200.0,
@@ -229,11 +231,16 @@ impl Default for EnvironmentRealm3D {
 }
 
 impl EnvironmentRealm3D {
+    /// Returns the background clear color converted from public sRGB input to linear light.
+    pub fn linear_clear_color(&self) -> Vec4 {
+        srgb_to_linear_rgba(self.clear_color)
+    }
+
     /// Builds a GPU-ready uniform buffer representation.
     pub fn build_uniform(&self, time: f32) -> Environment3DUniform {
         Environment3DUniform {
-            ambient_color: self.ambient_color,
-            fog_color: self.fog_color,
+            ambient_color: srgb_to_linear_rgba(self.ambient_color),
+            fog_color: srgb_to_linear_rgba(self.fog_color),
             fog_params: Vec4::new(
                 self.fog_start,
                 self.fog_end,
@@ -269,5 +276,19 @@ mod tests {
         let u = Environment3DUniform::zeroed();
         let bytes = bytemuck::bytes_of(&u);
         assert_eq!(bytes.len(), std::mem::size_of::<Environment3DUniform>());
+    }
+
+    #[test]
+    fn environment_colors_are_converted_from_srgb_for_the_gpu() {
+        let environment = EnvironmentRealm3D {
+            ambient_color: Vec4::new(0.5, 0.5, 0.5, 2.0),
+            fog_color: Vec4::new(0.5, 0.5, 0.5, 0.75),
+            ..Default::default()
+        };
+        let uniform = environment.build_uniform(0.0);
+        assert!((uniform.ambient_color.x - 0.214_041_14).abs() < 1e-6);
+        assert_eq!(uniform.ambient_color.w, 2.0);
+        assert!((uniform.fog_color.x - 0.214_041_14).abs() < 1e-6);
+        assert_eq!(uniform.fog_color.w, 0.75);
     }
 }

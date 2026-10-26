@@ -7,6 +7,7 @@ use crate::handle::{
 use crate::sampler::SamplerManager;
 use crate::texture::TextureManager;
 use galfus_core::GenerationalPool;
+use std::collections::HashMap;
 
 /// Specific GPU resource binding configuration for a single slot.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,9 +39,17 @@ pub struct GpuResourceRegistries<'a> {
     pub samplers: &'a SamplerManager,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum BindResourceHandle {
+    Buffer(GpuBufferHandle),
+    TextureView(GpuTextureViewHandle),
+    Sampler(GpuSamplerHandle),
+}
+
 /// Registry and constructor for GPU Bind Groups.
 pub struct BindGroupManager {
     pool: GenerationalPool<wgpu::BindGroup>,
+    dependencies: HashMap<GpuBindGroupHandle, Vec<BindResourceHandle>>,
 }
 
 impl Default for BindGroupManager {
@@ -53,6 +62,7 @@ impl BindGroupManager {
     pub fn new() -> Self {
         Self {
             pool: GenerationalPool::new(NAMESPACE_BIND_GROUP),
+            dependencies: HashMap::new(),
         }
     }
 
@@ -66,6 +76,7 @@ impl BindGroupManager {
         registries: &GpuResourceRegistries<'_>,
     ) -> GpuResult<GpuBindGroupHandle> {
         let mut wgpu_entries = Vec::with_capacity(entries.len());
+        let mut dependencies = Vec::with_capacity(entries.len());
 
         for entry in entries {
             let resource = match &entry.resource {
@@ -75,6 +86,7 @@ impl BindGroupManager {
                     size,
                 } => {
                     let buf = registries.buffers.get(*handle)?;
+                    dependencies.push(BindResourceHandle::Buffer(*handle));
                     wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: buf.raw(),
                         offset: *offset,
@@ -83,10 +95,12 @@ impl BindGroupManager {
                 }
                 BindResourceDesc::TextureView { handle } => {
                     let view = registries.textures.get_view(*handle)?;
+                    dependencies.push(BindResourceHandle::TextureView(*handle));
                     wgpu::BindingResource::TextureView(view.raw())
                 }
                 BindResourceDesc::Sampler { handle } => {
                     let samp = registries.samplers.get(*handle)?;
+                    dependencies.push(BindResourceHandle::Sampler(*handle));
                     wgpu::BindingResource::Sampler(samp.raw())
                 }
             };
@@ -104,6 +118,7 @@ impl BindGroupManager {
         });
 
         let handle = self.pool.insert(bind_group)?.cast::<BindGroupResource>();
+        self.dependencies.insert(handle, dependencies);
         Ok(handle)
     }
 
@@ -119,8 +134,29 @@ impl BindGroupManager {
 
     /// Destroys and removes a `BindGroup`.
     pub fn destroy(&mut self, handle: GpuBindGroupHandle) -> GpuResult<()> {
-        self.pool.remove(handle.cast()).map(|_| ()).map_err(|_| {
-            GpuError::InvalidArgument(format!("BindGroup handle not found: {:?}", handle.slot()))
-        })
+        self.pool
+            .remove(handle.cast())
+            .map(|_| {
+                self.dependencies.remove(&handle);
+            })
+            .map_err(|_| {
+                GpuError::InvalidArgument(format!(
+                    "BindGroup handle not found: {:?}",
+                    handle.slot()
+                ))
+            })
+    }
+
+    pub(crate) fn destroy_referencing(&mut self, resource: BindResourceHandle) {
+        let dependent_handles: Vec<GpuBindGroupHandle> = self
+            .dependencies
+            .iter()
+            .filter_map(|(handle, dependencies)| {
+                dependencies.contains(&resource).then_some(*handle)
+            })
+            .collect();
+        for handle in dependent_handles {
+            let _ = self.destroy(handle);
+        }
     }
 }

@@ -129,9 +129,9 @@ def build_procedural_skinned_mesh(
             cos_t = math.cos(theta)
             sin_t = math.sin(theta)
 
-            # Pack 80-byte vertex: pos(3f), norm(3f), uv(2f), tangent(4f), joints(4u), weights(4f)
+            # Pack 136-byte canonical Vertex3D record.
             packed = struct.pack(
-                "<3f3f2f4f4I4f",
+                "<3f3f2f2f4f4f4I4f4I4f",
                 cos_t * radius,
                 y,
                 sin_t * radius,
@@ -140,9 +140,15 @@ def build_procedural_skinned_mesh(
                 sin_t,
                 u,
                 v,
+                0.0,
+                0.0,
                 1.0,
                 0.0,
                 0.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
                 1.0,
                 bone_idx,
                 next_idx,
@@ -150,6 +156,14 @@ def build_procedural_skinned_mesh(
                 0,
                 1.0 - t,
                 t,
+                0.0,
+                0.0,
+                0,
+                0,
+                0,
+                0,
+                0.0,
+                0.0,
                 0.0,
                 0.0,
             )
@@ -190,8 +204,49 @@ def compute_bone_palette(time_val: float, bone_count: int = 12, height: float = 
     return palette
 
 
+def install_primitive_geometry_helper(galfus: Any) -> None:
+    """Routes legacy tour primitive descriptions to Galfus constructors."""
+    if getattr(galfus, "_feature_tour_primitives", False):
+        return
+    upload_binary = galfus.realm3d_create_geometry
+
+    def upload_primitive(realm_id: int, geometry_id: int, description: Dict[str, Any]) -> None:
+        primitive = description["primitive"]
+        size = float(description.get("size", 1.0))
+        radius = float(description.get("radius", size))
+        segments = max(3, int(description.get("subdivisions", 32)))
+        if primitive == "cube":
+            galfus.realm3d_create_cube(realm_id, geometry_id, size)
+        elif primitive == "plane":
+            galfus.realm3d_create_plane(realm_id, geometry_id, size, size)
+        elif primitive == "quad":
+            galfus.realm3d_create_quad(realm_id, geometry_id, size, size)
+        elif primitive == "sphere":
+            galfus.realm3d_create_sphere(realm_id, geometry_id, radius, segments // 2, segments)
+        elif primitive == "cylinder":
+            galfus.realm3d_create_cylinder(realm_id, geometry_id, radius, size, segments)
+        elif primitive == "pyramid":
+            galfus.realm3d_create_pyramid(realm_id, geometry_id, size, size, size)
+        elif primitive == "torus":
+            galfus.realm3d_create_torus(
+                realm_id, geometry_id, radius, radius * 0.3, segments, segments // 2
+            )
+        else:
+            raise ValueError(f"Unsupported tour primitive: {primitive}")
+
+    def create_geometry(*args: Any) -> None:
+        if len(args) == 3 and isinstance(args[2], dict):
+            upload_primitive(args[0], args[1], args[2])
+            return
+        upload_binary(*args)
+
+    galfus.realm3d_create_geometry = create_geometry
+    galfus._feature_tour_primitives = True
+
+
 def build_room_scene(realm_id: int, room: Dict[str, Any], seed: int, galfus: Any) -> None:
     """Populates rich procedural 3D scene elements for each room exhibit matching procedural.ts 1:1."""
+    install_primitive_geometry_helper(galfus)
     room_idx = room["roomIndex"]
     base_id = (room_idx + 1) * 1000
     fx, fy, fz = room["focusPoint"]
@@ -664,8 +719,8 @@ def build_room_scene(realm_id: int, room: Dict[str, Any], seed: int, galfus: Any
         c_vbytes = (ctypes.c_uint8 * len(v_bytes)).from_buffer_copy(v_bytes)
         c_indices = (ctypes.c_uint32 * len(indices))(*indices)
 
-        galfus.realm3d_create_geometry_raw(
-            realm_id, geom_skinned, c_vbytes, len(v_bytes), c_indices, len(indices)
+        galfus.realm3d_create_geometry(
+            realm_id, geom_skinned, 3, c_vbytes, len(v_bytes), c_indices, len(indices)
         )
 
         galfus.realm3d_create_material(

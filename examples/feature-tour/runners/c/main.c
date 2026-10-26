@@ -22,11 +22,54 @@
 typedef struct {
     float pos[3];
     float norm[3];
-    float uv[2];
+    float uv0[2];
+    float uv1[2];
     float tangent[4];
-    uint32_t joints[4];
-    float weights[4];
+    float color[4];
+    uint32_t joints0[4];
+    float weights0[4];
+    uint32_t joints1[4];
+    float weights1[4];
 } Vertex3DRecord;
+
+/* Tour shorthand that delegates primitive construction to the renderer. */
+static int32_t create_demo_primitive_geometry(uint32_t realm_id, uint32_t geometry_id,
+                                              const char *description) {
+    float size = 1.0f;
+    const char *size_key = strstr(description, "\"size\":");
+    const char *radius_key = strstr(description, "\"radius\":");
+    if (size_key)
+        sscanf(size_key + 7, "%f", &size);
+    float radius = size;
+    if (radius_key)
+        sscanf(radius_key + 9, "%f", &radius);
+
+    uint32_t segments = 24;
+    const char *segments_key = strstr(description, "\"subdivisions\":");
+    if (segments_key)
+        sscanf(segments_key + 15, "%u", &segments);
+
+    if (strstr(description, "\"cube\""))
+        return galfus_realm_3d_create_cube(realm_id, geometry_id, size);
+    if (strstr(description, "\"plane\""))
+        return galfus_realm_3d_create_plane(realm_id, geometry_id, size, size);
+    if (strstr(description, "\"quad\""))
+        return galfus_realm_3d_create_quad(realm_id, geometry_id, size, size);
+    if (strstr(description, "\"sphere\""))
+        return galfus_realm_3d_create_sphere(realm_id, geometry_id, radius, segments / 2, segments);
+    if (strstr(description, "\"cylinder\""))
+        return galfus_realm_3d_create_cylinder(realm_id, geometry_id, radius, size, segments);
+    if (strstr(description, "\"pyramid\""))
+        return galfus_realm_3d_create_pyramid(realm_id, geometry_id, size, size, size);
+    if (strstr(description, "\"torus\""))
+        return galfus_realm_3d_create_torus(realm_id, geometry_id, radius, radius * 0.3f, segments,
+                                            segments / 2);
+    return -1;
+}
+
+/* Local descriptions select a Galfus primitive; they never construct vertex data. */
+#define galfus_realm_3d_create_geometry(realm_id, geometry_id, description)                        \
+    create_demo_primitive_geometry((realm_id), (geometry_id), (description))
 
 static const char *ROOM_NAMES[10] = {"Welcome & Engine Overview", "PBR Primitives & Materials",
                                      "Dynamic Lights & Shadows",  "3D GPU Particle Systems",
@@ -196,20 +239,28 @@ static void build_skinned_mesh(Vertex3DRecord **out_verts, size_t *out_vert_coun
             rec->norm[0] = cos_t;
             rec->norm[1] = 0.0f;
             rec->norm[2] = sin_t;
-            rec->uv[0] = u;
-            rec->uv[1] = v;
+            rec->uv0[0] = u;
+            rec->uv0[1] = v;
+            rec->uv1[0] = 0.0f;
+            rec->uv1[1] = 0.0f;
             rec->tangent[0] = 1.0f;
             rec->tangent[1] = 0.0f;
             rec->tangent[2] = 0.0f;
             rec->tangent[3] = 1.0f;
-            rec->joints[0] = (uint32_t)bone_idx;
-            rec->joints[1] = (uint32_t)next_idx;
-            rec->joints[2] = 0;
-            rec->joints[3] = 0;
-            rec->weights[0] = 1.0f - t;
-            rec->weights[1] = t;
-            rec->weights[2] = 0.0f;
-            rec->weights[3] = 0.0f;
+            rec->color[0] = 1.0f;
+            rec->color[1] = 1.0f;
+            rec->color[2] = 1.0f;
+            rec->color[3] = 1.0f;
+            rec->joints0[0] = (uint32_t)bone_idx;
+            rec->joints0[1] = (uint32_t)next_idx;
+            rec->joints0[2] = 0;
+            rec->joints0[3] = 0;
+            rec->weights0[0] = 1.0f - t;
+            rec->weights0[1] = t;
+            rec->weights0[2] = 0.0f;
+            rec->weights0[3] = 0.0f;
+            memset(rec->joints1, 0, sizeof(rec->joints1));
+            memset(rec->weights1, 0, sizeof(rec->weights1));
         }
     }
 
@@ -672,9 +723,9 @@ static void build_all_rooms(void) {
             uint32_t geom_skin = base_id + 100;
             uint32_t mat_skin = base_id + 101;
             uint32_t mod_skin = 7102; // Matches tour_runner model ID
-            galfus_realm_3d_create_geometry_raw(REALM_3D, geom_skin, (const uint8_t *)verts,
-                                                vert_count * sizeof(Vertex3DRecord), indices,
-                                                idx_count);
+            (galfus_realm_3d_create_geometry)(REALM_3D, geom_skin, 3, (const uint8_t *)verts,
+                                              vert_count * sizeof(Vertex3DRecord), indices,
+                                              idx_count);
             galfus_realm_3d_create_material(
                 REALM_3D, mat_skin,
                 "{\"baseColor\":[0.15,0.85,0.95,1.0],\"emissiveColor\":[0.05,0.25,0.35,1.0],"

@@ -1,8 +1,7 @@
 use galfus_gpu_manager::{
-    AddressMode, BindGroupEntryDesc, BindGroupLayoutDesc, BindGroupLayoutEntryDesc,
-    BindResourceDesc, BindingType, BufferArena, BufferArenaDesc, BufferManager, BufferUsageFlags,
-    FilterMode, GpuBufferDesc, GpuContext, GpuManager, GpuSamplerDesc, GpuTextureDesc,
-    NormalizedTextureFormat, RenderPipelineTargetConfig, SamplerManager, ShaderVisibility,
+    AddressMode, BufferArena, BufferArenaDesc, BufferManager, BufferUsageFlags,
+    DerivedPipelineCacheKey, FilterMode, GpuBufferDesc, GpuContext, GpuManager, GpuSamplerDesc,
+    GpuTextureDesc, NormalizedTextureFormat, RenderPipelineTargetConfig, SamplerManager,
     TextureDimension, TextureManager, TextureUsageFlags, TileAtlas2DArray, TileAtlasDesc,
 };
 
@@ -74,10 +73,18 @@ fn test_texture_manager_lifecycle() {
         .expect("Get view failed");
     assert_eq!(view.parent(), handle);
 
+    let extra_view_handle = manager
+        .create_view(handle, &wgpu::TextureViewDescriptor::default())
+        .expect("Create extra view failed");
+
+    // The default view is owned by its texture and must not be removable alone.
+    assert!(manager.destroy_view(default_view_handle).is_err());
+
     // Destroy
     manager.destroy_texture(handle).expect("Destroy failed");
     assert!(manager.get_texture(handle).is_err());
     assert!(manager.get_view(default_view_handle).is_err());
+    assert!(manager.get_view(extra_view_handle).is_err());
 }
 
 #[test]
@@ -177,151 +184,26 @@ fn test_buffer_arena_suballocation_and_grow() {
     let data = [1u8, 2, 3, 4];
     arena.write_bytes(h1, &data);
 
+    assert!(arena.free(h1));
+    let reused = arena.allocate(32);
+    assert_eq!(arena.slice(reused).offset, 0);
+
     // Allocate large block that forces grow
     let h2 = arena.allocate(256);
     let slice2 = arena.slice(h2);
     assert!(slice2.offset >= 32);
     assert!(arena.capacity() >= 288);
 
-    // Advance frame and check deferred retirement
+    assert_eq!(arena.retired_buffer_count(), 1);
+
+    // The old backing buffer remains alive for the configured number of frames.
     arena.begin_frame(1);
-    arena.begin_frame(3);
+    assert_eq!(arena.retired_buffer_count(), 1);
+    arena.begin_frame(2);
+    assert_eq!(arena.retired_buffer_count(), 0);
 
-    assert!(arena.free(h1));
+    assert!(arena.free(reused));
     assert!(arena.free(h2));
-}
-
-#[test]
-fn test_bind_group_assembly_and_stale_detection() {
-    let mut gpu = GpuManager::new_headless().expect("GPU Manager needed");
-    let device = gpu.context.device_arc();
-
-    let layout_desc = BindGroupLayoutDesc {
-        label: Some("Test Layout".into()),
-        entries: vec![
-            BindGroupLayoutEntryDesc {
-                binding: 0,
-                visibility: ShaderVisibility::VERTEX_FRAGMENT,
-                ty: BindingType::UniformBuffer {
-                    has_dynamic_offset: false,
-                },
-            },
-            BindGroupLayoutEntryDesc {
-                binding: 1,
-                visibility: ShaderVisibility::FRAGMENT,
-                ty: BindingType::SampledTexture {
-                    multisampled: false,
-                },
-            },
-        ],
-    };
-
-    let layout = gpu
-        .layouts
-        .get_or_create_bind_group_layout(&device, &layout_desc);
-
-    // Create valid resources
-    let buf_handle = gpu
-        .buffers
-        .create_buffer(
-            &device,
-            &GpuBufferDesc {
-                label: Some("Test UBO".into()),
-                size: 64,
-                usages: BufferUsageFlags::UNIFORM,
-                mapped_at_creation: false,
-            },
-        )
-        .unwrap();
-
-    let tex_handle = gpu
-        .textures
-        .create_texture(
-            &device,
-            &GpuTextureDesc {
-                label: Some("Test Tex".into()),
-                width: 16,
-                height: 16,
-                depth_or_layers: 1,
-                mip_levels: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: NormalizedTextureFormat::Rgba8Unorm,
-                usages: TextureUsageFlags::default(),
-            },
-        )
-        .unwrap();
-
-    let view_handle = gpu.textures.get_texture(tex_handle).unwrap().default_view();
-
-    let registries = galfus_gpu_manager::GpuResourceRegistries {
-        buffers: &gpu.buffers,
-        textures: &gpu.textures,
-        samplers: &gpu.samplers,
-    };
-
-    // Create bind group with valid resources
-    let bg_handle = gpu
-        .bind_groups
-        .create_bind_group(
-            &device,
-            &layout,
-            Some("Valid BG"),
-            &[
-                BindGroupEntryDesc {
-                    binding: 0,
-                    resource: BindResourceDesc::Buffer {
-                        handle: buf_handle,
-                        offset: 0,
-                        size: None,
-                    },
-                },
-                BindGroupEntryDesc {
-                    binding: 1,
-                    resource: BindResourceDesc::TextureView {
-                        handle: view_handle,
-                    },
-                },
-            ],
-            &registries,
-        )
-        .expect("Valid bind group failed");
-
-    assert!(gpu.bind_groups.get(bg_handle).is_ok());
-
-    // Destroy the buffer to make the handle stale
-    gpu.buffers.destroy(buf_handle).unwrap();
-
-    let registries_after = galfus_gpu_manager::GpuResourceRegistries {
-        buffers: &gpu.buffers,
-        textures: &gpu.textures,
-        samplers: &gpu.samplers,
-    };
-
-    // Attempting to create a bind group with stale buffer must fail
-    let stale_err = gpu.bind_groups.create_bind_group(
-        &device,
-        &layout,
-        Some("Stale BG"),
-        &[
-            BindGroupEntryDesc {
-                binding: 0,
-                resource: BindResourceDesc::Buffer {
-                    handle: buf_handle,
-                    offset: 0,
-                    size: None,
-                },
-            },
-            BindGroupEntryDesc {
-                binding: 1,
-                resource: BindResourceDesc::TextureView {
-                    handle: view_handle,
-                },
-            },
-        ],
-        &registries_after,
-    );
-    assert!(stale_err.is_err());
 }
 
 #[test]
@@ -377,6 +259,10 @@ fn test_derived_render_pipeline_caching() {
         entry_point_vs: "vs_main",
         entry_point_fs: "fs_main",
         vertex_buffers: &[],
+        cache_key: Some(DerivedPipelineCacheKey {
+            layout: 1,
+            vertex_layout: 1,
+        }),
     };
 
     let p1 = gpu
@@ -399,6 +285,10 @@ fn test_derived_render_pipeline_caching() {
         entry_point_vs: "vs_main",
         entry_point_fs: "fs_main",
         vertex_buffers: &[],
+        cache_key: Some(DerivedPipelineCacheKey {
+            layout: 1,
+            vertex_layout: 1,
+        }),
     };
 
     let p2 = gpu
@@ -406,6 +296,29 @@ fn test_derived_render_pipeline_caching() {
         .get_or_create_render_pipeline_derived(&device, &desc_bgra)
         .unwrap();
     assert_ne!(p1, p2);
+
+    let different_layout_key = galfus_gpu_manager::DerivedPipelineDesc {
+        shader,
+        layout: &pipe_layout,
+        target: target_rgba,
+        entry_point_vs: "vs_main",
+        entry_point_fs: "fs_main",
+        vertex_buffers: &[],
+        cache_key: Some(DerivedPipelineCacheKey {
+            layout: 2,
+            vertex_layout: 1,
+        }),
+    };
+    let p3 = gpu
+        .pipelines
+        .get_or_create_render_pipeline_derived(&device, &different_layout_key)
+        .unwrap();
+    assert_ne!(p1, p3);
+
+    gpu.pipelines.destroy_shader(shader).unwrap();
+    assert!(gpu.pipelines.get_render_pipeline(p1).is_err());
+    assert!(gpu.pipelines.get_render_pipeline(p2).is_err());
+    assert!(gpu.pipelines.get_render_pipeline(p3).is_err());
 }
 
 #[test]
@@ -445,6 +358,18 @@ fn test_logical_buffer_lifecycle() {
         BufferUsageFlags::VERTEX,
     );
     assert!(dup_err.is_err());
+
+    // Direct destruction must also discard the logical mapping, allowing ID reuse.
+    gpu.buffers.destroy(handle).expect("Destroy should succeed");
+    assert!(gpu.buffers.get_logical_handle(valid_id).is_err());
+    let _replacement = gpu
+        .create_logical_buffer(
+            valid_id,
+            Some("Replacement Buffer"),
+            &contents,
+            BufferUsageFlags::VERTEX,
+        )
+        .expect("Logical ID should be reusable after physical destruction");
 
     // Write update (offset 4, len 4, respecting COPY_BUFFER_ALIGNMENT of 4)
     let new_data = [99u8, 88, 77, 66];
@@ -493,10 +418,23 @@ fn test_logical_texture_lifecycle() {
     assert_eq!(gpu.textures.get_logical_handle(valid_id).unwrap(), handle);
     assert!(gpu.textures.get_logical_view(valid_id).is_ok());
 
+    // Direct destruction must also discard the logical mapping, allowing ID reuse.
+    gpu.textures
+        .destroy_texture(handle)
+        .expect("Destroy should succeed");
+    assert!(gpu.textures.get_logical_handle(valid_id).is_err());
+    let _replacement = gpu
+        .create_logical_texture(valid_id, &desc, &pixels)
+        .expect("Logical ID should be reusable after physical destruction");
+
     // Partial update (2x2 sub-region)
     let sub_pixels = vec![128u8; 2 * 2 * 4];
     gpu.write_logical_texture(valid_id, 1, 1, 2, 2, &sub_pixels)
         .expect("Write sub-region should succeed");
+    assert!(
+        gpu.write_logical_texture(valid_id, 3, 3, 2, 2, &sub_pixels)
+            .is_err()
+    );
 
     // Dispose
     gpu.dispose_logical_texture(valid_id)

@@ -4,8 +4,10 @@
 //! vector shapes, dynamic 2D point lighting, polar soft shadows, and custom surface effects.
 
 pub mod api;
+mod api_animation;
 pub mod batch;
 pub mod context;
+mod context_shadows;
 pub mod gpu;
 pub mod pipeline;
 pub mod shader;

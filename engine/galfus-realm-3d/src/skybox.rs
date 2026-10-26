@@ -5,6 +5,7 @@ use glam::{Mat4, Vec4};
 use wgpu::util::DeviceExt;
 
 use galfus_realm_3d_resources::environment::SkyboxConfig3D;
+use galfus_realm_3d_resources::srgb_to_linear_rgba;
 
 pub const SKYBOX_SHADER: &str = r#"
 diagnostic(off, derivative_uniformity);
@@ -298,11 +299,11 @@ impl SkyboxPipeline3D {
         let uniform = SkyboxUniform {
             inv_view_proj: view_proj.inverse(),
             camera_pos,
-            sky_color: config.sky_color,
-            horizon_color: config.horizon_color,
-            ground_color: config.ground_color,
+            sky_color: srgb_to_linear_rgba(config.sky_color),
+            horizon_color: srgb_to_linear_rgba(config.horizon_color),
+            ground_color: srgb_to_linear_rgba(config.ground_color),
             sun_direction: config.sun_direction,
-            sun_color: config.sun_color,
+            sun_color: srgb_to_linear_rgba(config.sun_color),
             params: Vec4::new(
                 config.intensity,
                 config.sun_size,

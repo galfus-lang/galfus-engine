@@ -25,6 +25,18 @@ pub struct DerivedPipelineDesc<'a> {
     pub entry_point_vs: &'a str,
     pub entry_point_fs: &'a str,
     pub vertex_buffers: &'a [wgpu::VertexBufferLayout<'a>],
+    /// Optional caller-supplied identity for the pipeline and vertex layouts.
+    ///
+    /// The manager cannot inspect a `wgpu::PipelineLayout` structurally. Omitting this value
+    /// disables derived-pipeline caching rather than risking reuse with an incompatible layout.
+    pub cache_key: Option<DerivedPipelineCacheKey>,
+}
+
+/// Stable structural identity supplied when caching a derived pipeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DerivedPipelineCacheKey {
+    pub layout: u64,
+    pub vertex_layout: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -33,6 +45,7 @@ struct DerivedPipelineKey {
     target: RenderPipelineTargetConfig,
     entry_point_vs: String,
     entry_point_fs: String,
+    cache_key: DerivedPipelineCacheKey,
 }
 
 /// Registry and compiler for Shaders and GPU Pipelines.
@@ -95,17 +108,19 @@ impl PipelineManager {
         device: &wgpu::Device,
         desc: &DerivedPipelineDesc<'_>,
     ) -> GpuResult<GpuRenderPipelineHandle> {
-        let key = DerivedPipelineKey {
+        let key = desc.cache_key.map(|cache_key| DerivedPipelineKey {
             shader: desc.shader,
             target: desc.target.clone(),
             entry_point_vs: desc.entry_point_vs.to_string(),
             entry_point_fs: desc.entry_point_fs.to_string(),
-        };
+            cache_key,
+        });
 
-        if let Some(&handle) = self
-            .derived_render_cache
-            .get(&key)
-            .filter(|h| self.render_pipelines.get(h.cast()).is_ok())
+        if let Some(key) = &key
+            && let Some(&handle) = self
+                .derived_render_cache
+                .get(key)
+                .filter(|handle| self.render_pipelines.get(handle.cast()).is_ok())
         {
             return Ok(handle);
         }
@@ -171,7 +186,9 @@ impl PipelineManager {
             .render_pipelines
             .insert(pipeline)?
             .cast::<RenderPipelineResource>();
-        self.derived_render_cache.insert(key, handle);
+        if let Some(key) = key {
+            self.derived_render_cache.insert(key, handle);
+        }
         Ok(handle)
     }
 
@@ -229,7 +246,18 @@ impl PipelineManager {
     pub fn destroy_shader(&mut self, handle: GpuShaderHandle) -> GpuResult<()> {
         self.shaders
             .remove(handle.cast())
-            .map(|_| ())
+            .map(|_| {
+                let dependent_pipelines: Vec<GpuRenderPipelineHandle> = self
+                    .derived_render_cache
+                    .iter()
+                    .filter_map(|(key, pipeline)| (key.shader == handle).then_some(*pipeline))
+                    .collect();
+                self.derived_render_cache
+                    .retain(|key, _| key.shader != handle);
+                for pipeline in dependent_pipelines {
+                    let _ = self.render_pipelines.remove(pipeline.cast());
+                }
+            })
             .map_err(|_| GpuError::ShaderCompilationFailed("Shader handle not found".into()))
     }
 
@@ -237,7 +265,10 @@ impl PipelineManager {
     pub fn destroy_render_pipeline(&mut self, handle: GpuRenderPipelineHandle) -> GpuResult<()> {
         self.render_pipelines
             .remove(handle.cast())
-            .map(|_| ())
+            .map(|_| {
+                self.derived_render_cache
+                    .retain(|_, cached_handle| *cached_handle != handle);
+            })
             .map_err(|_| GpuError::PipelineCreationFailed("Render pipeline not found".into()))
     }
 

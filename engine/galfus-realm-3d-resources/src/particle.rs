@@ -6,6 +6,8 @@ use bytemuck::{Pod, Zeroable};
 use glam::{Quat, Vec3, Vec4};
 use serde::{Deserialize, Serialize};
 
+use crate::color::srgb_to_linear_rgba;
+
 /// 3D geometric shape from which particles are spawned.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -35,7 +37,7 @@ pub struct Particle3DInstance {
     pub position: [f32; 3],
     /// Current rendered size (diameter) in world units.
     pub size: f32,
-    /// RGBA interpolated color tint.
+    /// Linear RGBA interpolated color tint ready for the GPU.
     pub color: [f32; 4],
     /// 2D in-plane billboard rotation in radians.
     pub rotation: f32,
@@ -71,9 +73,9 @@ pub struct ParticleEmitter3D {
     pub start_size_range: [f32; 2],
     /// Final particle size range `[min, max]`.
     pub end_size_range: [f32; 2],
-    /// Initial particle RGBA color tint.
+    /// Initial particle sRGB RGBA color tint.
     pub start_color: Vec4,
-    /// Final particle RGBA color tint at the end of its life.
+    /// Final particle sRGB RGBA color tint at the end of its life.
     pub end_color: Vec4,
     /// Initial angular velocity range `[min, max]` in radians per second.
     pub rotation_speed_range: [f32; 2],
@@ -240,8 +242,8 @@ impl ParticleEmitterState3D {
             lifetime,
             start_size,
             end_size,
-            start_color: emitter.start_color,
-            end_color: emitter.end_color,
+            start_color: srgb_to_linear_rgba(emitter.start_color),
+            end_color: srgb_to_linear_rgba(emitter.end_color),
             rotation,
             rotation_speed,
         });
@@ -301,10 +303,9 @@ impl ParticleEmitterState3D {
         }
     }
 
-    /// Generates GPU instance data for all currently active particles.
-    pub fn build_instances(&self) -> Vec<Particle3DInstance> {
-        let mut instances = Vec::with_capacity(self.particles.len());
-
+    /// Appends GPU instance data for all currently active particles to a reusable staging buffer.
+    pub fn append_instances(&self, instances: &mut Vec<Particle3DInstance>) {
+        instances.reserve(self.particles.len());
         for p in &self.particles {
             let t = (p.age / p.lifetime).clamp(0.0, 1.0);
             let size = p.start_size + (p.end_size - p.start_size) * t;
@@ -318,8 +319,6 @@ impl ParticleEmitterState3D {
                 _pad: [0.0; 3],
             });
         }
-
-        instances
     }
 }
 
@@ -336,8 +335,31 @@ mod tests {
         state.update(&emitter, 0.1, Vec3::ZERO, Quat::IDENTITY);
         assert!(!state.particles.is_empty());
 
-        let instances = state.build_instances();
+        let mut instances = Vec::new();
+        state.append_instances(&mut instances);
         assert_eq!(instances.len(), state.particles.len());
+    }
+
+    #[test]
+    fn append_instances_reuses_staging_allocation() {
+        let emitter = ParticleEmitter3D {
+            max_particles: 8,
+            ..Default::default()
+        };
+        let mut state = ParticleEmitterState3D::new();
+        state.burst(&emitter, 8, Vec3::ZERO, Quat::IDENTITY);
+
+        let mut instances = Vec::new();
+        state.append_instances(&mut instances);
+        let first_capacity = instances.capacity();
+        let first_pointer = instances.as_ptr();
+
+        instances.clear();
+        state.append_instances(&mut instances);
+
+        assert_eq!(instances.len(), 8);
+        assert_eq!(instances.capacity(), first_capacity);
+        assert_eq!(instances.as_ptr(), first_pointer);
     }
 
     #[test]
@@ -353,5 +375,20 @@ mod tests {
         // Burst exceeding max capacity
         state.burst(&emitter, 50, Vec3::ZERO, Quat::IDENTITY);
         assert_eq!(state.particles.len(), 50);
+    }
+
+    #[test]
+    fn particle_colors_are_converted_to_linear_when_spawned() {
+        let emitter = ParticleEmitter3D {
+            start_color: Vec4::new(0.5, 0.5, 0.5, 0.25),
+            end_color: Vec4::new(0.5, 0.5, 0.5, 0.75),
+            ..Default::default()
+        };
+        let mut state = ParticleEmitterState3D::new();
+        state.spawn_particle(&emitter, Vec3::ZERO, Quat::IDENTITY);
+        let particle = &state.particles[0];
+        assert!((particle.start_color.x - 0.214_041_14).abs() < 1e-6);
+        assert_eq!(particle.start_color.w, 0.25);
+        assert_eq!(particle.end_color.w, 0.75);
     }
 }

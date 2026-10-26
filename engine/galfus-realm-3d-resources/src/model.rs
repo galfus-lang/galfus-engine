@@ -2,6 +2,7 @@ use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, UVec4, Vec4};
 use serde::{Deserialize, Serialize};
 
+use crate::color::srgb_to_linear_rgba;
 use crate::transform::Transform3D;
 
 /// 3D Model render instance binding a geometry and material to an entity.
@@ -18,7 +19,7 @@ pub struct Model3D {
     pub receive_shadow: bool,
     /// Whether this model generates outline silhouettes.
     pub cast_outline: bool,
-    /// RGBA tint for this model's outline silhouette.
+    /// sRGB RGBA tint for this model's outline silhouette.
     pub outline_color: Vec4,
     /// Whether this model instance is actively drawn.
     pub active: bool,
@@ -28,6 +29,9 @@ pub struct Model3D {
     /// Number of bones in this model's palette.
     #[serde(default)]
     pub bone_count: u32,
+    /// Per-target blend weights for the bound geometry. An empty vector disables morphing.
+    #[serde(skip, default)]
+    pub morph_weights: Vec<f32>,
 }
 
 impl Default for Model3D {
@@ -42,6 +46,7 @@ impl Default for Model3D {
             active: true,
             bone_offset: 0,
             bone_count: 0,
+            morph_weights: Vec::new(),
         }
     }
 }
@@ -73,8 +78,13 @@ impl Model3D {
         Model3DUniform {
             model: model_matrix,
             normal_matrix,
-            outline_color: self.outline_color,
-            flags: UVec4::new(flags, self.bone_offset, self.bone_count, 0),
+            outline_color: srgb_to_linear_rgba(self.outline_color),
+            flags: UVec4::new(
+                flags,
+                self.bone_offset,
+                self.bone_count,
+                self.morph_weights.len() as u32,
+            ),
         }
     }
 }
@@ -89,7 +99,7 @@ pub struct Model3DUniform {
     pub normal_matrix: Mat4,
     /// Outline silhouette color `[r, g, b, a]`.
     pub outline_color: Vec4,
-    /// Bit flags: `[bit 0: receive_shadow, bit 1: cast_outline, unused, unused]`.
+    /// Flags and offsets: `[flags, bone_offset, bone_count, morph_target_count]`.
     pub flags: UVec4,
 }
 
@@ -100,9 +110,9 @@ pub struct Model3DUniform {
 pub struct InstanceData3D {
     /// 4x4 Model-to-world transformation matrix.
     pub transform: Mat4,
-    /// RGBA tint / multiplier for base albedo and alpha.
+    /// sRGB RGBA tint / multiplier for base albedo and alpha.
     pub color: Vec4,
-    /// RGB emissive glow + emissive intensity in w.
+    /// sRGB RGB emissive glow + linear emissive intensity in w.
     pub emissive: Vec4,
     /// PBR properties: [x: metallic, y: roughness, z: reflectance, w: ao].
     pub pbr: Vec4,
@@ -119,6 +129,15 @@ impl Default for InstanceData3D {
             pbr: Vec4::new(0.0, 0.5, 0.5, 1.0),
             custom: Vec4::ZERO,
         }
+    }
+}
+
+impl InstanceData3D {
+    /// Converts public sRGB color inputs into the linear representation consumed by the GPU.
+    pub fn into_linear_gpu(mut self) -> Self {
+        self.color = srgb_to_linear_rgba(self.color);
+        self.emissive = srgb_to_linear_rgba(self.emissive);
+        self
     }
 }
 
@@ -142,6 +161,9 @@ pub struct InstancedModel3D {
     /// Whether this instanced model collection is actively drawn.
     #[serde(default = "default_true")]
     pub active: bool,
+    /// Per-target blend weights shared by every instance in this draw batch.
+    #[serde(skip, default)]
+    pub morph_weights: Vec<f32>,
 }
 
 fn default_true() -> bool {
@@ -157,6 +179,7 @@ impl Default for InstancedModel3D {
             cast_shadow: true,
             receive_shadow: true,
             active: true,
+            morph_weights: Vec::new(),
         }
     }
 }
@@ -192,5 +215,35 @@ mod tests {
         let inst = InstanceData3D::default();
         let bytes = bytemuck::bytes_of(&inst);
         assert_eq!(bytes.len(), 128);
+    }
+
+    #[test]
+    fn model_and_instance_colors_are_converted_for_the_gpu() {
+        let model = Model3D {
+            outline_color: Vec4::splat(0.5),
+            ..Default::default()
+        };
+        let uniform = model.build_uniform(&Transform3D::default());
+        assert!((uniform.outline_color.x - 0.214_041_14).abs() < 1e-6);
+
+        let instance = InstanceData3D {
+            color: Vec4::new(0.5, 0.5, 0.5, 0.25),
+            emissive: Vec4::new(0.5, 0.5, 0.5, 3.0),
+            ..Default::default()
+        }
+        .into_linear_gpu();
+        assert!((instance.color.x - 0.214_041_14).abs() < 1e-6);
+        assert_eq!(instance.color.w, 0.25);
+        assert_eq!(instance.emissive.w, 3.0);
+    }
+
+    #[test]
+    fn model_uniform_exposes_morph_target_count() {
+        let model = Model3D {
+            morph_weights: vec![0.25, 0.75],
+            ..Default::default()
+        };
+        let uniform = model.build_uniform(&Transform3D::default());
+        assert_eq!(uniform.flags.w, 2);
     }
 }

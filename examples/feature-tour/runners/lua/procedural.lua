@@ -4,10 +4,14 @@ ffi.cdef([[
     typedef struct {
         float pos[3];
         float norm[3];
-        float uv[2];
+        float uv0[2];
+        float uv1[2];
         float tangent[4];
-        uint32_t joints[4];
-        float weights[4];
+        float color[4];
+        uint32_t joints0[4];
+        float weights0[4];
+        uint32_t joints1[4];
+        float weights1[4];
     } Vertex3DRecord;
 ]])
 
@@ -183,20 +187,34 @@ function procedural.build_procedural_skinned_mesh(rings, radial_segs, height, bo
             rec.norm[0] = cos_t
             rec.norm[1] = 0.0
             rec.norm[2] = sin_t
-            rec.uv[0] = u
-            rec.uv[1] = v
+            rec.uv0[0] = u
+            rec.uv0[1] = v
+            rec.uv1[0] = 0.0
+            rec.uv1[1] = 0.0
             rec.tangent[0] = 1.0
             rec.tangent[1] = 0.0
             rec.tangent[2] = 0.0
             rec.tangent[3] = 1.0
-            rec.joints[0] = bone_idx
-            rec.joints[1] = next_idx
-            rec.joints[2] = 0
-            rec.joints[3] = 0
-            rec.weights[0] = 1.0 - t
-            rec.weights[1] = t
-            rec.weights[2] = 0.0
-            rec.weights[3] = 0.0
+            rec.color[0] = 1.0
+            rec.color[1] = 1.0
+            rec.color[2] = 1.0
+            rec.color[3] = 1.0
+            rec.joints0[0] = bone_idx
+            rec.joints0[1] = next_idx
+            rec.joints0[2] = 0
+            rec.joints0[3] = 0
+            rec.weights0[0] = 1.0 - t
+            rec.weights0[1] = t
+            rec.weights0[2] = 0.0
+            rec.weights0[3] = 0.0
+            rec.joints1[0] = 0
+            rec.joints1[1] = 0
+            rec.joints1[2] = 0
+            rec.joints1[3] = 0
+            rec.weights1[0] = 0.0
+            rec.weights1[1] = 0.0
+            rec.weights1[2] = 0.0
+            rec.weights1[3] = 0.0
 
             v_idx = v_idx + 1
         end
@@ -249,7 +267,55 @@ function procedural.compute_bone_palette(time_val, bone_count, height)
     return palette, bone_count * 16
 end
 
+local function install_primitive_geometry_helper(galfus)
+    if galfus._feature_tour_primitives then
+        return
+    end
+    local upload_binary = galfus.realm3d_create_geometry
+    galfus.realm3d_create_geometry = function(realm_id, geometry_id, ...)
+        local args = { ... }
+        local description = args[1]
+        if #args ~= 1 or type(description) ~= "string" then
+            return upload_binary(realm_id, geometry_id, ...)
+        end
+        local size = tonumber(description:match('"size":([%d%.]+)')) or 1.0
+        local radius = tonumber(description:match('"radius":([%d%.]+)')) or size
+        local segments = tonumber(description:match('"subdivisions":(%d+)')) or 32
+        if description:find('"cube"') then
+            return galfus.realm3d_create_cube(realm_id, geometry_id, size)
+        elseif description:find('"plane"') then
+            return galfus.realm3d_create_plane(realm_id, geometry_id, size, size)
+        elseif description:find('"quad"') then
+            return galfus.realm3d_create_quad(realm_id, geometry_id, size, size)
+        elseif description:find('"sphere"') then
+            return galfus.realm3d_create_sphere(
+                realm_id,
+                geometry_id,
+                radius,
+                math.floor(segments / 2),
+                segments
+            )
+        elseif description:find('"cylinder"') then
+            return galfus.realm3d_create_cylinder(realm_id, geometry_id, radius, size, segments)
+        elseif description:find('"pyramid"') then
+            return galfus.realm3d_create_pyramid(realm_id, geometry_id, size, size, size)
+        elseif description:find('"torus"') then
+            return galfus.realm3d_create_torus(
+                realm_id,
+                geometry_id,
+                radius,
+                radius * 0.3,
+                segments,
+                math.floor(segments / 2)
+            )
+        end
+        error("Unsupported tour primitive description")
+    end
+    galfus._feature_tour_primitives = true
+end
+
 function procedural.build_room_scene(realm_id, room, seed, galfus)
+    install_primitive_geometry_helper(galfus)
     local room_idx = room.roomIndex
     local base_id = (room_idx + 1) * 1000
     local fx = room.focusPoint[1]
@@ -706,7 +772,7 @@ function procedural.build_room_scene(realm_id, room, seed, galfus)
         local vbuf, vlen, ibuf, icount = procedural.build_procedural_skinned_mesh(24, 16, 5.0, 12)
         local v_raw = ffi.cast("const uint8_t*", vbuf)
         local i_raw = ffi.cast("const uint32_t*", ibuf)
-        galfus.realm3d_create_geometry_raw(realm_id, geom_skinned, v_raw, vlen, i_raw, icount)
+        galfus.realm3d_create_geometry(realm_id, geom_skinned, 3, v_raw, vlen, i_raw, icount)
         galfus.realm3d_create_material(
             realm_id,
             mat_skinned,

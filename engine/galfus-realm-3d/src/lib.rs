@@ -4,6 +4,7 @@
 //! Reverse-Z rendering, PBR-like lighting, and declarative entity management.
 
 pub mod api;
+mod api_animation;
 pub mod bloom;
 pub mod collector;
 pub mod context;
@@ -47,10 +48,11 @@ mod tests {
     use super::*;
     use galfus_realm_3d_resources::camera::Camera3D;
     use galfus_realm_3d_resources::environment::EnvironmentRealm3D;
-    use galfus_realm_3d_resources::geometry::Geometry3D;
+    use galfus_realm_3d_resources::geometry::{Geometry3D, MorphTarget3D, MorphVertex3D};
     use galfus_realm_3d_resources::light::Light3D;
     use galfus_realm_3d_resources::material::Material3D;
     use galfus_realm_3d_resources::model::Model3D;
+    use galfus_realm_3d_resources::particle::ParticleEmitter3D;
     use galfus_realm_3d_resources::transform::Transform3D;
     use galfus_realm_core::realm::Realm;
     use galfus_realm_core::types::{RealmInvocationContext, RealmKind, RealmPrepareContext};
@@ -105,6 +107,88 @@ mod tests {
         let mut env = EnvironmentRealm3D::default();
         env.bloom.enabled = true;
         realm.set_environment(env);
+    }
+
+    #[test]
+    fn light_updates_invalidate_the_incremental_light_buffer() {
+        let mut realm = Realm3DContext::new(10);
+        realm
+            .create_light(
+                1,
+                Light3D::point(Vec3::ONE, 1.0, 10.0, true),
+                Transform3D::default(),
+            )
+            .unwrap();
+
+        realm.lights_dirty = false;
+        realm
+            .set_light_transform(1, Transform3D::from_position(Vec3::X))
+            .unwrap();
+        assert!(realm.lights_dirty);
+
+        realm.lights_dirty = false;
+        realm.set_light_color(1, Vec3::new(0.2, 0.4, 0.6)).unwrap();
+        assert!(realm.lights_dirty);
+
+        realm.lights_dirty = false;
+        realm.set_light_intensity(1, 3.0).unwrap();
+        assert!(realm.lights_dirty);
+    }
+
+    #[test]
+    fn animation_property_setters_mark_the_realm_dirty() {
+        let mut realm = Realm3DContext::new(10);
+        realm
+            .create_camera(1, Camera3D::default(), Transform3D::default())
+            .unwrap();
+        realm.create_material(1, Material3D::default()).unwrap();
+        realm
+            .create_model(1, Model3D::new(1, 1), Transform3D::default())
+            .unwrap();
+        realm
+            .create_particle_emitter(1, ParticleEmitter3D::default(), Transform3D::default())
+            .unwrap();
+
+        realm.dirty = false;
+        realm.set_model_position(1, Vec3::X).unwrap();
+        assert!(realm.dirty);
+
+        realm.dirty = false;
+        realm.set_material_roughness(1, 0.2).unwrap();
+        assert!(realm.dirty);
+
+        realm.dirty = false;
+        realm.set_environment_sun_intensity(2.0);
+        assert!(realm.dirty);
+
+        realm.dirty = false;
+        realm.set_particle_emitter_speed(1, 4.0).unwrap();
+        assert!(realm.dirty);
+    }
+
+    #[test]
+    fn morph_weight_updates_validate_targets_and_refresh_model_bounds() {
+        let mut realm = Realm3DContext::new(11);
+        let mut geometry = Geometry3D::quad(2.0, 2.0);
+        geometry
+            .set_morph_targets(vec![MorphTarget3D::new(vec![
+                MorphVertex3D::new(
+                    [0.0, 0.0, 3.0],
+                    [0.0; 3],
+                    [0.0; 3]
+                );
+                4
+            ])])
+            .unwrap();
+        realm.create_geometry(1, geometry).unwrap();
+        realm
+            .create_model(1, Model3D::new(1, 1), Transform3D::default())
+            .unwrap();
+        realm.set_model_morph_weights(1, vec![1.0]).unwrap();
+        let (min, max) = realm.get_model_aabb(1).unwrap();
+        assert_eq!(min.z, 3.0);
+        assert_eq!(max.z, 3.0);
+        assert!(realm.set_model_morph_weights(1, vec![0.5, 0.5]).is_err());
     }
 
     #[test]
@@ -208,13 +292,24 @@ mod tests {
                 Transform3D::from_position(Vec3::new(0.0, 1.0, -3.0)),
             )
             .unwrap();
-        realm.create_geometry(1, Geometry3D::cube(1.0)).unwrap();
+        let mut cube = Geometry3D::cube(1.0);
+        cube.set_morph_targets(vec![MorphTarget3D::new(vec![
+            MorphVertex3D::new(
+                [0.0, 0.0, 0.1],
+                [0.0, 0.0, 0.1],
+                [0.0; 3]
+            );
+            cube.vertices.len()
+        ])])
+        .unwrap();
+        realm.create_geometry(1, cube).unwrap();
         realm
             .create_material(1, Material3D::solid_color(Vec4::new(0.2, 0.6, 1.0, 1.0)))
             .unwrap();
         realm
             .create_model(1, Model3D::new(1, 1), Transform3D::default())
             .unwrap();
+        realm.set_model_morph_weights(1, vec![1.0]).unwrap();
         realm
             .create_light(
                 1,
@@ -257,6 +352,15 @@ mod tests {
         };
         assert!(realm.prepare(&prep).is_ok());
 
+        // Same-size skeletal animation updates write into the existing storage buffer and keep
+        // scene bindings stable.
+        let scene_generation = realm.scene_bindings_generation;
+        realm
+            .update_model_bones(1, &[glam::Mat4::IDENTITY])
+            .unwrap();
+        assert!(realm.prepare(&prep).is_ok());
+        assert_eq!(realm.scene_bindings_generation, scene_generation);
+
         // 2. Render target texture
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Test Realm3D Render Target"),
@@ -290,8 +394,8 @@ mod tests {
         assert!(realm.render(&inv).is_ok());
 
         // Verify buffers are allocated
-        assert!(realm.models.get(&1).unwrap().2.is_some());
         assert!(realm.models.get(&1).unwrap().3.is_some());
+        assert!(realm.models.get(&1).unwrap().5.is_some());
         assert!(realm.materials.get(&1).unwrap().1.is_some());
 
         // Frame 2: Update model transform and material in-place (must stay persistent)
@@ -299,8 +403,8 @@ mod tests {
             .set_model_transform(1, Transform3D::from_position(Vec3::new(5.0, 0.0, 0.0)))
             .unwrap();
         // Model GPU buffer and bind group remain persistent (not dropped to None)
-        assert!(realm.models.get(&1).unwrap().2.is_some());
         assert!(realm.models.get(&1).unwrap().3.is_some());
+        assert!(realm.models.get(&1).unwrap().5.is_some());
 
         // Modify material property dynamically
         realm.materials.get_mut(&1).unwrap().0.base_color = Vec4::new(0.9, 0.1, 0.1, 1.0);
@@ -328,6 +432,41 @@ mod tests {
             target_format: wgpu::TextureFormat::Rgba8Unorm,
         };
         assert!(realm.render(&inv2).is_ok());
+
+        // Portal resources are tied to their active portal surface and are released when the
+        // logical portal disappears or the realm is cleared.
+        realm.materials.get_mut(&1).unwrap().0.surface_type =
+            galfus_realm_3d_resources::material::SurfaceType3D::Portal;
+        realm
+            .create_portal(9, galfus_realm_3d_resources::portal::Portal3D::mirror(1))
+            .unwrap();
+        let portal_pipeline = {
+            let pipeline = realm.pipeline.as_ref().unwrap();
+            PortalPipeline3D::new(
+                &device,
+                wgpu::TextureFormat::Rgba8Unorm,
+                &pipeline.refraction_layout,
+                16,
+                16,
+            )
+        };
+        realm.portal_pipelines.insert(1, portal_pipeline);
+        realm.destroy_portal(9).unwrap();
+        assert!(realm.portal_pipelines.is_empty());
+
+        let portal_pipeline = {
+            let pipeline = realm.pipeline.as_ref().unwrap();
+            PortalPipeline3D::new(
+                &device,
+                wgpu::TextureFormat::Rgba8Unorm,
+                &pipeline.refraction_layout,
+                16,
+                16,
+            )
+        };
+        realm.portal_pipelines.insert(1, portal_pipeline);
+        realm.clear().unwrap();
+        assert!(realm.portal_pipelines.is_empty());
     }
 
     #[test]
@@ -364,6 +503,7 @@ mod tests {
             realm.instanced_models.is_empty(),
             "instanced_models must be empty after clear()"
         );
+        assert!(realm.portal_pipelines.is_empty());
     }
 
     #[test]

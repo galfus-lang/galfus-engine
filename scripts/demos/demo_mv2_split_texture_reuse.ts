@@ -137,21 +137,14 @@ export async function runDemoMv2(): Promise<void> {
   );
 
   // Cube Geometry & Pedestal Geometry
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_CUBE_ID, {
-    primitive: 'cube',
-    size: 1.8
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PEDESTAL_ID, {
-    primitive: 'plane',
-    size: 10.0
-  });
+  galfus.realm3dCreateCube(REALM_3D, GEOM_CUBE_ID, 1.8);
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_PEDESTAL_ID, 10.0, 10.0);
 
   // Cube Material: Uses TARGET_2D_RTT in slot 0 (albedo) with LinearRepeat sampler!
   console.log('==> Creating Realm 3D Cube Material bound to TARGET_2D_RTT texture slot...');
   galfus.realm3dCreateMaterial(REALM_3D, MAT_CUBE_RTT_ID, {
     surfaceType: 'opaque',
     textureSlots: [TARGET_2D_RTT],
-    samplerIndex: 0, // LinearRepeat
     baseColor: [1.0, 1.0, 1.0, 1.0],
     roughness: 0.25,
     metallic: 0.1
@@ -570,7 +563,6 @@ Controls:
             galfus.realm3dCreateMaterial(REALM_3D, MAT_CUBE_RTT_ID, {
               surfaceType: 'opaque',
               textureSlots: [TARGET_2D_RTT],
-              samplerIndex: 0,
               baseColor: tintColor,
               roughness: 0.25,
               metallic: 0.1

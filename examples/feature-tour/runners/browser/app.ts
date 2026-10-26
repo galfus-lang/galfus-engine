@@ -5,7 +5,7 @@ import {
   initializeGalfusBrowser,
   type GalfusBrowserWasmModule
 } from '../../../../sdk/browser/galfus.ts';
-import { runFeatureTour, type TourController } from '../../tour_runner.ts';
+import { runFeatureTour, type TourController, type TourFrameState } from '../../tour_runner.ts';
 
 const canvasId = 'galfus-browser-tour';
 
@@ -32,16 +32,27 @@ function fail(error: unknown): void {
   console.error('[Browser Tour Error]', error);
 }
 
-function bindControls(controller: TourController, galfus: GalfusBrowser): void {
+function bindControls(
+  controller: TourController,
+  galfus: GalfusBrowser,
+  publishState: (state: TourFrameState) => void
+): void {
   const actions: Record<string, () => void> = {
     previous: () => controller.previous(),
     pause: () => controller.togglePause(),
     next: () => controller.next(),
     restart: () => controller.restart()
   };
+  const runAction = (action: string) => {
+    const handler = actions[action];
+    if (!handler) return;
+    document.body.dataset.lastTourAction = action;
+    handler();
+    publishState(controller.getState());
+  };
 
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-tour-action]')) {
-    button.addEventListener('click', () => actions[button.dataset.tourAction ?? '']?.());
+    button.addEventListener('click', () => runAction(button.dataset.tourAction ?? ''));
   }
 
   const audioButton = requiredElement<HTMLButtonElement>('[data-tour-audio]');
@@ -58,22 +69,23 @@ function bindControls(controller: TourController, galfus: GalfusBrowser): void {
   });
 
   window.addEventListener('keydown', (event) => {
-    const handlers: Record<string, () => void> = {
-      ' ': actions.pause!,
-      ArrowLeft: actions.previous!,
-      ArrowRight: actions.next!,
-      r: actions.restart!,
-      R: actions.restart!
+    const actionsByKey: Record<string, string> = {
+      ' ': 'pause',
+      ArrowLeft: 'previous',
+      ArrowRight: 'next',
+      r: 'restart',
+      R: 'restart'
     };
-    const handler = handlers[event.key];
-    if (handler) {
+    const action = actionsByKey[event.key];
+    if (action) {
       event.preventDefault();
-      handler();
+      runAction(action);
     }
   });
 
   window.addEventListener('pagehide', controller.stop, { once: true });
   window.addEventListener('galfus-tour-stop', controller.stop, { once: true });
+  document.body.dataset.controlsReady = 'true';
 }
 
 async function main(): Promise<void> {
@@ -89,27 +101,60 @@ async function main(): Promise<void> {
   const viewport = requiredElement<HTMLElement>('[data-tour-viewport]');
   const windowId = 1;
   let renderedFrames = 0;
+  let latestState: TourFrameState = {
+    roomIndex: 0,
+    paused: false,
+    tourClock: 0,
+    duration: 1
+  };
+  const canvasSize = (): [number, number] => [
+    Math.max(canvas.clientWidth, 1),
+    Math.max(canvas.clientHeight, 1)
+  ];
+  const publishState = (state: TourFrameState) => {
+    const [width, height] = canvasSize();
+    document.body.dataset.status = 'running';
+    document.body.dataset.renderedFrames = String(renderedFrames);
+    document.body.dataset.roomIndex = String(state.roomIndex);
+    document.body.dataset.paused = String(state.paused);
+    document.body.dataset.viewport = `${width}x${height}`;
+    progress.value = Math.max(0, Math.min(1, state.tourClock / state.duration));
+    viewport.textContent = `${width} × ${height}`;
+    pauseButton.textContent = state.paused ? 'Resume' : 'Pause';
+  };
+  const synchronizeViewport = () => {
+    const [width, height] = canvasSize();
+    galfus.multiverseUpdateWindowSize(windowId, width, height);
+    publishState(latestState);
+  };
+  const resizeObserver = new ResizeObserver(synchronizeViewport);
+  const stopViewportSynchronization = () => {
+    resizeObserver.disconnect();
+    window.removeEventListener('resize', synchronizeViewport);
+  };
+
+  window.addEventListener('resize', synchronizeViewport);
+  window.addEventListener('pagehide', stopViewportSynchronization, { once: true });
+  window.addEventListener('galfus-tour-stop', stopViewportSynchronization, { once: true });
 
   await runFeatureTour({
     engine: galfus,
     activeBinding: 'Browser / WASM',
     windowConfig: {
       canvasId,
-      size: [Math.max(canvas.clientWidth, 1), Math.max(canvas.clientHeight, 1)]
+      size: canvasSize()
     },
     nextFrame: nextAnimationFrame,
-    onReady: (controller) => bindControls(controller, galfus),
+    onReady: (controller) => {
+      latestState = controller.getState();
+      synchronizeViewport();
+      resizeObserver.observe(canvas);
+      bindControls(controller, galfus, publishState);
+    },
     onFrame: (state) => {
       renderedFrames++;
-      const [width, height] = galfus.windowGetSize(windowId);
-      document.body.dataset.status = 'running';
-      document.body.dataset.renderedFrames = String(renderedFrames);
-      document.body.dataset.roomIndex = String(state.roomIndex);
-      document.body.dataset.paused = String(state.paused);
-      document.body.dataset.viewport = `${width}x${height}`;
-      progress.value = Math.max(0, Math.min(1, state.tourClock / state.duration));
-      viewport.textContent = `${width} × ${height}`;
-      pauseButton.textContent = state.paused ? 'Resume' : 'Pause';
+      latestState = state;
+      publishState(state);
     }
   });
   document.body.dataset.status = 'stopped';

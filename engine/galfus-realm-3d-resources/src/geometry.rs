@@ -1,61 +1,10 @@
-use bytemuck::{Pod, Zeroable};
+pub use crate::vertex::{MorphTarget3D, MorphVertex3D, PrimitiveTopology3D, Vertex3D};
+use glam::Vec3;
 use serde::{Deserialize, Serialize};
-
-/// Standard 3D vertex layout containing position, normal, UV coordinates, tangent, and skinning weights.
-#[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Serialize, Deserialize)]
-#[repr(C)]
-pub struct Vertex3D {
-    /// 3D position vector in local space.
-    pub position: [f32; 3],
-    /// Unit surface normal vector.
-    pub normal: [f32; 3],
-    /// 2D texture mapping coordinate `[u, v]`.
-    pub uv: [f32; 2],
-    /// 4D tangent vector with sign for bitangent calculation `[x, y, z, w]`.
-    pub tangent: [f32; 4],
-    /// 4 bone joint indices for skeletal skinning.
-    #[serde(default)]
-    pub joints: [u32; 4],
-    /// 4 bone influence weights summing to 1.0.
-    #[serde(default)]
-    pub weights: [f32; 4],
-}
-
-impl Vertex3D {
-    /// Helper to construct a static vertex with default tangent and zero skinning weights.
-    pub const fn new(position: [f32; 3], normal: [f32; 3], uv: [f32; 2]) -> Self {
-        Self {
-            position,
-            normal,
-            uv,
-            tangent: [1.0, 0.0, 0.0, 1.0],
-            joints: [0; 4],
-            weights: [0.0; 4],
-        }
-    }
-
-    /// Constructs a skinned vertex with explicit bone joint indices and weights.
-    pub const fn skinned(
-        position: [f32; 3],
-        normal: [f32; 3],
-        uv: [f32; 2],
-        joints: [u32; 4],
-        weights: [f32; 4],
-    ) -> Self {
-        Self {
-            position,
-            normal,
-            uv,
-            tangent: [1.0, 0.0, 0.0, 1.0],
-            joints,
-            weights,
-        }
-    }
-}
 
 use crate::aabb::Aabb;
 
-/// 3D Geometry asset holding vertex attributes and indexed triangle topology.
+/// 3D Geometry asset holding vertex attributes, indices, and primitive topology.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Geometry3D {
@@ -66,20 +15,74 @@ pub struct Geometry3D {
     pub aabb: Aabb,
     /// Array of interleaved 3D vertices.
     pub vertices: Vec<Vertex3D>,
-    /// Indexed triangle list.
+    /// Indexed primitive sequence interpreted by [`Self::topology`].
     pub indices: Vec<u32>,
+    /// GPU interpretation of the indexed primitive sequence.
+    #[serde(default)]
+    pub topology: PrimitiveTopology3D,
+    /// Optional glTF-compatible blend-shape targets.
+    #[serde(skip, default)]
+    pub morph_targets: Vec<MorphTarget3D>,
 }
 
 impl Geometry3D {
     /// Creates a custom geometry from raw vertex and index slices.
     pub fn new(vertices: Vec<Vertex3D>, indices: Vec<u32>, label: Option<String>) -> Self {
+        Self::new_with_topology(vertices, indices, PrimitiveTopology3D::Triangles, label)
+    }
+
+    /// Creates custom geometry using an explicit primitive topology.
+    pub fn new_with_topology(
+        vertices: Vec<Vertex3D>,
+        indices: Vec<u32>,
+        topology: PrimitiveTopology3D,
+        label: Option<String>,
+    ) -> Self {
         let aabb = Aabb::from_vertices(&vertices);
         Self {
             label,
             aabb,
             vertices,
             indices,
+            topology,
+            morph_targets: Vec::new(),
         }
+    }
+
+    /// Replaces all blend-shape targets after validating their vertex counts.
+    pub fn set_morph_targets(&mut self, morph_targets: Vec<MorphTarget3D>) -> Result<(), String> {
+        if let Some((index, target)) = morph_targets
+            .iter()
+            .enumerate()
+            .find(|(_, target)| target.deltas.len() != self.vertices.len())
+        {
+            return Err(format!(
+                "Morph target {index} has {} deltas but geometry has {} vertices",
+                target.deltas.len(),
+                self.vertices.len()
+            ));
+        }
+        self.morph_targets = morph_targets;
+        Ok(())
+    }
+
+    /// Returns the exact local AABB after applying the supplied morph weights.
+    pub fn aabb_for_morph_weights(&self, weights: &[f32]) -> Aabb {
+        if self.morph_targets.is_empty() || weights.iter().all(|weight| *weight == 0.0) {
+            return self.aabb;
+        }
+
+        Aabb::from_points(self.vertices.iter().enumerate().map(|(index, vertex)| {
+            let mut position = Vec3::from_array(vertex.position);
+            for (target, weight) in self.morph_targets.iter().zip(weights) {
+                position += Vec3::from_array([
+                    target.deltas[index].position[0],
+                    target.deltas[index].position[1],
+                    target.deltas[index].position[2],
+                ]) * *weight;
+            }
+            position
+        }))
     }
 
     /// Generates a centered unit cube with the specified side length.
@@ -139,6 +142,8 @@ impl Geometry3D {
             aabb,
             vertices,
             indices,
+            topology: PrimitiveTopology3D::Triangles,
+            morph_targets: Vec::new(),
         }
     }
 
@@ -162,6 +167,8 @@ impl Geometry3D {
             aabb,
             vertices,
             indices,
+            topology: PrimitiveTopology3D::Triangles,
+            morph_targets: Vec::new(),
         }
     }
 
@@ -185,6 +192,8 @@ impl Geometry3D {
             aabb,
             vertices,
             indices,
+            topology: PrimitiveTopology3D::Triangles,
+            morph_targets: Vec::new(),
         }
     }
 
@@ -221,12 +230,12 @@ impl Geometry3D {
                 let next = (r + 1) * (sectors + 1) + s;
 
                 indices.push(cur);
-                indices.push(cur + 1);
                 indices.push(next);
+                indices.push(cur + 1);
 
                 indices.push(cur + 1);
-                indices.push(next + 1);
                 indices.push(next);
+                indices.push(next + 1);
             }
         }
 
@@ -236,6 +245,8 @@ impl Geometry3D {
             aabb,
             vertices,
             indices,
+            topology: PrimitiveTopology3D::Triangles,
+            morph_targets: Vec::new(),
         }
     }
 
@@ -267,7 +278,105 @@ impl Geometry3D {
 
 #[cfg(test)]
 mod tests {
+    use bytemuck::Zeroable;
+
     use super::*;
+
+    fn assert_outward_winding(geometry: &Geometry3D) {
+        let (triangles, _) = geometry.indices.as_chunks::<3>();
+        for triangle in triangles {
+            let vertices = [
+                geometry.vertices[triangle[0] as usize],
+                geometry.vertices[triangle[1] as usize],
+                geometry.vertices[triangle[2] as usize],
+            ];
+            let positions = vertices.map(|vertex| glam::Vec3::from(vertex.position));
+            let face_normal = (positions[1] - positions[0]).cross(positions[2] - positions[0]);
+            if face_normal.length_squared() <= f32::EPSILON {
+                continue;
+            }
+            let vertex_normal = vertices
+                .map(|vertex| glam::Vec3::from(vertex.normal))
+                .into_iter()
+                .sum::<glam::Vec3>();
+            assert!(
+                face_normal.dot(vertex_normal) > 0.0,
+                "triangle {triangle:?} has winding opposite to its vertex normal"
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_layout_and_defaults_are_stable() {
+        assert_eq!(std::mem::size_of::<Vertex3D>(), 136);
+        let vertex = Vertex3D::new([0.0; 3], [0.0, 1.0, 0.0], [0.0; 2]);
+        assert_eq!(vertex.color, [1.0; 4]);
+        assert_eq!(vertex.uv1, [0.0; 2]);
+        assert_eq!(vertex.tangent, [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(vertex.weights0, [0.0; 4]);
+        assert_eq!(vertex.weights1, [0.0; 4]);
+    }
+
+    #[test]
+    fn skinned8_preserves_both_joint_sets() {
+        let vertex = Vertex3D::skinned8(
+            [0.0; 3],
+            [0.0, 1.0, 0.0],
+            [0.0; 2],
+            [1, 2, 3, 4],
+            [0.4, 0.3, 0.2, 0.1],
+            [5, 6, 7, 8],
+            [0.05, 0.05, 0.05, 0.05],
+        );
+        assert_eq!(vertex.joints0, [1, 2, 3, 4]);
+        assert_eq!(vertex.joints1, [5, 6, 7, 8]);
+        assert_eq!(vertex.weights1, [0.05; 4]);
+    }
+
+    #[test]
+    fn morph_targets_validate_layout_and_produce_deformed_bounds() {
+        assert_eq!(std::mem::size_of::<MorphVertex3D>(), 48);
+        let mut geometry = Geometry3D::new(
+            vec![
+                Vertex3D::new([-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0]),
+                Vertex3D::new([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 0.0]),
+            ],
+            vec![0, 1],
+            None,
+        );
+        geometry
+            .set_morph_targets(vec![MorphTarget3D::new(vec![
+                MorphVertex3D::new([0.0, 2.0, 0.0], [0.0; 3], [0.0; 3]),
+                MorphVertex3D::new([0.0, 4.0, 0.0], [0.0; 3], [0.0; 3]),
+            ])])
+            .unwrap();
+        let bounds = geometry.aabb_for_morph_weights(&[0.5]);
+        assert_eq!(bounds.min, glam::Vec3::new(-1.0, 1.0, 0.0));
+        assert_eq!(bounds.max, glam::Vec3::new(1.0, 2.0, 0.0));
+        assert!(
+            geometry
+                .set_morph_targets(vec![MorphTarget3D::new(vec![MorphVertex3D::zeroed()])])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn primitive_topology_codes_and_helpers_are_stable() {
+        assert_eq!(
+            PrimitiveTopology3D::try_from(0),
+            Ok(PrimitiveTopology3D::Points)
+        );
+        assert_eq!(
+            PrimitiveTopology3D::try_from(4),
+            Ok(PrimitiveTopology3D::TriangleStrip)
+        );
+        assert!(PrimitiveTopology3D::LineStrip.is_strip());
+        assert!(PrimitiveTopology3D::TriangleStrip.is_triangle());
+        assert!(PrimitiveTopology3D::try_from(5).is_err());
+
+        let geometry = Geometry3D::new(Vec::new(), Vec::new(), None);
+        assert_eq!(geometry.topology, PrimitiveTopology3D::Triangles);
+    }
 
     #[test]
     fn test_cube_generation() {
@@ -341,5 +450,21 @@ mod tests {
         assert!(!tor.indices.is_empty());
         assert!(tor.aabb.max.x > 3.9);
         assert!(tor.aabb.min.x < -3.9);
+    }
+
+    #[test]
+    fn primitive_face_winding_matches_vertex_normals() {
+        for geometry in [
+            Geometry3D::cube(2.0),
+            Geometry3D::plane(2.0, 2.0),
+            Geometry3D::quad(2.0, 2.0),
+            Geometry3D::sphere(1.0, 8, 16),
+            Geometry3D::cylinder(1.0, 2.0, 16),
+            Geometry3D::capsule(1.0, 2.0, 4, 16),
+            Geometry3D::pyramid(2.0, 2.0, 3.0),
+            Geometry3D::torus(3.0, 1.0, 16, 8),
+        ] {
+            assert_outward_winding(&geometry);
+        }
     }
 }

@@ -5,6 +5,10 @@ type Command = {
 
 const COMMANDS: Command[] = [
   {
+    label: 'file-length policy',
+    args: ['bun', 'scripts/check-file-lengths.ts']
+  },
+  {
     label: 'bun --check',
     args: ['bun', '--check']
   },

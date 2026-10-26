@@ -1,4 +1,5 @@
 import { GalfusBun, type Sprite2DDesc } from '../../sdk/bun/galfus.ts';
+import { CRYSTAL_SURFACE_SNIPPET, POLY_SURFACE_SNIPPET } from './demo_2d1_effects.ts';
 import { extractKey } from './utils.ts';
 
 const TARGET_WINDOW = 1;
@@ -37,40 +38,6 @@ const SHAPE_CRATE_2 = 16;
 const LIGHT_PLAYER_ID = 1;
 const LIGHT_ORBIT_CYAN_ID = 2;
 const LIGHT_PULSE_MAGENTA_ID = 3;
-
-/** Custom 2D Surface Effect: Pulsing Energy Crystal */
-const CRYSTAL_SURFACE_SNIPPET = `
-fn surface_effect(in: SurfaceInput2D) -> SurfaceOutput2D {
-    var out: SurfaceOutput2D;
-    let wave = 0.5 + 0.5 * sin(in.time * in.custom.v0.x);
-    out.color = vec4<f32>(mix(in.color.rgb, in.custom.v1.rgb, wave * 0.7), in.color.a);
-    out.emissive = vec4<f32>(in.custom.v1.rgb * wave * in.custom.v0.y, 1.0);
-    return out;
-}
-`;
-
-/** Custom 2D Surface Effect: Procedural Regular N-gon / Rounded Shape */
-const POLY_SURFACE_SNIPPET = `
-fn sd_poly(p: vec2<f32>, r: f32, n: f32) -> f32 {
-    if (n < 3.0) { return length(p) - r; }
-    let an = 3.14159265 / n;
-    let a = atan2(p.y, p.x);
-    let bn = ((a % (2.0 * an)) + 2.0 * an) % (2.0 * an) - an;
-    return length(p) * cos(bn) - r;
-}
-fn surface_effect(in: SurfaceInput2D) -> SurfaceOutput2D {
-    var out: SurfaceOutput2D;
-    let d = sd_poly((in.uv - vec2<f32>(0.5)) * 2.0, 0.82, in.custom.v0.x);
-    if (d > 0.0) { discard; }
-    let edge = smoothstep(-0.06, 0.0, d);
-    let ring = smoothstep(-0.40, -0.38, d) * (1.0 - smoothstep(-0.32, -0.30, d));
-    var col = mix(in.color.rgb, in.color.rgb * 0.45, edge);
-    col = mix(col, vec3<f32>(1.0, 0.95, 0.8), ring * 0.65);
-    out.color = vec4<f32>(col, in.color.a);
-    out.emissive = vec4<f32>(0.0, 0.0, 0.0, 0.0);
-    return out;
-}
-`;
 
 export async function runDemo2d1(): Promise<void> {
   console.log(`================================================================

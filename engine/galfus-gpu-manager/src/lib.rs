@@ -52,11 +52,14 @@ pub use layout::{
     BindGroupLayoutDesc, BindGroupLayoutEntryDesc, BindingType, LayoutManager, ShaderVisibility,
 };
 pub use manager::GpuManager;
-pub use pipeline::{DerivedPipelineDesc, PipelineManager, RenderPipelineTargetConfig};
+pub use pipeline::{
+    DerivedPipelineCacheKey, DerivedPipelineDesc, PipelineManager, RenderPipelineTargetConfig,
+};
 pub use sampler::{GpuSampler, SamplerManager, StandardSamplers};
 pub use surface::GpuSurface;
 pub use texture::{GpuTexture, GpuTextureView, TextureManager};
 pub use types::{
     AddressMode, BufferUsageFlags, CompareFunction, FilterMode, GpuBufferDesc, GpuPresentMode,
-    GpuSamplerDesc, GpuTextureDesc, NormalizedTextureFormat, TextureDimension, TextureUsageFlags,
+    GpuSamplerDesc, GpuTextureDesc, NormalizedTextureFormat, TextureColorSpace, TextureDimension,
+    TextureUsageFlags,
 };

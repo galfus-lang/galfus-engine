@@ -67,7 +67,7 @@ export class WasmAudio {
     });
   }
 
-  play(soundId: number, volume: number, panning: number, speed: number, looping: boolean): void {
+  play(soundId: number, volume: number, panning: number, speed: number, looping: boolean): number {
     const context = this.getContext();
     const gain = context.createGain();
     gain.gain.value = Math.max(0, volume);
@@ -87,11 +87,18 @@ export class WasmAudio {
       paused: false
     });
     void this.startVoice(voiceId, this.voices.get(voiceId)!);
+    return voiceId;
   }
 
-  playSpatial(soundId: number, spatial: SpatialAudioState): void {
+  playSpatial(soundId: number, spatial: SpatialAudioState): number {
     const { volume, panning } = this.spatialValues(spatial);
-    this.play(soundId, volume, panning, spatial.config.speed ?? 1, spatial.config.looping ?? false);
+    return this.play(
+      soundId,
+      volume,
+      panning,
+      spatial.config.speed ?? 1,
+      spatial.config.looping ?? false
+    );
   }
 
   updateSpatial(voiceId: number, spatial: SpatialAudioState): void {

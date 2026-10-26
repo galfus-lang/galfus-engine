@@ -102,14 +102,8 @@ export async function runDemo3d1(): Promise<void> {
   console.log('✔ Camera3D created');
 
   console.log('==> Creating Geometries (Cube #1, Plane #2)...');
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_CUBE_ID, {
-    primitive: 'cube',
-    size: 1.6
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PLANE_ID, {
-    primitive: 'plane',
-    size: 20.0
-  });
+  galfus.realm3dCreateCube(REALM_3D, GEOM_CUBE_ID, 1.6);
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_PLANE_ID, 20.0, 20.0);
   console.log('✔ Geometries created');
 
   console.log(

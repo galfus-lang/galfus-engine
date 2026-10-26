@@ -57,7 +57,7 @@ impl PostProcessPipelines {
             && desc
                 .models
                 .values()
-                .any(|(m, _, _, _)| m.active && m.cast_outline)
+                .any(|(m, _, _, _, _, _)| m.active && m.cast_outline)
         {
             let outline_pipe = self.outline.get_or_insert_with(|| {
                 OutlinePipeline3D::new(
@@ -67,21 +67,33 @@ impl PostProcessPipelines {
                     desc.target_format,
                 )
             });
-            let outline_items = desc.models.values().filter_map(|(m, trans, _, bg_opt)| {
-                if !m.active || !m.cast_outline {
-                    return None;
-                }
-                let (geom, gpu_mesh) = desc.geometries.get(&m.geometry_id)?;
-                let (v, i, count) = gpu_mesh.as_ref()?;
-                let world_aabb = geom.aabb.transform(&trans.matrix());
-                if !desc
-                    .cam_frustum
-                    .intersects_aabb(world_aabb.min, world_aabb.max)
-                {
-                    return None;
-                }
-                Some((bg_opt.as_ref()?, v, i, *count))
-            });
+            let outline_items =
+                desc.models
+                    .values()
+                    .filter_map(|(m, trans, local_aabb, _, _, bg_opt)| {
+                        if !m.active || !m.cast_outline {
+                            return None;
+                        }
+                        let (geom, gpu_mesh) = desc.geometries.get(&m.geometry_id)?;
+                        if !geom.topology.is_triangle() {
+                            return None;
+                        }
+                        let mesh = gpu_mesh.as_ref()?;
+                        let world_aabb = local_aabb.transform(&trans.matrix());
+                        if !desc
+                            .cam_frustum
+                            .intersects_aabb(world_aabb.min, world_aabb.max)
+                        {
+                            return None;
+                        }
+                        Some((
+                            bg_opt.as_ref()?,
+                            &mesh.vertices,
+                            &mesh.indices,
+                            mesh.index_count,
+                            geom.topology,
+                        ))
+                    });
             outline_pipe.render(
                 crate::outline::OutlineRenderDesc {
                     device: desc.device,

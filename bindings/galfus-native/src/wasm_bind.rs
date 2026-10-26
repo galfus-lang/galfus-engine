@@ -8,12 +8,32 @@ use galfus_realm_3d::Realm3DContext;
 
 use crate::ffi_realm_3d_desc::{CameraLookAt3DDesc, CameraLookAt3DStateDesc};
 use crate::state::{
-    init_context, init_context_headless, shutdown_context, with_animation, with_animation_mut,
-    with_context, with_context_mut, with_multiverse_mut,
+    close_window, init_context, init_context_headless, shutdown_context, with_animation,
+    with_animation_mut, with_context, with_context_mut, with_multiverse_mut,
 };
 use galfus_animation::{
     AnimValue, AnimationTarget, LoopMode, PathCommand, PathFollowConfig, TransitionConfig,
 };
+
+fn check_ffi_res(code: i32) -> Result<()> {
+    if code == 0 {
+        Ok(())
+    } else {
+        let ptr = crate::ffi::galfus_get_last_error();
+        let err = if ptr.is_null() {
+            "Unknown native error".to_string()
+        } else {
+            let s = unsafe { std::ffi::CStr::from_ptr(ptr) }
+                .to_string_lossy()
+                .to_string();
+            unsafe {
+                crate::ffi::galfus_string_free(ptr);
+            }
+            s
+        };
+        Err(Error::from_reason(Status::GenericFailure, err))
+    }
+}
 
 #[wasm_bindgen(js_name = "platformInit")]
 pub fn platform_init() -> Result<()> {
@@ -52,8 +72,7 @@ pub fn window_create(config_val: JsUnknown) -> Result<u32> {
 
 #[wasm_bindgen(js_name = "windowClose")]
 pub fn window_close(window_id: u32) -> Result<()> {
-    with_context_mut(|ctx| ctx.close_window(window_id).map_err(|e| e.to_string()))
-        .map_err(|e| Error::from_reason(Status::GenericFailure, e))
+    close_window(window_id).map_err(|e| Error::from_reason(Status::GenericFailure, e))
 }
 
 #[wasm_bindgen(js_name = "windowSetTitle")]
@@ -915,26 +934,6 @@ pub fn animation_get_path_follow_state(path_id: u32) -> Result<JsUnknown> {
     env.to_js_value(&state)
 }
 
-fn check_ffi_res(code: i32) -> Result<()> {
-    if code == 0 {
-        Ok(())
-    } else {
-        let ptr = crate::ffi::galfus_get_last_error();
-        let err = if ptr.is_null() {
-            "Unknown native error".to_string()
-        } else {
-            let s = unsafe { std::ffi::CStr::from_ptr(ptr) }
-                .to_string_lossy()
-                .to_string();
-            unsafe {
-                crate::ffi::galfus_string_free(ptr);
-            }
-            s
-        };
-        Err(Error::from_reason(Status::GenericFailure, err))
-    }
-}
-
 // Realm 3D
 #[wasm_bindgen(js_name = "realm3dCreate")]
 pub fn realm_3d_create(realm_id: u32) -> Result<()> {
@@ -986,20 +985,7 @@ pub fn realm_3d_set_camera_transform(
 pub fn realm_3d_create_geometry(
     realm_id: u32,
     geometry_id: u32,
-    geometry_val: JsUnknown,
-) -> Result<()> {
-    let env = Env;
-    let c_geom = js_to_c_string(&env, Some(geometry_val))?
-        .ok_or_else(|| Error::from_reason(Status::InvalidArg, "geometry cannot be null"))?;
-    check_ffi_res(unsafe {
-        crate::ffi_realm_3d::galfus_realm_3d_create_geometry(realm_id, geometry_id, c_geom.as_ptr())
-    })
-}
-
-#[wasm_bindgen(js_name = "realm3dCreateGeometryRaw")]
-pub fn realm_3d_create_geometry_raw(
-    realm_id: u32,
-    geometry_id: u32,
+    topology: u32,
     vertex_data: Uint8Array,
     _vertex_data_len: Option<f64>,
     indices: Uint32Array,
@@ -1008,15 +994,165 @@ pub fn realm_3d_create_geometry_raw(
     let v_slice: &[u8] = vertex_data.as_ref();
     let i_slice: &[u32] = indices.as_ref();
     check_ffi_res(unsafe {
-        crate::ffi_realm_3d::galfus_realm_3d_create_geometry_raw(
+        crate::ffi_realm_3d::galfus_realm_3d_create_geometry(
             realm_id,
             geometry_id,
+            topology,
             v_slice.as_ptr(),
             v_slice.len(),
             i_slice.as_ptr(),
             i_slice.len(),
         )
     })
+}
+
+#[wasm_bindgen(js_name = "realm3dSetGeometryMorphTargets")]
+pub fn realm_3d_set_geometry_morph_targets(
+    realm_id: u32,
+    geometry_id: u32,
+    target_data: Uint8Array,
+    _target_data_len: Option<f64>,
+    target_count: u32,
+) -> Result<()> {
+    let data: &[u8] = target_data.as_ref();
+    let target_count = target_count as usize;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_set_geometry_morph_targets(
+            realm_id,
+            geometry_id,
+            data.as_ptr(),
+            data.len(),
+            target_count,
+        )
+    })
+}
+
+#[wasm_bindgen(js_name = "realm3dCreateCube")]
+pub fn realm_3d_create_cube(realm_id: u32, geometry_id: u32, size: f32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_cube(
+        realm_id,
+        geometry_id,
+        size,
+    ))
+}
+
+#[wasm_bindgen(js_name = "realm3dCreatePlane")]
+pub fn realm_3d_create_plane(
+    realm_id: u32,
+    geometry_id: u32,
+    width: f32,
+    depth: f32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_plane(
+        realm_id,
+        geometry_id,
+        width,
+        depth,
+    ))
+}
+
+#[wasm_bindgen(js_name = "realm3dCreateQuad")]
+pub fn realm_3d_create_quad(
+    realm_id: u32,
+    geometry_id: u32,
+    width: f32,
+    height: f32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_quad(
+        realm_id,
+        geometry_id,
+        width,
+        height,
+    ))
+}
+
+#[wasm_bindgen(js_name = "realm3dCreateSphere")]
+pub fn realm_3d_create_sphere(
+    realm_id: u32,
+    geometry_id: u32,
+    radius: f32,
+    rings: u32,
+    sectors: u32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_sphere(
+        realm_id,
+        geometry_id,
+        radius,
+        rings,
+        sectors,
+    ))
+}
+
+#[wasm_bindgen(js_name = "realm3dCreateCylinder")]
+pub fn realm_3d_create_cylinder(
+    realm_id: u32,
+    geometry_id: u32,
+    radius: f32,
+    height: f32,
+    sectors: u32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_cylinder(
+        realm_id,
+        geometry_id,
+        radius,
+        height,
+        sectors,
+    ))
+}
+
+#[wasm_bindgen(js_name = "realm3dCreateCapsule")]
+pub fn realm_3d_create_capsule(
+    realm_id: u32,
+    geometry_id: u32,
+    radius: f32,
+    cylinder_height: f32,
+    rings: u32,
+    sectors: u32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_capsule(
+        realm_id,
+        geometry_id,
+        radius,
+        cylinder_height,
+        rings,
+        sectors,
+    ))
+}
+
+#[wasm_bindgen(js_name = "realm3dCreatePyramid")]
+pub fn realm_3d_create_pyramid(
+    realm_id: u32,
+    geometry_id: u32,
+    width: f32,
+    depth: f32,
+    height: f32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_pyramid(
+        realm_id,
+        geometry_id,
+        width,
+        depth,
+        height,
+    ))
+}
+
+#[wasm_bindgen(js_name = "realm3dCreateTorus")]
+pub fn realm_3d_create_torus(
+    realm_id: u32,
+    geometry_id: u32,
+    major_radius: f32,
+    minor_radius: f32,
+    major_segments: u32,
+    minor_segments: u32,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_torus(
+        realm_id,
+        geometry_id,
+        major_radius,
+        minor_radius,
+        major_segments,
+        minor_segments,
+    ))
 }
 
 #[wasm_bindgen(js_name = "realm3dCreateMaterial")]
@@ -1066,6 +1202,42 @@ pub fn realm_3d_set_model_transform(
         galfus_realm_3d_resources::transform::Transform3D::from(desc).into();
     check_ffi_res(unsafe {
         crate::ffi_realm_3d::galfus_realm_3d_set_model_transform(realm_id, model_id, &native_tf)
+    })
+}
+
+#[wasm_bindgen(js_name = "realm3dSetModelMorphWeights")]
+pub fn realm_3d_set_model_morph_weights(
+    realm_id: u32,
+    model_id: u32,
+    weights: Float32Array,
+    _weight_count: Option<f64>,
+) -> Result<()> {
+    let weights: &[f32] = weights.as_ref();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_set_model_morph_weights(
+            realm_id,
+            model_id,
+            weights.as_ptr(),
+            weights.len(),
+        )
+    })
+}
+
+#[wasm_bindgen(js_name = "realm3dSetInstancedModelMorphWeights")]
+pub fn realm_3d_set_instanced_model_morph_weights(
+    realm_id: u32,
+    instanced_model_id: u32,
+    weights: Float32Array,
+    _weight_count: Option<f64>,
+) -> Result<()> {
+    let weights: &[f32] = weights.as_ref();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d::galfus_realm_3d_set_instanced_model_morph_weights(
+            realm_id,
+            instanced_model_id,
+            weights.as_ptr(),
+            weights.len(),
+        )
     })
 }
 

@@ -5,7 +5,8 @@
  * 1. Omni-directional Point Light with 6-face shadow map casting 360° real-time Reverse-Z shadows.
  * 2. Screen-Space Ambient Occlusion (SSAO) with bilateral edge-preserving depth blur.
  * 3. Atmospheric procedural skybox with dynamic Y-axis rotation.
- * 4. Interactive camera orbit & real-time keyboard toggles for SSAO and Point Light movement.
+ * 4. Alpha-cutout shadows from a translucent material.
+ * 5. Interactive camera orbit & real-time keyboard toggles for SSAO and Point Light movement.
  */
 
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
@@ -19,13 +20,51 @@ const CAMERA_ID = 1;
 const MAT_GROUND = 101;
 const MAT_PILLAR = 102;
 const MAT_ORB = 103;
+const MAT_CUTOUT = 104;
 
 const GEOM_GROUND = 201;
 const GEOM_PILLAR = 202;
 const GEOM_ORB = 203;
+const GEOM_CUTOUT = 204;
 
 const LIGHT_POINT = 301;
 const LIGHT_SUN = 302;
+const AO_TEXTURE_ID = 401;
+const CUTOUT_TEXTURE_ID = 402;
+
+function createOcclusionTexture(size: number): Uint8Array {
+  const pixels = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / (size - 1) - 0.5;
+      const v = y / (size - 1) - 0.5;
+      const radial = Math.min(Math.sqrt(u * u + v * v) * 1.8, 1.0);
+      const value = Math.round((0.32 + radial * 0.68) * 255);
+      const offset = (y * size + x) * 4;
+      pixels[offset] = value;
+      pixels[offset + 1] = value;
+      pixels[offset + 2] = value;
+      pixels[offset + 3] = 255;
+    }
+  }
+  return pixels;
+}
+
+function createCutoutTexture(size: number): Uint8Array {
+  const pixels = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const stripe = Math.floor(x / 8) % 2 === 0;
+      const crossbar = y > size / 2 - 3 && y < size / 2 + 3;
+      const offset = (y * size + x) * 4;
+      pixels[offset] = 50;
+      pixels[offset + 1] = 170;
+      pixels[offset + 2] = 235;
+      pixels[offset + 3] = stripe || crossbar ? 255 : 0;
+    }
+  }
+  return pixels;
+}
 
 export async function runDemo3d3(): Promise<void> {
   console.log('=== Galfus Engine - Demo 3D-3: Point Shadows & SSAO ===');
@@ -33,6 +72,7 @@ export async function runDemo3d3(): Promise<void> {
   console.log('  [O]      : Toggle camera auto-orbit');
   console.log('  [S]      : Toggle SSAO on/off');
   console.log('  [1] / [2]: Decrease / Increase SSAO intensity');
+  console.log('  [3] / [4]: Decrease / Increase material occlusion texture strength');
   console.log('  [Space]  : Pause/Resume Point Light zigzag path');
   console.log('  [Escape] : Exit\n');
 
@@ -63,6 +103,7 @@ export async function runDemo3d3(): Promise<void> {
   let ssaoEnabled = true;
   let ssaoIntensity = 0.65;
   let ssaoRadius = 0.45;
+  let materialOcclusionStrength = 0.7;
   let lightOrbitPaused = false;
   let autoOrbit = true;
 
@@ -100,6 +141,33 @@ export async function runDemo3d3(): Promise<void> {
   };
   applyEnvironment();
 
+  const occlusionTexture = createOcclusionTexture(64);
+  galfus.resourceCreateTexture(
+    AO_TEXTURE_ID,
+    {
+      label: 'Demo 3D-3 Material Occlusion Texture',
+      width: 64,
+      height: 64,
+      format: 'rgba8Unorm',
+      usages: { copyDst: true, textureBinding: true }
+    },
+    occlusionTexture,
+    occlusionTexture.byteLength
+  );
+  const cutoutTexture = createCutoutTexture(64);
+  galfus.resourceCreateTexture(
+    CUTOUT_TEXTURE_ID,
+    {
+      label: 'Demo 3D-3 Alpha Cutout Shadow Texture',
+      width: 64,
+      height: 64,
+      format: 'rgba8UnormSrgb',
+      usages: { copyDst: true, textureBinding: true }
+    },
+    cutoutTexture,
+    cutoutTexture.byteLength
+  );
+
   // Camera setup
   let camDistance = 14.0;
   let camAngle = 0.7;
@@ -119,21 +187,28 @@ export async function runDemo3d3(): Promise<void> {
     { position: curCamPos, rotation: curCamRot, scale: [1, 1, 1] }
   );
 
-  // Materials
-  galfus.realm3dCreateMaterial(REALM_3D, MAT_GROUND, {
-    baseColor: [0.65, 0.68, 0.7, 1.0],
-    metallic: 0.05,
-    roughness: 0.6,
-    reflectance: 0.3,
-    surfaceType: 'opaque'
-  });
-  galfus.realm3dCreateMaterial(REALM_3D, MAT_PILLAR, {
-    baseColor: [0.85, 0.45, 0.25, 1.0],
-    metallic: 0.2,
-    roughness: 0.4,
-    reflectance: 0.4,
-    surfaceType: 'opaque'
-  });
+  // Materials: ground and pillars use the same per-material occlusion texture.
+  const applyMaterialOcclusion = () => {
+    galfus.realm3dCreateMaterial(REALM_3D, MAT_GROUND, {
+      baseColor: [0.65, 0.68, 0.7, 1.0],
+      metallic: 0.05,
+      roughness: 0.6,
+      reflectance: 0.3,
+      occlusionTextureId: AO_TEXTURE_ID,
+      occlusionStrength: materialOcclusionStrength,
+      surfaceType: 'opaque'
+    });
+    galfus.realm3dCreateMaterial(REALM_3D, MAT_PILLAR, {
+      baseColor: [0.85, 0.45, 0.25, 1.0],
+      metallic: 0.2,
+      roughness: 0.4,
+      reflectance: 0.4,
+      occlusionTextureId: AO_TEXTURE_ID,
+      occlusionStrength: materialOcclusionStrength,
+      surfaceType: 'opaque'
+    });
+  };
+  applyMaterialOcclusion();
   galfus.realm3dCreateMaterial(REALM_3D, MAT_ORB, {
     baseColor: [1.0, 0.95, 0.6, 1.0],
     emissiveColor: [3.0, 2.5, 1.2, 1.0],
@@ -142,11 +217,22 @@ export async function runDemo3d3(): Promise<void> {
     reflectance: 0.5,
     surfaceType: 'opaque'
   });
+  galfus.realm3dCreateMaterial(REALM_3D, MAT_CUTOUT, {
+    baseColor: [0.5, 0.85, 1.0, 1.0],
+    albedoTextureId: CUTOUT_TEXTURE_ID,
+    textureSamplers: ['nearestClamp'],
+    alphaCutoff: 0.5,
+    roughness: 0.35,
+    metallic: 0.05,
+    side: 'double',
+    surfaceType: 'transparent'
+  });
 
   // Geometries
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_GROUND, { primitive: 'plane', size: 30.0 });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PILLAR, { primitive: 'cube', size: 1.5 });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_ORB, { primitive: 'cube', size: 0.5 });
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_GROUND, 30.0, 30.0);
+  galfus.realm3dCreateCube(REALM_3D, GEOM_PILLAR, 1.5);
+  galfus.realm3dCreateCube(REALM_3D, GEOM_ORB, 0.5);
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_CUTOUT, 2.8, 3.8);
 
   // Ground Model
   galfus.realm3dCreateModel(
@@ -200,6 +286,24 @@ export async function runDemo3d3(): Promise<void> {
       active: true
     },
     { position: [0, 2.5, 0], scale: [1, 1, 1], rotation: [0, 0, 0, 1] }
+  );
+
+  // A translucent card whose opaque stripes are the only parts that occlude the point light.
+  galfus.realm3dCreateModel(
+    REALM_3D,
+    100,
+    {
+      geometryId: GEOM_CUTOUT,
+      materialId: MAT_CUTOUT,
+      castShadow: true,
+      receiveShadow: true,
+      active: true
+    },
+    {
+      position: [2.8, 1.9, 0],
+      scale: [1, 1, 1],
+      rotation: [Math.SQRT1_2, 0, 0, Math.SQRT1_2]
+    }
   );
 
   // Omnidirectional Point Light with 6-face shadow map
@@ -331,6 +435,20 @@ export async function runDemo3d3(): Promise<void> {
             ssaoIntensity = Math.min(2.5, Number((ssaoIntensity + 0.1).toFixed(2)));
             console.log(`[Demo 3D-3] SSAO Intensity: ${ssaoIntensity}`);
             applyEnvironment(totalTime * 0.1);
+          } else if (key === '3') {
+            materialOcclusionStrength = Math.max(
+              0,
+              Number((materialOcclusionStrength - 0.1).toFixed(2))
+            );
+            console.log(`[Demo 3D-3] Material Occlusion Strength: ${materialOcclusionStrength}`);
+            applyMaterialOcclusion();
+          } else if (key === '4') {
+            materialOcclusionStrength = Math.min(
+              1,
+              Number((materialOcclusionStrength + 0.1).toFixed(2))
+            );
+            console.log(`[Demo 3D-3] Material Occlusion Strength: ${materialOcclusionStrength}`);
+            applyMaterialOcclusion();
           } else if (key === ' ' || key === 'space') {
             lightOrbitPaused = !lightOrbitPaused;
             console.log(`[Demo 3D-3] Light zigzag path: ${lightOrbitPaused ? 'PAUSED' : 'ACTIVE'}`);

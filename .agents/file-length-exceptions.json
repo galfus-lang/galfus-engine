@@ -1,0 +1,13 @@
+{
+  "maxLines": 600,
+  "exceptions": [
+    {
+      "path": "engine/galfus-realm-3d/src/shader.wgsl",
+      "reason": "The forward shader must remain one WGSL compilation unit; WGSL has no native source inclusion."
+    },
+    {
+      "path": "bindings/galfus-native/src/wasm_bind.rs",
+      "reason": "Generated flat WASM binding surface derived from the modular Node-API source."
+    }
+  ]
+}

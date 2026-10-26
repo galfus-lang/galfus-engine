@@ -15,9 +15,13 @@ namespace FeatureTourRunner
         public float posX, posY, posZ;
         public float normX, normY, normZ;
         public float uvU, uvV;
+        public float uv1U, uv1V;
         public float tanX, tanY, tanZ, tanW;
+        public float colorR, colorG, colorB, colorA;
         public uint joint0, joint1, joint2, joint3;
         public float weight0, weight1, weight2, weight3;
+        public uint joint4, joint5, joint6, joint7;
+        public float weight4, weight5, weight6, weight7;
     }
 
     class Program
@@ -336,6 +340,10 @@ namespace FeatureTourRunner
                                 tanY = 0.0f,
                                 tanZ = 0.0f,
                                 tanW = 1.0f,
+                                colorR = 1.0f,
+                                colorG = 1.0f,
+                                colorB = 1.0f,
+                                colorA = 1.0f,
                                 joint0 = (uint)b0,
                                 joint1 = (uint)b1,
                                 joint2 = 0,
@@ -368,7 +376,7 @@ namespace FeatureTourRunner
                     GCHandle iHandle = GCHandle.Alloc(indices, GCHandleType.Pinned);
                     try
                     {
-                        galfus.Realm3dCreateGeometryRaw(REALM_3D, baseId + 100, vHandle.AddrOfPinnedObject(), (ulong)(vertCount * Marshal.SizeOf<Vertex3DRecord>()), iHandle.AddrOfPinnedObject(), (ulong)idxCount);
+                        galfus.Realm3dCreateGeometry(REALM_3D, baseId + 100, 3, vHandle.AddrOfPinnedObject(), (ulong)(vertCount * Marshal.SizeOf<Vertex3DRecord>()), iHandle.AddrOfPinnedObject(), (ulong)idxCount);
                     }
                     finally
                     {
@@ -693,6 +701,45 @@ namespace FeatureTourRunner
             try { galfus.PlatformShutdown(); } catch { }
 
             Console.WriteLine("✔ C# feature tour finished gracefully.");
+        }
+    }
+
+    /* Tour compatibility helper that delegates primitive creation to Galfus. */
+    static class PrimitiveGeometryExtensions
+    {
+        public static void Realm3dCreateGeometry(this GalfusEngine galfus, uint realmId,
+            uint geometryId, string description)
+        {
+            float size = ReadNumber(description, "\"size\":", 1.0f);
+            float radius = ReadNumber(description, "\"radius\":", size);
+            uint segments = (uint)ReadNumber(description, "\"subdivisions\":", 32.0f);
+            if (description.Contains("\"cube\""))
+                galfus.Realm3dCreateCube(realmId, geometryId, size);
+            else if (description.Contains("\"plane\""))
+                galfus.Realm3dCreatePlane(realmId, geometryId, size, size);
+            else if (description.Contains("\"quad\""))
+                galfus.Realm3dCreateQuad(realmId, geometryId, size, size);
+            else if (description.Contains("\"sphere\""))
+                galfus.Realm3dCreateSphere(realmId, geometryId, radius, segments / 2, segments);
+            else if (description.Contains("\"cylinder\""))
+                galfus.Realm3dCreateCylinder(realmId, geometryId, radius, size, segments);
+            else if (description.Contains("\"pyramid\""))
+                galfus.Realm3dCreatePyramid(realmId, geometryId, size, size, size);
+            else if (description.Contains("\"torus\""))
+                galfus.Realm3dCreateTorus(realmId, geometryId, radius, radius * 0.3f, segments, segments / 2);
+            else
+                throw new ArgumentException($"Unsupported tour primitive: {description}");
+        }
+
+        static float ReadNumber(string value, string key, float fallback)
+        {
+            int start = value.IndexOf(key, StringComparison.Ordinal);
+            if (start < 0) return fallback;
+            start += key.Length;
+            int end = start;
+            while (end < value.Length && (char.IsDigit(value[end]) || value[end] == '.')) end++;
+            return float.TryParse(value[start..end], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float number) ? number : fallback;
         }
     }
 }

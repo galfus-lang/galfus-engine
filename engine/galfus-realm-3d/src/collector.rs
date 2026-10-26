@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 
 use galfus_realm_3d_resources::frustum::Frustum;
-use galfus_realm_3d_resources::geometry::Geometry3D;
-use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D};
+use galfus_realm_3d_resources::geometry::{Geometry3D, PrimitiveTopology3D};
+use galfus_realm_3d_resources::material::{Material3D, MaterialSide3D, SurfaceType3D};
 use glam::Vec3;
 
+use crate::pipeline::SurfacePipelineState;
 use crate::types::{GpuInstancedModelEntry, GpuMeshBuffers, GpuModelEntry};
 
 /// A collected and culled draw item ready for pass submission.
@@ -12,9 +13,11 @@ use crate::types::{GpuInstancedModelEntry, GpuMeshBuffers, GpuModelEntry};
 pub struct CollectedDrawItem<'a> {
     pub model_id: u32,
     pub geometry_id: u32,
+    pub topology: PrimitiveTopology3D,
     pub material_id: u32,
     pub depth: f32,
     pub surface_type: SurfaceType3D,
+    pub side: MaterialSide3D,
     pub model_bg: &'a wgpu::BindGroup,
     pub material_bg: &'a wgpu::BindGroup,
     pub vertex_buffer: &'a wgpu::Buffer,
@@ -34,6 +37,8 @@ pub struct DrawCollector<'a> {
     pub masked: Vec<CollectedDrawItem<'a>>,
     /// Alpha-blended semi-transparent geometry sorted back-to-front for correct alpha blending.
     pub transparent: Vec<CollectedDrawItem<'a>>,
+    /// Additive geometry sorted back-to-front and rendered after alpha blending.
+    pub additive: Vec<CollectedDrawItem<'a>>,
     /// Screen-space refractive geometry sorted back-to-front.
     pub refractive: Vec<CollectedDrawItem<'a>>,
     /// Planar reflection mirrors and optical portals sorted front-to-back.
@@ -54,7 +59,7 @@ impl<'a> DrawCollector<'a> {
     ) -> Self {
         let mut collector = Self::default();
 
-        for (&model_id, (model, model_transform, _, model_bg_opt)) in models {
+        for (&model_id, (model, model_transform, local_aabb, _, _, model_bg_opt)) in models {
             if !model.active {
                 continue;
             }
@@ -63,14 +68,12 @@ impl<'a> DrawCollector<'a> {
                 continue;
             };
 
-            let Some((geom, Some((v_buf, i_buf, index_count)))) =
-                geometries.get(&model.geometry_id)
-            else {
+            let Some((geom, Some(mesh))) = geometries.get(&model.geometry_id) else {
                 continue;
             };
 
             // Frustum Culling
-            let world_aabb = geom.aabb.transform(&model_transform.matrix());
+            let world_aabb = local_aabb.transform(&model_transform.matrix());
             if let Some(f) = frustum
                 && !f.intersects_aabb(world_aabb.min, world_aabb.max)
             {
@@ -88,6 +91,7 @@ impl<'a> DrawCollector<'a> {
                 .unwrap_or(SurfaceType3D::Opaque);
 
             let shader_effect = mat_entry.and_then(|m| m.0.shader_effect.as_deref());
+            let side = mat_entry.map_or_default(|m| m.0.side);
 
             // Euclidean distance squared from camera to model center
             let depth = (model_transform.position - camera_pos).length_squared();
@@ -95,14 +99,16 @@ impl<'a> DrawCollector<'a> {
             let item = CollectedDrawItem {
                 model_id,
                 geometry_id: model.geometry_id,
+                topology: geom.topology,
                 material_id: model.material_id,
                 depth,
                 surface_type,
+                side,
                 model_bg,
                 material_bg,
-                vertex_buffer: v_buf,
-                index_buffer: i_buf,
-                index_count: *index_count,
+                vertex_buffer: &mesh.vertices,
+                index_buffer: &mesh.indices,
+                index_count: mesh.index_count,
                 shader_effect,
                 instance_buffer: None,
                 instance_count: 1,
@@ -113,14 +119,15 @@ impl<'a> DrawCollector<'a> {
                 SurfaceType3D::Masked => collector.masked.push(item),
                 SurfaceType3D::Refractive => collector.refractive.push(item),
                 SurfaceType3D::Mirror | SurfaceType3D::Portal => collector.mirrors.push(item),
-                SurfaceType3D::Transparent | SurfaceType3D::Additive => {
-                    collector.transparent.push(item)
-                }
+                SurfaceType3D::Transparent => collector.transparent.push(item),
+                SurfaceType3D::Additive => collector.additive.push(item),
             }
         }
 
         // Collect instanced models
-        for (&inst_id, (inst_model, instances, inst_buf_opt, _, model_bg_opt)) in instanced_models {
+        for (&inst_id, (inst_model, instances, inst_buf_opt, _, _, model_bg_opt)) in
+            instanced_models
+        {
             if !inst_model.active || instances.is_empty() {
                 continue;
             }
@@ -133,9 +140,7 @@ impl<'a> DrawCollector<'a> {
                 continue;
             };
 
-            let Some((_geom, Some((v_buf, i_buf, index_count)))) =
-                geometries.get(&inst_model.geometry_id)
-            else {
+            let Some((geom, Some(mesh))) = geometries.get(&inst_model.geometry_id) else {
                 continue;
             };
 
@@ -149,6 +154,7 @@ impl<'a> DrawCollector<'a> {
                 .unwrap_or(SurfaceType3D::Opaque);
 
             let shader_effect = mat_entry.and_then(|m| m.0.shader_effect.as_deref());
+            let side = mat_entry.map_or_default(|m| m.0.side);
 
             let depth = if let Some(first) = instances.first() {
                 let p = glam::Vec3::new(
@@ -164,14 +170,16 @@ impl<'a> DrawCollector<'a> {
             let item = CollectedDrawItem {
                 model_id: inst_id,
                 geometry_id: inst_model.geometry_id,
+                topology: geom.topology,
                 material_id: inst_model.material_id,
                 depth,
                 surface_type,
+                side,
                 model_bg,
                 material_bg,
-                vertex_buffer: v_buf,
-                index_buffer: i_buf,
-                index_count: *index_count,
+                vertex_buffer: &mesh.vertices,
+                index_buffer: &mesh.indices,
+                index_count: mesh.index_count,
                 shader_effect,
                 instance_buffer: Some(inst_buf),
                 instance_count: instances.len() as u32,
@@ -182,9 +190,8 @@ impl<'a> DrawCollector<'a> {
                 SurfaceType3D::Masked => collector.masked.push(item),
                 SurfaceType3D::Refractive => collector.refractive.push(item),
                 SurfaceType3D::Mirror | SurfaceType3D::Portal => collector.mirrors.push(item),
-                SurfaceType3D::Transparent | SurfaceType3D::Additive => {
-                    collector.transparent.push(item)
-                }
+                SurfaceType3D::Transparent => collector.transparent.push(item),
+                SurfaceType3D::Additive => collector.additive.push(item),
             }
         }
 
@@ -219,6 +226,11 @@ impl<'a> DrawCollector<'a> {
                 .partial_cmp(&a.depth)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+        collector.additive.sort_by(|a, b| {
+            b.depth
+                .partial_cmp(&a.depth)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         collector.mirrors.sort_by(|a, b| {
             a.depth
                 .partial_cmp(&b.depth)
@@ -233,7 +245,7 @@ impl<'a> DrawCollector<'a> {
 pub fn render_draw_items<'a>(
     pass: &mut wgpu::RenderPass<'a>,
     pipeline: &'a crate::pipeline::Pipeline3D,
-    items: impl IntoIterator<Item = (&'a CollectedDrawItem<'a>, bool)>,
+    items: impl IntoIterator<Item = &'a CollectedDrawItem<'a>>,
     refraction_bg: &'a wgpu::BindGroup,
 ) {
     pass.set_bind_group(3, refraction_bg, &[]);
@@ -241,11 +253,24 @@ pub fn render_draw_items<'a>(
     let mut curr_mat = None;
     let mut curr_geom = None;
 
-    for (item, transparent) in items {
+    for item in items {
         let is_instanced = item.instance_buffer.is_some() && item.instance_count > 0;
-        let key = (item.shader_effect, transparent, is_instanced);
+        let surface_state = SurfacePipelineState::from_surface_type(item.surface_type);
+        let key = (
+            item.shader_effect,
+            item.topology,
+            surface_state,
+            item.side,
+            is_instanced,
+        );
         if curr_pipe != Some(key) {
-            pass.set_pipeline(pipeline.get_pipeline(item.shader_effect, transparent, is_instanced));
+            pass.set_pipeline(pipeline.get_pipeline(
+                item.shader_effect,
+                item.topology,
+                surface_state,
+                item.side,
+                is_instanced,
+            ));
             curr_pipe = Some(key);
         }
         if curr_mat != Some(item.material_id) {
@@ -258,8 +283,7 @@ pub fn render_draw_items<'a>(
             curr_geom = Some(item.geometry_id);
         }
         pass.set_bind_group(2, item.model_bg, &[]);
-        if let Some(inst_buf) = item.instance_buffer {
-            pass.set_vertex_buffer(1, inst_buf.slice(..));
+        if item.instance_buffer.is_some() {
             pass.draw_indexed(0..item.index_count, 0, 0..item.instance_count);
         } else {
             pass.draw_indexed(0..item.index_count, 0, 0..1);

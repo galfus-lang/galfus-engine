@@ -72,6 +72,14 @@ jobs:
         with:
           bun-version: 1.4.3
 
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install Bun dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
@@ -115,8 +123,22 @@ jobs:
       - name: Install wasm-bindgen CLI
         run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
 
+      - name: Restore Playwright Chromium cache
+        id: playwright-chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-chromium-
+
       - name: Install Chromium for Playwright
+        if: steps.playwright-chromium.outputs.cache-hit != 'true'
         run: bunx playwright install --with-deps chromium
+
+      - name: Install Playwright Chromium system dependencies
+        if: steps.playwright-chromium.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium
 
       - name: Run Browser/WASM feature tour
         run: bun run test:tour:browser

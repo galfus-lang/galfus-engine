@@ -126,24 +126,9 @@ export async function runDemo3d5(): Promise<void> {
   updateCamera();
 
   // 3. Geometries: Floor, Pedestal, and Occlusion Pillars
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PLANE_ID, {
-    primitive: 'plane',
-    size: 20.0
-  });
-
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PEDESTAL_ID, {
-    primitive: 'cylinder',
-    radius: 1.6,
-    size: 0.6,
-    subdivisions: 32
-  });
-
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PILLAR_ID, {
-    primitive: 'cylinder',
-    radius: 0.35,
-    size: 4.5,
-    subdivisions: 24
-  });
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_PLANE_ID, 20.0, 20.0);
+  galfus.realm3dCreateCylinder(REALM_3D, GEOM_PEDESTAL_ID, 1.6, 0.6, 32);
+  galfus.realm3dCreateCylinder(REALM_3D, GEOM_PILLAR_ID, 0.35, 4.5, 24);
 
   // 4. Materials
   galfus.realm3dCreateMaterial(REALM_3D, MAT_FLOOR_ID, {

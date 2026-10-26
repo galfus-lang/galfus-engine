@@ -5,7 +5,8 @@ use std::os::raw::c_char;
 use galfus_platform::{CursorGrabMode, CursorIcon, WindowConfig};
 
 use crate::state::{
-    init_context, init_context_headless, shutdown_context, with_context, with_context_mut,
+    close_window, init_context, init_context_headless, shutdown_context, with_context,
+    with_context_mut,
 };
 
 thread_local! {
@@ -53,6 +54,16 @@ pub(crate) unsafe fn from_c_str_optional<'a>(
         Ok(None)
     } else {
         Ok(Some(trimmed))
+    }
+}
+
+fn finish_audio_play(result: Result<u32, String>) -> u32 {
+    match result {
+        Ok(voice_id) => voice_id,
+        Err(error) => {
+            set_last_error(&error);
+            0
+        }
     }
 }
 
@@ -176,7 +187,7 @@ pub unsafe extern "C" fn galfus_window_create(config_json: *const c_char) -> i32
 /// Closes and destroys a window by its logical ID. Returns 0 on success, -1 on failure.
 #[unsafe(no_mangle)]
 pub extern "C" fn galfus_window_close(window_id: u32) -> i32 {
-    let result = with_context_mut(|ctx| ctx.close_window(window_id).map_err(|e| e.to_string()));
+    let result = close_window(window_id);
 
     match result {
         Ok(()) => 0,
@@ -270,7 +281,8 @@ pub extern "C" fn galfus_window_set_cursor_icon(window_id: u32, icon: u32) -> i3
 
 /// Pumps pending platform events into a stable fixed-layout batch.
 ///
-/// The returned pointers remain valid until `galfus_platform_release_event_batch` is called.
+/// The returned pointers remain valid until `galfus_platform_release_event_batch` is called or
+/// platform shutdown, whichever happens first.
 ///
 /// # Safety
 ///
@@ -377,7 +389,10 @@ pub unsafe extern "C" fn galfus_audio_load_sound(
     }
 }
 
-/// Plays a registered sound with playback parameters. Returns voice instance ID (>= 0) on success, -1 on failure.
+/// Plays a registered sound with playback parameters.
+///
+/// Returns a non-zero voice instance ID on success, or 0 on failure. Use
+/// `galfus_get_last_error` to retrieve the failure detail.
 #[unsafe(no_mangle)]
 pub extern "C" fn galfus_audio_play_sound(
     sound_id: u32,
@@ -385,7 +400,7 @@ pub extern "C" fn galfus_audio_play_sound(
     panning: f32,
     speed: f32,
     looping: bool,
-) -> i32 {
+) -> u32 {
     let config = galfus_platform::PlaybackConfig {
         volume,
         panning,
@@ -396,17 +411,12 @@ pub extern "C" fn galfus_audio_play_sound(
     let result =
         with_context_mut(|ctx| ctx.play_sound(sound_id, config).map_err(|e| e.to_string()));
 
-    match result {
-        Ok(_) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
+    finish_audio_play(result)
 }
 
 /// Plays a registered sound with 3D/2D spatial positioning relative to a listener ear.
-/// Returns 0 on success, -1 on failure.
+/// Returns a non-zero voice instance ID on success, or 0 on failure. Use
+/// `galfus_get_last_error` to retrieve the failure detail.
 ///
 /// # Safety
 /// `emitter_json`, `listener_json`, and `config_json` must be valid null-terminated C string pointers.
@@ -414,10 +424,10 @@ pub extern "C" fn galfus_audio_play_sound(
 pub unsafe extern "C" fn galfus_audio_play_sound_spatial(
     sound_id: u32,
     spatial: *const crate::ffi_native_structs::GalfusSpatialAudio,
-) -> i32 {
+) -> u32 {
     if spatial.is_null() {
         set_last_error("Null pointer passed to play_sound_spatial");
-        return -1;
+        return 0;
     }
     // SAFETY: The pointer was checked above and copied before this function returns.
     let (emitter, listener, config) = unsafe { (*spatial).into_parts() };
@@ -427,13 +437,7 @@ pub unsafe extern "C" fn galfus_audio_play_sound_spatial(
             .map_err(|e| e.to_string())
     });
 
-    match result {
-        Ok(_) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
+    finish_audio_play(result)
 }
 
 /// Updates spatial positioning of an active sound voice relative to a listener ear.
@@ -558,76 +562,5 @@ pub extern "C" fn galfus_audio_unload_sound(sound_id: u32) -> i32 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ffi_transforms_getters::galfus_platform_get_window_size;
-
-    #[test]
-    fn test_c_api_lifecycle_and_json_exchange() {
-        // Shutdown any leftover state from prior tests
-        let _ = galfus_platform_shutdown();
-
-        // 1. Initialize headless
-        assert_eq!(galfus_platform_init_headless(), 0);
-
-        // Double init should fail
-        assert_eq!(galfus_platform_init_headless(), -1);
-        let err_ptr = galfus_get_last_error();
-        assert!(!err_ptr.is_null());
-        let err_str = unsafe { from_c_str(err_ptr) }.unwrap();
-        assert!(err_str.contains("already initialized"));
-        unsafe { galfus_string_free(err_ptr) };
-
-        // 2. Capabilities JSON
-        let caps_ptr = galfus_platform_get_capabilities();
-        assert!(!caps_ptr.is_null());
-        let caps_json = unsafe { from_c_str(caps_ptr) }.unwrap();
-        assert!(caps_json.contains("\"isHeadless\":true"));
-        assert!(caps_json.contains("\"supportsMultipleWindows\":false"));
-        unsafe { galfus_string_free(caps_ptr) };
-
-        // 3. Window creation should be rejected in headless mode
-        let config_json =
-            CString::new(r#"{"id": 1, "title": "Test Window", "size": [800, 600]}"#).unwrap();
-        let create_res = unsafe { galfus_window_create(config_json.as_ptr()) };
-        assert_eq!(create_res, -1);
-
-        let err_ptr = galfus_get_last_error();
-        assert!(!err_ptr.is_null());
-        let err_str = unsafe { from_c_str(err_ptr) }.unwrap();
-        assert!(err_str.contains("headless mode"));
-        unsafe { galfus_string_free(err_ptr) };
-
-        // 4. Pump events
-        let mut event_batch = crate::ffi_event_batch::GalfusEventBatch {
-            batch_id: 0,
-            events: std::ptr::null(),
-            event_count: 0,
-            text_data: std::ptr::null(),
-            text_length: 0,
-        };
-        assert_eq!(unsafe { galfus_platform_pump_events(&mut event_batch) }, 0);
-        assert_eq!(event_batch.event_count, 0);
-        assert_eq!(galfus_platform_release_event_batch(event_batch.batch_id), 0);
-
-        // 4.1 Window & Audio error paths on non-existent IDs
-        assert_eq!(galfus_window_close(999), -1);
-        let title = CString::new("New Title").unwrap();
-        assert_eq!(unsafe { galfus_window_set_title(999, title.as_ptr()) }, -1);
-        assert_eq!(galfus_window_set_cursor_grab(999, 1), -1);
-        assert_eq!(galfus_window_set_cursor_icon(999, 1), -1);
-
-        let mut w: u32 = 0;
-        let mut h: u32 = 0;
-        assert_eq!(
-            unsafe { galfus_platform_get_window_size(999, &mut w, &mut h) },
-            -1
-        );
-
-        assert_eq!(galfus_audio_play_sound(999, 1.0, 0.0, 1.0, false), -1);
-        assert_eq!(galfus_audio_unload_sound(999), -1);
-
-        // 5. Shutdown
-        assert_eq!(galfus_platform_shutdown(), 0);
-    }
-}
+#[path = "ffi_tests.rs"]
+mod tests;

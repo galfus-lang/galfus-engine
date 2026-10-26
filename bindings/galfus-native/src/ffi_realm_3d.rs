@@ -1,8 +1,6 @@
 use std::os::raw::c_char;
 
 use galfus_realm_3d::Realm3DContext;
-use galfus_realm_3d_resources::camera::Camera3D;
-use galfus_realm_3d_resources::geometry::{Geometry3D, Vertex3D};
 use galfus_realm_3d_resources::model::InstanceData3D;
 
 use crate::ffi::{from_c_str, from_c_str_optional, set_last_error};
@@ -10,7 +8,9 @@ use crate::ffi_native_structs::GalfusTransform3D;
 use crate::ffi_realm_3d_desc::*;
 use crate::state::with_multiverse_mut;
 
-unsafe fn parse_transform_3d(transform_json: *const c_char) -> Result<Transform3DDesc, String> {
+pub(super) unsafe fn parse_transform_3d(
+    transform_json: *const c_char,
+) -> Result<Transform3DDesc, String> {
     match unsafe { from_c_str_optional(transform_json) } {
         Ok(Some(s)) => serde_json::from_str(s).map_err(|e| format!("Invalid Transform3DDesc: {e}")),
         Ok(None) => Ok(Transform3DDesc::default()),
@@ -43,231 +43,12 @@ pub extern "C" fn galfus_realm_3d_destroy(realm_id: u32) -> i32 {
     }
 }
 
-/// Registers or updates a 3D Camera in the 3D Realm.
-///
-/// # Safety
-/// Pointers must be valid, null-terminated UTF-8 strings.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_3d_create_camera(
-    realm_id: u32,
-    camera_id: u32,
-    camera_json: *const c_char,
-    transform_json: *const c_char,
-) -> i32 {
-    let cam_desc: Camera3DDesc =
-        match serde_json::from_str(match unsafe { from_c_str(camera_json) } {
-            Ok(s) => s,
-            Err(e) => {
-                set_last_error(&e);
-                return -1;
-            }
-        }) {
-            Ok(d) => d,
-            Err(e) => {
-                set_last_error(&format!("Invalid Camera3DDesc: {e}"));
-                return -1;
-            }
-        };
-
-    let trans_desc: Transform3DDesc = match unsafe { parse_transform_3d(transform_json) } {
-        Ok(d) => d,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    let look_at = cam_desc.look_at.clone();
-    let mut camera: Camera3D = cam_desc.into();
-    if let Some(look_at) = look_at {
-        let (target, up) = look_at.into_vectors();
-        if let Err(e) = camera.set_look_at(target, up) {
-            set_last_error(&format!("Invalid CameraLookAt3DDesc: {e}"));
-            return -1;
-        }
-    }
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm3DContext>(realm_id)
-            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
-        realm
-            .create_camera(camera_id, camera, trans_desc.into())
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Clears the optional look-at configuration of an existing 3D Camera.
-#[unsafe(no_mangle)]
-pub extern "C" fn galfus_realm_3d_clear_camera_look_at(realm_id: u32, camera_id: u32) -> i32 {
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm3DContext>(realm_id)
-            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
-        realm
-            .clear_camera_look_at(camera_id)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Updates the transform of an existing Camera in the 3D Realm.
-///
-/// # Safety
-/// `transform_json` must be a valid, null-terminated UTF-8 string.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_3d_set_camera_transform(
-    realm_id: u32,
-    camera_id: u32,
-    transform: *const GalfusTransform3D,
-) -> i32 {
-    if transform.is_null() {
-        set_last_error("Null pointer passed to set_camera_transform");
-        return -1;
-    }
-    // SAFETY: The pointer was checked above and copied before this function returns.
-    let transform = unsafe { (*transform).into() };
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm3DContext>(realm_id)
-            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
-        realm
-            .set_camera_transform(camera_id, transform)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Registers or updates a 3D Geometry in the 3D Realm.
-///
-/// # Safety
-/// `geometry_json` must be a valid, null-terminated UTF-8 string.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_3d_create_geometry(
-    realm_id: u32,
-    geometry_id: u32,
-    geometry_json: *const c_char,
-) -> i32 {
-    let geom_desc: Geometry3DDesc =
-        match serde_json::from_str(match unsafe { from_c_str(geometry_json) } {
-            Ok(s) => s,
-            Err(e) => {
-                set_last_error(&e);
-                return -1;
-            }
-        }) {
-            Ok(d) => d,
-            Err(e) => {
-                set_last_error(&format!("Invalid Geometry3DDesc: {e}"));
-                return -1;
-            }
-        };
-
-    if geom_desc.primitive.is_none() || geom_desc.primitive.as_deref() == Some("custom") {
-        set_last_error("Custom geometry must be uploaded with galfus_realm_3d_create_geometry_raw");
-        return -1;
-    }
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm3DContext>(realm_id)
-            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
-        realm
-            .create_geometry(geometry_id, geom_desc.into())
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Registers or updates custom 3D geometry from interleaved binary vertex data and u32 indices.
-///
-/// Vertex data uses the `Vertex3D` C layout: position `[f32; 3]`, normal `[f32; 3]`, UV
-/// `[f32; 2]`, tangent `[f32; 4]`, joints `[u32; 4]`, and weights `[f32; 4]` (80 bytes).
-/// Indices must reference an existing vertex.
-///
-/// # Safety
-/// `vertices_ptr` must be valid for `vertices_len` bytes and `indices_ptr` must be valid for
-/// `indices_len` u32 elements when their respective lengths are non-zero.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_3d_create_geometry_raw(
-    realm_id: u32,
-    geometry_id: u32,
-    vertices_ptr: *const u8,
-    vertices_len: usize,
-    indices_ptr: *const u32,
-    indices_len: usize,
-) -> i32 {
-    const VERTEX3D_BYTES: usize = std::mem::size_of::<Vertex3D>();
-
-    if vertices_len == 0 || !vertices_len.is_multiple_of(VERTEX3D_BYTES) {
-        set_last_error("Vertex data length must be a non-zero multiple of 80 bytes");
-        return -1;
-    }
-    if vertices_ptr.is_null() || (indices_len != 0 && indices_ptr.is_null()) {
-        set_last_error("Null custom geometry data pointer");
-        return -1;
-    }
-
-    let vertex_bytes = unsafe { std::slice::from_raw_parts(vertices_ptr, vertices_len) };
-    let vertices = vertex_bytes
-        .as_chunks::<VERTEX3D_BYTES>()
-        .0
-        .iter()
-        .map(|chunk| unsafe { std::ptr::read_unaligned(chunk.as_ptr().cast::<Vertex3D>()) })
-        .collect::<Vec<_>>();
-    let indices = if indices_len == 0 {
-        Vec::new()
-    } else {
-        unsafe { std::slice::from_raw_parts(indices_ptr, indices_len) }.to_vec()
-    };
-
-    if indices
-        .iter()
-        .any(|&index| index as usize >= vertices.len())
-    {
-        set_last_error("Custom geometry index is outside the vertex buffer");
-        return -1;
-    }
-
-    let geometry = Geometry3D::new(vertices, indices, None);
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm3DContext>(realm_id)
-            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
-        realm
-            .create_geometry(geometry_id, geometry)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
+#[path = "ffi_realm_3d_camera.rs"]
+mod ffi_realm_3d_camera;
+pub use ffi_realm_3d_camera::*;
+#[path = "ffi_realm_3d_geometry.rs"]
+mod ffi_realm_3d_geometry;
+pub use ffi_realm_3d_geometry::*;
 /// Registers or updates a 3D Material in the 3D Realm.
 ///
 /// # Safety
@@ -497,6 +278,78 @@ pub unsafe extern "C" fn galfus_realm_3d_set_instanced_model_data(
     }
 }
 
+/// Updates blend-shape weights for one model from a contiguous f32 buffer.
+///
+/// # Safety
+/// `weights_ptr` must be valid for `weight_count` f32 elements when the count is non-zero.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_3d_set_model_morph_weights(
+    realm_id: u32,
+    model_id: u32,
+    weights_ptr: *const f32,
+    weight_count: usize,
+) -> i32 {
+    if weight_count != 0 && weights_ptr.is_null() {
+        set_last_error("Null morph weight data pointer");
+        return -1;
+    }
+    let weights = if weight_count == 0 {
+        Vec::new()
+    } else {
+        unsafe { std::slice::from_raw_parts(weights_ptr, weight_count) }.to_vec()
+    };
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm
+            .set_model_morph_weights(model_id, weights)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Updates blend-shape weights shared by every instance in an instanced draw batch.
+///
+/// # Safety
+/// `weights_ptr` must be valid for `weight_count` f32 elements when the count is non-zero.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_3d_set_instanced_model_morph_weights(
+    realm_id: u32,
+    instanced_model_id: u32,
+    weights_ptr: *const f32,
+    weight_count: usize,
+) -> i32 {
+    if weight_count != 0 && weights_ptr.is_null() {
+        set_last_error("Null morph weight data pointer");
+        return -1;
+    }
+    let weights = if weight_count == 0 {
+        Vec::new()
+    } else {
+        unsafe { std::slice::from_raw_parts(weights_ptr, weight_count) }.to_vec()
+    };
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
+        realm
+            .set_instanced_model_morph_weights(instanced_model_id, weights)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
 /// Registers or updates a 3D Light in the 3D Realm.
 ///
 /// # Safety
@@ -663,88 +516,6 @@ pub unsafe extern "C" fn galfus_realm_3d_update_bones(
     }
 }
 
-/// Queues a debug 3D line segment.
-#[unsafe(no_mangle)]
-pub extern "C" fn galfus_realm_3d_draw_line(
-    realm_id: u32,
-    x0: f32,
-    y0: f32,
-    z0: f32,
-    x1: f32,
-    y1: f32,
-    z1: f32,
-    r: f32,
-    g: f32,
-    b: f32,
-    a: f32,
-) -> i32 {
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm3DContext>(realm_id)
-            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
-        realm.draw_line(
-            glam::Vec3::new(x0, y0, z0),
-            glam::Vec3::new(x1, y1, z1),
-            glam::Vec4::new(r, g, b, a),
-        );
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Queues a debug 3D Axis-Aligned Bounding Box (AABB).
-#[unsafe(no_mangle)]
-pub extern "C" fn galfus_realm_3d_draw_aabb(
-    realm_id: u32,
-    min_x: f32,
-    min_y: f32,
-    min_z: f32,
-    max_x: f32,
-    max_y: f32,
-    max_z: f32,
-    r: f32,
-    g: f32,
-    b: f32,
-    a: f32,
-) -> i32 {
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm3DContext>(realm_id)
-            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
-        realm.draw_aabb(
-            glam::Vec3::new(min_x, min_y, min_z),
-            glam::Vec3::new(max_x, max_y, max_z),
-            glam::Vec4::new(r, g, b, a),
-        );
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Clears any queued gizmos in Realm 3D.
-#[unsafe(no_mangle)]
-pub extern "C" fn galfus_realm_3d_clear_gizmos(realm_id: u32) -> i32 {
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm3DContext>(realm_id)
-            .ok_or_else(|| format!("Realm3D {realm_id} not found"))?;
-        realm.clear_gizmos();
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
+#[path = "ffi_realm_3d_gizmo.rs"]
+mod ffi_realm_3d_gizmo;
+pub use ffi_realm_3d_gizmo::*;

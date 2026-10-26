@@ -33,13 +33,14 @@ struct SurfaceInput {
     world_normal: vec3<f32>,
     view_dir: vec3<f32>,
     uv: vec2<f32>,
+    uv1: vec2<f32>,
+    vertex_color: vec4<f32>,
     albedo: vec4<f32>,
     emissive: vec3<f32>,
     roughness: f32,
     metallic: f32,
     reflectance: f32,
     time: f32,
-    sampler_index: u32,
     custom: CustomParams,
     instance_color: vec4<f32>,
     instance_emissive: vec4<f32>,
@@ -51,14 +52,21 @@ struct SurfaceInput {
 - `world_pos`: World-space position of the fragment (`vec3<f32>`).
 - `world_normal`: Interpolated world-space normal (`vec3<f32>`).
 - `view_dir`: Normalized vector from fragment to camera (`vec3<f32>`).
-- `uv`: Texture coordinate (`vec2<f32>`).
+- `uv`: Primary texture coordinate, `TEXCOORD_0` (`vec2<f32>`).
+- `uv1`: Secondary texture coordinate, `TEXCOORD_1` (`vec2<f32>`).
+- `vertex_color`: Interpolated `COLOR_0`. It is already multiplied into `albedo`.
 - `albedo`: Base material albedo (`vec4<f32>`).
 - `emissive`: Base material emissive color (`vec3<f32>`).
 - `roughness`, `metallic`, and `reflectance`: Base material PBR factors.
 - `time`: Elapsed engine time in seconds.
-- `sampler_index`: Material sampler selection (`0` through `3`).
+- Material texture samplers are selected internally per slot; surface effects receive the
+  resolved material values rather than sampler implementation details.
 - `custom`: Standardized 64-byte user parameters (`custom.v0`, `custom.v1`, `custom.v2`, `custom.v3`).
 - `instance_*`: Per-instance overrides supplied by instanced models.
+
+The composed shader also provides `sample_material_texture(slot, uv)`. It applies the sampler
+configured for that slot, or the default sampler when no override is supplied, so custom effects
+never receive or manage sampler selectors directly.
 
 ### 2.2. `SurfaceOutput`
 

@@ -1,70 +1,52 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
+import { createDemo3d7Environment } from './demo_3d7_environment.ts';
+import { updateDemo3d7MirrorMaterial } from './demo_3d7_materials.ts';
 import { extractKey, quatFromLookAt } from './utils.ts';
 
-const TARGET_WINDOW = 1;
-const REALM_3D = 10;
-const INVOCATION_MAIN = 100;
-
-const CAMERA_ID = 1;
-
-// Geometries
-const GEOM_PLANE_ID = 1;
-const GEOM_PEDESTAL_ID = 2;
-const GEOM_PILLAR_ID = 3;
-const GEOM_MIRROR_QUAD_ID = 4;
-const GEOM_GEM_ID = 5;
-const GEOM_FRAME_H_ID = 6;
-const GEOM_FRAME_V_ID = 7;
-const GEOM_SECRET_OBELISK_ID = 8;
-
-// Materials
-const MAT_FLOOR_ID = 1;
-const MAT_PEDESTAL_ID = 2;
-const MAT_PILLAR_ID = 3;
-const MAT_MIRROR_PORTAL_ID = 4;
-const MAT_GEM_ID = 5;
-const MAT_FRAME_ID = 6;
-const MAT_SECRET_CHAMBER_ID = 7;
-const MAT_PARTICLE_ID = 8;
-const MAT_SECRET_PARTICLE_ID = 9;
-
-// Models
-const MODEL_FLOOR_ID = 1;
-const MODEL_PEDESTAL_ID = 2;
-const MODEL_PILLAR_FL_ID = 3;
-const MODEL_PILLAR_FR_ID = 4;
-const MODEL_PILLAR_BL_ID = 5;
-const MODEL_PILLAR_BR_ID = 6;
-const MODEL_GEM_ID = 7;
-const MODEL_MIRROR_PORTAL_ID = 8;
-const MODEL_FRAME_TOP_ID = 9;
-const MODEL_FRAME_BOTTOM_ID = 10;
-const MODEL_FRAME_LEFT_ID = 11;
-const MODEL_FRAME_RIGHT_ID = 12;
-const MODEL_SECRET_OBELISK_ID = 13;
-const MODEL_SECRET_FLOOR_ID = 14;
-
-// Lights
-const LIGHT_DIR_ID = 1;
-const LIGHT_POINT_CENTER_ID = 2;
-const LIGHT_POINT_SECRET_ID = 3;
-
-// Emitters & Portal
-const EMITTER_FOUNTAIN_ID = 1;
-const EMITTER_SECRET_OBELISK_ID = 2;
-const PORTAL_GATEWAY_ID = 1;
-
-interface MirrorTint {
-  name: string;
-  color: [number, number, number, number];
-}
-
-const MIRROR_TINTS: MirrorTint[] = [
-  { name: 'Pure Silver', color: [0.96, 0.98, 1.0, 1.0] },
-  { name: 'Warm Gold', color: [1.0, 0.88, 0.65, 1.0] },
-  { name: 'Obsidian Dark', color: [0.45, 0.48, 0.55, 1.0] },
-  { name: 'Mystic Cyan', color: [0.65, 0.95, 1.0, 1.0] }
-];
+import {
+  TARGET_WINDOW,
+  REALM_3D,
+  INVOCATION_MAIN,
+  CAMERA_ID,
+  GEOM_PLANE_ID,
+  GEOM_PEDESTAL_ID,
+  GEOM_PILLAR_ID,
+  GEOM_MIRROR_QUAD_ID,
+  GEOM_GEM_ID,
+  GEOM_FRAME_H_ID,
+  GEOM_FRAME_V_ID,
+  GEOM_SECRET_OBELISK_ID,
+  MAT_FLOOR_ID,
+  MAT_PEDESTAL_ID,
+  MAT_PILLAR_ID,
+  MAT_MIRROR_PORTAL_ID,
+  MAT_GEM_ID,
+  MAT_FRAME_ID,
+  MAT_SECRET_CHAMBER_ID,
+  MAT_PARTICLE_ID,
+  MAT_SECRET_PARTICLE_ID,
+  MODEL_FLOOR_ID,
+  MODEL_PEDESTAL_ID,
+  MODEL_PILLAR_FL_ID,
+  MODEL_PILLAR_FR_ID,
+  MODEL_PILLAR_BL_ID,
+  MODEL_PILLAR_BR_ID,
+  MODEL_GEM_ID,
+  MODEL_MIRROR_PORTAL_ID,
+  MODEL_FRAME_TOP_ID,
+  MODEL_FRAME_BOTTOM_ID,
+  MODEL_FRAME_LEFT_ID,
+  MODEL_FRAME_RIGHT_ID,
+  MODEL_SECRET_OBELISK_ID,
+  MODEL_SECRET_FLOOR_ID,
+  LIGHT_DIR_ID,
+  LIGHT_POINT_CENTER_ID,
+  LIGHT_POINT_SECRET_ID,
+  EMITTER_FOUNTAIN_ID,
+  EMITTER_SECRET_OBELISK_ID,
+  PORTAL_GATEWAY_ID,
+  MIRROR_TINTS
+} from './demo_3d7_scene.ts';
 
 export async function runDemo3d7(): Promise<void> {
   console.log(
@@ -101,82 +83,34 @@ export async function runDemo3d7(): Promise<void> {
   console.log(`==> Creating Realm3D (#${REALM_3D})...`);
   galfus.realm3dCreate(REALM_3D);
 
-  // 1. Atmospheric Environment with HDR Bloom
   let bloomEnabled = true;
   const applyEnvironment = () => {
-    galfus.realm3dSetEnvironment(REALM_3D, {
-      ambientColor: [0.06, 0.07, 0.1, 1.0],
-      clearColor: [0.02, 0.025, 0.04, 1.0],
-      fogMode: 'exponential',
-      fogDensity: 0.012,
-      fogColor: [0.03, 0.035, 0.055, 1.0],
-      exposure: 1.15,
-      bloom: {
-        enabled: bloomEnabled,
-        threshold: 0.65,
-        knee: 0.35,
-        intensity: 1.1,
-        scatter: 0.75
-      }
-    });
+    galfus.realm3dSetEnvironment(REALM_3D, createDemo3d7Environment(bloomEnabled));
   };
   applyEnvironment();
 
-  // 2. Geometries
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PLANE_ID, {
-    primitive: 'plane',
-    size: 26.0
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PEDESTAL_ID, {
-    primitive: 'cylinder',
-    radius: 1.6,
-    size: 0.7,
-    subdivisions: 32
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PILLAR_ID, {
-    primitive: 'cylinder',
-    radius: 0.38,
-    size: 5.0,
-    subdivisions: 24
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_MIRROR_QUAD_ID, {
-    primitive: 'quad',
-    size: 5.6
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_GEM_ID, {
-    primitive: 'pyramid',
-    size: 1.4
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_FRAME_H_ID, {
-    primitive: 'cube',
-    size: 1.0
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_FRAME_V_ID, {
-    primitive: 'cube',
-    size: 1.0
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_SECRET_OBELISK_ID, {
-    primitive: 'cylinder',
-    radius: 0.8,
-    size: 4.2,
-    subdivisions: 16
-  });
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_PLANE_ID, 26.0, 26.0);
+  galfus.realm3dCreateCylinder(REALM_3D, GEOM_PEDESTAL_ID, 1.6, 0.7, 32);
+  galfus.realm3dCreateCylinder(REALM_3D, GEOM_PILLAR_ID, 0.38, 5.0, 24);
+  galfus.realm3dCreateQuad(REALM_3D, GEOM_MIRROR_QUAD_ID, 5.6, 5.6);
+  galfus.realm3dCreatePyramid(REALM_3D, GEOM_GEM_ID, 1.4, 1.4, 1.4);
+  galfus.realm3dCreateCube(REALM_3D, GEOM_FRAME_H_ID, 1.0);
+  galfus.realm3dCreateCube(REALM_3D, GEOM_FRAME_V_ID, 1.0);
+  galfus.realm3dCreateCylinder(REALM_3D, GEOM_SECRET_OBELISK_ID, 0.8, 4.2, 16);
 
-  // 3. Materials
   let currentReflectance = 0.95;
   let currentTintIdx = 0;
   let isPortalMode = false;
 
-  const updateMirrorMaterial = () => {
-    galfus.realm3dCreateMaterial(REALM_3D, MAT_MIRROR_PORTAL_ID, {
-      surfaceType: isPortalMode ? 'portal' : 'mirror',
-      baseColor: MIRROR_TINTS[currentTintIdx]!.color,
-      roughness: 0.04,
-      metallic: 0.95,
-      reflectance: currentReflectance,
-      emissiveColor: isPortalMode ? [0.15, 0.45, 0.95, 1.0] : [0, 0, 0, 0]
-    });
-  };
+  const updateMirrorMaterial = () =>
+    updateDemo3d7MirrorMaterial(
+      galfus,
+      REALM_3D,
+      MAT_MIRROR_PORTAL_ID,
+      isPortalMode,
+      MIRROR_TINTS[currentTintIdx]!.color,
+      currentReflectance
+    );
 
   galfus.realm3dCreateMaterial(REALM_3D, MAT_FLOOR_ID, {
     surfaceType: 'opaque',
@@ -227,7 +161,6 @@ export async function runDemo3d7(): Promise<void> {
 
   updateMirrorMaterial();
 
-  // 4. Models
   galfus.realm3dCreateModel(
     REALM_3D,
     MODEL_FLOOR_ID,

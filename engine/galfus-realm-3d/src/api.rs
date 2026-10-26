@@ -2,7 +2,7 @@
 
 use galfus_realm_3d_resources::camera::{Camera3D, CameraLookAt3D};
 use galfus_realm_3d_resources::environment::EnvironmentRealm3D;
-use galfus_realm_3d_resources::geometry::Geometry3D;
+use galfus_realm_3d_resources::geometry::{Geometry3D, MorphTarget3D};
 use galfus_realm_3d_resources::light::Light3D;
 use galfus_realm_3d_resources::material::Material3D;
 use galfus_realm_3d_resources::model::{InstanceData3D, InstancedModel3D, Model3D};
@@ -13,6 +13,21 @@ use galfus_realm_core::error::RealmResult;
 
 use crate::context::{Realm3DContext, not_found};
 use crate::types::validate_id;
+
+fn validate_morph_weights(weights: &[f32], target_count: usize) -> RealmResult<()> {
+    if !weights.is_empty() && weights.len() != target_count {
+        return Err(galfus_realm_core::error::RealmError::Internal(format!(
+            "Morph weight count {} does not match geometry target count {target_count}",
+            weights.len()
+        )));
+    }
+    if weights.iter().any(|weight| !weight.is_finite()) {
+        return Err(galfus_realm_core::error::RealmError::Internal(
+            "Morph weights must be finite".into(),
+        ));
+    }
+    Ok(())
+}
 
 impl Realm3DContext {
     /// Registers or updates a `Camera3D` with its `Transform3D`.
@@ -102,6 +117,82 @@ impl Realm3DContext {
     pub fn create_geometry(&mut self, id: u32, geometry: Geometry3D) -> RealmResult<()> {
         validate_id(id)?;
         self.geometries.insert(id, (geometry, None));
+        let geometry = self.geometries[&id].0.clone();
+        let target_count = geometry.morph_targets.len();
+        for entry in self
+            .models
+            .values_mut()
+            .filter(|entry| entry.0.geometry_id == id)
+        {
+            if !entry.0.morph_weights.is_empty() && entry.0.morph_weights.len() != target_count {
+                entry.0.morph_weights.clear();
+                entry.4 = None;
+            }
+            entry.2 = geometry.aabb_for_morph_weights(&entry.0.morph_weights);
+            entry.5 = None;
+        }
+        for entry in self
+            .instanced_models
+            .values_mut()
+            .filter(|entry| entry.0.geometry_id == id)
+        {
+            if !entry.0.morph_weights.is_empty() && entry.0.morph_weights.len() != target_count {
+                entry.0.morph_weights.clear();
+                entry.4 = None;
+            }
+            entry.5 = None;
+        }
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Replaces the direct binary morph-target data of an existing geometry.
+    pub fn set_geometry_morph_targets(
+        &mut self,
+        id: u32,
+        morph_targets: Vec<MorphTarget3D>,
+    ) -> RealmResult<()> {
+        let realm_id = self.id;
+        let geometry = self
+            .geometries
+            .get_mut(&id)
+            .ok_or_else(|| not_found(realm_id, "Geometry", id))?;
+        geometry
+            .0
+            .set_morph_targets(morph_targets)
+            .map_err(galfus_realm_core::error::RealmError::Internal)?;
+        geometry.1 = None;
+        let geometry = geometry.0.clone();
+
+        let target_count = geometry.morph_targets.len();
+        let aabb = geometry.aabb;
+        for entry in self
+            .models
+            .values_mut()
+            .filter(|entry| entry.0.geometry_id == id)
+        {
+            if !entry.0.morph_weights.is_empty() && entry.0.morph_weights.len() != target_count {
+                entry.0.morph_weights.clear();
+                entry.4 = None;
+            }
+            entry.2 = if entry.0.morph_weights.is_empty() {
+                aabb
+            } else {
+                geometry.aabb_for_morph_weights(&entry.0.morph_weights)
+            };
+            entry.5 = None;
+        }
+        for entry in self
+            .instanced_models
+            .values_mut()
+            .filter(|entry| entry.0.geometry_id == id)
+        {
+            if !entry.0.morph_weights.is_empty() && entry.0.morph_weights.len() != target_count {
+                entry.0.morph_weights.clear();
+                entry.4 = None;
+            }
+            entry.5 = None;
+        }
         self.dirty = true;
         Ok(())
     }
@@ -114,7 +205,14 @@ impl Realm3DContext {
         transform: Transform3D,
     ) -> RealmResult<()> {
         validate_id(id)?;
-        self.models.insert(id, (model, transform, None, None));
+        let aabb = self
+            .geometries
+            .get(&model.geometry_id)
+            .map(|(geometry, _)| geometry.aabb_for_morph_weights(&model.morph_weights))
+            .unwrap_or_default();
+        self.models
+            .insert(id, (model, transform, aabb, None, None, None));
+        self.bones_dirty |= self.model_bones.contains_key(&id);
         self.dirty = true;
         Ok(())
     }
@@ -123,7 +221,7 @@ impl Realm3DContext {
     pub fn create_instanced_model(&mut self, id: u32, model: InstancedModel3D) -> RealmResult<()> {
         validate_id(id)?;
         self.instanced_models
-            .insert(id, (model, Vec::new(), None, None, None));
+            .insert(id, (model, Vec::new(), None, None, None, None));
         self.dirty = true;
         Ok(())
     }
@@ -138,7 +236,57 @@ impl Realm3DContext {
             .instanced_models
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "InstancedModel", id))?;
-        entry.1 = instances;
+        entry.1 = instances
+            .into_iter()
+            .map(InstanceData3D::into_linear_gpu)
+            .collect();
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the blend weights of an existing model.
+    pub fn set_model_morph_weights(&mut self, id: u32, weights: Vec<f32>) -> RealmResult<()> {
+        let geometry_id = self
+            .models
+            .get(&id)
+            .ok_or_else(|| not_found(self.id, "Model", id))?
+            .0
+            .geometry_id;
+        let geometry = self
+            .geometries
+            .get(&geometry_id)
+            .ok_or_else(|| not_found(self.id, "Geometry", geometry_id))?;
+        validate_morph_weights(weights.as_slice(), geometry.0.morph_targets.len())?;
+        let aabb = geometry.0.aabb_for_morph_weights(&weights);
+        let entry = self.models.get_mut(&id).expect("model was checked above");
+        entry.0.morph_weights = weights;
+        entry.2 = aabb;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the blend weights shared by every instance in an instanced draw batch.
+    pub fn set_instanced_model_morph_weights(
+        &mut self,
+        id: u32,
+        weights: Vec<f32>,
+    ) -> RealmResult<()> {
+        let geometry_id = self
+            .instanced_models
+            .get(&id)
+            .ok_or_else(|| not_found(self.id, "InstancedModel", id))?
+            .0
+            .geometry_id;
+        let geometry = self
+            .geometries
+            .get(&geometry_id)
+            .ok_or_else(|| not_found(self.id, "Geometry", geometry_id))?;
+        validate_morph_weights(weights.as_slice(), geometry.0.morph_targets.len())?;
+        let entry = self
+            .instanced_models
+            .get_mut(&id)
+            .expect("instanced model was checked above");
+        entry.0.morph_weights = weights;
         self.dirty = true;
         Ok(())
     }
@@ -177,11 +325,11 @@ impl Realm3DContext {
             .get(&id)
             .ok_or_else(|| not_found(self.id, "Model", id))?;
         let geom_id = model_entry.0.geometry_id;
-        let geom = self
+        let _geom = self
             .geometries
             .get(&geom_id)
             .ok_or_else(|| not_found(self.id, "Geometry", geom_id))?;
-        let world_aabb = geom.0.aabb.transform(&model_entry.1.matrix());
+        let world_aabb = model_entry.2.transform(&model_entry.1.matrix());
         Ok((world_aabb.min, world_aabb.max))
     }
 
@@ -195,24 +343,41 @@ impl Realm3DContext {
         if !self.models.contains_key(&model_id) {
             return Err(not_found(realm_id, "Model", model_id));
         }
-        self.model_bones.insert(model_id, matrices.to_vec());
-        self.dirty = true;
+        let changed = match self.model_bones.entry(model_id) {
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                if entry.get().as_slice() == matrices {
+                    false
+                } else {
+                    let palette = entry.get_mut();
+                    palette.clear();
+                    palette.extend_from_slice(matrices);
+                    true
+                }
+            }
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(matrices.to_vec());
+                true
+            }
+        };
+        self.bones_dirty |= changed;
         Ok(())
     }
 
     /// Rebuilds the unified skeletal bone buffer from per-model bone states.
     pub(crate) fn rebuild_bones(&mut self) {
-        if self.model_bones.is_empty() {
+        if !self.bones_dirty {
             return;
         }
         self.bones.clear();
+        for entry in self.models.values_mut() {
+            entry.0.bone_offset = 0;
+            entry.0.bone_count = 0;
+        }
         for (model_id, matrices) in &self.model_bones {
             if let Some(entry) = self.models.get_mut(model_id) {
                 entry.0.bone_offset = self.bones.len() as u32;
                 entry.0.bone_count = matrices.len() as u32;
                 self.bones.extend_from_slice(matrices);
-                entry.2 = None;
-                entry.3 = None;
             }
         }
     }
@@ -249,7 +414,7 @@ impl Realm3DContext {
 
     /// Destroys an existing `Model3D` and its skeletal bone palette if present.
     pub fn destroy_model(&mut self, id: u32) -> RealmResult<()> {
-        self.model_bones.remove(&id);
+        self.bones_dirty |= self.model_bones.remove(&id).is_some();
         self.models
             .remove(&id)
             .map(|_| {
@@ -274,6 +439,7 @@ impl Realm3DContext {
         self.lights
             .remove(&id)
             .map(|_| {
+                self.lights_dirty = true;
                 self.dirty = true;
             })
             .ok_or_else(|| not_found(self.id, "Light", id))
@@ -288,6 +454,7 @@ impl Realm3DContext {
     ) -> RealmResult<()> {
         validate_id(id)?;
         self.lights.insert(id, (light, transform));
+        self.lights_dirty = true;
         self.dirty = true;
         Ok(())
     }
@@ -298,6 +465,31 @@ impl Realm3DContext {
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "Light", id))?
             .1 = transform;
+        self.lights_dirty = true;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the sRGB color of an existing `Light3D`.
+    pub fn set_light_color(&mut self, id: u32, color: glam::Vec3) -> RealmResult<()> {
+        self.lights
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "Light", id))?
+            .0
+            .color = color;
+        self.lights_dirty = true;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the intensity of an existing `Light3D`.
+    pub fn set_light_intensity(&mut self, id: u32, intensity: f32) -> RealmResult<()> {
+        self.lights
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "Light", id))?
+            .0
+            .intensity = intensity;
+        self.lights_dirty = true;
         self.dirty = true;
         Ok(())
     }
@@ -318,6 +510,7 @@ impl Realm3DContext {
         validate_id(id)?;
         self.emitters
             .insert(id, (emitter, transform, ParticleEmitterState3D::new()));
+        self.dirty = true;
         Ok(())
     }
 
@@ -332,6 +525,7 @@ impl Realm3DContext {
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))?;
         entry.1 = transform;
+        self.dirty = true;
         Ok(())
     }
 
@@ -349,7 +543,9 @@ impl Realm3DContext {
     pub fn destroy_particle_emitter(&mut self, id: u32) -> RealmResult<()> {
         self.emitters
             .remove(&id)
-            .map(|_| ())
+            .map(|_| {
+                self.dirty = true;
+            })
             .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))
     }
 
@@ -357,6 +553,7 @@ impl Realm3DContext {
     pub fn create_portal(&mut self, id: u32, portal: Portal3D) -> RealmResult<()> {
         validate_id(id)?;
         self.portals.insert(id, portal);
+        self.prune_portal_pipelines();
         self.dirty = true;
         Ok(())
     }
@@ -367,6 +564,7 @@ impl Realm3DContext {
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "Portal", id))?
             .active = active;
+        self.prune_portal_pipelines();
         self.dirty = true;
         Ok(())
     }
@@ -375,8 +573,9 @@ impl Realm3DContext {
     pub fn destroy_portal(&mut self, id: u32) -> RealmResult<()> {
         self.portals
             .remove(&id)
-            .map(|_| ())
-            .ok_or_else(|| not_found(self.id, "Portal", id))
+            .ok_or_else(|| not_found(self.id, "Portal", id))?;
+        self.prune_portal_pipelines();
+        Ok(())
     }
 
     /// Queues debug gizmo drawing primitives.

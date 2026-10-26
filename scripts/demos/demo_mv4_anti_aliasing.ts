@@ -104,14 +104,8 @@ export async function runDemoMv4(): Promise<void> {
   );
 
   // Geometries
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_CUBE_ID, {
-    primitive: 'cube',
-    size: 1.8
-  });
-  galfus.realm3dCreateGeometry(REALM_3D, GEOM_PLANE_ID, {
-    primitive: 'plane',
-    size: 25.0
-  });
+  galfus.realm3dCreateCube(REALM_3D, GEOM_CUBE_ID, 1.8);
+  galfus.realm3dCreatePlane(REALM_3D, GEOM_PLANE_ID, 25.0, 25.0);
 
   // High-Contrast Materials to emphasize edge aliasing vs smoothing
   galfus.realm3dCreateMaterial(REALM_3D, MAT_CUBE_CYAN, {
