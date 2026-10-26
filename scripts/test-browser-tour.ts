@@ -32,7 +32,7 @@ async function waitForTourState(
   consoleErrors: string[]
 ): Promise<void> {
   try {
-    await page.waitForFunction(condition, undefined, { timeout: 30_000 });
+    await page.waitForFunction(condition, undefined, { polling: 100, timeout: 30_000 });
   } catch (error) {
     const state = await readTourState(page).catch(() => ({ unavailable: 'true' }));
     const details = {
@@ -133,12 +133,14 @@ async function main(): Promise<void> {
     );
 
     await page.evaluate(() => {
+      window.requestAnimationFrame = () => 0;
       const canvas = document.querySelector<HTMLCanvasElement>('#galfus-browser-tour');
       if (!canvas) {
         throw new Error('Browser tour canvas was not found');
       }
       canvas.style.width = '800px';
       canvas.style.height = '450px';
+      void canvas.clientWidth;
     });
     await waitForTourState(
       page,
