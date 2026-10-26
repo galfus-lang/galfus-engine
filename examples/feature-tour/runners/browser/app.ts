@@ -101,8 +101,18 @@ async function main(): Promise<void> {
   const viewport = requiredElement<HTMLElement>('[data-tour-viewport]');
   const windowId = 1;
   let renderedFrames = 0;
+  let latestState: TourFrameState = {
+    roomIndex: 0,
+    paused: false,
+    tourClock: 0,
+    duration: 1
+  };
+  const canvasSize = (): [number, number] => [
+    Math.max(canvas.clientWidth, 1),
+    Math.max(canvas.clientHeight, 1)
+  ];
   const publishState = (state: TourFrameState) => {
-    const [width, height] = galfus.windowGetSize(windowId);
+    const [width, height] = canvasSize();
     document.body.dataset.status = 'running';
     document.body.dataset.renderedFrames = String(renderedFrames);
     document.body.dataset.roomIndex = String(state.roomIndex);
@@ -112,18 +122,33 @@ async function main(): Promise<void> {
     viewport.textContent = `${width} × ${height}`;
     pauseButton.textContent = state.paused ? 'Resume' : 'Pause';
   };
+  const synchronizeViewport = () => {
+    const [width, height] = canvasSize();
+    galfus.multiverseUpdateWindowSize(windowId, width, height);
+    publishState(latestState);
+  };
+  const resizeObserver = new ResizeObserver(synchronizeViewport);
+
+  window.addEventListener('pagehide', () => resizeObserver.disconnect(), { once: true });
+  window.addEventListener('galfus-tour-stop', () => resizeObserver.disconnect(), { once: true });
 
   await runFeatureTour({
     engine: galfus,
     activeBinding: 'Browser / WASM',
     windowConfig: {
       canvasId,
-      size: [Math.max(canvas.clientWidth, 1), Math.max(canvas.clientHeight, 1)]
+      size: canvasSize()
     },
     nextFrame: nextAnimationFrame,
-    onReady: (controller) => bindControls(controller, galfus, publishState),
+    onReady: (controller) => {
+      latestState = controller.getState();
+      synchronizeViewport();
+      resizeObserver.observe(canvas);
+      bindControls(controller, galfus, publishState);
+    },
     onFrame: (state) => {
       renderedFrames++;
+      latestState = state;
       publishState(state);
     }
   });
