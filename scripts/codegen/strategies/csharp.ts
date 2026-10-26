@@ -223,6 +223,7 @@ export class CSharpStrategy implements CodegenStrategy {
       const outStruct =
         outParam && isNativeStruct(outParam.type) ? outParam.type.nativeStruct : undefined;
       const isReturnI32 = fn.returnType === 'i32';
+      const hasErrorSentinel = fn.errorSentinel !== undefined;
       const isReturnString =
         fn.returnType === 'string' || isJson(fn.returnType) || isJsonArray(fn.returnType);
       const isReturnBool = fn.returnType === 'bool';
@@ -233,6 +234,7 @@ export class CSharpStrategy implements CodegenStrategy {
       else if (outStruct) returnTypeStr = `Galfus${outStruct}`;
       else if (isReturnString) returnTypeStr = 'string';
       else if (isReturnBool) returnTypeStr = 'bool';
+      else if (fn.returnType === 'u32') returnTypeStr = 'uint';
 
       // 1. Primitive / Raw JSON string method
       const stringParamSig = fn.params
@@ -295,6 +297,12 @@ export class CSharpStrategy implements CodegenStrategy {
         lines.push(`                return PtrToStringUtf8AndFree(res);`);
       } else if (isReturnBool) {
         lines.push(`                return Native.${fn.cName}(${nativeArgs});`);
+      } else if (hasErrorSentinel) {
+        lines.push(`                uint result = Native.${fn.cName}(${nativeArgs});`);
+        lines.push(
+          `                if (result == ${fn.errorSentinel}u) throw new GalfusError("${fn.methodName} failed: " + GetLastError());`
+        );
+        lines.push(`                return result;`);
       } else {
         lines.push(`                Native.${fn.cName}(${nativeArgs});`);
       }

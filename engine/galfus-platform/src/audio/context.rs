@@ -54,6 +54,10 @@ pub struct AudioContext {
     sounds: HashMap<u32, StaticSoundData>,
     #[cfg(not(target_arch = "wasm32"))]
     voices: GenerationalPool<StaticSoundHandle>,
+    #[cfg(not(target_arch = "wasm32"))]
+    voice_ids: HashMap<u32, Handle<StaticSoundHandle>>,
+    #[cfg(not(target_arch = "wasm32"))]
+    next_voice_id: u32,
 }
 
 impl AudioContext {
@@ -66,6 +70,8 @@ impl AudioContext {
                 manager,
                 sounds: HashMap::new(),
                 voices: GenerationalPool::new(NAMESPACE_AUDIO_VOICE),
+                voice_ids: HashMap::new(),
+                next_voice_id: 1,
             }
         }
 
@@ -76,9 +82,28 @@ impl AudioContext {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn parse_voice_handle(voice_id: u32) -> PlatformResult<Handle<StaticSoundHandle>> {
-        Handle::from_u32_index(voice_id, NAMESPACE_AUDIO_VOICE)
+    fn voice_handle(&self, voice_id: u32) -> PlatformResult<Handle<StaticSoundHandle>> {
+        self.voice_ids
+            .get(&voice_id)
+            .copied()
             .ok_or(PlatformError::SoundNotFound(voice_id))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn allocate_voice_id(&mut self) -> PlatformResult<u32> {
+        let first_candidate = self.next_voice_id;
+        loop {
+            let voice_id = self.next_voice_id;
+            self.next_voice_id = self.next_voice_id.checked_add(1).unwrap_or(1);
+            if !self.voice_ids.contains_key(&voice_id) {
+                return Ok(voice_id);
+            }
+            if self.next_voice_id == first_candidate {
+                return Err(PlatformError::AudioPlaybackFailed(
+                    "Voice ID space exhausted".into(),
+                ));
+            }
+        }
     }
 
     /// Loads raw audio data bytes (WAV, MP3, OGG, FLAC) and registers it under a host logical ID.
@@ -111,35 +136,43 @@ impl AudioContext {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
+            if !self.sounds.contains_key(&sound_id) {
+                return Err(PlatformError::SoundNotFound(sound_id));
+            }
+
+            if self.manager.is_none() {
+                return Err(PlatformError::AudioInitializationFailed(
+                    "Audio manager not available".into(),
+                ));
+            }
+
+            let db = amplitude_to_decibels(config.volume);
+            let mut settings = StaticSoundSettings::new()
+                .volume(db)
+                .panning(config.panning)
+                .playback_rate(config.speed as f64);
+
+            if config.looping {
+                settings = settings.loop_region(..);
+            }
+
+            let voice_id = self.allocate_voice_id()?;
             let sound_data = self
                 .sounds
                 .get(&sound_id)
                 .ok_or(PlatformError::SoundNotFound(sound_id))?;
+            let manager = self.manager.as_mut().ok_or_else(|| {
+                PlatformError::AudioInitializationFailed("Audio manager not available".into())
+            })?;
+            let handle = manager
+                .play(sound_data.with_settings(settings))
+                .map_err(|e| PlatformError::AudioPlaybackFailed(format!("Play failed: {e}")))?;
 
-            if let Some(ref mut manager) = self.manager {
-                let db = amplitude_to_decibels(config.volume);
-                let mut settings = StaticSoundSettings::new()
-                    .volume(db)
-                    .panning(config.panning)
-                    .playback_rate(config.speed as f64);
-
-                if config.looping {
-                    settings = settings.loop_region(..);
-                }
-
-                let handle = manager
-                    .play(sound_data.with_settings(settings))
-                    .map_err(|e| PlatformError::AudioPlaybackFailed(format!("Play failed: {e}")))?;
-
-                let voice_handle = self.voices.insert(handle).map_err(|e| {
-                    PlatformError::AudioPlaybackFailed(format!("Failed to register voice: {e}"))
-                })?;
-                Ok(voice_handle.to_u32_index())
-            } else {
-                Err(PlatformError::AudioInitializationFailed(
-                    "Audio manager not available".into(),
-                ))
-            }
+            let voice_handle = self.voices.insert(handle).map_err(|e| {
+                PlatformError::AudioPlaybackFailed(format!("Failed to register voice: {e}"))
+            })?;
+            self.voice_ids.insert(voice_id, voice_handle);
+            Ok(voice_id)
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -185,7 +218,7 @@ impl AudioContext {
     pub fn pause_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let handle = Self::parse_voice_handle(voice_id)?;
+            let handle = self.voice_handle(voice_id)?;
             let voice = self
                 .voices
                 .get_mut(handle)
@@ -205,7 +238,7 @@ impl AudioContext {
     pub fn resume_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let handle = Self::parse_voice_handle(voice_id)?;
+            let handle = self.voice_handle(voice_id)?;
             let voice = self
                 .voices
                 .get_mut(handle)
@@ -225,11 +258,12 @@ impl AudioContext {
     pub fn stop_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let handle = Self::parse_voice_handle(voice_id)?;
+            let handle = self.voice_handle(voice_id)?;
             let mut voice = self
                 .voices
                 .remove(handle)
                 .map_err(|_| PlatformError::SoundNotFound(voice_id))?;
+            self.voice_ids.remove(&voice_id);
             voice.stop(Tween::default());
             Ok(())
         }
@@ -245,7 +279,7 @@ impl AudioContext {
     pub fn set_sound_volume(&mut self, voice_id: u32, volume: f32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let handle = Self::parse_voice_handle(voice_id)?;
+            let handle = self.voice_handle(voice_id)?;
             let voice = self
                 .voices
                 .get_mut(handle)
@@ -266,7 +300,7 @@ impl AudioContext {
     pub fn set_sound_panning(&mut self, voice_id: u32, panning: f32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let handle = Self::parse_voice_handle(voice_id)?;
+            let handle = self.voice_handle(voice_id)?;
             let voice = self
                 .voices
                 .get_mut(handle)
@@ -286,7 +320,7 @@ impl AudioContext {
     pub fn get_sound_state(&self, voice_id: u32) -> PlaybackState {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if let Ok(handle) = Self::parse_voice_handle(voice_id)
+            if let Ok(handle) = self.voice_handle(voice_id)
                 && let Ok(voice) = self.voices.get(handle)
             {
                 return match voice.state() {
@@ -315,9 +349,12 @@ impl AudioContext {
             let finished = collect_reap_candidates(&self.voices, |voice| {
                 voice.state() == KiraPlaybackState::Stopped
             });
-            let reaped = finished.len();
+            let mut reaped = 0;
             for handle in finished {
-                let _ = self.voices.remove(handle);
+                if self.voices.remove(handle).is_ok() {
+                    self.voice_ids.retain(|_, current| *current != handle);
+                    reaped += 1;
+                }
             }
             reaped
         }
@@ -401,17 +438,12 @@ mod tests {
     }
 
     #[test]
-    fn test_voice_handle_index_roundtrip() {
-        use galfus_core::Handle;
-        let dummy = Handle::<()>::new(
-            42,
-            std::num::NonZeroU32::new(7).unwrap(),
-            NAMESPACE_AUDIO_VOICE,
-        );
-        let u32_val = dummy.to_u32_index();
-        let decoded = Handle::<()>::from_u32_index(u32_val, NAMESPACE_AUDIO_VOICE).unwrap();
-        assert_eq!(decoded.slot(), 42);
-        assert_eq!(decoded.generation().get(), 7);
+    fn voice_ids_skip_the_ffi_failure_sentinel_on_wraparound() {
+        let mut audio = AudioContext::new();
+        audio.next_voice_id = u32::MAX;
+
+        assert_eq!(audio.allocate_voice_id().unwrap(), u32::MAX);
+        assert_eq!(audio.allocate_voice_id().unwrap(), 1);
     }
 
     #[test]

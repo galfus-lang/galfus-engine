@@ -255,6 +255,8 @@ export class PythonStrategy implements CodegenStrategy {
         returnAnnotation = 'List[Any]';
       } else if (fn.returnType === 'string') {
         returnAnnotation = 'str';
+      } else if (fn.returnType === 'u32' || fn.returnType === 'u64') {
+        returnAnnotation = 'int';
       } else if (fn.returnsParamField) {
         returnAnnotation = 'int';
       }
@@ -324,6 +326,11 @@ export class PythonStrategy implements CodegenStrategy {
           lines.push(`        return ${pName}["${field}"]`);
           lines.push(`    return 0`);
         }
+      } else if (fn.errorSentinel !== undefined) {
+        lines.push(`    result = _lib.${fn.cName}(${callArgs.join(', ')})`);
+        lines.push(`    if result == ${fn.errorSentinel}:`);
+        lines.push(`        raise GalfusError(f"${fn.methodName} failed: {get_last_error()}")`);
+        lines.push(`    return result`);
       } else {
         lines.push(`    return _lib.${fn.cName}(${callArgs.join(', ')})`);
       }

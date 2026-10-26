@@ -45,6 +45,7 @@ pub fn shutdown_context() -> Result<(), String> {
     })?;
     let anim_dropped = ANIMATION.with(|cell| cell.borrow_mut().take().is_some());
     let ctx_dropped = CONTEXT.with(|cell| cell.borrow_mut().take().is_some());
+    crate::ffi_event_batch::clear_event_batches();
     if anim_dropped || mv_dropped || ctx_dropped {
         Ok(())
     } else {

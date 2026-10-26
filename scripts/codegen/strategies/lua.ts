@@ -294,6 +294,14 @@ export class LuaStrategy implements CodegenStrategy {
         if (fn.returnsParamField) {
           lines.push(`    return 0`);
         }
+      } else if (fn.errorSentinel !== undefined) {
+        lines.push(`    local result = clib.${fn.cName}(${callArgs})`);
+        lines.push(`    if result == ${fn.errorSentinel} then`);
+        lines.push(
+          `        error("${fn.methodName} failed: " .. (M.get_last_error() or "unknown"))`
+        );
+        lines.push(`    end`);
+        lines.push(`    return result`);
       } else {
         lines.push(`    return clib.${fn.cName}(${callArgs})`);
       }

@@ -121,7 +121,7 @@ export const platformFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_platform_pump_events',
     methodName: 'platformPumpEvents',
-    doc: 'Pumps and collects pending platform input events through a fixed-layout batch.',
+    doc: 'Pumps platform input events into a fixed-layout batch; its pointers expire on release or shutdown.',
     params: [
       {
         name: 'outBatch',
@@ -206,7 +206,7 @@ export const platformFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_audio_play_sound',
     methodName: 'audioPlaySound',
-    doc: 'Plays a registered sound resource using playback parameters.',
+    doc: 'Plays a registered sound resource and returns its controllable voice ID.',
     params: [
       {
         name: 'soundId',
@@ -234,12 +234,13 @@ export const platformFunctions: FunctionSpec[] = [
         doc: 'Whether the sound loops indefinitely'
       }
     ],
-    returnType: 'i32'
+    returnType: 'u32',
+    errorSentinel: 0
   },
   {
     cName: 'galfus_audio_play_sound_spatial',
     methodName: 'audioPlaySoundSpatial',
-    doc: 'Plays a registered sound with 3D/2D spatial positioning relative to a listener ear.',
+    doc: 'Plays a spatial sound and returns its controllable voice ID.',
     params: [
       {
         name: 'soundId',
@@ -248,7 +249,8 @@ export const platformFunctions: FunctionSpec[] = [
       },
       { name: 'spatial', type: { nativeStruct: 'SpatialAudio' }, doc: 'Spatial playback state.' }
     ],
-    returnType: 'i32'
+    returnType: 'u32',
+    errorSentinel: 0
   },
   {
     cName: 'galfus_audio_update_sound_spatial',

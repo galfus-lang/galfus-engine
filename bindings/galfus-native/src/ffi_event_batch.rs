@@ -26,7 +26,10 @@ pub struct GalfusPlatformEvent {
     pub text2_length: u32,
 }
 
-/// Caller-visible view of an event batch. It remains valid until `galfus_platform_release_event_batch`.
+/// Caller-visible view of an event batch.
+///
+/// It remains valid until `galfus_platform_release_event_batch` or platform shutdown, whichever
+/// happens first.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct GalfusEventBatch {
@@ -286,6 +289,19 @@ pub fn release_event_batch(batch_id: u64) -> Result<(), String> {
     })
 }
 
+/// Releases all event batches owned by the current native binding thread.
+///
+/// This invalidates every event and text pointer previously exposed through the C ABI.
+pub(crate) fn clear_event_batches() {
+    EVENT_BATCHES.with(|batches| batches.borrow_mut().clear());
+    NEXT_BATCH_ID.with(|next| *next.borrow_mut() = 1);
+}
+
+#[cfg(test)]
+pub(crate) fn event_batch_count() -> usize {
+    EVENT_BATCHES.with(|batches| batches.borrow().len())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -325,5 +341,18 @@ mod tests {
         .unwrap();
         assert_eq!(physical_key, "KeyW");
         release_event_batch(batch.batch_id).unwrap();
+    }
+
+    #[test]
+    fn clearing_event_batches_reclaims_every_pending_batch() {
+        let first = store_event_batch(Vec::new());
+        let second = store_event_batch(Vec::new());
+        assert_eq!(event_batch_count(), 2);
+
+        clear_event_batches();
+
+        assert_eq!(event_batch_count(), 0);
+        assert!(release_event_batch(first.batch_id).is_err());
+        assert!(release_event_batch(second.batch_id).is_err());
     }
 }

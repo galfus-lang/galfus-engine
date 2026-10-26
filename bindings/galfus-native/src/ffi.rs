@@ -57,6 +57,16 @@ pub(crate) unsafe fn from_c_str_optional<'a>(
     }
 }
 
+fn finish_audio_play(result: Result<u32, String>) -> u32 {
+    match result {
+        Ok(voice_id) => voice_id,
+        Err(error) => {
+            set_last_error(&error);
+            0
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Exported C API Functions
 // ---------------------------------------------------------------------------
@@ -271,7 +281,8 @@ pub extern "C" fn galfus_window_set_cursor_icon(window_id: u32, icon: u32) -> i3
 
 /// Pumps pending platform events into a stable fixed-layout batch.
 ///
-/// The returned pointers remain valid until `galfus_platform_release_event_batch` is called.
+/// The returned pointers remain valid until `galfus_platform_release_event_batch` is called or
+/// platform shutdown, whichever happens first.
 ///
 /// # Safety
 ///
@@ -378,7 +389,10 @@ pub unsafe extern "C" fn galfus_audio_load_sound(
     }
 }
 
-/// Plays a registered sound with playback parameters. Returns voice instance ID (>= 0) on success, -1 on failure.
+/// Plays a registered sound with playback parameters.
+///
+/// Returns a non-zero voice instance ID on success, or 0 on failure. Use
+/// `galfus_get_last_error` to retrieve the failure detail.
 #[unsafe(no_mangle)]
 pub extern "C" fn galfus_audio_play_sound(
     sound_id: u32,
@@ -386,7 +400,7 @@ pub extern "C" fn galfus_audio_play_sound(
     panning: f32,
     speed: f32,
     looping: bool,
-) -> i32 {
+) -> u32 {
     let config = galfus_platform::PlaybackConfig {
         volume,
         panning,
@@ -397,17 +411,12 @@ pub extern "C" fn galfus_audio_play_sound(
     let result =
         with_context_mut(|ctx| ctx.play_sound(sound_id, config).map_err(|e| e.to_string()));
 
-    match result {
-        Ok(_) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
+    finish_audio_play(result)
 }
 
 /// Plays a registered sound with 3D/2D spatial positioning relative to a listener ear.
-/// Returns 0 on success, -1 on failure.
+/// Returns a non-zero voice instance ID on success, or 0 on failure. Use
+/// `galfus_get_last_error` to retrieve the failure detail.
 ///
 /// # Safety
 /// `emitter_json`, `listener_json`, and `config_json` must be valid null-terminated C string pointers.
@@ -415,10 +424,10 @@ pub extern "C" fn galfus_audio_play_sound(
 pub unsafe extern "C" fn galfus_audio_play_sound_spatial(
     sound_id: u32,
     spatial: *const crate::ffi_native_structs::GalfusSpatialAudio,
-) -> i32 {
+) -> u32 {
     if spatial.is_null() {
         set_last_error("Null pointer passed to play_sound_spatial");
-        return -1;
+        return 0;
     }
     // SAFETY: The pointer was checked above and copied before this function returns.
     let (emitter, listener, config) = unsafe { (*spatial).into_parts() };
@@ -428,13 +437,7 @@ pub unsafe extern "C" fn galfus_audio_play_sound_spatial(
             .map_err(|e| e.to_string())
     });
 
-    match result {
-        Ok(_) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
+    finish_audio_play(result)
 }
 
 /// Updates spatial positioning of an active sound voice relative to a listener ear.

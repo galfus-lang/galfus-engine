@@ -29,6 +29,8 @@ export interface FunctionSpec {
   doc: string;
   params: ParamSpec[];
   returnType: DataType;
+  /** Numeric value returned by the native API when the operation fails. */
+  errorSentinel?: number;
   /** Optional extraction of a return value from an input param on success (e.g. config.id) */
   returnsParamField?: { paramName: string; fieldName: string };
 }

@@ -4,6 +4,13 @@ use super::*;
 use crate::ffi_transforms_getters::galfus_platform_get_window_size;
 
 #[test]
+fn audio_play_ffi_preserves_the_voice_id() {
+    assert_eq!(finish_audio_play(Ok(42)), 42);
+    assert_eq!(finish_audio_play(Ok(u32::MAX)), u32::MAX);
+    assert_eq!(finish_audio_play(Err("playback failed".into())), 0);
+}
+
+#[test]
 fn test_c_api_lifecycle_and_json_exchange() {
     // Shutdown any leftover state from prior tests
     let _ = galfus_platform_shutdown();
@@ -65,9 +72,22 @@ fn test_c_api_lifecycle_and_json_exchange() {
         -1
     );
 
-    assert_eq!(galfus_audio_play_sound(999, 1.0, 0.0, 1.0, false), -1);
+    assert_eq!(galfus_audio_play_sound(999, 1.0, 0.0, 1.0, false), 0);
     assert_eq!(galfus_audio_unload_sound(999), -1);
 
     // 5. Shutdown
     assert_eq!(galfus_platform_shutdown(), 0);
+}
+
+#[test]
+fn shutdown_releases_unclaimed_event_batches() {
+    let _ = galfus_platform_shutdown();
+    assert_eq!(galfus_platform_init_headless(), 0);
+
+    let batch = crate::ffi_event_batch::store_event_batch(Vec::new());
+    assert_eq!(crate::ffi_event_batch::event_batch_count(), 1);
+
+    assert_eq!(galfus_platform_shutdown(), 0);
+    assert_eq!(crate::ffi_event_batch::event_batch_count(), 0);
+    assert!(crate::ffi_event_batch::release_event_batch(batch.batch_id).is_err());
 }
