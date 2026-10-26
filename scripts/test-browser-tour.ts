@@ -14,7 +14,8 @@ async function invokeTourAction(
   page: import('@playwright/test').Page,
   action: 'next' | 'pause'
 ): Promise<void> {
-  await page.locator(`[data-tour-action="${action}"]`).click();
+  // The continuously rendered WebGPU canvas can prevent Playwright from observing a stable layout.
+  await page.locator(`[data-tour-action="${action}"]`).click({ force: true });
 }
 
 async function readTourState(
