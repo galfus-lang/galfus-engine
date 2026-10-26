@@ -94,6 +94,9 @@ export async function startBrowserTourServer(port = 0): Promise<BrowserTourServe
     port,
     async fetch(request) {
       const url = new URL(request.url);
+      if (url.pathname === '/favicon.ico') {
+        return new Response(null, { status: 204 });
+      }
       const relativePath = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
       const filePath = resolve(outputDir, relativePath);
 

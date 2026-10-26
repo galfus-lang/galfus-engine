@@ -41,7 +41,11 @@ function bindControls(controller: TourController, galfus: GalfusBrowser): void {
   };
 
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-tour-action]')) {
-    button.addEventListener('click', () => actions[button.dataset.tourAction ?? '']?.());
+    button.addEventListener('click', () => {
+      const action = button.dataset.tourAction ?? '';
+      document.body.dataset.lastTourAction = action;
+      actions[action]?.();
+    });
   }
 
   const audioButton = requiredElement<HTMLButtonElement>('[data-tour-audio]');
@@ -74,6 +78,7 @@ function bindControls(controller: TourController, galfus: GalfusBrowser): void {
 
   window.addEventListener('pagehide', controller.stop, { once: true });
   window.addEventListener('galfus-tour-stop', controller.stop, { once: true });
+  document.body.dataset.controlsReady = 'true';
 }
 
 async function main(): Promise<void> {

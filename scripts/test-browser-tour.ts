@@ -14,11 +14,35 @@ async function invokeTourAction(
   page: import('@playwright/test').Page,
   action: 'next' | 'pause'
 ): Promise<void> {
-  await page.evaluate((tourAction) => {
-    const button = document.querySelector<HTMLButtonElement>(`[data-tour-action="${tourAction}"]`);
-    if (!button) throw new Error(`Browser tour action '${tourAction}' was not found`);
-    button.click();
-  }, action);
+  await page.locator(`[data-tour-action="${action}"]`).click();
+}
+
+async function readTourState(
+  page: import('@playwright/test').Page
+): Promise<Record<string, string | undefined>> {
+  return page.evaluate(() => ({ ...document.body.dataset }));
+}
+
+async function waitForTourState(
+  page: import('@playwright/test').Page,
+  condition: () => boolean,
+  description: string,
+  pageErrors: Error[],
+  consoleErrors: string[]
+): Promise<void> {
+  try {
+    await page.waitForFunction(condition, undefined, { timeout: 30_000 });
+  } catch (error) {
+    const state = await readTourState(page).catch(() => ({ unavailable: 'true' }));
+    const details = {
+      state,
+      pageErrors: pageErrors.map(({ message }) => message),
+      consoleErrors
+    };
+    throw new Error(`Timed out waiting for ${description}: ${JSON.stringify(details)}`, {
+      cause: error
+    });
+  }
 }
 
 async function main(): Promise<void> {
@@ -36,14 +60,20 @@ async function main(): Promise<void> {
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const pageErrors: Error[] = [];
+  const consoleErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
 
   try {
     await page.goto(server.url);
-    await page.waitForFunction(
+    await waitForTourState(
+      page,
       () => document.body.dataset.status === 'running' || document.body.dataset.status === 'failed',
-      undefined,
-      { timeout: 30_000 }
+      'the browser tour to initialize',
+      pageErrors,
+      consoleErrors
     );
     const initialization = await page.evaluate(() => ({
       status: document.body.dataset.status,
@@ -54,10 +84,19 @@ async function main(): Promise<void> {
         `Browser tour initialization failed: ${initialization.error ?? 'unknown error'}`
       );
     }
-    await page.waitForFunction(
+    await waitForTourState(
+      page,
       () => Number(document.body.dataset.renderedFrames ?? '0') >= 3,
-      undefined,
-      { timeout: 30_000 }
+      'three rendered frames',
+      pageErrors,
+      consoleErrors
+    );
+    await waitForTourState(
+      page,
+      () => document.body.dataset.controlsReady === 'true',
+      'the tour controls to become ready',
+      pageErrors,
+      consoleErrors
     );
     const canvasSize = await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('#galfus-browser-tour');
@@ -76,9 +115,21 @@ async function main(): Promise<void> {
     }
 
     await invokeTourAction(page, 'next');
-    await page.waitForFunction(() => document.body.dataset.roomIndex === '1');
+    await waitForTourState(
+      page,
+      () => document.body.dataset.roomIndex === '1' && document.body.dataset.status === 'running',
+      'Room 2 after the next control action',
+      pageErrors,
+      consoleErrors
+    );
     await invokeTourAction(page, 'pause');
-    await page.waitForFunction(() => document.body.dataset.paused === 'true');
+    await waitForTourState(
+      page,
+      () => document.body.dataset.paused === 'true',
+      'the paused state after the pause control action',
+      pageErrors,
+      consoleErrors
+    );
 
     await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('#galfus-browser-tour');
@@ -88,7 +139,13 @@ async function main(): Promise<void> {
       canvas.style.width = '800px';
       canvas.style.height = '450px';
     });
-    await page.waitForFunction(() => document.body.dataset.viewport === '800x450');
+    await waitForTourState(
+      page,
+      () => document.body.dataset.viewport === '800x450',
+      'the resized browser viewport',
+      pageErrors,
+      consoleErrors
+    );
 
     const result = await page.evaluate(() => ({
       status: document.body.dataset.status,
@@ -100,6 +157,9 @@ async function main(): Promise<void> {
     }
     if (pageErrors.length > 0) {
       throw new Error(`Unexpected browser page error: ${pageErrors[0]?.message}`);
+    }
+    if (consoleErrors.length > 0) {
+      throw new Error(`Unexpected browser console error: ${consoleErrors[0]}`);
     }
 
     if (visibleDurationMs > 0) {
