@@ -153,6 +153,20 @@ impl<T> GenerationalPool<T> {
         }
     }
 
+    /// Iterates over active entries together with their current versioned handles.
+    pub fn iter(&self) -> impl Iterator<Item = (Handle<T>, &T)> {
+        let namespace = self.namespace;
+        self.slots
+            .iter()
+            .enumerate()
+            .filter_map(move |(slot_idx, slot)| match slot {
+                Slot::Occupied { value, generation } => {
+                    Some((Handle::new(slot_idx as u32, *generation, namespace), value))
+                }
+                Slot::Vacant { .. } => None,
+            })
+    }
+
     /// Removes and returns the value, incrementing the slot's generation to invalidate existing handles.
     pub fn remove(&mut self, handle: Handle<T>) -> CoreResult<T> {
         let slot_idx = self.validate_handle(handle)?;
@@ -226,5 +240,18 @@ mod tests {
             pool2.get(h1),
             Err(CoreError::NamespaceMismatch { .. })
         ));
+    }
+
+    #[test]
+    fn test_iteration_returns_only_active_entries_with_valid_handles() {
+        let mut pool = GenerationalPool::new(10);
+        let first = pool.insert("first").unwrap();
+        let second = pool.insert("second").unwrap();
+        pool.remove(first).unwrap();
+
+        let entries: Vec<_> = pool.iter().collect();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].0, second);
+        assert_eq!(*entries[0].1, "second");
     }
 }

@@ -9,7 +9,10 @@ use galfus_core::id::validate_host_logical_id;
 #[cfg(not(target_arch = "wasm32"))]
 use kira::{
     AudioManager, AudioManagerSettings, Decibels, DefaultBackend, Tween,
-    sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings},
+    sound::{
+        PlaybackState as KiraPlaybackState,
+        static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings},
+    },
 };
 
 use super::types::{
@@ -31,6 +34,16 @@ fn amplitude_to_decibels(amplitude: f32) -> Decibels {
     } else {
         Decibels(20.0 * amplitude.log10())
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn collect_reap_candidates<T>(
+    pool: &GenerationalPool<T>,
+    should_reap: impl Fn(&T) -> bool,
+) -> Vec<Handle<T>> {
+    pool.iter()
+        .filter_map(|(handle, value)| should_reap(value).then_some(handle))
+        .collect()
 }
 
 /// Central audio coordinator managing sound resources and active playback voices.
@@ -94,6 +107,8 @@ impl AudioContext {
     /// Plays a sound by its logical ID using the given configuration.
     /// Returns a versioned voice instance ID from the generational pool.
     pub fn play_sound(&mut self, sound_id: u32, config: PlaybackConfig) -> PlatformResult<u32> {
+        self.reap_finished_voices();
+
         #[cfg(not(target_arch = "wasm32"))]
         {
             let sound_data = self
@@ -291,6 +306,28 @@ impl AudioContext {
         }
     }
 
+    /// Releases one-shot voices whose native backend playback has completed.
+    ///
+    /// Returned IDs become stale after this operation and their pool slots are reusable.
+    pub fn reap_finished_voices(&mut self) -> usize {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let finished = collect_reap_candidates(&self.voices, |voice| {
+                voice.state() == KiraPlaybackState::Stopped
+            });
+            let reaped = finished.len();
+            for handle in finished {
+                let _ = self.voices.remove(handle);
+            }
+            reaped
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            0
+        }
+    }
+
     /// Unloads a sound resource by logical ID.
     pub fn unload_sound(&mut self, id: u32) -> PlatformResult<()> {
         #[cfg(not(target_arch = "wasm32"))]
@@ -409,5 +446,25 @@ mod tests {
             res.is_err(),
             "Loading corrupt audio data must return AudioLoadFailed"
         );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn reap_candidates_only_include_finished_entries_and_recycle_their_slots() {
+        let mut pool = GenerationalPool::new(NAMESPACE_AUDIO_VOICE);
+        let finished = pool.insert(true).unwrap();
+        let playing = pool.insert(false).unwrap();
+
+        let candidates = collect_reap_candidates(&pool, |is_finished| *is_finished);
+        assert_eq!(candidates, vec![finished]);
+        for handle in candidates {
+            pool.remove(handle).unwrap();
+        }
+
+        assert!(!pool.contains(finished));
+        assert!(pool.contains(playing));
+        let reused = pool.insert(false).unwrap();
+        assert_eq!(reused.slot(), finished.slot());
+        assert_ne!(reused.generation(), finished.generation());
     }
 }

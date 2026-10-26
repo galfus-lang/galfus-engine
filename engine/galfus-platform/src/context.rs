@@ -367,10 +367,16 @@ impl PlatformContext {
         self.audio.unload_sound(sound_id)
     }
 
+    /// Releases completed native audio voices and returns the number of recycled voice slots.
+    pub fn reap_finished_audio_voices(&mut self) -> usize {
+        self.audio.reap_finished_voices()
+    }
+
     /// Pumps platform events on demand, collecting and returning normalized events.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn pump_events(&mut self) -> PlatformResult<Vec<PlatformEvent>> {
         self.ensure_main_thread()?;
+        self.reap_finished_audio_voices();
 
         let mut collector = EventCollector {
             winit_to_logical: &self.winit_to_logical,
@@ -440,6 +446,7 @@ impl PlatformContext {
     /// On browser, returns empty or collected events from DOM listeners.
     #[cfg(target_arch = "wasm32")]
     pub fn pump_events(&mut self) -> PlatformResult<Vec<PlatformEvent>> {
+        self.reap_finished_audio_voices();
         Ok(self
             .windows
             .values()
