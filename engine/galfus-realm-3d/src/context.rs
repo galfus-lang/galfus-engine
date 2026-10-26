@@ -7,7 +7,9 @@ use galfus_realm_3d_resources::environment::EnvironmentRealm3D;
 use galfus_realm_3d_resources::geometry::Geometry3D;
 use galfus_realm_3d_resources::light::Light3D;
 use galfus_realm_3d_resources::material::{Material3D, SurfaceType3D};
-use galfus_realm_3d_resources::particle::{ParticleEmitter3D, ParticleEmitterState3D};
+use galfus_realm_3d_resources::particle::{
+    Particle3DInstance, ParticleEmitter3D, ParticleEmitterState3D,
+};
 use galfus_realm_3d_resources::transform::Transform3D;
 use galfus_realm_core::error::RealmError;
 use glam::UVec2;
@@ -42,6 +44,8 @@ pub struct Realm3DContext {
     pub emitters: BTreeMap<u32, (ParticleEmitter3D, Transform3D, ParticleEmitterState3D)>,
     pub portals: BTreeMap<u32, galfus_realm_3d_resources::portal::Portal3D>,
     pub(crate) particle_renderer: Option<crate::particle::ParticleRenderer3D>,
+    pub(crate) particle_alpha_instances: Vec<Particle3DInstance>,
+    pub(crate) particle_additive_instances: Vec<Particle3DInstance>,
     pub(crate) refraction_pipeline: Option<crate::refraction::RefractionPipeline3D>,
     pub(crate) portal_pipelines: BTreeMap<u32, crate::portal::PortalPipeline3D>,
     pub(crate) scene_buffers: Option<SceneGpuBuffers>,
@@ -77,6 +81,8 @@ impl Realm3DContext {
             emitters: BTreeMap::new(),
             portals: BTreeMap::new(),
             particle_renderer: None,
+            particle_alpha_instances: Vec::new(),
+            particle_additive_instances: Vec::new(),
             refraction_pipeline: None,
             portal_pipelines: BTreeMap::new(),
             scene_buffers: None,
@@ -89,6 +95,27 @@ impl Realm3DContext {
             total_time: 0.0,
             dirty: true,
         }
+    }
+
+    /// Clears all host-managed scene resources while retaining reusable renderer allocations.
+    pub(crate) fn clear_scene_resources(&mut self) {
+        self.cameras.clear();
+        self.materials.clear();
+        self.geometries.clear();
+        self.models.clear();
+        self.instanced_models.clear();
+        self.lights.clear();
+        self.emitters.clear();
+        self.particle_alpha_instances.clear();
+        self.particle_additive_instances.clear();
+        self.portals.clear();
+        self.model_bones.clear();
+        self.bones.clear();
+        self.lights_dirty = true;
+        self.bones_dirty = true;
+        self.gizmos.clear();
+        self.portal_pipelines.clear();
+        self.dirty = true;
     }
 
     /// Drops offscreen pipelines whose model no longer owns an active mirror/portal surface.

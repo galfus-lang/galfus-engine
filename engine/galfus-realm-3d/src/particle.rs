@@ -351,7 +351,7 @@ pub fn partition_by_depth(
     i as u32
 }
 
-/// Collects and segregates active particle instances from registered emitters into alpha and additive lists.
+/// Collects and segregates active particle instances into reusable alpha and additive staging buffers.
 pub fn collect_emitter_instances(
     emitters: &std::collections::BTreeMap<
         u32,
@@ -369,14 +369,12 @@ pub fn collect_emitter_instances(
             Option<wgpu::BindGroup>,
         ),
     >,
-) -> (Vec<Particle3DInstance>, Vec<Particle3DInstance>) {
-    if emitters.is_empty() {
-        return (Vec::new(), Vec::new());
-    }
-    let mut alpha = Vec::new();
-    let mut additive = Vec::new();
+    alpha: &mut Vec<Particle3DInstance>,
+    additive: &mut Vec<Particle3DInstance>,
+) {
+    alpha.clear();
+    additive.clear();
     for (emitter, _, state) in emitters.values() {
-        let inst = state.build_instances();
         let is_add = emitter
             .material_id
             .and_then(|mid| materials.get(&mid))
@@ -385,10 +383,9 @@ pub fn collect_emitter_instances(
             })
             .unwrap_or(true);
         if is_add {
-            additive.extend(inst);
+            state.append_instances(additive);
         } else {
-            alpha.extend(inst);
+            state.append_instances(alpha);
         }
     }
-    (alpha, additive)
 }

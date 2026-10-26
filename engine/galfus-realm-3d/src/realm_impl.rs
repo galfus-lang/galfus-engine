@@ -19,21 +19,7 @@ impl Realm for Realm3DContext {
     }
 
     fn clear(&mut self) -> RealmResult<()> {
-        self.cameras.clear();
-        self.materials.clear();
-        self.geometries.clear();
-        self.models.clear();
-        self.instanced_models.clear();
-        self.lights.clear();
-        self.emitters.clear();
-        self.portals.clear();
-        self.model_bones.clear();
-        self.bones.clear();
-        self.lights_dirty = true;
-        self.bones_dirty = true;
-        self.gizmos.clear();
-        self.portal_pipelines.clear();
-        self.dirty = true;
+        self.clear_scene_resources();
         Ok(())
     }
 
@@ -224,11 +210,15 @@ impl Realm for Realm3DContext {
             );
         }
 
-        let (mut alpha_instances, mut additive_instances) =
-            crate::particle::collect_emitter_instances(&self.emitters, &self.materials);
+        crate::particle::collect_emitter_instances(
+            &self.emitters,
+            &self.materials,
+            &mut self.particle_alpha_instances,
+            &mut self.particle_additive_instances,
+        );
 
-        let alpha_count = alpha_instances.len() as u32;
-        let additive_count = additive_instances.len() as u32;
+        let alpha_count = self.particle_alpha_instances.len() as u32;
+        let additive_count = self.particle_additive_instances.len() as u32;
 
         let has_refr = !collector.refractive.is_empty();
         let (behind_alpha, behind_additive) = if has_refr && (alpha_count > 0 || additive_count > 0)
@@ -241,8 +231,16 @@ impl Realm for Realm3DContext {
             let threshold = (min_refr.sqrt() - 0.6).max(0.0).powi(2);
             let cam_pos = camera_transform.position;
             (
-                crate::particle::partition_by_depth(&mut alpha_instances, cam_pos, threshold),
-                crate::particle::partition_by_depth(&mut additive_instances, cam_pos, threshold),
+                crate::particle::partition_by_depth(
+                    &mut self.particle_alpha_instances,
+                    cam_pos,
+                    threshold,
+                ),
+                crate::particle::partition_by_depth(
+                    &mut self.particle_additive_instances,
+                    cam_pos,
+                    threshold,
+                ),
             )
         } else {
             (0, 0)
@@ -256,7 +254,12 @@ impl Realm for Realm3DContext {
                     &pipeline.scene_layout,
                 )
             });
-            particle_renderer.upload(device, queue, &alpha_instances, &additive_instances);
+            particle_renderer.upload(
+                device,
+                queue,
+                &self.particle_alpha_instances,
+                &self.particle_additive_instances,
+            );
         }
 
         // 0. Render offscreen mirror / optical portal passes for all visible mirrors reached by the camera
