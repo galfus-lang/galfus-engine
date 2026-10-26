@@ -128,9 +128,14 @@ async function main(): Promise<void> {
     publishState(latestState);
   };
   const resizeObserver = new ResizeObserver(synchronizeViewport);
+  const stopViewportSynchronization = () => {
+    resizeObserver.disconnect();
+    window.removeEventListener('resize', synchronizeViewport);
+  };
 
-  window.addEventListener('pagehide', () => resizeObserver.disconnect(), { once: true });
-  window.addEventListener('galfus-tour-stop', () => resizeObserver.disconnect(), { once: true });
+  window.addEventListener('resize', synchronizeViewport);
+  window.addEventListener('pagehide', stopViewportSynchronization, { once: true });
+  window.addEventListener('galfus-tour-stop', stopViewportSynchronization, { once: true });
 
   await runFeatureTour({
     engine: galfus,

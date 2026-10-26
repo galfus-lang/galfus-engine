@@ -132,16 +132,7 @@ async function main(): Promise<void> {
       consoleErrors
     );
 
-    await page.evaluate(() => {
-      window.requestAnimationFrame = () => 0;
-      const canvas = document.querySelector<HTMLCanvasElement>('#galfus-browser-tour');
-      if (!canvas) {
-        throw new Error('Browser tour canvas was not found');
-      }
-      canvas.style.width = '800px';
-      canvas.style.height = '450px';
-      void canvas.clientWidth;
-    });
+    await page.setViewportSize({ width: 800, height: 450 });
     await waitForTourState(
       page,
       () => document.body.dataset.viewport === '800x450',
