@@ -23,6 +23,7 @@ export interface TourController {
   previous(): void;
   restart(): void;
   stop(): void;
+  getState(): TourFrameState;
 }
 
 /** Snapshot of the playback state reported after every frame. */
@@ -348,7 +349,13 @@ export async function runFeatureTour(options: TourRunnerOptions): Promise<void> 
     restart: () => seekToRoom(0),
     stop: () => {
       running = false;
-    }
+    },
+    getState: () => ({
+      roomIndex: currentRoomIndex,
+      paused: isPaused,
+      tourClock,
+      duration: tour.duration
+    })
   });
 
   while (running) {
