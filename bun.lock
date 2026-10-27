@@ -5,14 +5,83 @@
     "": {
       "name": "galfus-engine",
       "devDependencies": {
+        "@galfus/engine-core": "workspace:*",
+        "@galfus/engine-realm2d": "workspace:*",
+        "@galfus/engine-realm3d": "workspace:*",
+        "@galfus/transport-browser": "workspace:*",
+        "@galfus/transport-bun": "workspace:*",
+        "@galfus/transport-node": "workspace:*",
+        "@galfus/transport-types": "workspace:*",
         "@johnnymorganz/stylua-bin": "^2.6.0",
         "@playwright/test": "^1.64.1",
         "@types/bun": "^1.4.3",
         "prettier": "^3.9.10",
       },
     },
+    "host/engine-core": {
+      "name": "@galfus/engine-core",
+      "version": "0.1.0",
+      "dependencies": {
+        "@galfus/transport-types": "workspace:*",
+      },
+    },
+    "host/engine-realm2d": {
+      "name": "@galfus/engine-realm2d",
+      "version": "0.1.0",
+      "dependencies": {
+        "@galfus/engine-core": "workspace:*",
+        "@galfus/transport-types": "workspace:*",
+      },
+    },
+    "host/engine-realm3d": {
+      "name": "@galfus/engine-realm3d",
+      "version": "0.1.0",
+      "dependencies": {
+        "@galfus/engine-core": "workspace:*",
+        "@galfus/transport-types": "workspace:*",
+      },
+    },
+    "host/transport-browser": {
+      "name": "@galfus/transport-browser",
+      "version": "0.1.0",
+      "dependencies": {
+        "@galfus/transport-types": "workspace:*",
+      },
+    },
+    "host/transport-bun": {
+      "name": "@galfus/transport-bun",
+      "version": "0.1.0",
+      "dependencies": {
+        "@galfus/transport-types": "workspace:*",
+      },
+    },
+    "host/transport-node": {
+      "name": "@galfus/transport-node",
+      "version": "0.1.0",
+      "dependencies": {
+        "@galfus/transport-types": "workspace:*",
+      },
+    },
+    "host/transport-types": {
+      "name": "@galfus/transport-types",
+      "version": "0.1.0",
+    },
   },
   "packages": {
+    "@galfus/engine-core": ["@galfus/engine-core@workspace:host/engine-core"],
+
+    "@galfus/engine-realm2d": ["@galfus/engine-realm2d@workspace:host/engine-realm2d"],
+
+    "@galfus/engine-realm3d": ["@galfus/engine-realm3d@workspace:host/engine-realm3d"],
+
+    "@galfus/transport-browser": ["@galfus/transport-browser@workspace:host/transport-browser"],
+
+    "@galfus/transport-bun": ["@galfus/transport-bun@workspace:host/transport-bun"],
+
+    "@galfus/transport-node": ["@galfus/transport-node@workspace:host/transport-node"],
+
+    "@galfus/transport-types": ["@galfus/transport-types@workspace:host/transport-types"],
+
     "@johnnymorganz/stylua-bin": ["@johnnymorganz/stylua-bin@2.6.0", "", { "optionalDependencies": { "@johnnymorganz/stylua-bin-darwin-arm64": "2.6.0", "@johnnymorganz/stylua-bin-darwin-x64": "2.6.0", "@johnnymorganz/stylua-bin-linux-arm64": "2.6.0", "@johnnymorganz/stylua-bin-linux-x64": "2.6.0", "@johnnymorganz/stylua-bin-win32-x64": "2.6.0" }, "bin": { "stylua": "run.js" } }, "sha512-cg3vKROljsCbPGIIxOuo+zNAulOjzarSzC6jijT8x3Y69NdFPjFktV8l3pxUBOh8hM9lRJheJ71qGCQVzBFQQw=="],
 
     "@johnnymorganz/stylua-bin-darwin-arm64": ["@johnnymorganz/stylua-bin-darwin-arm64@2.6.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-1ZNdL7CV/dvxslxL31g+6EZnmBkU1SCP1tIItYoBJa2VlCkZMD615IqDybwlRWV6+ezeGd7ThZnQXotC6v6E9g=="],

@@ -1,5 +1,12 @@
 {
-  "include": ["sdk/**/*.ts", "sdk/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.tsx"],
+  "include": [
+    "host/**/*.ts",
+    "host/**/*.tsx",
+    "sdk/**/*.ts",
+    "sdk/**/*.tsx",
+    "scripts/**/*.ts",
+    "scripts/**/*.tsx"
+  ],
   "exclude": ["node_modules"],
   "compilerOptions": {
     // Environment setup & latest features
@@ -15,6 +22,19 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
+    "paths": {
+      "@galfus/transport-types": ["./host/transport-types/src/index.ts"],
+      "@galfus/transport-bun": ["./host/transport-bun/src/index.ts"],
+      "@galfus/transport-node": ["./host/transport-node/src/index.ts"],
+      "@galfus/transport-browser": ["./host/transport-browser/src/index.ts"],
+      "@galfus/engine-core": ["./host/engine-core/src/index.ts"],
+      "@galfus/engine-realm2d": ["./host/engine-realm2d/src/index.ts"],
+      "@galfus/engine-realm2d/utils": ["./host/engine-realm2d/src/utils/index.ts"],
+      "@galfus/engine-realm2d/presets": ["./host/engine-realm2d/src/presets/index.ts"],
+      "@galfus/engine-realm3d": ["./host/engine-realm3d/src/index.ts"],
+      "@galfus/engine-realm3d/utils": ["./host/engine-realm3d/src/utils/index.ts"],
+      "@galfus/engine-realm3d/presets": ["./host/engine-realm3d/src/presets/index.ts"]
+    },
     // Best practices
     "strict": true,
     "skipLibCheck": true,
