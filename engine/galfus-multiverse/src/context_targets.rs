@@ -59,9 +59,17 @@ impl MultiverseContext {
 
     /// Destroys a Target and removes associated invocations, connectors, bindings, and GPU resources.
     pub fn destroy_target(&mut self, target_id: u32) -> MultiverseResult<()> {
-        if self.targets.remove(&target_id).is_none() {
-            return Err(MultiverseError::TargetNotFound(target_id));
+        let desc = self
+            .targets
+            .remove(&target_id)
+            .ok_or(MultiverseError::TargetNotFound(target_id))?;
+
+        if let TargetKind::Window { window_id } = desc.kind {
+            self.surfaces.remove(&window_id);
+            self.window_sizes.remove(&window_id);
         }
+        self.surfaces.remove(&target_id);
+        self.window_sizes.remove(&target_id);
         if let (Some((tex_handle, _, _)), Some(gpu)) = (
             self.target_textures.remove(&target_id),
             &mut self.gpu_manager,

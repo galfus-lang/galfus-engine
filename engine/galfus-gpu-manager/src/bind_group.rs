@@ -50,6 +50,7 @@ pub(crate) enum BindResourceHandle {
 pub struct BindGroupManager {
     pool: GenerationalPool<wgpu::BindGroup>,
     dependencies: HashMap<GpuBindGroupHandle, Vec<BindResourceHandle>>,
+    dependents: HashMap<BindResourceHandle, Vec<GpuBindGroupHandle>>,
 }
 
 impl Default for BindGroupManager {
@@ -63,6 +64,7 @@ impl BindGroupManager {
         Self {
             pool: GenerationalPool::new(NAMESPACE_BIND_GROUP),
             dependencies: HashMap::new(),
+            dependents: HashMap::new(),
         }
     }
 
@@ -118,6 +120,12 @@ impl BindGroupManager {
         });
 
         let handle = self.pool.insert(bind_group)?.cast::<BindGroupResource>();
+        for &res in &dependencies {
+            let list = self.dependents.entry(res).or_default();
+            if !list.contains(&handle) {
+                list.push(handle);
+            }
+        }
         self.dependencies.insert(handle, dependencies);
         Ok(handle)
     }
@@ -137,7 +145,16 @@ impl BindGroupManager {
         self.pool
             .remove(handle.cast())
             .map(|_| {
-                self.dependencies.remove(&handle);
+                if let Some(res_list) = self.dependencies.remove(&handle) {
+                    for res in res_list {
+                        if let Some(bg_list) = self.dependents.get_mut(&res) {
+                            bg_list.retain(|&h| h != handle);
+                            if bg_list.is_empty() {
+                                self.dependents.remove(&res);
+                            }
+                        }
+                    }
+                }
             })
             .map_err(|_| {
                 GpuError::InvalidArgument(format!(
@@ -148,15 +165,10 @@ impl BindGroupManager {
     }
 
     pub(crate) fn destroy_referencing(&mut self, resource: BindResourceHandle) {
-        let dependent_handles: Vec<GpuBindGroupHandle> = self
-            .dependencies
-            .iter()
-            .filter_map(|(handle, dependencies)| {
-                dependencies.contains(&resource).then_some(*handle)
-            })
-            .collect();
-        for handle in dependent_handles {
-            let _ = self.destroy(handle);
+        if let Some(dependent_handles) = self.dependents.remove(&resource) {
+            for handle in dependent_handles {
+                let _ = self.destroy(handle);
+            }
         }
     }
 }

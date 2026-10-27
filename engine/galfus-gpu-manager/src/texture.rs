@@ -452,9 +452,9 @@ fn bytes_per_pixel(format: crate::types::NormalizedTextureFormat) -> GpuResult<u
         | NormalizedTextureFormat::Bgra8Unorm
         | NormalizedTextureFormat::Bgra8UnormSrgb
         | NormalizedTextureFormat::Depth32Float
-        | NormalizedTextureFormat::R32Float => Ok(4),
-        NormalizedTextureFormat::Rg16Float | NormalizedTextureFormat::Rg32Float => Ok(8),
-        NormalizedTextureFormat::Rgba16Float => Ok(8),
+        | NormalizedTextureFormat::R32Float
+        | NormalizedTextureFormat::Rg16Float => Ok(4),
+        NormalizedTextureFormat::Rg32Float | NormalizedTextureFormat::Rgba16Float => Ok(8),
         NormalizedTextureFormat::Rgba32Float => Ok(16),
         NormalizedTextureFormat::Depth24Plus | NormalizedTextureFormat::Depth24PlusStencil8 => {
             Err(GpuError::InvalidArgument(
@@ -477,4 +477,34 @@ fn expected_byte_len(
         .ok_or_else(|| GpuError::InvalidArgument("Texture byte size overflow".into()))?;
     usize::try_from(byte_len)
         .map_err(|_| GpuError::InvalidArgument("Texture byte size exceeds address space".into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::NormalizedTextureFormat;
+
+    #[test]
+    fn test_bytes_per_pixel_rg16float() {
+        assert_eq!(
+            bytes_per_pixel(NormalizedTextureFormat::Rg16Float).unwrap(),
+            4
+        );
+        assert_eq!(
+            bytes_per_pixel(NormalizedTextureFormat::Rg32Float).unwrap(),
+            8
+        );
+        assert_eq!(
+            bytes_per_pixel(NormalizedTextureFormat::Rgba16Float).unwrap(),
+            8
+        );
+        assert_eq!(
+            bytes_per_pixel(NormalizedTextureFormat::R8Unorm).unwrap(),
+            1
+        );
+        assert_eq!(
+            bytes_per_pixel(NormalizedTextureFormat::R16Float).unwrap(),
+            2
+        );
+    }
 }

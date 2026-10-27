@@ -178,13 +178,26 @@ impl BufferArena {
     }
 
     /// Writes raw byte payload into an existing slice.
+    ///
+    /// # Panics
+    /// Panics if the handle is invalid or if `data` exceeds slice capacity.
     pub fn write_bytes(&self, handle: ArenaAllocHandle, data: &[u8]) {
-        let slice = self.slice(handle);
         assert!(
-            data.len() as u64 <= slice.size,
-            "data exceeds slice capacity"
+            self.try_write_bytes(handle, data),
+            "invalid handle or data exceeds slice capacity"
         );
+    }
+
+    /// Safely writes raw byte payload into an existing slice if valid and fits.
+    pub fn try_write_bytes(&self, handle: ArenaAllocHandle, data: &[u8]) -> bool {
+        let Some(slice) = self.try_slice(handle) else {
+            return false;
+        };
+        if data.len() as u64 > slice.size {
+            return false;
+        }
         self.queue.write_buffer(&self.buffer, slice.offset, data);
+        true
     }
 
     /// Allocates and writes a byte payload in one step, applying padding if necessary.
@@ -229,18 +242,25 @@ impl BufferArena {
     }
 
     /// Resolves an allocated handle into an active slice.
+    ///
+    /// # Panics
+    /// Panics if the handle is invalid, stale, or has already been freed.
     pub fn slice(&self, handle: ArenaAllocHandle) -> ArenaSlice {
-        let rec = self
-            .records
-            .get(handle.index as usize)
-            .expect("invalid arena handle index");
-        assert_eq!(rec.generation, handle.generation, "stale arena handle");
-        assert!(rec.alive, "arena slice has been freed");
+        self.try_slice(handle)
+            .expect("invalid, stale or freed arena handle")
+    }
 
-        ArenaSlice {
+    /// Safely resolves an allocated handle into an active slice, returning `None` if invalid, stale or freed.
+    pub fn try_slice(&self, handle: ArenaAllocHandle) -> Option<ArenaSlice> {
+        let rec = self.records.get(handle.index as usize)?;
+        if rec.generation != handle.generation || !rec.alive {
+            return None;
+        }
+
+        Some(ArenaSlice {
             offset: rec.offset,
             size: rec.size,
-        }
+        })
     }
 
     /// Returns a reference to the active backing GPU buffer.

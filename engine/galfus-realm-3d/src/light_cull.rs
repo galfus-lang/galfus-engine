@@ -209,6 +209,16 @@ impl LightCullingPipeline3D {
         }
     }
 
+    /// Returns a reference to the GPU buffer storing visible light indices.
+    pub fn visible_indices_buffer(&self) -> &wgpu::Buffer {
+        &self.visible_indices_buffer
+    }
+
+    /// Returns a reference to the GPU buffer storing the atomic count of visible lights.
+    pub fn visible_count_buffer(&self) -> &wgpu::Buffer {
+        &self.visible_count_buffer
+    }
+
     /// Dispatches compute culling against the camera's 6 frustum planes.
     pub fn dispatch(
         &self,

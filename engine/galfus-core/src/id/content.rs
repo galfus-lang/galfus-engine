@@ -31,12 +31,36 @@ impl ContentId {
         self.0
     }
 
-    /// Validates that two content sources with identical IDs actually match, guarding against hash collisions.
+    /// Validates that two content IDs match.
     pub fn verify_match(self, other: Self) -> CoreResult<()> {
         if self == other {
             Ok(())
         } else {
-            Err(CoreError::CollisionDetected { content_id: self.0 })
+            Err(CoreError::ContentMismatch {
+                expected: self.0,
+                actual: other.0,
+            })
+        }
+    }
+
+    /// Verifies that two byte sources with the same ContentId actually match, guarding against hash collisions.
+    pub fn verify_collision_free(
+        self,
+        content_a: &[u8],
+        other: Self,
+        content_b: &[u8],
+    ) -> CoreResult<()> {
+        if self == other {
+            if content_a != content_b {
+                Err(CoreError::CollisionDetected { content_id: self.0 })
+            } else {
+                Ok(())
+            }
+        } else {
+            Err(CoreError::ContentMismatch {
+                expected: self.0,
+                actual: other.0,
+            })
         }
     }
 }
@@ -71,12 +95,25 @@ mod tests {
     }
 
     #[test]
-    fn test_content_id_collision_verification() {
+    fn test_content_id_verification() {
         let id1 = ContentId::from_raw(0x1234);
         let id2 = ContentId::from_raw(0x1234);
         let id3 = ContentId::from_raw(0x5678);
 
         assert!(id1.verify_match(id2).is_ok());
-        assert!(id1.verify_match(id3).is_err());
+        assert!(matches!(
+            id1.verify_match(id3),
+            Err(CoreError::ContentMismatch {
+                expected: 0x1234,
+                actual: 0x5678
+            })
+        ));
+
+        // Test collision detection
+        assert!(id1.verify_collision_free(b"abc", id2, b"abc").is_ok());
+        assert!(matches!(
+            id1.verify_collision_free(b"abc", id2, b"xyz"),
+            Err(CoreError::CollisionDetected { content_id: 0x1234 })
+        ));
     }
 }

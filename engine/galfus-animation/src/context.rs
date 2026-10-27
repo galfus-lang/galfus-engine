@@ -29,6 +29,9 @@ impl Default for AnimationContext {
 }
 
 impl AnimationContext {
+    /// Maximum number of unpolled animation events retained before oldest events are evicted.
+    pub const DEFAULT_MAX_EVENT_QUEUE_SIZE: usize = 1024;
+
     /// Creates a new empty `AnimationContext`.
     pub fn new() -> Self {
         Self {
@@ -140,14 +143,26 @@ impl AnimationContext {
     pub fn step(&mut self, dt: f32) {
         for instance in self.transitions.values_mut() {
             if let Some(event) = instance.step(dt) {
-                self.event_queue.push_back(event);
+                Self::push_event_to_queue(&mut self.event_queue, event);
             }
         }
         for instance in self.path_follows.values_mut() {
             if let Some(event) = instance.step(dt) {
-                self.event_queue.push_back(event);
+                Self::push_event_to_queue(&mut self.event_queue, event);
             }
         }
+    }
+
+    fn push_event_to_queue(queue: &mut VecDeque<AnimationEvent>, event: AnimationEvent) {
+        if queue.len() >= Self::DEFAULT_MAX_EVENT_QUEUE_SIZE {
+            queue.pop_front();
+        }
+        queue.push_back(event);
+    }
+
+    /// Pushes an event to the queue, discarding the oldest event if capacity is exceeded.
+    pub fn push_event(&mut self, event: AnimationEvent) {
+        Self::push_event_to_queue(&mut self.event_queue, event);
     }
 
     /// Applies evaluated animated values to bound targets inside Multiverse.
@@ -281,5 +296,15 @@ impl AnimationContext {
     /// Sets a custom channel value directly.
     pub fn set_custom_channel(&mut self, channel_id: u32, value: AnimValue) {
         self.custom_channels.insert(channel_id, value);
+    }
+
+    /// Removes a custom channel by ID, releasing its stored value.
+    pub fn remove_custom_channel(&mut self, channel_id: u32) -> Option<AnimValue> {
+        self.custom_channels.remove(&channel_id)
+    }
+
+    /// Clears all custom channels.
+    pub fn clear_custom_channels(&mut self) {
+        self.custom_channels.clear();
     }
 }

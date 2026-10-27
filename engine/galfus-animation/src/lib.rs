@@ -544,4 +544,42 @@ mod tests {
         // Now transition 3 can bind successfully
         assert!(ctx.bind_target(3, target_3d).is_ok());
     }
+
+    #[test]
+    fn test_custom_channels_lifecycle() {
+        let mut ctx = AnimationContext::new();
+        ctx.set_custom_channel(1, AnimValue::Scalar(42.0));
+        assert_eq!(
+            ctx.get_custom_channel(1).unwrap().as_scalar().unwrap(),
+            42.0
+        );
+
+        let removed = ctx.remove_custom_channel(1);
+        assert_eq!(removed.unwrap().as_scalar().unwrap(), 42.0);
+        assert!(ctx.get_custom_channel(1).is_none());
+
+        ctx.set_custom_channel(2, AnimValue::Scalar(10.0));
+        ctx.set_custom_channel(3, AnimValue::Scalar(20.0));
+        ctx.clear_custom_channels();
+        assert!(ctx.get_custom_channel(2).is_none());
+        assert!(ctx.get_custom_channel(3).is_none());
+    }
+
+    #[test]
+    fn test_event_queue_bounded_eviction() {
+        let mut ctx = AnimationContext::new();
+        for i in 0..(AnimationContext::DEFAULT_MAX_EVENT_QUEUE_SIZE + 50) {
+            ctx.push_event(AnimationEvent {
+                transition_id: i as u32,
+                event_type: AnimationEventType::Started,
+                target: None,
+                value: AnimValue::Scalar(0.0),
+                elapsed: 0.0,
+            });
+        }
+        let events = ctx.pump_events();
+        assert_eq!(events.len(), AnimationContext::DEFAULT_MAX_EVENT_QUEUE_SIZE);
+        // The first 50 events (0..50) must have been evicted, so the oldest event remaining has transition_id 50
+        assert_eq!(events[0].transition_id, 50);
+    }
 }
