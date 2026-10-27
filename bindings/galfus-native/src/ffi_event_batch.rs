@@ -67,6 +67,15 @@ fn push_text(text: &mut Vec<u8>, value: &str) -> (u32, u32) {
     (offset, length)
 }
 
+fn push_debug<T: std::fmt::Debug>(text: &mut Vec<u8>, value: T) -> (u32, u32) {
+    use std::io::Write;
+    let offset = u32::try_from(text.len()).expect("event text arena exceeds u32 length");
+    let _ = write!(text, "{value:?}");
+    let length =
+        u32::try_from(text.len() - offset as usize).expect("event text value exceeds u32 length");
+    (offset, length)
+}
+
 fn modifier_flags(modifiers: galfus_platform::ModifiersState) -> u32 {
     (u32::from(modifiers.shift) * FLAG_SHIFT)
         | (u32::from(modifiers.ctrl) * FLAG_CTRL)
@@ -162,8 +171,7 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
                     output.event_type = 2;
                     output.values[2] = pressure;
                     output.flags = u32::from(state.is_pressed()) * FLAG_TRUE;
-                    (output.text0_offset, output.text0_length) =
-                        push_text(text, &format!("{button:?}"));
+                    (output.text0_offset, output.text0_length) = push_debug(text, button);
                 }
                 PointerEvent::Enter { .. } => output.event_type = 3,
                 PointerEvent::Leave { .. } => output.event_type = 4,
@@ -196,16 +204,14 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
                     output.event_type = 1;
                     output.flags |= u32::from(state.is_pressed()) * FLAG_TRUE;
                     output.flags |= u32::from(repeat) * FLAG_REPEAT;
-                    (output.text0_offset, output.text0_length) =
-                        push_text(text, &format!("{physical_key:?}"));
+                    (output.text0_offset, output.text0_length) = push_debug(text, physical_key);
                     match logical_key {
                         LogicalKey::Character(value) => {
                             (output.text1_offset, output.text1_length) = push_text(text, &value);
                         }
                         LogicalKey::Named(value) => {
                             output.flags |= FLAG_LOGICAL_NAMED;
-                            (output.text1_offset, output.text1_length) =
-                                push_text(text, &format!("{value:?}"));
+                            (output.text1_offset, output.text1_length) = push_debug(text, value);
                         }
                         LogicalKey::Unidentified => {
                             (output.text1_offset, output.text1_length) =
@@ -232,14 +238,12 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
                 GamepadEvent::Button { button, state, .. } => {
                     output.event_type = 3;
                     output.flags = u32::from(state.is_pressed()) * FLAG_TRUE;
-                    (output.text0_offset, output.text0_length) =
-                        push_text(text, &format!("{button:?}"));
+                    (output.text0_offset, output.text0_length) = push_debug(text, button);
                 }
                 GamepadEvent::Axis { axis, value, .. } => {
                     output.event_type = 4;
                     output.values[0] = value;
-                    (output.text0_offset, output.text0_length) =
-                        push_text(text, &format!("{axis:?}"));
+                    (output.text0_offset, output.text0_length) = push_debug(text, axis);
                 }
             }
         }

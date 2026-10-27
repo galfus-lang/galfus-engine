@@ -57,6 +57,8 @@ pub struct AudioContext {
     #[cfg(not(target_arch = "wasm32"))]
     voice_ids: HashMap<u32, Handle<StaticSoundHandle>>,
     #[cfg(not(target_arch = "wasm32"))]
+    handle_to_voice_id: HashMap<Handle<StaticSoundHandle>, u32>,
+    #[cfg(not(target_arch = "wasm32"))]
     next_voice_id: u32,
 }
 
@@ -71,6 +73,7 @@ impl AudioContext {
                 sounds: HashMap::new(),
                 voices: GenerationalPool::new(NAMESPACE_AUDIO_VOICE),
                 voice_ids: HashMap::new(),
+                handle_to_voice_id: HashMap::new(),
                 next_voice_id: 1,
             }
         }
@@ -172,6 +175,7 @@ impl AudioContext {
                 PlatformError::AudioPlaybackFailed(format!("Failed to register voice: {e}"))
             })?;
             self.voice_ids.insert(voice_id, voice_handle);
+            self.handle_to_voice_id.insert(voice_handle, voice_id);
             Ok(voice_id)
         }
 
@@ -352,7 +356,9 @@ impl AudioContext {
             let mut reaped = 0;
             for handle in finished {
                 if self.voices.remove(handle).is_ok() {
-                    self.voice_ids.retain(|_, current| *current != handle);
+                    if let Some(voice_id) = self.handle_to_voice_id.remove(&handle) {
+                        self.voice_ids.remove(&voice_id);
+                    }
                     reaped += 1;
                 }
             }

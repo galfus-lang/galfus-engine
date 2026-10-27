@@ -37,6 +37,10 @@ pub enum CoreError {
     #[error("Handle pool exhausted: no free slots available")]
     SlotExhaustion,
 
+    /// Deterministic content IDs do not match.
+    #[error("Content ID mismatch: expected {expected:#018x}, got {actual:#018x}")]
+    ContentMismatch { expected: u64, actual: u64 },
+
     /// A deterministic content ID collision was detected.
     #[error("Content ID collision detected for hash {content_id:#018x}")]
     CollisionDetected { content_id: u64 },

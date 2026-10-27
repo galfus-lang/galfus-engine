@@ -171,10 +171,9 @@ impl Realm for Realm3DContext {
         let cam_frustum = Frustum::from_view_projection(camera_uniform.view_projection);
 
         // Optional parallel GPU light culling against camera frustum
-        if !self.lights.is_empty() {
-            let cull_pipe = self
-                .light_cull_pipeline
-                .get_or_insert_with(|| crate::light_cull::LightCullingPipeline3D::new(device, 256));
+        if let Some(cull_pipe) = &self.light_cull_pipeline
+            && !self.lights.is_empty()
+        {
             cull_pipe.dispatch(
                 device,
                 queue,

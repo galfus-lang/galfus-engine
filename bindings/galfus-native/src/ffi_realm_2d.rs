@@ -535,8 +535,9 @@ pub extern "C" fn galfus_realm_2d_destroy_particle_emitter(realm_id: u32, emitte
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
             .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm.remove_particle_emitter(emitter_id);
-        Ok(())
+        realm
+            .destroy_particle_emitter(emitter_id)
+            .map_err(|e| e.to_string())
     }) {
         Ok(()) => 0,
         Err(e) => {

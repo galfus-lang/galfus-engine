@@ -185,8 +185,13 @@ fn test_buffer_arena_suballocation_and_grow() {
     arena.write_bytes(h1, &data);
 
     assert!(arena.free(h1));
+    assert!(arena.try_slice(h1).is_none());
+    assert!(!arena.try_write_bytes(h1, &data));
+
     let reused = arena.allocate(32);
     assert_eq!(arena.slice(reused).offset, 0);
+    assert!(arena.try_slice(reused).is_some());
+    assert!(arena.try_write_bytes(reused, &data));
 
     // Allocate large block that forces grow
     let h2 = arena.allocate(256);

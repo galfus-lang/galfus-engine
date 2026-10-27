@@ -51,6 +51,7 @@ impl Realm2DContext {
         self.materials.insert(material_id, material);
         self.material_bind_groups.remove(&material_id);
         self.material_uniform_buffers.remove(&material_id);
+        self.material_texture_slots.remove(&material_id);
         self.dirty = true;
         Ok(())
     }
@@ -153,9 +154,25 @@ impl Realm2DContext {
         }
     }
 
+    /// Destroys a 2D particle emitter entity by its host logical ID.
+    pub fn destroy_particle_emitter(&mut self, emitter_id: u32) -> RealmResult<()> {
+        self.emitters
+            .remove(&emitter_id)
+            .map(|_| {
+                self.dirty = true;
+            })
+            .ok_or_else(|| {
+                galfus_realm_core::RealmError::ResourceNotFound(
+                    self.id,
+                    format!("ParticleEmitter {emitter_id}"),
+                )
+            })
+    }
+
+    /// Backwards-compatible alias for `destroy_particle_emitter`.
+    #[inline]
     pub fn remove_particle_emitter(&mut self, emitter_id: u32) {
-        self.emitters.remove(&emitter_id);
-        self.dirty = true;
+        let _ = self.destroy_particle_emitter(emitter_id);
     }
 
     /// Destroys a camera entity by its host logical ID.
@@ -177,6 +194,7 @@ impl Realm2DContext {
     pub fn destroy_material(&mut self, material_id: u32) -> RealmResult<()> {
         self.material_bind_groups.remove(&material_id);
         self.material_uniform_buffers.remove(&material_id);
+        self.material_texture_slots.remove(&material_id);
         self.materials
             .remove(&material_id)
             .map(|_| {
