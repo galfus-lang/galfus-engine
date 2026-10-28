@@ -199,11 +199,19 @@ export class AnimationCoordinator {
   // ---------------------------------------------------------------------------
   // Event Pump & Lifecycle
   // ---------------------------------------------------------------------------
-  onEvent(listener: AnimationEventListener): () => void {
+  on(_type: 'animation', listener: AnimationEventListener): () => void {
     this._eventListeners.add(listener);
     return () => {
       this._eventListeners.delete(listener);
     };
+  }
+
+  onEvent(listener: AnimationEventListener): () => void {
+    return this.on('animation', listener);
+  }
+
+  clearListeners(): void {
+    this._eventListeners.clear();
   }
 
   step(dt?: number): void {

@@ -18,7 +18,12 @@ import { Realm3D } from './realm3d/realm';
 import { ResourceManager } from './resources/manager';
 import { AudioManager } from './audio/manager';
 import { AnimationCoordinator } from './animation/coordinator';
-import { IdAllocator } from './types';
+import {
+  IdAllocator,
+  type RuntimeEventListener,
+  type RuntimeEventMap,
+  type RuntimeEventType
+} from './types';
 
 export class MultiverseRuntime {
   readonly platform = new PlatformCoordinator();
@@ -27,7 +32,8 @@ export class MultiverseRuntime {
   readonly audio = new AudioManager();
   readonly animation = new AnimationCoordinator();
   private readonly _realmIdAllocator = new IdAllocator<RealmId>(1);
-  private readonly _onTickCallbacks = new Set<FrameCallback>();
+  private readonly _eventListeners = new Map<RuntimeEventType, Set<(event: any) => void>>();
+  private _animationUnsubscribe: (() => void) | null = null;
 
   private _frameId = 0;
   private _elapsedSeconds = 0;
@@ -73,6 +79,16 @@ export class MultiverseRuntime {
     this.resources.bindEngine(this.transport.engine);
     this.audio.bindEngine(this.transport.engine);
     this.animation.bindEngine(this.transport.engine);
+
+    // Forward animation events from coordinator to runtime listeners
+    this._animationUnsubscribe = this.animation.on('animation', (event) => {
+      const animListeners = this._eventListeners.get('animation');
+      if (animListeners && animListeners.size > 0) {
+        for (const listener of animListeners) {
+          listener(event);
+        }
+      }
+    });
   }
 
   /**
@@ -93,6 +109,39 @@ export class MultiverseRuntime {
     const realm = new Realm3D(id);
     this.multiverse.registerRealm(realm);
     return realm;
+  }
+
+  /**
+   * Registers a strongly typed event listener.
+   *
+   * @param type Event category: 'tick', 'window', 'pointer', 'keyboard', 'gamepad', 'animation', 'platform'.
+   * @param listener Callback receiving the strongly typed event payload.
+   * @returns Unsubscribe function to remove the listener.
+   */
+  on<T extends RuntimeEventType>(type: T, listener: RuntimeEventListener<T>): () => void {
+    let set = this._eventListeners.get(type);
+    if (!set) {
+      set = new Set();
+      this._eventListeners.set(type, set);
+    }
+    set.add(listener as (event: any) => void);
+    return () => {
+      set?.delete(listener as (event: any) => void);
+    };
+  }
+
+  /**
+   * Clears all registered event listeners, or listeners for a specific event type.
+   */
+  clearListeners(type?: RuntimeEventType): void {
+    if (type) {
+      this._eventListeners.get(type)?.clear();
+    } else {
+      for (const set of this._eventListeners.values()) {
+        set.clear();
+      }
+      this._eventListeners.clear();
+    }
   }
 
   /**
@@ -138,13 +187,11 @@ export class MultiverseRuntime {
   /**
    * Registers a frame update callback invoked on every tick.
    *
+   * @deprecated Prefer `runtime.on('tick', callback)`.
    * @returns Unsubscribe function to unregister the callback.
    */
   onTick(callback: FrameCallback): () => void {
-    this._onTickCallbacks.add(callback);
-    return () => {
-      this._onTickCallbacks.delete(callback);
-    };
+    return this.on('tick', callback);
   }
 
   /**
@@ -152,7 +199,11 @@ export class MultiverseRuntime {
    */
   dispose(): void {
     this.stop();
-    this._onTickCallbacks.clear();
+    this.clearListeners();
+    if (this._animationUnsubscribe) {
+      this._animationUnsubscribe();
+      this._animationUnsubscribe = null;
+    }
     this.animation.dispose();
     this.audio.dispose();
     this.resources.dispose();
@@ -165,15 +216,48 @@ export class MultiverseRuntime {
   // Internal Frame Tick Pipeline
   // ---------------------------------------------------------------------------
   private tickFrame(timing: FrameTiming): void {
-    // 1. Invoke user tick listeners
-    for (const callback of this._onTickCallbacks) {
-      callback(timing);
+    // 1. Pump platform events internally
+    const platformEvents = this.platform.pumpEvents();
+    if (platformEvents.length > 0) {
+      const platformListeners = this._eventListeners.get('platform');
+      for (const event of platformEvents) {
+        // Auto-synchronize window swapchain size in Multiverse on resize
+        if (event.kind === 'window' && event.type === 'resized') {
+          this.platform.window.updateSize(event.windowId as any, event.width, event.height);
+        }
+
+        // Dispatch to kind listeners ('window', 'pointer', 'keyboard', 'gamepad')
+        const kindListeners = this._eventListeners.get(event.kind as RuntimeEventType);
+        if (kindListeners && kindListeners.size > 0) {
+          for (const listener of kindListeners) {
+            listener(event);
+          }
+        }
+
+        // Forward through platform coordinator
+        this.platform.dispatch(event);
+
+        // Dispatch to generic 'platform' listeners
+        if (platformListeners && platformListeners.size > 0) {
+          for (const listener of platformListeners) {
+            listener(event);
+          }
+        }
+      }
     }
 
-    // 2. Step animations
+    // 2. Dispatch frame tick listeners ('tick')
+    const tickListeners = this._eventListeners.get('tick');
+    if (tickListeners && tickListeners.size > 0) {
+      for (const listener of tickListeners) {
+        listener(timing);
+      }
+    }
+
+    // 3. Step animations (this also pumps animation events and triggers registered listeners)
     this.animation.step(timing.dt);
 
-    // 3. Prepare ECS context
+    // 4. Prepare ECS context
     const context: SystemContext = {
       time: this._elapsedSeconds,
       dt: timing.dt,
@@ -181,14 +265,14 @@ export class MultiverseRuntime {
       engine: this.transport.engine
     };
 
-    // 4. Step all ECS worlds and sync with core
+    // 5. Step all ECS worlds and sync with core
     this.multiverse.syncAllRealms(context);
 
-    // 5. Resolve multiverse schedule and dispatch to GPU
+    // 6. Resolve multiverse schedule and dispatch to GPU
     this.multiverse.resolve();
     this.multiverse.dispatch(timing.frameId, timing.dt);
 
-    // 6. Tick transport I/O (e.g. window events, input polling)
+    // 7. Tick transport I/O
     this.transport.tick?.(timing.dt);
   }
 }

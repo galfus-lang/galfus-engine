@@ -6,43 +6,11 @@ import { EPSILON, equalsApprox } from './common';
 import type { ReadonlyQuat, Quat } from './quat';
 import type { ReadonlyVec3, Vec3 } from './vec3';
 
-export type Mat4 = Float32Array & {
-  0: number;
-  1: number;
-  2: number;
-  3: number;
-  4: number;
-  5: number;
-  6: number;
-  7: number;
-  8: number;
-  9: number;
-  10: number;
-  11: number;
-  12: number;
-  13: number;
-  14: number;
-  15: number;
-};
+export type Mat4Index = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
 
-export type ReadonlyMat4 = ArrayLike<number> & {
-  0: number;
-  1: number;
-  2: number;
-  3: number;
-  4: number;
-  5: number;
-  6: number;
-  7: number;
-  8: number;
-  9: number;
-  10: number;
-  11: number;
-  12: number;
-  13: number;
-  14: number;
-  15: number;
-};
+export type Mat4 = Float32Array & { [K in Mat4Index]: number };
+
+export type ReadonlyMat4 = ArrayLike<number> & { readonly [K in Mat4Index]: number };
 
 export function create(): Mat4 {
   const out = new Float32Array(16) as unknown as Mat4;
@@ -54,42 +22,16 @@ export function create(): Mat4 {
 }
 
 export function identity(out: Mat4): Mat4 {
+  out.fill(0);
   out[0] = 1;
-  out[1] = 0;
-  out[2] = 0;
-  out[3] = 0;
-  out[4] = 0;
   out[5] = 1;
-  out[6] = 0;
-  out[7] = 0;
-  out[8] = 0;
-  out[9] = 0;
   out[10] = 1;
-  out[11] = 0;
-  out[12] = 0;
-  out[13] = 0;
-  out[14] = 0;
   out[15] = 1;
   return out;
 }
 
 export function copy(out: Mat4, a: ReadonlyMat4): Mat4 {
-  out[0] = a[0];
-  out[1] = a[1];
-  out[2] = a[2];
-  out[3] = a[3];
-  out[4] = a[4];
-  out[5] = a[5];
-  out[6] = a[6];
-  out[7] = a[7];
-  out[8] = a[8];
-  out[9] = a[9];
-  out[10] = a[10];
-  out[11] = a[11];
-  out[12] = a[12];
-  out[13] = a[13];
-  out[14] = a[14];
-  out[15] = a[15];
+  out.set(a as ArrayLike<number>);
   return out;
 }
 
@@ -150,41 +92,18 @@ export function multiply(out: Mat4, a: ReadonlyMat4, b: ReadonlyMat4): Mat4 {
 }
 
 export function fromTranslation(out: Mat4, v: ReadonlyVec3): Mat4 {
-  out[0] = 1;
-  out[1] = 0;
-  out[2] = 0;
-  out[3] = 0;
-  out[4] = 0;
-  out[5] = 1;
-  out[6] = 0;
-  out[7] = 0;
-  out[8] = 0;
-  out[9] = 0;
-  out[10] = 1;
-  out[11] = 0;
+  identity(out);
   out[12] = v[0];
   out[13] = v[1];
   out[14] = v[2];
-  out[15] = 1;
   return out;
 }
 
 export function fromScaling(out: Mat4, v: ReadonlyVec3): Mat4 {
+  out.fill(0);
   out[0] = v[0];
-  out[1] = 0;
-  out[2] = 0;
-  out[3] = 0;
-  out[4] = 0;
   out[5] = v[1];
-  out[6] = 0;
-  out[7] = 0;
-  out[8] = 0;
-  out[9] = 0;
   out[10] = v[2];
-  out[11] = 0;
-  out[12] = 0;
-  out[13] = 0;
-  out[14] = 0;
   out[15] = 1;
   return out;
 }
@@ -281,11 +200,7 @@ export function translate(out: Mat4, a: ReadonlyMat4, v: ReadonlyVec3): Mat4 {
   const y = v[1];
   const z = v[2];
 
-  if (a === out) {
-    out[12] = a[0] * x + a[4] * y + a[8] * z + a[12];
-    out[13] = a[1] * x + a[5] * y + a[9] * z + a[13];
-    out[14] = a[2] * x + a[6] * y + a[10] * z + a[14];
-    out[15] = a[3] * x + a[7] * y + a[11] * z + a[15];
+  if (a !== out) {
     out[0] = a[0];
     out[1] = a[1];
     out[2] = a[2];
@@ -298,11 +213,149 @@ export function translate(out: Mat4, a: ReadonlyMat4, v: ReadonlyVec3): Mat4 {
     out[9] = a[9];
     out[10] = a[10];
     out[11] = a[11];
-    out[12] = a[0] * x + a[4] * y + a[8] * z + a[12];
-    out[13] = a[1] * x + a[5] * y + a[9] * z + a[13];
-    out[14] = a[2] * x + a[6] * y + a[10] * z + a[14];
-    out[15] = a[3] * x + a[7] * y + a[11] * z + a[15];
   }
+
+  out[12] = a[0] * x + a[4] * y + a[8] * z + a[12];
+  out[13] = a[1] * x + a[5] * y + a[9] * z + a[13];
+  out[14] = a[2] * x + a[6] * y + a[10] * z + a[14];
+  out[15] = a[3] * x + a[7] * y + a[11] * z + a[15];
+  return out;
+}
+
+const _scratchRot = new Float32Array(16) as unknown as Mat4;
+
+/**
+ * Creates a rotation matrix from an angle in radians and an axis.
+ */
+export function fromRotation(out: Mat4, rad: number, axis: ReadonlyVec3): Mat4 {
+  let x = axis[0];
+  let y = axis[1];
+  let z = axis[2];
+  let len = Math.hypot(x, y, z);
+  if (len < EPSILON) return identity(out);
+
+  len = 1 / len;
+  x *= len;
+  y *= len;
+  z *= len;
+  const s = Math.sin(rad);
+  const c = Math.cos(rad);
+  const t = 1 - c;
+
+  out[0] = x * x * t + c;
+  out[1] = y * x * t + z * s;
+  out[2] = z * x * t - y * s;
+  out[3] = 0;
+  out[4] = x * y * t - z * s;
+  out[5] = y * y * t + c;
+  out[6] = z * y * t + x * s;
+  out[7] = 0;
+  out[8] = x * z * t + y * s;
+  out[9] = y * z * t - x * s;
+  out[10] = z * z * t + c;
+  out[11] = 0;
+  out[12] = 0;
+  out[13] = 0;
+  out[14] = 0;
+  out[15] = 1;
+  return out;
+}
+
+/**
+ * Rotates a mat4 by the given angle in radians around the given axis.
+ */
+export function rotate(out: Mat4, rad: number, axis: ReadonlyVec3): Mat4;
+export function rotate(out: Mat4, a: ReadonlyMat4, rad: number, axis: ReadonlyVec3): Mat4;
+export function rotate(
+  out: Mat4,
+  aOrRad: ReadonlyMat4 | number,
+  radOrAxis: number | ReadonlyVec3,
+  maybeAxis?: ReadonlyVec3
+): Mat4 {
+  const a = typeof aOrRad === 'number' ? out : aOrRad;
+  const rad = typeof aOrRad === 'number' ? aOrRad : (radOrAxis as number);
+  const axis = (typeof aOrRad === 'number' ? radOrAxis : maybeAxis) as ReadonlyVec3;
+
+  fromRotation(_scratchRot, rad, axis);
+  return multiply(out, a, _scratchRot);
+}
+
+/**
+ * Generates a look-at matrix with the given eye position, focal point, and up-vector.
+ */
+export function lookAt(out: Mat4, eye: ReadonlyVec3, center: ReadonlyVec3, up: ReadonlyVec3): Mat4 {
+  const eyex = eye[0],
+    eyey = eye[1],
+    eyez = eye[2];
+  const upx = up[0],
+    upy = up[1],
+    upz = up[2];
+  const centerx = center[0],
+    centery = center[1],
+    centerz = center[2];
+
+  if (
+    Math.abs(eyex - centerx) < EPSILON &&
+    Math.abs(eyey - centery) < EPSILON &&
+    Math.abs(eyez - centerz) < EPSILON
+  ) {
+    return identity(out);
+  }
+
+  let z0 = eyex - centerx,
+    z1 = eyey - centery,
+    z2 = eyez - centerz;
+  let len = 1 / Math.hypot(z0, z1, z2);
+  z0 *= len;
+  z1 *= len;
+  z2 *= len;
+
+  let x0 = upy * z2 - upz * z1,
+    x1 = upz * z0 - upx * z2,
+    x2 = upx * z1 - upy * z0;
+  len = Math.hypot(x0, x1, x2);
+  if (!len) {
+    x0 = 0;
+    x1 = 0;
+    x2 = 0;
+  } else {
+    len = 1 / len;
+    x0 *= len;
+    x1 *= len;
+    x2 *= len;
+  }
+
+  let y0 = z1 * x2 - z2 * x1,
+    y1 = z2 * x0 - z0 * x2,
+    y2 = z0 * x1 - z1 * x0;
+  len = Math.hypot(y0, y1, y2);
+  if (!len) {
+    y0 = 0;
+    y1 = 0;
+    y2 = 0;
+  } else {
+    len = 1 / len;
+    y0 *= len;
+    y1 *= len;
+    y2 *= len;
+  }
+
+  out[0] = x0;
+  out[1] = y0;
+  out[2] = z0;
+  out[3] = 0;
+  out[4] = x1;
+  out[5] = y1;
+  out[6] = z1;
+  out[7] = 0;
+  out[8] = x2;
+  out[9] = y2;
+  out[10] = z2;
+  out[11] = 0;
+  out[12] = -(x0 * eyex + x1 * eyey + x2 * eyez);
+  out[13] = -(y0 * eyex + y1 * eyey + y2 * eyez);
+  out[14] = -(z0 * eyex + z1 * eyey + z2 * eyez);
+  out[15] = 1;
   return out;
 }
 
@@ -460,22 +513,68 @@ export function getRotation(out: Quat, mat: ReadonlyMat4): Quat {
 }
 
 export function equals(a: ReadonlyMat4, b: ReadonlyMat4, epsilon: number = EPSILON): boolean {
-  return (
-    equalsApprox(a[0], b[0], epsilon) &&
-    equalsApprox(a[1], b[1], epsilon) &&
-    equalsApprox(a[2], b[2], epsilon) &&
-    equalsApprox(a[3], b[3], epsilon) &&
-    equalsApprox(a[4], b[4], epsilon) &&
-    equalsApprox(a[5], b[5], epsilon) &&
-    equalsApprox(a[6], b[6], epsilon) &&
-    equalsApprox(a[7], b[7], epsilon) &&
-    equalsApprox(a[8], b[8], epsilon) &&
-    equalsApprox(a[9], b[9], epsilon) &&
-    equalsApprox(a[10], b[10], epsilon) &&
-    equalsApprox(a[11], b[11], epsilon) &&
-    equalsApprox(a[12], b[12], epsilon) &&
-    equalsApprox(a[13], b[13], epsilon) &&
-    equalsApprox(a[14], b[14], epsilon) &&
-    equalsApprox(a[15], b[15], epsilon)
-  );
+  for (let i = 0; i < 16; i++) {
+    const valA = a[i as keyof ReadonlyMat4] as number;
+    const valB = b[i as keyof ReadonlyMat4] as number;
+    if (!equalsApprox(valA, valB, epsilon)) return false;
+  }
+  return true;
+}
+
+/**
+ * Copies the translation vector components from `from` into `out`.
+ */
+export function copyPosition(out: Mat4, from: ReadonlyMat4): Mat4 {
+  out[12] = from[12];
+  out[13] = from[13];
+  out[14] = from[14];
+  return out;
+}
+
+/**
+ * Sets the translation vector components in `out`.
+ */
+export function setTranslation(
+  out: Mat4,
+  xOrVec: number | ReadonlyVec3,
+  y?: number,
+  z?: number
+): Mat4 {
+  if (typeof xOrVec === 'number') {
+    out[12] = xOrVec;
+    out[13] = y ?? 0;
+    out[14] = z ?? 0;
+  } else {
+    out[12] = xOrVec[0];
+    out[13] = xOrVec[1];
+    out[14] = xOrVec[2];
+  }
+  return out;
+}
+
+/**
+ * Copies the 3x3 rotation basis from `from` into `out`, preserving the scale of `out`.
+ */
+export function copyRotation(out: Mat4, from: ReadonlyMat4): Mat4 {
+  const sx = Math.hypot(out[0], out[1], out[2]) || 1;
+  const sy = Math.hypot(out[4], out[5], out[6]) || 1;
+  const sz = Math.hypot(out[8], out[9], out[10]) || 1;
+
+  const fsx = Math.hypot(from[0], from[1], from[2]) || 1;
+  const fsy = Math.hypot(from[4], from[5], from[6]) || 1;
+  const fsz = Math.hypot(from[8], from[9], from[10]) || 1;
+
+  out[0] = (from[0] / fsx) * sx;
+  out[1] = (from[1] / fsx) * sx;
+  out[2] = (from[2] / fsx) * sx;
+
+  out[4] = (from[4] / fsy) * sy;
+  out[5] = (from[5] / fsy) * sy;
+  out[6] = (from[6] / fsy) * sy;
+
+  out[8] = (from[8] / fsz) * sz;
+  out[9] = (from[9] / fsz) * sz;
+  out[10] = (from[10] / fsz) * sz;
+
+  return out;
 }

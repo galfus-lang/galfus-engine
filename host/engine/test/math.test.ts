@@ -79,6 +79,40 @@ describe('@galfus/engine-core > Math', () => {
     const identityCheck = mat4.create();
     mat4.multiply(identityCheck, m, inv);
     expect(mat4.equals(identityCheck, mat4.create())).toBe(true);
+
+    // Test mat4.rotate with radians and axis
+    const rotMat = mat4.create();
+    mat4.fromRotation(rotMat, Math.PI / 2, [0, 1, 0]); // 90 deg around Y
+    const rotatedVec = vec3.create();
+    vec3.transformMat4(rotatedVec, [1, 0, 0], rotMat);
+    expect(rotatedVec[0]).toBeCloseTo(0);
+    expect(rotatedVec[1]).toBeCloseTo(0);
+    expect(rotatedVec[2]).toBeCloseTo(-1);
+
+    // In-place rotation
+    const inPlaceMat = mat4.create();
+    mat4.rotate(inPlaceMat, Math.PI / 2, [0, 1, 0]);
+    expect(mat4.equals(inPlaceMat, rotMat)).toBe(true);
+
+    // Position and translation helpers
+    const posMat = mat4.create();
+    mat4.setTranslation(posMat, 100, 200, 300);
+    const copiedPos = mat4.create();
+    mat4.copyPosition(copiedPos, posMat);
+    const extractedPos = vec3.create();
+    mat4.getTranslation(extractedPos, copiedPos);
+    expect(extractedPos[0]).toBe(100);
+    expect(extractedPos[1]).toBe(200);
+    expect(extractedPos[2]).toBe(300);
+
+    // Test lookAt
+    const lookAtMat = mat4.create();
+    mat4.lookAt(lookAtMat, [0, 0, 10], [0, 0, 0], [0, 1, 0]);
+    const eyeTransformed = vec3.create();
+    vec3.transformMat4(eyeTransformed, [0, 0, 10], lookAtMat);
+    expect(eyeTransformed[0]).toBeCloseTo(0);
+    expect(eyeTransformed[1]).toBeCloseTo(0);
+    expect(eyeTransformed[2]).toBeCloseTo(0); // eye mapped to camera origin
   });
 
   it('vec4: arithmetic and mat4 transformation', () => {

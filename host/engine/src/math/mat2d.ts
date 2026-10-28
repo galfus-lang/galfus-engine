@@ -8,7 +8,7 @@
  * | 0  0  1  |
  */
 import { EPSILON, equalsApprox } from './common';
-import type { ReadonlyVec2 } from './vec2';
+import type { ReadonlyVec2, Vec2 } from './vec2';
 
 export type Mat2d = Float32Array & {
   0: number;
@@ -242,4 +242,36 @@ export function equals(a: ReadonlyMat2d, b: ReadonlyMat2d, epsilon: number = EPS
     equalsApprox(a[4], b[4], epsilon) &&
     equalsApprox(a[5], b[5], epsilon)
   );
+}
+
+/**
+ * Copies the 2D translation components from `from` into `out`.
+ */
+export function copyPosition(out: Mat2d, from: ReadonlyMat2d): Mat2d {
+  out[4] = from[4];
+  out[5] = from[5];
+  return out;
+}
+
+/**
+ * Sets the 2D translation components in `out`.
+ */
+export function setTranslation(out: Mat2d, xOrVec: number | ReadonlyVec2, y?: number): Mat2d {
+  if (typeof xOrVec === 'number') {
+    out[4] = xOrVec;
+    out[5] = y ?? 0;
+  } else {
+    out[4] = xOrVec[0];
+    out[5] = xOrVec[1];
+  }
+  return out;
+}
+
+/**
+ * Extracts the 2D translation vector from `mat` into `out`.
+ */
+export function getTranslation(out: Vec2, mat: ReadonlyMat2d): Vec2 {
+  out[0] = mat[4];
+  out[1] = mat[5];
+  return out;
 }

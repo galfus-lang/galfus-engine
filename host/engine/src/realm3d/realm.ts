@@ -20,6 +20,7 @@ import { assertValidLogicalId } from '@galfus/transport-types';
 import type { AnimationCoordinator } from '../animation/coordinator';
 import { createTransform3D, type Transform3DProps } from '../anchors/component';
 import { AnchorSolveSystem } from '../anchors/solver';
+import { HierarchyCoordinator } from '../anchors/hierarchy';
 import type { EntityId } from '../ecs/entity';
 import type { SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
@@ -46,6 +47,7 @@ export class Realm3D implements RealmConnector {
   readonly world = new EcsWorld();
   readonly solver = new AnchorSolveSystem();
   readonly syncSystem: Realm3DSyncSystem;
+  readonly hierarchy: HierarchyCoordinator<'3d'>;
 
   private _engine: GalfusEngine | null = null;
   private _nextResourceLogicalId = 1;
@@ -53,6 +55,7 @@ export class Realm3D implements RealmConnector {
   constructor(realmId: RealmId | number) {
     this.realmId = realmId as RealmId;
     assertValidLogicalId(this.realmId, 'RealmId');
+    this.hierarchy = new HierarchyCoordinator(this.world, '3d');
     this.syncSystem = new Realm3DSyncSystem(this.realmId, this.solver.cache);
 
     // Register anchor solver in preRender

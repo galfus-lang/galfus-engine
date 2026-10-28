@@ -136,4 +136,77 @@ describe('@galfus/engine > Anchors', () => {
     // 5 + 2 + 100 = 107
     expect(trans[0]).toBeCloseTo(107);
   });
+
+  it('HierarchyCoordinator: attaches, queries parent/children, and detaches entities cleanly', () => {
+    const world = new EcsWorld();
+    const solver = new AnchorSolveSystem();
+    const { HierarchyCoordinator } = require('../src/anchors/hierarchy');
+    const hierarchy = new HierarchyCoordinator(world, '3d');
+
+    const tank = { entityId: world.createEntity() };
+    const turret = { entityId: world.createEntity() };
+    const barrel = { entityId: world.createEntity() };
+
+    world.attachComponent(tank.entityId, createTransform3D({ position: [10, 0, 0] }));
+    world.attachComponent(turret.entityId, createTransform3D({ position: [0, 2, 0] }));
+    world.attachComponent(barrel.entityId, createTransform3D({ position: [0, 0, 5] }));
+
+    // Attach using object handles
+    hierarchy.attach(turret, tank);
+    hierarchy.attach(barrel, turret);
+
+    expect(hierarchy.isAttached(turret)).toBe(true);
+    expect(hierarchy.isAttached(barrel)).toBe(true);
+    expect(hierarchy.getParent(turret)).toBe(tank.entityId);
+    expect(hierarchy.getParent(barrel)).toBe(turret.entityId);
+    expect(hierarchy.getChildren(tank)).toEqual([turret.entityId]);
+    expect(hierarchy.getChildren(turret)).toEqual([barrel.entityId]);
+
+    // Solve and verify world transforms
+    solver.solve(world, { time: 0, dt: 0.016, frameId: 1 });
+    const barrelWorld = solver.cache.getWorld3D(barrel.entityId);
+    expect(barrelWorld).toBeDefined();
+
+    const pos = vec3.create();
+    mat4.getTranslation(pos, barrelWorld!);
+    expect(pos[0]).toBeCloseTo(10);
+    expect(pos[1]).toBeCloseTo(2);
+    expect(pos[2]).toBeCloseTo(5);
+
+    // Detach barrel
+    hierarchy.detach(barrel);
+    expect(hierarchy.isAttached(barrel)).toBe(false);
+    expect(hierarchy.getChildren(turret)).toEqual([]);
+  });
+
+  it('HierarchyCoordinator: executes functional in-place callback using mat4.copyPosition and setTranslation', () => {
+    const world = new EcsWorld();
+    const solver = new AnchorSolveSystem();
+    const { HierarchyCoordinator } = require('../src/anchors/hierarchy');
+    const hierarchy = new HierarchyCoordinator(world, '3d');
+
+    const parent = world.createEntity();
+    const child = world.createEntity();
+
+    world.attachComponent(parent, createTransform3D({ position: [50, 20, -10] }));
+    world.attachComponent(child, createTransform3D({ position: [1, 2, 3] }));
+
+    // Custom functional constraint: copy position from parent and override Y to 999
+    hierarchy.attach(child, parent, (targetWorld: any, local: any, outWorld: any) => {
+      mat4.copy(outWorld, local);
+      mat4.copyPosition(outWorld, targetWorld);
+      mat4.setTranslation(outWorld, 50, 999, -10);
+    });
+
+    solver.solve(world, { time: 0, dt: 0.016, frameId: 1 });
+
+    const childWorld = solver.cache.getWorld3D(child);
+    expect(childWorld).toBeDefined();
+
+    const pos = vec3.create();
+    mat4.getTranslation(pos, childWorld!);
+    expect(pos[0]).toBeCloseTo(50);
+    expect(pos[1]).toBeCloseTo(999);
+    expect(pos[2]).toBeCloseTo(-10);
+  });
 });

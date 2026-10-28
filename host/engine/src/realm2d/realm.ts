@@ -15,6 +15,7 @@ import type {
 import { assertValidLogicalId } from '@galfus/transport-types';
 import type { AnimationCoordinator } from '../animation/coordinator';
 import { AnchorSolveSystem } from '../anchors/solver';
+import { HierarchyCoordinator } from '../anchors/hierarchy';
 import { createTransform2D, type Transform2DProps } from '../anchors/component';
 import type { EntityId } from '../ecs/entity';
 import type { SystemContext } from '../ecs/system';
@@ -38,6 +39,7 @@ export class Realm2D implements RealmConnector {
   readonly world = new EcsWorld();
   readonly solver = new AnchorSolveSystem();
   readonly syncSystem: Realm2DSyncSystem;
+  readonly hierarchy: HierarchyCoordinator<'2d'>;
 
   private _engine: GalfusEngine | null = null;
   private _nextResourceLogicalId = 1;
@@ -45,6 +47,7 @@ export class Realm2D implements RealmConnector {
   constructor(realmId: RealmId | number) {
     this.realmId = realmId as RealmId;
     assertValidLogicalId(this.realmId, 'RealmId');
+    this.hierarchy = new HierarchyCoordinator(this.world, '2d');
     this.syncSystem = new Realm2DSyncSystem(this.realmId, this.solver.cache);
 
     // Register anchor solver in preRender

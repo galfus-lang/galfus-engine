@@ -45,8 +45,8 @@ const runtime = createRuntime(transport);
 // 2. Initialize platform windowing and GPU subsystem
 await runtime.init({ debug: true });
 
-// 3. Register user frame updates
-runtime.onTick(({ dt, fps, frameId }) => {
+// 3. Register user frame updates (returns an off unsubscription callback)
+const offTick = runtime.on('tick', ({ dt, fps, frameId }) => {
   // Game logic updates here
 });
 
@@ -172,36 +172,45 @@ const targetId = runtime.multiverse.createTarget({ kind: { type: 'window', windo
 
 ---
 
-### Handling Window Events in the Game Loop
+### Handling Window & Platform Events (`runtime.on`)
 
-You can inspect lifecycle and input events pumped from `runtime.platform` during each tick:
+Platform event pumping and swapchain resizing run **100% internally** inside the frame loop. You do not need to poll events or manually forward resize dimensions.
+
+To handle window lifecycle, keyboard, pointer, or gamepad inputs, simply register listeners using `runtime.on()`. Every `.on()` call returns a functional `off()` callback to unsubscribe when no longer needed:
 
 ```ts
-runtime.onTick(() => {
-  // Pump platform events (window resize, move, close, focus, keyboard, mouse)
-  const events = runtime.platform.pumpEvents();
+// 1. Listen to window events (resizing, closing, focus)
+const offWindow = runtime.on('window', (event) => {
+  switch (event.type) {
+    case 'resized':
+      // Multiverse swapchain is resized automatically; use this for UI layout or HUD updates
+      console.log(`Window ${event.windowId} resized to ${event.width}x${event.height}`);
+      break;
 
-  for (const event of events) {
-    if (event.kind === 'window') {
-      switch (event.type) {
-        case 'resized':
-          console.log(`Window ${event.windowId} resized to ${event.width}x${event.height}`);
-          runtime.platform.window.updateSize(event.windowId as any, event.width, event.height);
-          break;
+    case 'closeRequested':
+      console.log('User closed window. Saving state and terminating...');
+      runtime.stop();
+      runtime.platform.window.close(event.windowId as any);
+      break;
 
-        case 'closeRequested':
-          console.log('User closed window. Saving state and terminating...');
-          runtime.stop();
-          runtime.platform.window.close(event.windowId as any);
-          break;
-
-        case 'focusChanged':
-          console.log(`Window focused: ${event.focused}`);
-          break;
-      }
-    }
+    case 'focusChanged':
+      console.log(`Window focused: ${event.focused}`);
+      break;
   }
 });
+
+// 2. Listen to keyboard inputs
+const offKeyboard = runtime.on('keyboard', (event) => {
+  if (event.type === 'key' && event.state === 'pressed') {
+    console.log(`Key pressed: ${event.key}`);
+  }
+});
+
+// 3. Unsubscribe when needed:
+offWindow();
+
+// Or remove all listeners at once:
+runtime.clearListeners();
 ```
 
 ---
@@ -273,34 +282,43 @@ const { materialId } = realm3D.createMaterial(
 );
 ```
 
-### Procedural Primitives & Anchor Hierarchies
+### Procedural Primitives & Anchor Hierarchies (`realm3D.hierarchy`)
 
-Entities anchor to target entities using persistent matrix memory buffers (no GC allocations):
+Entities anchor to parent entities with zero garbage collection allocations. Use `realm3D.hierarchy.attach(origin, target, constraint?)`:
 
 ```ts
-import { createAnchor } from '@galfus/engine/anchors';
+import { mat4 } from '@galfus/engine';
 
-// Parent Base Entity (e.g. Tank Body)
+// 1. Parent Base Entity (e.g. Tank Body)
 const parentTank = realm3D.createCube(2.0, materialId, {
   position: [0, 0, 0]
 });
 
-// Child Entity (e.g. Turret mounted on top)
+// 2. Child Entity (e.g. Turret mounted on top)
 const turret = realm3D.createCylinder(0.8, 0.5, 16, materialId, {
   position: [0, 1.25, 0] // Local offset relative to tank
 });
 
-// Anchor turret to tank body
-realm3D.world.attachComponent(
-  turret.entityId,
-  createAnchor({ targetEntityId: parentTank.entityId })
-);
+// Anchor turret to tank body (static anchor by default)
+realm3D.hierarchy.attach(turret, parentTank);
 
-// Child Barrel mounted to Turret
+// 3. Child Barrel mounted to Turret
 const barrel = realm3D.createCapsule(0.15, 1.5, 4, 16, materialId, {
   position: [0, 0.2, 0.8] // Local offset relative to turret
 });
-realm3D.world.attachComponent(barrel.entityId, createAnchor({ targetEntityId: turret.entityId }));
+realm3D.hierarchy.attach(barrel, turret);
+
+// 4. Custom constraint callback (Zero-GC, using functional mat4 utilities):
+//    e.g. UI indicator follows target position but keeps fixed world orientation:
+realm3D.hierarchy.attach(indicator, parentTank, (targetWorld, local, outWorld) => {
+  mat4.copy(outWorld, local);
+  mat4.copyPosition(outWorld, targetWorld);
+});
+
+// 5. Query and detach:
+const isAttached = realm3D.hierarchy.isAttached(turret); // true
+const children = realm3D.hierarchy.getChildren(parentTank); // [turret.entityId]
+realm3D.hierarchy.detach(barrel); // Unlinks barrel from turret
 ```
 
 ### Particles, Portals & Debug Gizmos
@@ -441,8 +459,8 @@ const pathId = runtime.animation.createPathFollow(
   { kind: 'camera3DTransform', realmId: realm3D.realmId, cameraId }
 );
 
-// 5. Listen to animation lifecycle events
-runtime.animation.onEvent((event) => {
+// 5. Listen to animation lifecycle events using runtime.on('animation')
+const offAnim = runtime.on('animation', (event) => {
   if (event.eventType === 'completed') {
     console.log(`Transition ${event.transitionId} finished!`);
   }

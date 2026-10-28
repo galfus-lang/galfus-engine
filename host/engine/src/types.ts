@@ -38,3 +38,29 @@ export class IdAllocator<T extends number = number> {
     this._nextId = startId;
   }
 }
+
+/**
+ * Event map describing all event types emitted across the Galfus Engine runtime.
+ */
+import type {
+  AnimationEvent,
+  FrameTiming,
+  GamepadEvent,
+  KeyboardEvent,
+  PlatformEvent,
+  PointerEvent,
+  WindowEvent
+} from '@galfus/transport-types';
+
+export interface RuntimeEventMap {
+  tick: FrameTiming;
+  window: WindowEvent;
+  pointer: PointerEvent;
+  keyboard: KeyboardEvent;
+  gamepad: GamepadEvent;
+  animation: AnimationEvent;
+  platform: PlatformEvent;
+}
+
+export type RuntimeEventType = keyof RuntimeEventMap;
+export type RuntimeEventListener<T extends RuntimeEventType> = (event: RuntimeEventMap[T]) => void;
