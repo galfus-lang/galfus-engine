@@ -2,6 +2,7 @@
  * High-level Realm3D manager combining an ECS World, Anchor solver, and core sync.
  */
 import type {
+  AnimValue,
   Camera3DDesc,
   CameraLookAt3D,
   CameraLookAt3DStateDesc,
@@ -12,15 +13,18 @@ import type {
   Material3DDesc,
   Model3DDesc,
   ParticleEmitter3DDesc,
-  Portal3DDesc
+  Portal3DDesc,
+  TransitionConfig
 } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
+import type { AnimationCoordinator } from '../animation/coordinator';
 import { createTransform3D, type Transform3DProps } from '../anchors/component';
 import { AnchorSolveSystem } from '../anchors/solver';
 import type { EntityId } from '../ecs/entity';
 import type { SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
 import type { RealmConnector, RealmId, RealmKind } from '../multiverse/realm';
+import type { TransitionId } from '../types';
 import {
   createCamera3D,
   createGeometry3D,
@@ -30,12 +34,15 @@ import {
   createModel3D,
   createParticleEmitter3D,
   createPortal3D,
+  type Model3DComponent,
   type Primitive3DKind
 } from './components';
+import { type GeometryData, packGeometryData } from './geometry';
 import { Realm3DSyncSystem } from './sync';
 
 export class Realm3D implements RealmConnector {
   readonly realmKind: RealmKind = '3d';
+  readonly realmId: RealmId;
   readonly world = new EcsWorld();
   readonly solver = new AnchorSolveSystem();
   readonly syncSystem: Realm3DSyncSystem;
@@ -43,9 +50,10 @@ export class Realm3D implements RealmConnector {
   private _engine: GalfusEngine | null = null;
   private _nextResourceLogicalId = 1;
 
-  constructor(readonly realmId: RealmId) {
-    assertValidLogicalId(realmId, 'RealmId');
-    this.syncSystem = new Realm3DSyncSystem(realmId, this.solver.cache);
+  constructor(realmId: RealmId | number) {
+    this.realmId = realmId as RealmId;
+    assertValidLogicalId(this.realmId, 'RealmId');
+    this.syncSystem = new Realm3DSyncSystem(this.realmId, this.solver.cache);
 
     // Register anchor solver in preRender
     this.world.addSystem('preRender', this.solver.createSystem());
@@ -114,6 +122,48 @@ export class Realm3D implements RealmConnector {
     const materialId = this.allocateResourceId();
     this.world.attachComponent(entityId, createMaterial3D(materialId, desc));
     return { entityId, materialId };
+  }
+
+  /**
+   * Creates a 3D geometry from semantic vertex attributes or a primitive descriptor.
+   */
+  createGeometry(
+    data: GeometryData | Primitive3DKind,
+    materialId?: number,
+    transform?: Transform3DProps
+  ): { entityId: EntityId; geometryId: number; modelId?: number } {
+    const entityId = this.world.createEntity();
+    const geometryId = this.allocateResourceId();
+
+    let primitive: Primitive3DKind;
+    if ('positions' in data) {
+      const packed = packGeometryData(data);
+      primitive = {
+        kind: 'custom',
+        topology: packed.topology,
+        vertexData: packed.vertexData,
+        indices: packed.indices
+      };
+    } else {
+      primitive = data;
+    }
+
+    this.world.attachComponent(entityId, createTransform3D(transform));
+    this.world.attachComponent(entityId, createGeometry3D(geometryId, primitive));
+
+    let modelId: number | undefined;
+    if (materialId !== undefined) {
+      modelId = this.allocateResourceId();
+      this.world.attachComponent(
+        entityId,
+        createModel3D(modelId, {
+          geometryId,
+          materialId
+        })
+      );
+    }
+
+    return { entityId, geometryId, modelId };
   }
 
   createPrimitive(
@@ -362,5 +412,23 @@ export class Realm3D implements RealmConnector {
     if (this._engine) {
       this._engine.realm3dUpdateBones(this.realmId, modelId, data, data.length);
     }
+  }
+
+  /**
+   * Helper to animate a model transform directly without manual target ID construction.
+   */
+  animateModel(
+    entityId: EntityId,
+    targetValue: AnimValue,
+    config: TransitionConfig,
+    animation: AnimationCoordinator
+  ): TransitionId | undefined {
+    const model = this.world.getComponent<Model3DComponent>(entityId, 'Model3D');
+    if (!model) return undefined;
+    return animation.createTransition(targetValue, config, {
+      kind: 'modelTransform3D',
+      realmId: this.realmId,
+      modelId: model.modelId
+    });
   }
 }

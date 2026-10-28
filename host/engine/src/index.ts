@@ -1,6 +1,8 @@
 /**
  * @galfus/engine: Unified game engine runtime with Multiverse, Realms, Anchors, ECS, Resources, Audio, Animation, and Zero-Alloc Math.
  */
+export * from './types';
+export * from './platform/index';
 export * from './math/index';
 export * from './ecs/index';
 export * from './anchors/index';

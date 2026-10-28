@@ -40,7 +40,9 @@
       "@galfus/engine/realm3d/presets": ["./host/engine/src/realm3d/presets/index.ts"],
       "@galfus/engine/resources": ["./host/engine/src/resources/index.ts"],
       "@galfus/engine/audio": ["./host/engine/src/audio/index.ts"],
-      "@galfus/engine/animation": ["./host/engine/src/animation/index.ts"]
+      "@galfus/engine/animation": ["./host/engine/src/animation/index.ts"],
+      "@galfus/engine/platform": ["./host/engine/src/platform/index.ts"],
+      "@galfus/engine/types": ["./host/engine/src/types.ts"]
     },
     // Best practices
     "strict": true,

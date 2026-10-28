@@ -13,24 +13,28 @@ import type {
   Svg2DDesc
 } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
+import type { AnimationCoordinator } from '../animation/coordinator';
 import { AnchorSolveSystem } from '../anchors/solver';
 import { createTransform2D, type Transform2DProps } from '../anchors/component';
 import type { EntityId } from '../ecs/entity';
 import type { SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
 import type { RealmConnector, RealmId, RealmKind } from '../multiverse/realm';
+import type { TransitionId } from '../types';
 import {
   createCamera2D,
   createLight2D,
   createParticleEmitter2D,
   createShape2D,
   createSprite2D,
-  createSvg2D
+  createSvg2D,
+  type Svg2DComponent
 } from './components';
 import { Realm2DSyncSystem } from './sync';
 
 export class Realm2D implements RealmConnector {
   readonly realmKind: RealmKind = '2d';
+  readonly realmId: RealmId;
   readonly world = new EcsWorld();
   readonly solver = new AnchorSolveSystem();
   readonly syncSystem: Realm2DSyncSystem;
@@ -38,9 +42,10 @@ export class Realm2D implements RealmConnector {
   private _engine: GalfusEngine | null = null;
   private _nextResourceLogicalId = 1;
 
-  constructor(readonly realmId: RealmId) {
-    assertValidLogicalId(realmId, 'RealmId');
-    this.syncSystem = new Realm2DSyncSystem(realmId, this.solver.cache);
+  constructor(realmId: RealmId | number) {
+    this.realmId = realmId as RealmId;
+    assertValidLogicalId(this.realmId, 'RealmId');
+    this.syncSystem = new Realm2DSyncSystem(this.realmId, this.solver.cache);
 
     // Register anchor solver in preRender
     this.world.addSystem('preRender', this.solver.createSystem());
@@ -186,5 +191,26 @@ export class Realm2D implements RealmConnector {
     if (this._engine) {
       this._engine.realm2dParticleEmitterBurst(this.realmId, emitterId, count);
     }
+  }
+
+  /**
+   * Helper to animate SVG opacity directly without manual target ID construction.
+   */
+  animateSvgOpacity(
+    entityId: EntityId,
+    initialOpacity: number,
+    targetOpacity: number,
+    duration: number,
+    animation: AnimationCoordinator
+  ): TransitionId | undefined {
+    const svg = this.world.getComponent<Svg2DComponent>(entityId, 'Svg2D');
+    if (!svg) return undefined;
+    const transId = animation.createScalarTransition(initialOpacity, duration, 0, 0, {
+      kind: 'svgOpacity',
+      realmId: this.realmId,
+      svgId: svg.svgId
+    });
+    animation.transitionToScalar(transId, targetOpacity, duration);
+    return transId;
   }
 }

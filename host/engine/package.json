@@ -18,7 +18,9 @@
     "./realm3d/presets": "./src/realm3d/presets/index.ts",
     "./resources": "./src/resources/index.ts",
     "./audio": "./src/audio/index.ts",
-    "./animation": "./src/animation/index.ts"
+    "./animation": "./src/animation/index.ts",
+    "./platform": "./src/platform/index.ts",
+    "./types": "./src/types.ts"
   },
   "dependencies": {
     "@galfus/transport-types": "workspace:*"

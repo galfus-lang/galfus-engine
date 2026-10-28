@@ -3,8 +3,9 @@
  */
 import type { GalfusEngine } from '@galfus/transport-types';
 import type { SystemContext } from '../ecs/system';
+import type { RealmId } from '../types';
 
-export type RealmId = number;
+export { type RealmId };
 export type RealmKind = '2d' | '3d' | 'color' | 'custom';
 
 /**
@@ -12,7 +13,7 @@ export type RealmKind = '2d' | '3d' | 'color' | 'custom';
  * with the underlying Multiverse and GalfusEngine core.
  */
 export interface RealmConnector {
-  readonly realmId: RealmId;
+  readonly realmId: RealmId | number;
   readonly realmKind: RealmKind;
 
   /**

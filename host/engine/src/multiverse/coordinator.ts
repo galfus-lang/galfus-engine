@@ -13,13 +13,15 @@ import type {
 } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
 import type { SystemContext } from '../ecs/system';
-import type { RealmConnector, RealmId } from './realm';
+import { IdAllocator, type InvocationId, type RealmId, type TargetId } from '../types';
+import type { RealmConnector } from './realm';
 
-export type TargetId = number;
-export type InvocationId = number;
+export { type InvocationId, type TargetId } from '../types';
 
 export class MultiverseCoordinator {
   private _engine: GalfusEngine | null = null;
+  private readonly _targetIdAllocator = new IdAllocator<TargetId>(1);
+  private readonly _invocationIdAllocator = new IdAllocator<InvocationId>(1);
   private readonly _realms = new Map<RealmId, RealmConnector>();
   private readonly _targets = new Set<TargetId>();
   private readonly _invocations = new Set<InvocationId>();
@@ -39,9 +41,22 @@ export class MultiverseCoordinator {
   }
 
   /**
-   * Registers a target (Window or Texture) in the multiverse.
+   * Registers a target (Window or Texture) in the multiverse, returning its TargetId.
    */
-  createTarget(targetId: TargetId, desc: TargetDesc): void {
+  createTarget(desc: TargetDesc): TargetId;
+  createTarget(targetId: TargetId | number, desc: TargetDesc): TargetId;
+  createTarget(arg1: TargetId | number | TargetDesc, arg2?: TargetDesc): TargetId {
+    let targetId: TargetId;
+    let desc: TargetDesc;
+
+    if (typeof arg1 === 'number') {
+      targetId = arg1 as TargetId;
+      desc = arg2!;
+    } else {
+      targetId = this._targetIdAllocator.allocate('TargetId');
+      desc = arg1;
+    }
+
     assertValidLogicalId(targetId, 'TargetId');
     if (this._targets.has(targetId)) {
       throw new Error(`Multiverse target ${targetId} is already created.`);
@@ -51,29 +66,32 @@ export class MultiverseCoordinator {
       this._engine.multiverseCreateTarget(targetId, desc);
     }
     this._targets.add(targetId);
+    return targetId;
   }
 
   /**
    * Destroys a render target.
    */
-  destroyTarget(targetId: TargetId): void {
-    if (!this._targets.has(targetId)) return;
+  destroyTarget(targetId: TargetId | number): void {
+    const id = targetId as TargetId;
+    if (!this._targets.has(id)) return;
     if (this._engine) {
-      this._engine.multiverseDestroyTarget(targetId);
+      this._engine.multiverseDestroyTarget(id);
     }
-    this._targets.delete(targetId);
+    this._targets.delete(id);
   }
 
   /**
    * Registers a specialized realm connector (e.g. Realm2D or Realm3D).
    */
   registerRealm(realm: RealmConnector): void {
-    assertValidLogicalId(realm.realmId, 'RealmId');
-    if (this._realms.has(realm.realmId)) {
-      throw new Error(`Realm ${realm.realmId} is already registered in Multiverse.`);
+    const realmId = realm.realmId as RealmId;
+    assertValidLogicalId(realmId, 'RealmId');
+    if (this._realms.has(realmId)) {
+      throw new Error(`Realm ${realmId} is already registered in Multiverse.`);
     }
 
-    this._realms.set(realm.realmId, realm);
+    this._realms.set(realmId, realm);
     if (this._engine) {
       realm.bindEngine(this._engine);
     }
@@ -82,28 +100,45 @@ export class MultiverseCoordinator {
   /**
    * Unregisters and disposes a realm connector.
    */
-  unregisterRealm(realmId: RealmId): void {
-    const realm = this._realms.get(realmId);
+  unregisterRealm(realmId: RealmId | number): void {
+    const id = realmId as RealmId;
+    const realm = this._realms.get(id);
     if (!realm) return;
 
     realm.dispose();
     if (this._engine) {
-      this._engine.multiverseUnregisterRealm(realmId);
+      this._engine.multiverseUnregisterRealm(id);
     }
-    this._realms.delete(realmId);
+    this._realms.delete(id);
   }
 
   /**
    * Retrieves a registered realm connector by ID.
    */
-  getRealm<T extends RealmConnector = RealmConnector>(realmId: RealmId): T | undefined {
-    return this._realms.get(realmId) as T | undefined;
+  getRealm<T extends RealmConnector = RealmConnector>(realmId: RealmId | number): T | undefined {
+    return this._realms.get(realmId as RealmId) as T | undefined;
   }
 
   /**
-   * Creates an invocation linking a realm to a target with viewport parameters.
+   * Creates an invocation linking a realm to a target with viewport parameters, returning InvocationId.
    */
-  createInvocation(invocationId: InvocationId, desc: InvocationDesc): void {
+  createInvocation(desc: InvocationDesc): InvocationId;
+  createInvocation(invocationId: InvocationId | number, desc: InvocationDesc): InvocationId;
+  createInvocation(
+    arg1: InvocationId | number | InvocationDesc,
+    arg2?: InvocationDesc
+  ): InvocationId {
+    let invocationId: InvocationId;
+    let desc: InvocationDesc;
+
+    if (typeof arg1 === 'number') {
+      invocationId = arg1 as InvocationId;
+      desc = arg2!;
+    } else {
+      invocationId = this._invocationIdAllocator.allocate('InvocationId');
+      desc = arg1;
+    }
+
     assertValidLogicalId(invocationId, 'InvocationId');
     if (this._invocations.has(invocationId)) {
       throw new Error(`Invocation ${invocationId} is already created.`);
@@ -113,43 +148,45 @@ export class MultiverseCoordinator {
       this._engine.multiverseCreateInvocation(invocationId, desc);
     }
     this._invocations.add(invocationId);
+    return invocationId;
   }
 
   /**
    * Destroys an existing invocation.
    */
-  destroyInvocation(invocationId: InvocationId): void {
-    if (!this._invocations.has(invocationId)) return;
+  destroyInvocation(invocationId: InvocationId | number): void {
+    const id = invocationId as InvocationId;
+    if (!this._invocations.has(id)) return;
     if (this._engine) {
-      this._engine.multiverseDestroyInvocation(invocationId);
+      this._engine.multiverseDestroyInvocation(id);
     }
-    this._invocations.delete(invocationId);
+    this._invocations.delete(id);
   }
 
   /**
    * Enables or disables an invocation.
    */
-  setInvocationEnabled(invocationId: InvocationId, enabled: boolean): void {
+  setInvocationEnabled(invocationId: InvocationId | number, enabled: boolean): void {
     if (this._engine) {
-      this._engine.multiverseSetInvocationEnabled(invocationId, enabled);
+      this._engine.multiverseSetInvocationEnabled(invocationId as InvocationId, enabled);
     }
   }
 
   /**
    * Updates the responsive viewport rectangle of an invocation.
    */
-  setInvocationViewport(invocationId: InvocationId, viewport: ViewportRect): void {
+  setInvocationViewport(invocationId: InvocationId | number, viewport: ViewportRect): void {
     if (this._engine) {
-      this._engine.multiverseSetInvocationViewport(invocationId, viewport);
+      this._engine.multiverseSetInvocationViewport(invocationId as InvocationId, viewport);
     }
   }
 
   /**
    * Updates the post-process filter chain for an invocation.
    */
-  setInvocationFilters(invocationId: InvocationId, filters: InvocationFilter[]): void {
+  setInvocationFilters(invocationId: InvocationId | number, filters: InvocationFilter[]): void {
     if (this._engine) {
-      this._engine.multiverseSetInvocationFilters(invocationId, filters);
+      this._engine.multiverseSetInvocationFilters(invocationId as InvocationId, filters);
     }
   }
 
@@ -157,7 +194,7 @@ export class MultiverseCoordinator {
    * Updates the clear color of an invocation.
    */
   setInvocationClearColor(
-    invocationId: InvocationId,
+    invocationId: InvocationId | number,
     r: number,
     g: number,
     b: number,
@@ -165,16 +202,31 @@ export class MultiverseCoordinator {
     hasClear = true
   ): void {
     if (this._engine) {
-      this._engine.multiverseSetInvocationClearColor(invocationId, r, g, b, a, hasClear);
+      this._engine.multiverseSetInvocationClearColor(
+        invocationId as InvocationId,
+        r,
+        g,
+        b,
+        a,
+        hasClear
+      );
     }
   }
 
   /**
    * Updates the camera slot bound to an existing invocation.
    */
-  setInvocationCameraSlot(invocationId: InvocationId, cameraSlot: number, hasSlot = true): void {
+  setInvocationCameraSlot(
+    invocationId: InvocationId | number,
+    cameraSlot: number,
+    hasSlot = true
+  ): void {
     if (this._engine) {
-      this._engine.multiverseSetInvocationCameraSlot(invocationId, cameraSlot, hasSlot);
+      this._engine.multiverseSetInvocationCameraSlot(
+        invocationId as InvocationId,
+        cameraSlot,
+        hasSlot
+      );
     }
   }
 
@@ -190,9 +242,9 @@ export class MultiverseCoordinator {
   /**
    * Unbinds a target texture from a realm input slot.
    */
-  unbindTargetTexture(realmId: RealmId, slot: string): void {
+  unbindTargetTexture(realmId: RealmId | number, slot: string): void {
     if (this._engine) {
-      this._engine.multiverseUnbindTargetTexture(realmId, slot);
+      this._engine.multiverseUnbindTargetTexture(realmId as RealmId, slot);
     }
   }
 
@@ -207,68 +259,88 @@ export class MultiverseCoordinator {
   }
 
   /**
-   * Updates the window size for a window Target.
+   * Updates anti-aliasing configuration on a target.
    */
-  updateWindowSize(windowId: number, width: number, height: number): void {
-    if (this._engine) {
-      this._engine.multiverseUpdateWindowSize(windowId, width, height);
-    }
-  }
-
-  /**
-   * Sets global Anti-Aliasing mode for the Multiverse.
-   */
-  setAntiAliasing(mode: AntiAliasingMode): void {
+  setAntiAliasing(_targetId: TargetId | number, mode: AntiAliasingMode): void {
     if (this._engine) {
       this._engine.multiverseSetAntiAliasing(mode);
     }
   }
 
   /**
-   * Gets current global Anti-Aliasing mode.
+   * Steps all registered realms with the system context.
    */
-  getAntiAliasing(): string {
-    return this._engine?.multiverseGetAntiAliasing() ?? 'none';
+  stepRealms(context: SystemContext): void {
+    for (const realm of this._realms.values()) {
+      if ('step' in realm && typeof (realm as any).step === 'function') {
+        (realm as any).step(context);
+      }
+    }
   }
 
   /**
-   * Synchronizes all registered realms before rendering.
+   * Synchronizes all realm states into the native/WASM core.
+   */
+  syncRealms(context?: SystemContext): void {
+    for (const realm of this._realms.values()) {
+      (realm as any).sync(context);
+    }
+  }
+
+  /**
+   * Synchronizes and steps all registered realms with system context.
    */
   syncAllRealms(context: SystemContext): void {
     for (const realm of this._realms.values()) {
+      if ('step' in realm && typeof (realm as any).step === 'function') {
+        (realm as any).step(context);
+      }
       realm.sync(context);
     }
   }
 
   /**
-   * Resolves the multiverse frame schedule.
+   * Resolves responsive multiverse viewports and scheduling before dispatch.
    */
-  resolve(): MultiverseSchedule | undefined {
-    return this._engine?.multiverseResolve();
+  resolve(): any {
+    if (this._engine && typeof (this._engine as any).multiverseResolve === 'function') {
+      return (this._engine as any).multiverseResolve();
+    }
+    return this.getSchedule() ?? { invocations: [] };
   }
 
   /**
-   * Dispatches the resolved schedule to the GPU.
+   * Dispatches the native multiverse rendering pass for all active invocations.
    */
-  dispatch(frameId: number, dtSeconds: number): void {
+  dispatch(frameId?: number, dt?: number): void {
     if (this._engine) {
-      this._engine.multiverseDispatch(frameId, dtSeconds);
+      (this._engine as any).multiverseDispatch(frameId, dt);
     }
   }
 
   /**
-   * Shuts down all invocations, targets, and realms.
+   * Queries the current active schedule of all realms, targets, and invocations.
+   */
+  getSchedule(): MultiverseSchedule | undefined {
+    return (this._engine as any)?.multiverseGetSchedule?.();
+  }
+
+  /**
+   * Releases all multiverse resources.
    */
   dispose(): void {
-    for (const invId of Array.from(this._invocations)) {
-      this.destroyInvocation(invId);
+    for (const invocationId of this._invocations) {
+      this.destroyInvocation(invocationId);
     }
-    for (const realmId of Array.from(this._realms.keys())) {
-      this.unregisterRealm(realmId);
+    for (const realm of this._realms.values()) {
+      realm.dispose();
     }
-    for (const targetId of Array.from(this._targets)) {
+    for (const targetId of this._targets) {
       this.destroyTarget(targetId);
     }
+    this._realms.clear();
+    this._targets.clear();
+    this._invocations.clear();
     this._engine = null;
   }
 }

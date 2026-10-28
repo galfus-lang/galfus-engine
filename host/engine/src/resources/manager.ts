@@ -1,35 +1,23 @@
 /**
- * ResourceManager manages allocation and GPU binding for shared textures and buffers.
+ * ResourceManager manages allocation and GPU binding for shared textures.
  */
-import type {
-  BufferDesc,
-  GalfusEngine,
-  GpuTextureDesc,
-  TextureUpdateDesc
-} from '@galfus/transport-types';
-import { assertValidLogicalId } from '@galfus/transport-types';
+import type { GalfusEngine, GpuTextureDesc, TextureUpdateDesc } from '@galfus/transport-types';
+import { IdAllocator, type TextureId } from '../types';
 
 export class ResourceManager {
   private _engine: GalfusEngine | null = null;
-  private _nextResourceId = 1;
-  private readonly _textures = new Set<number>();
-  private readonly _buffers = new Set<number>();
+  private readonly _idAllocator = new IdAllocator<TextureId>(1);
+  private readonly _textures = new Set<TextureId>();
 
   bindEngine(engine: GalfusEngine): void {
     this._engine = engine;
   }
 
-  allocateResourceId(): number {
-    const id = this._nextResourceId++;
-    assertValidLogicalId(id, 'ResourceId');
-    return id;
-  }
-
   /**
-   * Creates a shared GPU texture from raw byte data under a tracked logical ID.
+   * Creates a shared GPU texture from raw byte data under a tracked logical TextureId.
    */
-  createTexture(desc: GpuTextureDesc, data: Uint8Array): number {
-    const textureId = this.allocateResourceId();
+  createTexture(desc: GpuTextureDesc, data: Uint8Array): TextureId {
+    const textureId = this._idAllocator.allocate('TextureId');
     if (this._engine) {
       this._engine.resourceCreateTexture(textureId, desc, data, data.byteLength);
     }
@@ -40,7 +28,7 @@ export class ResourceManager {
   /**
    * Updates a sub-rectangle of an existing GPU texture.
    */
-  updateTexture(textureId: number, rect: TextureUpdateDesc, data: Uint8Array): void {
+  updateTexture(textureId: TextureId, rect: TextureUpdateDesc, data: Uint8Array): void {
     if (this._engine) {
       this._engine.resourceUpdateTexture(textureId, rect, data, data.byteLength);
     }
@@ -49,7 +37,7 @@ export class ResourceManager {
   /**
    * Disposes a GPU texture and frees its logical ID.
    */
-  disposeTexture(textureId: number): void {
+  disposeTexture(textureId: TextureId): void {
     if (!this._textures.has(textureId)) return;
     if (this._engine) {
       this._engine.resourceDisposeTexture(textureId);
@@ -58,51 +46,15 @@ export class ResourceManager {
   }
 
   /**
-   * Creates a shared GPU buffer from raw byte data under a tracked logical ID.
-   */
-  createBuffer(desc: BufferDesc, data: Uint8Array): number {
-    const bufferId = this.allocateResourceId();
-    if (this._engine) {
-      this._engine.resourceCreateBuffer(bufferId, desc, data, data.byteLength);
-    }
-    this._buffers.add(bufferId);
-    return bufferId;
-  }
-
-  /**
-   * Updates byte contents of an existing GPU buffer at a specified byte offset.
-   */
-  updateBuffer(bufferId: number, offset: number, data: Uint8Array): void {
-    if (this._engine) {
-      this._engine.resourceUpdateBuffer(bufferId, offset, data, data.byteLength);
-    }
-  }
-
-  /**
-   * Disposes a GPU buffer and frees its logical ID.
-   */
-  disposeBuffer(bufferId: number): void {
-    if (!this._buffers.has(bufferId)) return;
-    if (this._engine) {
-      this._engine.resourceDisposeBuffer(bufferId);
-    }
-    this._buffers.delete(bufferId);
-  }
-
-  /**
-   * Disposes all active textures and buffers.
+   * Disposes all active textures.
    */
   dispose(): void {
     if (this._engine) {
       for (const textureId of this._textures) {
         this._engine.resourceDisposeTexture(textureId);
       }
-      for (const bufferId of this._buffers) {
-        this._engine.resourceDisposeBuffer(bufferId);
-      }
     }
     this._textures.clear();
-    this._buffers.clear();
     this._engine = null;
   }
 }

@@ -12,17 +12,21 @@ import type {
 import type { SystemContext } from './ecs/system';
 import { MultiverseCoordinator } from './multiverse/coordinator';
 import type { RealmId } from './multiverse/realm';
+import { PlatformCoordinator } from './platform/index';
 import { Realm2D } from './realm2d/realm';
 import { Realm3D } from './realm3d/realm';
 import { ResourceManager } from './resources/manager';
 import { AudioManager } from './audio/manager';
 import { AnimationCoordinator } from './animation/coordinator';
+import { IdAllocator } from './types';
 
 export class MultiverseRuntime {
+  readonly platform = new PlatformCoordinator();
   readonly multiverse = new MultiverseCoordinator();
   readonly resources = new ResourceManager();
   readonly audio = new AudioManager();
   readonly animation = new AnimationCoordinator();
+  private readonly _realmIdAllocator = new IdAllocator<RealmId>(1);
   private readonly _onTickCallbacks = new Set<FrameCallback>();
 
   private _frameId = 0;
@@ -60,10 +64,11 @@ export class MultiverseRuntime {
   }
 
   /**
-   * Initializes the transport backend and binds the engine to the Multiverse coordinator.
+   * Initializes the transport backend and binds the engine to all subsystem coordinators.
    */
   async init(options?: TransportInitOptions): Promise<void> {
     await this.transport.init(options);
+    this.platform.bindEngine(this.transport.engine);
     this.multiverse.bindEngine(this.transport.engine);
     this.resources.bindEngine(this.transport.engine);
     this.audio.bindEngine(this.transport.engine);
@@ -71,19 +76,21 @@ export class MultiverseRuntime {
   }
 
   /**
-   * Creates, registers, and returns a new Realm2D in the multiverse.
+   * Creates, registers, and returns a new Realm2D in the multiverse (automatically allocating RealmId if omitted).
    */
-  createRealm2D(realmId: RealmId): Realm2D {
-    const realm = new Realm2D(realmId);
+  createRealm2D(realmId?: RealmId | number): Realm2D {
+    const id = (realmId ?? this._realmIdAllocator.allocate('RealmId')) as RealmId;
+    const realm = new Realm2D(id);
     this.multiverse.registerRealm(realm);
     return realm;
   }
 
   /**
-   * Creates, registers, and returns a new Realm3D in the multiverse.
+   * Creates, registers, and returns a new Realm3D in the multiverse (automatically allocating RealmId if omitted).
    */
-  createRealm3D(realmId: RealmId): Realm3D {
-    const realm = new Realm3D(realmId);
+  createRealm3D(realmId?: RealmId | number): Realm3D {
+    const id = (realmId ?? this._realmIdAllocator.allocate('RealmId')) as RealmId;
+    const realm = new Realm3D(id);
     this.multiverse.registerRealm(realm);
     return realm;
   }
@@ -150,6 +157,7 @@ export class MultiverseRuntime {
     this.audio.dispose();
     this.resources.dispose();
     this.multiverse.dispose();
+    this.platform.dispose();
     this.transport.dispose();
   }
 
