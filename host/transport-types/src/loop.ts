@@ -114,6 +114,15 @@ export interface EngineLoopController {
    * ```
    */
   step(timeMs?: number, deltaMs?: number): void;
+
+  /** Alias for {@link startLoop}. */
+  start?(callback: FrameCallback, options?: LoopOptions): void;
+
+  /** Alias for {@link stopLoop}. */
+  stop?(): void;
+
+  /** Alias for {@link step}. */
+  tick?(timeMs?: number, deltaMs?: number): void;
 }
 
 /**

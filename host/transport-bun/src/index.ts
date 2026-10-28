@@ -112,6 +112,18 @@ export class BunTransport implements GalfusTransport {
     this._lastTime = now;
     this._callback?.(timing);
   }
+
+  start(callback: FrameCallback, options?: LoopOptions): void {
+    this.startLoop(callback, options);
+  }
+
+  stop(): void {
+    this.stopLoop();
+  }
+
+  tick(timeMs?: number, deltaMs?: number): void {
+    this.step(timeMs, deltaMs);
+  }
 }
 
 /** Creates a new GalfusTransport driver instance running via Bun FFI. */
