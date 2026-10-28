@@ -1,22 +1,18 @@
+/**
+ * @galfus/engine-core: Foundation runtime, ECS, and zero-allocation math.
+ */
 import type { GalfusEngine } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
+import type { EntityId } from './ecs/entity';
+import type { SystemContext } from './ecs/system';
 
-export type EntityId = number;
-export type WorldId = number;
+export * from './math/index';
+export * from './ecs/index';
+
+export type RealmId = number;
 export type WindowId = number;
 export type TargetId = number;
 export type InvocationId = number;
-
-export type SystemStep = 'input' | 'update' | 'preRender' | 'postRender';
-
-export interface SystemContext {
-  time: number;
-  dt: number;
-  frameId: number;
-  engine: GalfusEngine;
-}
-
-export type System<TWorld = unknown> = (world: TWorld, context: SystemContext) => void;
 
 export interface EngineInitOptions {
   engine: GalfusEngine;
