@@ -23,7 +23,7 @@ export class MultiverseCoordinator {
   private readonly _targetIdAllocator = new IdAllocator<TargetId>(1);
   private readonly _invocationIdAllocator = new IdAllocator<InvocationId>(1);
   private readonly _realms = new Map<RealmId, RealmConnector>();
-  private readonly _targets = new Set<TargetId>();
+  private readonly _targets = new Map<TargetId, TargetDesc>();
   private readonly _invocations = new Set<InvocationId>();
 
   get engine(): GalfusEngine | null {
@@ -35,6 +35,12 @@ export class MultiverseCoordinator {
    */
   bindEngine(engine: GalfusEngine): void {
     this._engine = engine;
+    for (const [targetId, desc] of this._targets) {
+      if (desc.kind.type === 'window') {
+        engine.multiverseAttachWindow?.(desc.kind.windowId);
+      }
+      engine.multiverseCreateTarget(targetId, desc);
+    }
     for (const realm of this._realms.values()) {
       realm.bindEngine(engine);
     }
@@ -63,9 +69,12 @@ export class MultiverseCoordinator {
     }
 
     if (this._engine) {
+      if (desc.kind.type === 'window') {
+        this._engine.multiverseAttachWindow?.(desc.kind.windowId);
+      }
       this._engine.multiverseCreateTarget(targetId, desc);
     }
-    this._targets.add(targetId);
+    this._targets.set(targetId, desc);
     return targetId;
   }
 
@@ -335,7 +344,7 @@ export class MultiverseCoordinator {
     for (const realm of this._realms.values()) {
       realm.dispose();
     }
-    for (const targetId of this._targets) {
+    for (const targetId of this._targets.keys()) {
       this.destroyTarget(targetId);
     }
     this._realms.clear();

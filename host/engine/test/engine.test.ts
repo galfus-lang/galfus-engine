@@ -168,7 +168,6 @@ describe('@galfus/engine > Unified MultiverseRuntime', () => {
     expect(calls).toContain('createCube:20:2');
     expect(calls).toContain('multiverseResolve');
     expect(calls).toContain('multiverseDispatch:1:0.016');
-    expect(calls).toContain('transport:tick:0.016');
 
     // 8. Step second frame
     runtime.tick(0.016);

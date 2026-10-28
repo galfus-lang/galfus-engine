@@ -22,6 +22,8 @@
     "test:tour:browser": "bun scripts/test-browser-tour.ts",
     "test:host": "bun test host",
     "demo": "cargo build -p galfus-native && bun scripts/demos/main.ts",
+    "demo:tutorial": "bun host/engine/demo/tutorial.ts",
+    "demo:tutorial:headless": "bun host/engine/demo/tutorial.ts --headless",
     "tour": "bun examples/feature-tour/runners/bun/index.ts",
     "tour:bun": "bun examples/feature-tour/runners/bun/index.ts",
     "tour:node": "bun examples/feature-tour/runners/node/index.ts",

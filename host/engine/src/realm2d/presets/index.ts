@@ -8,12 +8,14 @@ export function createOrthoCamera2DPreset(
     orthoScale?: number;
     near?: number;
     far?: number;
+    cameraSlot?: number;
   } = {}
 ): Camera2DDesc {
   return {
     orthoScale: options.orthoScale ?? 1.0,
     near: options.near ?? 0.0,
     far: options.far ?? 1000.0,
+    cameraSlot: options.cameraSlot ?? 0,
     active: true
   };
 }

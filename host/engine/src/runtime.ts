@@ -271,9 +271,6 @@ export class MultiverseRuntime {
     // 6. Resolve multiverse schedule and dispatch to GPU
     this.multiverse.resolve();
     this.multiverse.dispatch(timing.frameId, timing.dt);
-
-    // 7. Tick transport I/O
-    this.transport.tick?.(timing.dt);
   }
 }
 

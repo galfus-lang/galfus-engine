@@ -29,6 +29,7 @@ import {
   createShape2D,
   createSprite2D,
   createSvg2D,
+  type ParticleEmitter2DComponent,
   type Svg2DComponent
 } from './components';
 import { Realm2DSyncSystem } from './sync';
@@ -75,6 +76,12 @@ export class Realm2D implements RealmConnector {
     }
   }
 
+  flush(): void {
+    if (this._engine) {
+      this.syncSystem.sync(this.world, this._engine);
+    }
+  }
+
   dispose(): void {
     this.syncSystem.dispose(this._engine);
     if (this._engine) {
@@ -112,45 +119,90 @@ export class Realm2D implements RealmConnector {
     return entityId;
   }
 
-  createCamera(desc: Camera2DDesc, transform?: Transform2DProps): EntityId {
+  createCamera(
+    desc: Camera2DDesc,
+    transform?: Transform2DProps
+  ): { entityId: EntityId; cameraId: number } {
     const entityId = this.world.createEntity();
     const cameraId = this.allocateResourceId();
     this.world.attachComponent(entityId, createTransform2D(transform));
     this.world.attachComponent(entityId, createCamera2D(cameraId, desc));
-    return entityId;
+    return { entityId, cameraId };
   }
 
-  createSvg(desc: Svg2DDesc, transform?: Transform2DProps): EntityId {
+  createSvg(desc: Svg2DDesc, transform?: Transform2DProps): { entityId: EntityId; svgId: number } {
     const entityId = this.world.createEntity();
     const svgId = this.allocateResourceId();
     this.world.attachComponent(entityId, createTransform2D(transform));
     this.world.attachComponent(entityId, createSvg2D(svgId, desc));
-    return entityId;
+    return { entityId, svgId };
   }
 
   // ---------------------------------------------------------------------------
   // SVG Dynamic Manipulation
   // ---------------------------------------------------------------------------
-  setSvgSource(svgId: number, source: string): void {
+  private _resolveSvgId(svg: number | { svgId?: number; entityId?: EntityId }): number {
+    if (typeof svg === 'number') {
+      return this.world.getComponent<Svg2DComponent>(svg as EntityId, 'Svg2D')?.svgId ?? svg;
+    }
+    return (
+      svg.svgId ??
+      (svg.entityId
+        ? this.world.getComponent<Svg2DComponent>(svg.entityId, 'Svg2D')?.svgId
+        : undefined) ??
+      1
+    );
+  }
+
+  setSvgSource(svg: number | { svgId?: number; entityId?: EntityId }, source: string): void {
+    const svgId = this._resolveSvgId(svg);
     if (this._engine) {
+      if (!this.syncSystem.isSvgSynced(svgId)) {
+        this.flush();
+      }
       this._engine.realm2dSetSvgSource(this.realmId, svgId, source);
     }
   }
 
-  setSvgAttribute(svgId: number, elementId: string, name: string, value: string): void {
+  setSvgAttribute(
+    svg: number | { svgId?: number; entityId?: EntityId },
+    elementId: string,
+    name: string,
+    value: string
+  ): void {
+    const svgId = this._resolveSvgId(svg);
     if (this._engine) {
+      if (!this.syncSystem.isSvgSynced(svgId)) {
+        this.flush();
+      }
       this._engine.realm2dSetSvgAttribute(this.realmId, svgId, elementId, name, value);
     }
   }
 
-  removeSvgAttribute(svgId: number, elementId: string, name: string): void {
+  removeSvgAttribute(
+    svg: number | { svgId?: number; entityId?: EntityId },
+    elementId: string,
+    name: string
+  ): void {
+    const svgId = this._resolveSvgId(svg);
     if (this._engine) {
+      if (!this.syncSystem.isSvgSynced(svgId)) {
+        this.flush();
+      }
       this._engine.realm2dRemoveSvgAttribute(this.realmId, svgId, elementId, name);
     }
   }
 
-  setSvgText(svgId: number, elementId: string, text: string): void {
+  setSvgText(
+    svg: number | { svgId?: number; entityId?: EntityId },
+    elementId: string,
+    text: string
+  ): void {
+    const svgId = this._resolveSvgId(svg);
     if (this._engine) {
+      if (!this.syncSystem.isSvgSynced(svgId)) {
+        this.flush();
+      }
       this._engine.realm2dSetSvgText(this.realmId, svgId, elementId, text);
     }
   }
@@ -182,16 +234,39 @@ export class Realm2D implements RealmConnector {
   // ---------------------------------------------------------------------------
   // 2D Particle Emitters
   // ---------------------------------------------------------------------------
-  createParticleEmitter(desc: ParticleEmitter2DDesc, transform?: Transform2DProps): EntityId {
+  createParticleEmitter(
+    desc: ParticleEmitter2DDesc,
+    transform?: Transform2DProps
+  ): { entityId: EntityId; emitterId: number } {
     const entityId = this.world.createEntity();
     const emitterId = this.allocateResourceId();
     this.world.attachComponent(entityId, createTransform2D(transform));
     this.world.attachComponent(entityId, createParticleEmitter2D(emitterId, desc));
-    return entityId;
+    return { entityId, emitterId };
   }
 
-  particleEmitterBurst(emitterId: number, count: number): void {
+  particleEmitterBurst(
+    emitter: number | { emitterId?: number; entityId?: EntityId },
+    count: number
+  ): void {
+    const emitterId =
+      typeof emitter === 'number'
+        ? (this.world.getComponent<ParticleEmitter2DComponent>(
+            emitter as EntityId,
+            'ParticleEmitter2D'
+          )?.emitterId ?? emitter)
+        : (emitter.emitterId ??
+          (emitter.entityId
+            ? this.world.getComponent<ParticleEmitter2DComponent>(
+                emitter.entityId,
+                'ParticleEmitter2D'
+              )?.emitterId
+            : undefined) ??
+          1);
     if (this._engine) {
+      if (!this.syncSystem.isEmitterSynced(emitterId)) {
+        this.flush();
+      }
       this._engine.realm2dParticleEmitterBurst(this.realmId, emitterId, count);
     }
   }

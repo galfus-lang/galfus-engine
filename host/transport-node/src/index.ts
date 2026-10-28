@@ -71,27 +71,28 @@ export class NodeTransport implements GalfusTransport {
     const intervalMs = 1000 / targetFps;
     const maxDeltaMs = options.maxDeltaMs ?? DEFAULT_MAX_DELTA_MS;
 
-    const tick = () => {
-      if (!this._isRunning) return;
+    const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const runAsyncLoop = async () => {
+      while (this._isRunning) {
+        const now = performance.now();
+        const timing = calculateFrameTiming(now, this._lastTime, ++this._frameId, maxDeltaMs);
+        this._lastTime = now;
 
-      const now = performance.now();
-      const timing = calculateFrameTiming(now, this._lastTime, ++this._frameId, maxDeltaMs);
-      this._lastTime = now;
+        try {
+          this._callback?.(timing);
+        } catch (err) {
+          console.error('[NodeTransport] Unhandled error during frame execution:', err);
+        }
 
-      try {
-        this._callback?.(timing);
-      } catch (err) {
-        console.error('[NodeTransport] Unhandled error during frame execution:', err);
-      }
+        if (!this._isRunning) break;
 
-      if (this._isRunning) {
         const elapsed = performance.now() - now;
-        const delay = Math.max(0, intervalMs - elapsed);
-        this._loopTimer = setTimeout(tick, delay);
+        const delay = Math.max(1, Math.round(intervalMs - elapsed));
+        await sleep(delay);
       }
     };
 
-    tick();
+    void runAsyncLoop();
   }
 
   stopLoop(): void {

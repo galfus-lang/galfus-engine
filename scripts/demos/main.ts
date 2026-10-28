@@ -17,6 +17,7 @@ import { runDemo2d2 } from './demo_2d2_effects_particles.ts';
 import { runDemo2d3 } from './demo_2d3_svg.ts';
 import { runDemoAnim1 } from './demo_anim1_transitions.ts';
 import { runDemoTour } from './demo_tour_feature_path.ts';
+import { runTutorialDemo } from '../../host/engine/demo/tutorial.ts';
 
 function printHelp(): void {
   console.log('=== Galfus Engine - TypeScript / Bun Demos ===');
@@ -49,7 +50,11 @@ function printHelp(): void {
     '    2d3   - Reactive Vector SVG (Cyberpunk HUD, Dynamic Attributes, <use> States & Text)'
   );
   console.log('\n  [Feature Tour]');
-  console.log('    tour  - Guided Split-Screen Multiverse Feature Tour (3D & 2D Companion)\n');
+  console.log('    tour      - Guided Split-Screen Multiverse Feature Tour (3D & 2D Companion)');
+  console.log('\n  [Host Layer Tutorial]');
+  console.log(
+    '    tutorial  - Host Engine Tutorial: Floor, 3D Tank, Hierarchy, 2D HUD (Interactive)\n'
+  );
 }
 
 async function main(): Promise<void> {
@@ -149,6 +154,11 @@ async function main(): Promise<void> {
     case 'tour':
     case 'featuretour':
       await runDemoTour();
+      break;
+
+    case 'tutorial':
+    case 'host':
+      await runTutorialDemo();
       break;
 
     case 'help':

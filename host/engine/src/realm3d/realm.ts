@@ -35,7 +35,9 @@ import {
   createModel3D,
   createParticleEmitter3D,
   createPortal3D,
+  type Camera3DComponent,
   type Model3DComponent,
+  type ParticleEmitter3DComponent,
   type Primitive3DKind
 } from './components';
 import { type GeometryData, packGeometryData } from './geometry';
@@ -96,6 +98,12 @@ export class Realm3D implements RealmConnector {
   // ---------------------------------------------------------------------------
   // Fluent Entity Spawning Helpers
   // ---------------------------------------------------------------------------
+  flush(): void {
+    if (this._engine) {
+      this.syncSystem.sync(this.world, this._engine);
+    }
+  }
+
   createModel(desc: Model3DDesc, transform?: Transform3DProps): EntityId {
     const entityId = this.world.createEntity();
     const modelId = this.allocateResourceId();
@@ -104,12 +112,15 @@ export class Realm3D implements RealmConnector {
     return entityId;
   }
 
-  createCamera(desc: Camera3DDesc, transform?: Transform3DProps): EntityId {
+  createCamera(
+    desc: Camera3DDesc,
+    transform?: Transform3DProps
+  ): { entityId: EntityId; cameraId: number } {
     const entityId = this.world.createEntity();
     const cameraId = this.allocateResourceId();
     this.world.attachComponent(entityId, createTransform3D(transform));
     this.world.attachComponent(entityId, createCamera3D(cameraId, desc));
-    return entityId;
+    return { entityId, cameraId };
   }
 
   createLight(desc: Light3DDesc, transform?: Transform3DProps): EntityId {
@@ -289,8 +300,23 @@ export class Realm3D implements RealmConnector {
   // ---------------------------------------------------------------------------
   // Camera LookAt, Environment & Debug Gizmos
   // ---------------------------------------------------------------------------
-  setCameraLookAt(cameraId: number, lookAt: CameraLookAt3D): void {
+  setCameraLookAt(
+    camera: number | { cameraId?: number; entityId?: EntityId },
+    lookAt: CameraLookAt3D
+  ): void {
+    const cameraId =
+      typeof camera === 'number'
+        ? (this.world.getComponent<Camera3DComponent>(camera as EntityId, 'Camera3D')?.cameraId ??
+          camera)
+        : (camera.cameraId ??
+          (camera.entityId
+            ? this.world.getComponent<Camera3DComponent>(camera.entityId, 'Camera3D')?.cameraId
+            : undefined) ??
+          1);
     if (this._engine) {
+      if (!this.syncSystem.isCameraSynced(cameraId)) {
+        this.flush();
+      }
       this._engine.realm3dSetCameraLookAt(this.realmId, cameraId, lookAt);
     }
   }
@@ -354,16 +380,39 @@ export class Realm3D implements RealmConnector {
   // ---------------------------------------------------------------------------
   // Particles, Portals & Advanced Mesh Features
   // ---------------------------------------------------------------------------
-  createParticleEmitter(desc: ParticleEmitter3DDesc, transform?: Transform3DProps): EntityId {
+  createParticleEmitter(
+    desc: ParticleEmitter3DDesc,
+    transform?: Transform3DProps
+  ): { entityId: EntityId; emitterId: number } {
     const entityId = this.world.createEntity();
     const emitterId = this.allocateResourceId();
     this.world.attachComponent(entityId, createTransform3D(transform));
     this.world.attachComponent(entityId, createParticleEmitter3D(emitterId, desc));
-    return entityId;
+    return { entityId, emitterId };
   }
 
-  particleEmitterBurst(emitterId: number, count: number): void {
+  particleEmitterBurst(
+    emitter: number | { emitterId?: number; entityId?: EntityId },
+    count: number
+  ): void {
+    const emitterId =
+      typeof emitter === 'number'
+        ? (this.world.getComponent<ParticleEmitter3DComponent>(
+            emitter as EntityId,
+            'ParticleEmitter3D'
+          )?.emitterId ?? emitter)
+        : (emitter.emitterId ??
+          (emitter.entityId
+            ? this.world.getComponent<ParticleEmitter3DComponent>(
+                emitter.entityId,
+                'ParticleEmitter3D'
+              )?.emitterId
+            : undefined) ??
+          1);
     if (this._engine) {
+      if (!this.syncSystem.isEmitterSynced(emitterId)) {
+        this.flush();
+      }
       this._engine.realm3dParticleEmitterBurst(this.realmId, emitterId, count);
     }
   }

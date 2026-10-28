@@ -51,7 +51,13 @@ const offTick = runtime.on('tick', ({ dt, fps, frameId }) => {
 });
 
 // 4. Start the precision frame loop
-runtime.start({ targetFps: 120 });
+runtime.start({ targetFps: 60 });
+
+// Or drive frames explicitly with an asynchronous loop yielding to the event loop:
+// while (running) {
+//   runtime.tick(0.016);
+//   await Bun.sleep(16);
+// }
 ```
 
 ---
@@ -201,8 +207,8 @@ const offWindow = runtime.on('window', (event) => {
 
 // 2. Listen to keyboard inputs
 const offKeyboard = runtime.on('keyboard', (event) => {
-  if (event.type === 'key' && event.state === 'pressed') {
-    console.log(`Key pressed: ${event.key}`);
+  if (event.type === 'input' && event.state === 'pressed') {
+    console.log(`Key pressed: ${event.physicalKey}`);
   }
 });
 
@@ -233,22 +239,27 @@ const realm2D = runtime.createRealm2D();
 const main3DInvocation = runtime.multiverse.createInvocation({
   realmId: realm3D.realmId,
   targetId,
-  viewport: { width: { vw: 100 }, height: { vh: 100 } }
+  cameraSlot: 0,
+  zIndex: 0,
+  viewport: { width: { vw: 100 }, height: { vh: 100 } },
+  clearColor: [0.06, 0.08, 0.12, 1.0]
 });
 
 // 4. Create picture-in-picture (PiP) 2D UI/Minimap overlay
 const pip2DInvocation = runtime.multiverse.createInvocation({
   realmId: realm2D.realmId,
   targetId,
+  cameraSlot: 0,
+  zIndex: 1,
   viewport: {
     anchorX: 'right',
     anchorY: 'top',
-    offsetX: { px: 20 },
-    offsetY: { px: 20 },
-    width: { px: 250 },
-    height: { px: 250 }
+    offsetX: { px: -24 }, // Negative offset places the viewport 24px inside the right window margin
+    offsetY: { px: 24 }, // Positive offset places the viewport 24px below the top margin
+    width: { px: 320 },
+    height: { px: 180 }
   },
-  clearColor: [0, 0, 0, 0.4] // semi-transparent background
+  clearColor: [0.0, 0.0, 0.0, 0.0] // transparent background for UI overlay
 });
 ```
 
@@ -256,28 +267,52 @@ const pip2DInvocation = runtime.multiverse.createInvocation({
 
 ## 5. Working with 3D Scenes (`Realm3D`)
 
-### Cams, Lights & PBR Materials
+### Environment, Cameras, Lights & PBR Materials
 
 ```ts
 import { presets3D } from '@galfus/engine/realm3d';
 
-// Perspective Camera
-realm3D.createCamera(presets3D.createPerspectiveCamera3DPreset(), {
-  position: [0, 5, -12]
+// 1. Procedural skybox, ambient lighting and exposure
+realm3D.setEnvironment({
+  ambientColor: [0.15, 0.18, 0.22, 1.0],
+  clearColor: [0.06, 0.08, 0.12, 1.0],
+  exposure: 1.0,
+  skybox: {
+    mode: 'procedural',
+    skyColor: [0.2, 0.35, 0.65, 1.0],
+    horizonColor: [0.55, 0.65, 0.75, 1.0],
+    groundColor: [0.05, 0.05, 0.08, 1.0],
+    sunDirection: [0.6, 0.8, 0.3, 0.0],
+    sunColor: [1.0, 0.95, 0.8, 2.0],
+    intensity: 1.0
+  }
 });
-realm3D.setCameraLookAt(1, { target: [0, 0, 0] });
 
-// Lighting
-realm3D.createLight(presets3D.createPointLight3DPreset({ color: [1, 1, 0.9], intensity: 1200 }), {
-  position: [5, 10, -5]
-});
+// 2. Perspective Camera looking towards the center
+const camera = realm3D.createCamera(
+  presets3D.createPerspectiveCamera3DPreset({ fovY: 60.0, near: 0.1, far: 1000, cameraSlot: 0 }),
+  { position: [0, 5, 10] }
+);
+realm3D.setCameraLookAt(camera, { target: [0, 1.0, 0] });
 
-// PBR Material
+// 3. Directional Key Light pointing downward into the scene
+realm3D.createLight(
+  { kind: 'directional', color: [1.0, 0.95, 0.85], intensity: 2.5, castShadow: false },
+  { position: [10, 20, 10] }
+);
+
+// 4. Soft Point Light fill
+realm3D.createLight(
+  presets3D.createPointLight3DPreset({ color: [0.4, 0.6, 1.0], intensity: 3.0, range: 30.0 }),
+  { position: [-6, 6, 6] }
+);
+
+// 5. PBR Material
 const { materialId } = realm3D.createMaterial(
   presets3D.createPbrMaterialPreset({
-    baseColor: [0.8, 0.2, 0.3, 1.0],
-    roughness: 0.2,
-    metallic: 0.8
+    baseColor: [0.92, 0.38, 0.12, 1.0],
+    roughness: 0.25,
+    metallic: 0.75
   })
 );
 ```
@@ -310,6 +345,9 @@ realm3D.hierarchy.attach(barrel, turret);
 
 // 4. Custom constraint callback (Zero-GC, using functional mat4 utilities):
 //    e.g. UI indicator follows target position but keeps fixed world orientation:
+const indicator = realm3D.createCube(0.2, materialId, {
+  position: [0, 2.5, 0]
+});
 realm3D.hierarchy.attach(indicator, parentTank, (targetWorld, local, outWorld) => {
   mat4.copy(outWorld, local);
   mat4.copyPosition(outWorld, targetWorld);
@@ -317,7 +355,7 @@ realm3D.hierarchy.attach(indicator, parentTank, (targetWorld, local, outWorld) =
 
 // 5. Query and detach:
 const isAttached = realm3D.hierarchy.isAttached(turret); // true
-const children = realm3D.hierarchy.getChildren(parentTank); // [turret.entityId]
+const children = realm3D.hierarchy.getChildren(parentTank); // [turret.entityId, indicator.entityId]
 realm3D.hierarchy.detach(barrel); // Unlinks barrel from turret
 ```
 
@@ -335,7 +373,7 @@ const sparkEmitter = realm3D.createParticleEmitter(
   { position: [0, 1, 0] }
 );
 
-realm3D.particleEmitterBurst(1, 100);
+realm3D.particleEmitterBurst(sparkEmitter, 100);
 
 // Immediate Debug Lines and Bounding Boxes
 realm3D.drawLine(0, 0, 0, 0, 10, 0, 0, 1, 0, 1);
@@ -347,25 +385,40 @@ realm3D.drawAabb(-1, -1, -1, 1, 1, 1, 1, 0, 0, 1);
 ## 6. Working with 2D Scenes (`Realm2D`)
 
 ```ts
-// Camera & Lighting
-realm2D.createCamera({ orthoScale: 1.0 }, { position: [0, 0] });
-realm2D.createLight({ color: [1, 1, 1], radius: 300, intensity: 1.0 }, { position: [100, 100] });
+import { presets2D } from '@galfus/engine/realm2d';
+
+// Camera centered at [0, 0] with Reverse-Z Orthographic projection & Lighting
+realm2D.createCamera(presets2D.createOrthoCamera2DPreset({ orthoScale: 180, cameraSlot: 0 }), {
+  position: [0, 0]
+});
+realm2D.createLight(
+  presets2D.createPointLight2DPreset({ color: [1, 1, 1], range: 1000, intensity: 1.0 }),
+  { position: [0, 0] }
+);
 
 // Sprites & Procedural SDF Shapes
 realm2D.createSprite({ dimensions: [64, 64] }, { position: [200, 300] });
 realm2D.createShape({ kind: 'circle', radius: 32 }, { position: [400, 300] });
 
-// Dynamic Interactive SVG
+// Dynamic Interactive Vector SVG (quad centered at origin; root element ID required for animations)
 const hudSvg = realm2D.createSvg(
   {
-    source: '<svg><text id="score">Score: 0</text></svg>'
+    source: `
+      <svg id="root" width="320" height="180" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+        <rect width="320" height="180" rx="8" fill="#0d141e" stroke="#25384e" stroke-width="2"/>
+        <text x="16" y="32" font-family="sans-serif" font-size="14" font-weight="bold" fill="#00d8ff">GALFUS ENGINE</text>
+        <text id="score" x="16" y="60" font-family="sans-serif" font-size="12" fill="#4ade80">Score: 0</text>
+      </svg>
+    `,
+    castShadow: false,
+    receiveShadow: false
   },
-  { position: [20, 20] }
+  { position: [0, 0] }
 );
 
 // Mutate SVG DOM elements directly at runtime
-realm2D.setSvgText(1, 'score', 'Score: 1500');
-realm2D.setSvgAttribute(1, 'score', 'fill', '#FFD700');
+realm2D.setSvgText(hudSvg, 'score', 'Score: 1500');
+realm2D.setSvgAttribute(hudSvg, 'score', 'fill', '#FFD700');
 
 // Soft Polar SDF Shadows
 realm2D.setShadowConfig({ ambient: 0.15, lightRadius: 15 });
@@ -382,7 +435,7 @@ Galfus avoids generic unstructured buffers in favor of **domain-semantic structu
 ```ts
 // 1. Upload typed pixel buffer to GPU as a Texture (returns strongly-typed TextureId)
 const textureId = runtime.resources.createTexture(
-  { width: 256, height: 256, format: 'rgba8unorm' },
+  { width: 256, height: 256, format: 'rgba8Unorm' },
   rawPixelBytes
 );
 
@@ -409,14 +462,15 @@ const soundId = runtime.audio.loadSound(rawAudioBytes);
 // 2. Play stereo sound (returns typed VoiceId)
 const voiceId = runtime.audio.playSound(soundId, { volume: 0.8, looping: true });
 
-// 3. Play 3D spatial sound with initial emitter position (returns typed VoiceId)
+// 3. Play 3D spatial sound with continuous looping (returns typed VoiceId)
 const spatialVoice = runtime.audio.playSoundSpatial(soundId, [5, 0, 2], {
   volume: 1.0,
-  maxDistance: 50
+  maxDistance: 50,
+  looping: true
 });
 
 // 4. Update spatial positioning per-frame directly without allocating objects:
-runtime.onTick(() => {
+runtime.on('tick', ({ dt, frameId }) => {
   // Update listener (typically from main camera position)
   runtime.audio.setListenerPosition(camX, camY, camZ);
 
@@ -432,20 +486,20 @@ All transitions and path followers can be **directly bound to entity properties*
 ```ts
 // 1. Animate a 3D Model transform directly via Realm helper:
 realm3D.animateModel(
-  cubeEntityId,
+  parentTank.entityId,
   { type: 'vec3', value: [10, 5, 0] },
   { duration: 1.5, easing: 'easeOutCubic' },
   runtime.animation
 );
 
 // 2. Animate a 2D SVG opacity directly via Realm helper:
-realm2D.animateSvgOpacity(svgEntityId, 0.0, 1.0, runtime.animation);
+realm2D.animateSvgOpacity(hudSvg.entityId, 0.0, 1.0, 1.5, runtime.animation);
 
 // 3. Create transition explicitly bound to an AnimationTarget:
 const transId = runtime.animation.createTransition(
   { type: 'vec3', value: [0, 0, 0] },
   { duration: 2.0 },
-  { kind: 'modelTransform3D', realmId: realm3D.realmId, modelId }
+  { kind: 'modelTransform3D', realmId: realm3D.realmId, modelId: turret.modelId }
 );
 
 // 4. Follow declarative SVG-like path motion bound to a 3D camera:
@@ -456,7 +510,7 @@ const pathId = runtime.animation.createPathFollow(
     { type: 'quadTo', control: [5, 10, 0], to: [10, 5, 0], duration: 1.5 }
   ],
   { duration: 3.5 },
-  { kind: 'camera3DTransform', realmId: realm3D.realmId, cameraId }
+  { kind: 'camera3DTransform', realmId: realm3D.realmId, cameraId: camera.cameraId }
 );
 
 // 5. Listen to animation lifecycle events using runtime.on('animation')
@@ -469,10 +523,39 @@ const offAnim = runtime.on('animation', (event) => {
 
 ---
 
-## 8. Clean Shutdown
+## 8. Executable Demo & Clean Shutdown
 
-Calling `dispose()` cleans up all native pointers, memory allocations, audio voices, and open windows:
+You can execute the complete, verified demo locally at any time:
+
+```bash
+# Run interactive desktop OS window demo:
+bun demo tutorial
+# or
+bun run demo:tutorial
+
+# Or run headless (CI / test environments):
+bun run demo:tutorial:headless
+```
+
+### Clean Shutdown
+
+To ensure immediate, clean termination when the user closes the window or presses <kbd>Esc</kbd>, halt the loop with `runtime.stop()`, close the window, call `runtime.dispose()`, and exit:
 
 ```ts
-runtime.dispose();
+const shutdown = (reason: string) => {
+  runtime.stop();
+  runtime.platform.window.close(windowId);
+  runtime.dispose();
+  process.exit(0);
+};
+
+runtime.on('keyboard', (event) => {
+  if (event.type === 'input' && event.state === 'pressed') {
+    if (event.physicalKey === 'escape') shutdown('Escape key');
+  }
+});
+
+runtime.on('window', (event) => {
+  if (event.type === 'closeRequested') shutdown('Window closed');
+});
 ```

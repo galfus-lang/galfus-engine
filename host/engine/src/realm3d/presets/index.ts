@@ -8,13 +8,15 @@ export function createPerspectiveCamera3DPreset(
     fovY?: number;
     near?: number;
     far?: number;
+    cameraSlot?: number;
   } = {}
 ): Camera3DDesc {
   return {
     kind: 'perspective',
-    fovY: options.fovY ?? 1.047198, // 60 deg
+    fovY: options.fovY ?? 60.0,
     near: options.near ?? 0.1,
-    far: options.far ?? 1000.0
+    far: options.far ?? 1000.0,
+    cameraSlot: options.cameraSlot ?? 0
   };
 }
 
@@ -29,7 +31,7 @@ export function createPointLight3DPreset(
     kind: 'point',
     range: options.range ?? 20.0,
     color: options.color ?? [1.0, 1.0, 1.0],
-    intensity: options.intensity ?? 1000.0
+    intensity: options.intensity ?? 3.0
   };
 }
 

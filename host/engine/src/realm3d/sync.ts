@@ -326,6 +326,14 @@ export class Realm3DSyncSystem {
     }
   }
 
+  isCameraSynced(cameraId: number): boolean {
+    return this._syncedCameras.has(cameraId);
+  }
+
+  isEmitterSynced(emitterId: number): boolean {
+    return this._syncedEmitters.has(emitterId);
+  }
+
   /**
    * Disposes all tracked IDs on the engine when the realm is destroyed.
    */

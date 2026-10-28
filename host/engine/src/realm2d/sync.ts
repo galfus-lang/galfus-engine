@@ -211,6 +211,14 @@ export class Realm2DSyncSystem {
     }
   }
 
+  isSvgSynced(svgId: number): boolean {
+    return this._syncedSvgs.has(svgId);
+  }
+
+  isEmitterSynced(emitterId: number): boolean {
+    return this._syncedEmitters.has(emitterId);
+  }
+
   /**
    * Disposes all tracked IDs on the engine when the realm is destroyed.
    */
