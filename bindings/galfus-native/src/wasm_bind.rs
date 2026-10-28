@@ -1028,11 +1028,11 @@ pub fn realm_3d_set_geometry_morph_targets(
 }
 
 #[wasm_bindgen(js_name = "realm3dCreateCube")]
-pub fn realm_3d_create_cube(realm_id: u32, geometry_id: u32, size: f32) -> Result<()> {
+pub fn realm_3d_create_cube(realm_id: u32, geometry_id: u32, size: f64) -> Result<()> {
     check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_cube(
         realm_id,
         geometry_id,
-        size,
+        size as f32,
     ))
 }
 
@@ -1040,14 +1040,14 @@ pub fn realm_3d_create_cube(realm_id: u32, geometry_id: u32, size: f32) -> Resul
 pub fn realm_3d_create_plane(
     realm_id: u32,
     geometry_id: u32,
-    width: f32,
-    depth: f32,
+    width: f64,
+    depth: f64,
 ) -> Result<()> {
     check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_plane(
         realm_id,
         geometry_id,
-        width,
-        depth,
+        width as f32,
+        depth as f32,
     ))
 }
 
@@ -1055,14 +1055,14 @@ pub fn realm_3d_create_plane(
 pub fn realm_3d_create_quad(
     realm_id: u32,
     geometry_id: u32,
-    width: f32,
-    height: f32,
+    width: f64,
+    height: f64,
 ) -> Result<()> {
     check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_quad(
         realm_id,
         geometry_id,
-        width,
-        height,
+        width as f32,
+        height as f32,
     ))
 }
 
@@ -1070,14 +1070,14 @@ pub fn realm_3d_create_quad(
 pub fn realm_3d_create_sphere(
     realm_id: u32,
     geometry_id: u32,
-    radius: f32,
+    radius: f64,
     rings: u32,
     sectors: u32,
 ) -> Result<()> {
     check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_sphere(
         realm_id,
         geometry_id,
-        radius,
+        radius as f32,
         rings,
         sectors,
     ))
@@ -1087,15 +1087,15 @@ pub fn realm_3d_create_sphere(
 pub fn realm_3d_create_cylinder(
     realm_id: u32,
     geometry_id: u32,
-    radius: f32,
-    height: f32,
+    radius: f64,
+    height: f64,
     sectors: u32,
 ) -> Result<()> {
     check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_cylinder(
         realm_id,
         geometry_id,
-        radius,
-        height,
+        radius as f32,
+        height as f32,
         sectors,
     ))
 }
@@ -1104,16 +1104,16 @@ pub fn realm_3d_create_cylinder(
 pub fn realm_3d_create_capsule(
     realm_id: u32,
     geometry_id: u32,
-    radius: f32,
-    cylinder_height: f32,
+    radius: f64,
+    cylinder_height: f64,
     rings: u32,
     sectors: u32,
 ) -> Result<()> {
     check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_capsule(
         realm_id,
         geometry_id,
-        radius,
-        cylinder_height,
+        radius as f32,
+        cylinder_height as f32,
         rings,
         sectors,
     ))
@@ -1123,16 +1123,16 @@ pub fn realm_3d_create_capsule(
 pub fn realm_3d_create_pyramid(
     realm_id: u32,
     geometry_id: u32,
-    width: f32,
-    depth: f32,
-    height: f32,
+    width: f64,
+    depth: f64,
+    height: f64,
 ) -> Result<()> {
     check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_pyramid(
         realm_id,
         geometry_id,
-        width,
-        depth,
-        height,
+        width as f32,
+        depth as f32,
+        height as f32,
     ))
 }
 
@@ -1140,16 +1140,16 @@ pub fn realm_3d_create_pyramid(
 pub fn realm_3d_create_torus(
     realm_id: u32,
     geometry_id: u32,
-    major_radius: f32,
-    minor_radius: f32,
+    major_radius: f64,
+    minor_radius: f64,
     major_segments: u32,
     minor_segments: u32,
 ) -> Result<()> {
     check_ffi_res(crate::ffi_realm_3d::galfus_realm_3d_create_torus(
         realm_id,
         geometry_id,
-        major_radius,
-        minor_radius,
+        major_radius as f32,
+        minor_radius as f32,
         major_segments,
         minor_segments,
     ))
