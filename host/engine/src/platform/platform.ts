@@ -110,3 +110,34 @@ export class PlatformCoordinator {
     this._engine = null;
   }
 }
+
+/**
+ * Resolves a normalized lowercase key string from a platform KeyboardEvent or input object.
+ *
+ * @param event The keyboard event from `runtime.on('keyboard', ...)`.
+ * @returns Normalized lowercase key identifier (e.g. `'escape'`, `'w'`, `'enter'`, `'1'`).
+ */
+export function getKey(event: { logicalKey?: string; physicalKey?: string }): string {
+  if (typeof event.logicalKey === 'string' && event.logicalKey.length > 0) {
+    return event.logicalKey.toLowerCase();
+  }
+  const phys = String(event.physicalKey ?? '').toLowerCase();
+  if (phys.startsWith('key') && phys.length === 4) return phys.slice(3);
+  if (phys.startsWith('digit') && phys.length === 6) return phys.slice(5);
+  return phys;
+}
+
+/**
+ * Checks if a keyboard event matches any of the given key names (case-insensitive).
+ *
+ * @param event The keyboard event.
+ * @param keys Key names to compare against (e.g. `'Escape'`, `'q'`).
+ * @returns `true` if the event key matches any of the target keys.
+ */
+export function isKey(
+  event: { logicalKey?: string; physicalKey?: string },
+  ...keys: string[]
+): boolean {
+  const normalized = getKey(event);
+  return keys.some((k) => k.toLowerCase() === normalized);
+}

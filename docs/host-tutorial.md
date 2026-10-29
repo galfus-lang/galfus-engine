@@ -205,10 +205,15 @@ const offWindow = runtime.on('window', (event) => {
   }
 });
 
-// 2. Listen to keyboard inputs
+// 2. Listen to keyboard inputs with normalized keys and convenience helpers
+import { isKey, getKey } from '@galfus/engine';
+
 const offKeyboard = runtime.on('keyboard', (event) => {
   if (event.type === 'input' && event.state === 'pressed') {
-    console.log(`Key pressed: ${event.physicalKey}`);
+    console.log(`Key pressed: ${event.logicalKey} (physical: ${event.physicalKey})`);
+    if (isKey(event, 'Escape', 'q')) {
+      console.log('Exit requested via Escape or Q');
+    }
   }
 });
 
@@ -289,17 +294,15 @@ realm3D.setEnvironment({
 });
 
 // 2. Perspective Camera looking towards the center
-const camera = realm3D.createCamera(
-  presets3D.createPerspectiveCamera3DPreset({ fovY: 60.0, near: 0.1, far: 1000, cameraSlot: 0 }),
-  { position: [0, 5, 10] }
-);
+const camera = realm3D.createCamera(presets3D.createPerspectiveCamera3DPreset(), {
+  position: [0, 5, 10]
+});
 realm3D.setCameraLookAt(camera, { target: [0, 1.0, 0] });
 
 // 3. Directional Key Light pointing downward into the scene
-realm3D.createLight(
-  { kind: 'directional', color: [1.0, 0.95, 0.85], intensity: 2.5, castShadow: false },
-  { position: [10, 20, 10] }
-);
+realm3D.createLight(presets3D.createDirectionalLight3DPreset({ color: [1.0, 0.95, 0.85] }), {
+  position: [10, 20, 10]
+});
 
 // 4. Soft Point Light fill
 realm3D.createLight(
@@ -388,7 +391,7 @@ realm3D.drawAabb(-1, -1, -1, 1, 1, 1, 1, 0, 0, 1);
 import { presets2D } from '@galfus/engine/realm2d';
 
 // Camera centered at [0, 0] with Reverse-Z Orthographic projection & Lighting
-realm2D.createCamera(presets2D.createOrthoCamera2DPreset({ orthoScale: 180, cameraSlot: 0 }), {
+realm2D.createCamera(presets2D.createOrthoCamera2DPreset({ orthoScale: 180 }), {
   position: [0, 0]
 });
 realm2D.createLight(

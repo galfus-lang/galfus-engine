@@ -55,6 +55,21 @@ describe('@galfus/engine-core > Math', () => {
     expect(rotated[2]).toBeCloseTo(0);
   });
 
+  it('quat: fromLookAt orients a vector towards target', () => {
+    const eye = vec3.fromValues(0, 0, 10);
+    const target = vec3.fromValues(0, 0, 0);
+    const q = quat.create();
+    quat.fromLookAt(q, eye, target);
+
+    // Transforming forward vector [0, 0, -1] by q should point from eye towards target (i.e. -Z)
+    const forward = vec3.fromValues(0, 0, -1);
+    const outDir = vec3.create();
+    vec3.transformQuat(outDir, forward, q);
+    expect(outDir[0]).toBeCloseTo(0);
+    expect(outDir[1]).toBeCloseTo(0);
+    expect(outDir[2]).toBeCloseTo(-1);
+  });
+
   it('mat4: creates, composes transforms and inverts', () => {
     const m = mat4.create();
     const q = quat.create();

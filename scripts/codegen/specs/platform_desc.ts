@@ -157,8 +157,8 @@ export const platformDescriptors: DescSpec[] = [
   {
     kind: 'union',
     name: 'LogicalKey',
-    doc: 'Logical key representation: string or named key object.',
-    variants: ['string', { inline: { named: { type: 'string' } } }]
+    doc: 'Logical key representation: normalized key string.',
+    variants: ['string']
   },
   {
     kind: 'enum',

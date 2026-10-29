@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use galfus_platform::{
-    GamepadEvent, KeyboardEvent, LogicalKey, PlatformEvent, PointerEvent, ScrollDelta, WindowEvent,
+    GamepadEvent, KeyboardEvent, PlatformEvent, PointerEvent, ScrollDelta, WindowEvent,
 };
 
 /// One normalized platform event. Text fields are byte ranges inside `GalfusEventBatch::text_data`.
@@ -57,7 +57,6 @@ const FLAG_ALT: u32 = 1 << 3;
 const FLAG_SUPER: u32 = 1 << 4;
 const FLAG_REPEAT: u32 = 1 << 5;
 const FLAG_SCROLL_PIXELS: u32 = 1 << 6;
-const FLAG_LOGICAL_NAMED: u32 = 1 << 7;
 const FLAG_TEXT_PRESENT: u32 = 1 << 8;
 
 fn push_text(text: &mut Vec<u8>, value: &str) -> (u32, u32) {
@@ -205,19 +204,8 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
                     output.flags |= u32::from(state.is_pressed()) * FLAG_TRUE;
                     output.flags |= u32::from(repeat) * FLAG_REPEAT;
                     (output.text0_offset, output.text0_length) = push_debug(text, physical_key);
-                    match logical_key {
-                        LogicalKey::Character(value) => {
-                            (output.text1_offset, output.text1_length) = push_text(text, &value);
-                        }
-                        LogicalKey::Named(value) => {
-                            output.flags |= FLAG_LOGICAL_NAMED;
-                            (output.text1_offset, output.text1_length) = push_debug(text, value);
-                        }
-                        LogicalKey::Unidentified => {
-                            (output.text1_offset, output.text1_length) =
-                                push_text(text, "unidentified");
-                        }
-                    }
+                    (output.text1_offset, output.text1_length) =
+                        push_text(text, logical_key.as_str());
                     if let Some(value) = input_text {
                         output.flags |= FLAG_TEXT_PRESENT;
                         (output.text2_offset, output.text2_length) = push_text(text, &value);
@@ -309,7 +297,7 @@ pub(crate) fn event_batch_count() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use galfus_platform::{KeyCode, KeyState, ModifiersState};
+    use galfus_platform::{KeyCode, KeyState, LogicalKey, ModifiersState};
 
     #[test]
     fn ffi_layout_is_stable_on_64_bit_targets() {
@@ -344,6 +332,15 @@ mod tests {
         }
         .unwrap();
         assert_eq!(physical_key, "KeyW");
+
+        let logical_key = unsafe {
+            std::str::from_utf8(std::slice::from_raw_parts(
+                batch.text_data.add(event.text1_offset as usize),
+                event.text1_length as usize,
+            ))
+        }
+        .unwrap();
+        assert_eq!(logical_key, "w");
         release_event_batch(batch.batch_id).unwrap();
     }
 

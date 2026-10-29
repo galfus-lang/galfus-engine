@@ -215,6 +215,80 @@ export function fromEuler(out: Quat, x: number, y: number, z: number): Quat {
   return out;
 }
 
+/**
+ * Computes a rotation quaternion that orients an entity at `eye` towards `target`.
+ *
+ * @param out Output quaternion receiving the computed rotation.
+ * @param eye Observer / entity origin position.
+ * @param target Destination target point to look at.
+ * @param up Upward reference direction (defaults to [0, 1, 0]).
+ * @returns `out`
+ */
+export function fromLookAt(
+  out: Quat,
+  eye: ReadonlyVec3,
+  target: ReadonlyVec3,
+  up: ReadonlyVec3 = [0.0, 1.0, 0.0]
+): Quat {
+  let fx = target[0] - eye[0];
+  let fy = target[1] - eye[1];
+  let fz = target[2] - eye[2];
+  const rlen = 1.0 / (Math.hypot(fx, fy, fz) || 1.0);
+  fx *= rlen;
+  fy *= rlen;
+  fz *= rlen;
+
+  let rx = up[1] * fz - up[2] * fy;
+  let ry = up[2] * fx - up[0] * fz;
+  let rz = up[0] * fy - up[1] * fx;
+  const rlenR = 1.0 / (Math.hypot(rx, ry, rz) || 1.0);
+  rx *= rlenR;
+  ry *= rlenR;
+  rz *= rlenR;
+
+  const ux = fy * rz - fz * ry;
+  const uy = fz * rx - fx * rz;
+  const uz = fx * ry - fy * rx;
+
+  const m00 = rx;
+  const m01 = ry;
+  const m02 = rz;
+  const m10 = ux;
+  const m11 = uy;
+  const m12 = uz;
+  const m20 = -fx;
+  const m21 = -fy;
+  const m22 = -fz;
+
+  const trace = m00 + m11 + m22;
+  if (trace > 0) {
+    const s = 0.5 / Math.sqrt(trace + 1.0);
+    out[0] = (m12 - m21) * s;
+    out[1] = (m20 - m02) * s;
+    out[2] = (m01 - m10) * s;
+    out[3] = 0.25 / s;
+  } else if (m00 > m11 && m00 > m22) {
+    const s = 2.0 * Math.sqrt(1.0 + m00 - m11 - m22);
+    out[0] = 0.25 * s;
+    out[1] = (m10 + m01) / s;
+    out[2] = (m20 + m02) / s;
+    out[3] = (m12 - m21) / s;
+  } else if (m11 > m22) {
+    const s = 2.0 * Math.sqrt(1.0 + m11 - m00 - m22);
+    out[0] = (m10 + m01) / s;
+    out[1] = 0.25 * s;
+    out[2] = (m21 + m12) / s;
+    out[3] = (m20 - m02) / s;
+  } else {
+    const s = 2.0 * Math.sqrt(1.0 + m22 - m00 - m11);
+    out[0] = (m20 + m02) / s;
+    out[1] = (m21 + m12) / s;
+    out[2] = 0.25 * s;
+    out[3] = (m01 - m10) / s;
+  }
+  return out;
+}
+
 export function equals(a: ReadonlyQuat, b: ReadonlyQuat, epsilon: number = EPSILON): boolean {
   return (
     equalsApprox(a[0], b[0], epsilon) &&

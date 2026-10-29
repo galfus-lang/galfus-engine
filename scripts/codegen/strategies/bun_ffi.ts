@@ -361,7 +361,7 @@ export class BunFfiStrategy implements CodegenStrategy {
       '        }',
       '        if (kind === 3) {',
       '          const event: any = { kind: "keyboard", type: type === 1 ? "input" : "modifiersChanged", windowId, modifiers };',
-      '          if (type === 1) Object.assign(event, { physicalKey: this.enumText(text0), logicalKey: (flags & 128) !== 0 ? { named: this.enumText(text1) } : text1, state: (flags & 1) !== 0 ? "pressed" : "released", repeat: (flags & 32) !== 0 });',
+      '          if (type === 1) Object.assign(event, { physicalKey: this.enumText(text0), logicalKey: text1, state: (flags & 1) !== 0 ? "pressed" : "released", repeat: (flags & 32) !== 0 });',
       '          if ((flags & 256) !== 0) event.text = text2;',
       '          events.push(event); continue;',
       '        }',

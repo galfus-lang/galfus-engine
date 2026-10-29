@@ -12,6 +12,7 @@
 import { createBunTransport } from '@galfus/transport-bun';
 import {
   createRuntime,
+  isKey,
   mat4,
   quat,
   type TargetId,
@@ -40,72 +41,6 @@ function createMinimalWav(): Uint8Array {
   view.setUint32(40, 2, true); // Subchunk2Size (2 bytes data)
   view.setInt16(44, 0, true); // 1 sample of silence
   return new Uint8Array(buffer);
-}
-
-function quatFromLookAt(
-  eye: [number, number, number],
-  target: [number, number, number],
-  up: [number, number, number] = [0.0, 1.0, 0.0]
-): [number, number, number, number] {
-  let fx = target[0] - eye[0];
-  let fy = target[1] - eye[1];
-  let fz = target[2] - eye[2];
-  const rlen = 1.0 / (Math.hypot(fx, fy, fz) || 1.0);
-  fx *= rlen;
-  fy *= rlen;
-  fz *= rlen;
-
-  let rx = up[1] * fz - up[2] * fy;
-  let ry = up[2] * fx - up[0] * fz;
-  let rz = up[0] * fy - up[1] * fx;
-  const rlenR = 1.0 / (Math.hypot(rx, ry, rz) || 1.0);
-  rx *= rlenR;
-  ry *= rlenR;
-  rz *= rlenR;
-
-  const ux = fy * rz - fz * ry;
-  const uy = fz * rx - fx * rz;
-  const uz = fx * ry - fy * rx;
-
-  const m00 = rx;
-  const m01 = ry;
-  const m02 = rz;
-  const m10 = ux;
-  const m11 = uy;
-  const m12 = uz;
-  const m20 = -fx;
-  const m21 = -fy;
-  const m22 = -fz;
-
-  const trace = m00 + m11 + m22;
-  if (trace > 0) {
-    const s = 0.5 / Math.sqrt(trace + 1.0);
-    return [(m12 - m21) * s, (m20 - m02) * s, (m01 - m10) * s, 0.25 / s];
-  } else if (m00 > m11 && m00 > m22) {
-    const s = 2.0 * Math.sqrt(1.0 + m00 - m11 - m22);
-    return [0.25 * s, (m10 + m01) / s, (m20 + m02) / s, (m12 - m21) / s];
-  } else if (m11 > m22) {
-    const s = 2.0 * Math.sqrt(1.0 + m11 - m00 - m22);
-    return [(m10 + m01) / s, 0.25 * s, (m21 + m12) / s, (m20 - m02) / s];
-  } else {
-    const s = 2.0 * Math.sqrt(1.0 + m22 - m00 - m11);
-    return [(m20 + m02) / s, (m21 + m12) / s, 0.25 * s, (m01 - m10) / s];
-  }
-}
-
-function extractKey(event: any): string {
-  if (typeof event.logicalKey === 'object' && event.logicalKey !== null) {
-    if ('character' in event.logicalKey && typeof event.logicalKey.character === 'string') {
-      return event.logicalKey.character.toLowerCase();
-    }
-    if ('named' in event.logicalKey && typeof event.logicalKey.named === 'string') {
-      return event.logicalKey.named.toLowerCase();
-    }
-  }
-  const phys = String(event.physicalKey ?? '').toLowerCase();
-  if (phys.startsWith('key') && phys.length === 4) return phys.slice(3);
-  if (phys.startsWith('digit') && phys.length === 6) return phys.slice(5);
-  return phys;
 }
 
 export interface TutorialDemoOptions {
@@ -221,20 +156,22 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
 
   // Perspective Camera: looking from elevated isometric angle down to the center
   const camPos: [number, number, number] = [0, 5, 10];
-  const camRot = quatFromLookAt(camPos, [0, 1.0, 0]);
-  const camera = realm3D.createCamera(
-    presets3D.createPerspectiveCamera3DPreset({ fovY: 60.0, near: 0.1, far: 1000, cameraSlot: 0 }),
-    { position: camPos, rotation: camRot }
-  );
+  const camRot = quat.create();
+  quat.fromLookAt(camRot, camPos, [0, 1.0, 0]);
+  const camera = realm3D.createCamera(presets3D.createPerspectiveCamera3DPreset(), {
+    position: camPos,
+    rotation: camRot
+  });
   realm3D.setCameraLookAt(camera, { target: [0, 1.0, 0] });
 
   // Key directional light with warm sun color pointing downwards
   const lightPos: [number, number, number] = [10, 20, 10];
-  const lightRot = quatFromLookAt(lightPos, [0, 0, 0]);
-  realm3D.createLight(
-    { kind: 'directional', color: [1.0, 0.95, 0.85], intensity: 2.5, castShadow: false },
-    { position: lightPos, rotation: lightRot }
-  );
+  const lightRot = quat.create();
+  quat.fromLookAt(lightRot, lightPos, [0, 0, 0]);
+  realm3D.createLight(presets3D.createDirectionalLight3DPreset({ color: [1.0, 0.95, 0.85] }), {
+    position: lightPos,
+    rotation: lightRot
+  });
 
   // Soft ambient fill light
   realm3D.createLight(
@@ -332,7 +269,7 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
 
   // 5. Assemble 2D Realm HUD
   console.log('[5/7] Assembling 2D HUD Overlay Scene...');
-  realm2D.createCamera(presets2D.createOrthoCamera2DPreset({ orthoScale: 180, cameraSlot: 0 }), {
+  realm2D.createCamera(presets2D.createOrthoCamera2DPreset({ orthoScale: 180 }), {
     position: [0, 0]
   });
   realm2D.createLight(
@@ -415,9 +352,8 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
   // Listen to Keyboard Escape Event
   runtime.on('keyboard', (event) => {
     if (event.type === 'input' && event.state === 'pressed') {
-      const key = extractKey(event);
-      if (key === 'escape' || key === 'esc' || key === 'q') {
-        shutdown(`Key '${key}' pressed`);
+      if (isKey(event, 'escape', 'esc', 'q')) {
+        shutdown(`Key '${event.logicalKey}' pressed`);
       }
     }
   });
@@ -425,9 +361,8 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
   // Listen to Platform Events for cross-system event routing
   runtime.on('platform', (event) => {
     if (event.kind === 'keyboard' && event.type === 'input' && event.state === 'pressed') {
-      const key = extractKey(event);
-      if (key === 'escape' || key === 'esc' || key === 'q') {
-        shutdown(`Key '${key}' pressed`);
+      if (isKey(event, 'escape', 'esc', 'q')) {
+        shutdown(`Key '${event.logicalKey}' pressed`);
       }
     } else if (event.kind === 'window' && event.type === 'closeRequested') {
       shutdown('Window close requested');
@@ -455,10 +390,7 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
     if (turretTransform) {
       turretAngle += dt * 0.9;
       quat.setAxisAngle(rotQuat, [0, 1, 0], turretAngle);
-      turretTransform.rotation[0] = rotQuat[0];
-      turretTransform.rotation[1] = rotQuat[1];
-      turretTransform.rotation[2] = rotQuat[2];
-      turretTransform.rotation[3] = rotQuat[3];
+      quat.copy(turretTransform.rotation, rotQuat);
       turretTransform.isDirty = true;
     }
 

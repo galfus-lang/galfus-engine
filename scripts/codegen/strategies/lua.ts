@@ -205,7 +205,7 @@ export class LuaStrategy implements CodegenStrategy {
       '                if event.event_type == 6 then value.delta = { [bit.band(flags, 64) ~= 0 and "pixels" or "lines"] = { values[2], values[3] } } end',
       '            elseif event.kind == 3 then',
       '                value = { kind = "keyboard", type = event.event_type == 1 and "input" or "modifiersChanged", windowId = event.window_id, modifiers = modifiers }',
-      '                if event.event_type == 1 then value.physicalKey, value.logicalKey, value.state = event_enum(text0), bit.band(flags, 128) ~= 0 and { named = event_enum(text1) } or text1, bit.band(flags, 1) ~= 0 and "pressed" or "released"; value["repeat"] = bit.band(flags, 32) ~= 0 end',
+      '                if event.event_type == 1 then value.physicalKey, value.logicalKey, value.state = event_enum(text0), text1, bit.band(flags, 1) ~= 0 and "pressed" or "released"; value["repeat"] = bit.band(flags, 32) ~= 0 end',
       '                if bit.band(flags, 256) ~= 0 then value.text = text2 end',
       '            else',
       '                local names = { "connected", "disconnected", "button", "axis" }',

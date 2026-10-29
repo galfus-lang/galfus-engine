@@ -176,7 +176,7 @@ export class PythonStrategy implements CodegenStrategy {
       '                elif event.event_type == 6: value["delta"] = {"pixels" if flags & 64 else "lines": [values[2], values[3]]}',
       '            elif event.kind == 3:',
       '                value = {"kind": "keyboard", "type": "input" if event.event_type == 1 else "modifiersChanged", "windowId": event.window_id, "modifiers": modifiers}',
-      '                if event.event_type == 1: value.update(physicalKey=_event_enum(text0), logicalKey={"named": _event_enum(text1)} if flags & 128 else text1, state="pressed" if flags & 1 else "released", repeat=bool(flags & 32))',
+      '                if event.event_type == 1: value.update(physicalKey=_event_enum(text0), logicalKey=text1, state="pressed" if flags & 1 else "released", repeat=bool(flags & 32))',
       '                if flags & 256: value["text"] = text2',
       '            else:',
       '                names = ["connected", "disconnected", "button", "axis"]',

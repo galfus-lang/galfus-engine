@@ -35,6 +35,21 @@ export function createPointLight3DPreset(
   };
 }
 
+export function createDirectionalLight3DPreset(
+  options: {
+    color?: [number, number, number];
+    intensity?: number;
+    castShadow?: boolean;
+  } = {}
+): Light3DDesc {
+  return {
+    kind: 'directional',
+    color: options.color ?? [1.0, 1.0, 1.0],
+    intensity: options.intensity ?? 2.5,
+    castShadow: options.castShadow ?? false
+  };
+}
+
 export function createPbrMaterialPreset(
   options: {
     baseColor?: [number, number, number, number];
