@@ -40,7 +40,12 @@ import {
   type ParticleEmitter3DComponent,
   type Primitive3DKind
 } from './components';
-import { type GeometryData, packGeometryData } from './geometry';
+import {
+  type GeometryData,
+  type MorphTargetData,
+  packGeometryData,
+  packMorphTargets
+} from './geometry';
 import { Realm3DSyncSystem } from './sync';
 
 export class Realm3D implements RealmConnector {
@@ -449,6 +454,34 @@ export class Realm3D implements RealmConnector {
     }
   }
 
+  setGeometryMorphTargets(
+    geometryId: number,
+    targetData: Uint8Array | MorphTargetData[],
+    vertexCount?: number
+  ): void {
+    if (this._engine) {
+      if (targetData instanceof Uint8Array) {
+        const count = vertexCount ? Math.floor(targetData.byteLength / (vertexCount * 48)) : 1;
+        this._engine.realm3dSetGeometryMorphTargets(
+          this.realmId,
+          geometryId,
+          targetData,
+          targetData.byteLength,
+          count
+        );
+      } else {
+        const packed = packMorphTargets(targetData, vertexCount ?? 0);
+        this._engine.realm3dSetGeometryMorphTargets(
+          this.realmId,
+          geometryId,
+          packed.targetData,
+          packed.targetData.byteLength,
+          packed.targetCount
+        );
+      }
+    }
+  }
+
   setInstancedModelMorphWeights(instancedModelId: number, weights: Float32Array): void {
     if (this._engine) {
       this._engine.realm3dSetInstancedModelMorphWeights(
@@ -482,5 +515,36 @@ export class Realm3D implements RealmConnector {
       realmId: this.realmId,
       modelId: model.modelId
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Entity Name & Metadata Helpers
+  // ---------------------------------------------------------------------------
+  setEntityName(entityId: EntityId, name: string): void {
+    this.world.setEntityName(entityId, name);
+  }
+
+  getEntityName(entityId: EntityId): string | undefined {
+    return this.world.getEntityName(entityId);
+  }
+
+  findEntityByName(name: string): EntityId | undefined {
+    return this.world.findEntityByName(name);
+  }
+
+  findEntitiesByName(pattern: string | RegExp): EntityId[] {
+    return this.world.findEntitiesByName(pattern);
+  }
+
+  setMetadataKV(entityId: EntityId, key: string, value: unknown): void {
+    this.world.setMetadataKV(entityId, key, value);
+  }
+
+  getMetadataKV<T = unknown>(entityId: EntityId, key: string): T | undefined {
+    return this.world.getMetadataKV<T>(entityId, key);
+  }
+
+  findEntitiesByMetadata(key: string, value?: unknown): EntityId[] {
+    return this.world.findEntitiesByMetadata(key, value);
   }
 }

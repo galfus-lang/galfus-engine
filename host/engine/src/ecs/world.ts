@@ -4,6 +4,7 @@
 import { ComponentStore, type Component } from './component';
 import { EntityManager, type EntityId } from './entity';
 import { IntentStore, type IntentFlusher } from './intent';
+import { createMetadata, createName, type MetadataComponent, type NameComponent } from './metadata';
 import { SystemPipeline, type System, type SystemContext, type SystemStep } from './system';
 
 export class EcsWorld implements IntentFlusher {
@@ -98,6 +99,95 @@ export class EcsWorld implements IntentFlusher {
     }
 
     return result ? Array.from(result) : [];
+  }
+
+  /**
+   * Sets or replaces the human-readable name of an entity.
+   */
+  setEntityName(entityId: EntityId, name: string): void {
+    const existing = this.getComponent<NameComponent>(entityId, 'Name');
+    if (existing) {
+      existing.name = name;
+    } else {
+      this.attachComponent(entityId, createName(name));
+    }
+  }
+
+  /**
+   * Retrieves the human-readable name of an entity if assigned.
+   */
+  getEntityName(entityId: EntityId): string | undefined {
+    return this.getComponent<NameComponent>(entityId, 'Name')?.name;
+  }
+
+  /**
+   * Finds the first entity possessing the exact given name.
+   */
+  findEntityByName(name: string): EntityId | undefined {
+    const ids = this.components.getEntitiesWith('Name');
+    for (const id of ids) {
+      const comp = this.components.get<NameComponent>(id, 'Name');
+      if (comp?.name === name) return id;
+    }
+    return undefined;
+  }
+
+  /**
+   * Finds all entities matching a given name or regular expression pattern.
+   */
+  findEntitiesByName(pattern: string | RegExp): EntityId[] {
+    const matches: EntityId[] = [];
+    const ids = this.components.getEntitiesWith('Name');
+    const isRegex = pattern instanceof RegExp;
+
+    for (const id of ids) {
+      const comp = this.components.get<NameComponent>(id, 'Name');
+      if (!comp) continue;
+      if (isRegex ? pattern.test(comp.name) : comp.name === pattern) {
+        matches.push(id);
+      }
+    }
+
+    return matches;
+  }
+
+  /**
+   * Sets or updates a key-value entry in the entity's MetadataComponent.
+   */
+  setMetadataKV(entityId: EntityId, key: string, value: unknown): void {
+    let metadata = this.getComponent<MetadataComponent>(entityId, 'Metadata');
+    if (!metadata) {
+      metadata = createMetadata();
+      this.attachComponent(entityId, metadata);
+    }
+    metadata.entries.set(key, value);
+  }
+
+  /**
+   * Retrieves a metadata value by key for an entity.
+   */
+  getMetadataKV<T = unknown>(entityId: EntityId, key: string): T | undefined {
+    const metadata = this.getComponent<MetadataComponent>(entityId, 'Metadata');
+    return metadata?.entries.get(key) as T | undefined;
+  }
+
+  /**
+   * Finds all entities possessing a specific metadata key (and optional matching value).
+   */
+  findEntitiesByMetadata(key: string, value?: unknown): EntityId[] {
+    const matches: EntityId[] = [];
+    const ids = this.components.getEntitiesWith('Metadata');
+
+    for (const id of ids) {
+      const comp = this.components.get<MetadataComponent>(id, 'Metadata');
+      if (!comp || !comp.entries.has(key)) continue;
+
+      if (value === undefined || comp.entries.get(key) === value) {
+        matches.push(id);
+      }
+    }
+
+    return matches;
   }
 
   /**
