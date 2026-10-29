@@ -22,24 +22,44 @@ import {
 import { presets3D } from '@galfus/engine/realm3d';
 import { presets2D } from '@galfus/engine/realm2d';
 
-/** Generates a minimal 46-byte PCM WAV audio buffer of silence for audio testing. */
-function createMinimalWav(): Uint8Array {
-  const buffer = new ArrayBuffer(46);
+/** Synthesizes an audible, looping 16-bit PCM WAV audio waveform (sci-fi tank engine hum). */
+function createSynthesizedWav(durationSecs = 1.0, freq = 180.0): Uint8Array {
+  const sampleRate = 44100;
+  const numSamples = Math.floor(sampleRate * durationSecs);
+  const dataSize = numSamples * 2;
+  const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
+
+  // 'RIFF' chunk
   view.setUint32(0, 0x52494646, false); // 'RIFF'
-  view.setUint32(4, 38, true); // ChunkSize
+  view.setUint32(4, 36 + dataSize, true);
   view.setUint32(8, 0x57415645, false); // 'WAVE'
+
+  // 'fmt ' subchunk (PCM 16-bit mono)
   view.setUint32(12, 0x666d7420, false); // 'fmt '
-  view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
-  view.setUint16(20, 1, true); // AudioFormat (1 = PCM)
-  view.setUint16(22, 1, true); // NumChannels (1 = Mono)
-  view.setUint32(24, 44100, true); // SampleRate (44100 Hz)
-  view.setUint32(28, 88200, true); // ByteRate (SampleRate * 2)
-  view.setUint16(32, 2, true); // BlockAlign (2 bytes per sample)
-  view.setUint16(34, 16, true); // BitsPerSample (16-bit)
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+
+  // 'data' subchunk
   view.setUint32(36, 0x64617461, false); // 'data'
-  view.setUint32(40, 2, true); // Subchunk2Size (2 bytes data)
-  view.setInt16(44, 0, true); // 1 sample of silence
+  view.setUint32(40, dataSize, true);
+
+  // Periodic waveform: fundamental + octave harmonics for a smooth turbine drone
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    const wave =
+      0.6 * Math.sin(2.0 * Math.PI * freq * t) +
+      0.3 * Math.sin(2.0 * Math.PI * (freq * 2.0) * t) +
+      0.1 * Math.sin(2.0 * Math.PI * (freq * 0.5) * t);
+    const sample = Math.max(-1.0, Math.min(1.0, wave));
+    view.setInt16(44 + i * 2, Math.round(sample * 24000), true);
+  }
+
   return new Uint8Array(buffer);
 }
 
@@ -303,14 +323,15 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
   const rawPixelBytes = new Uint8Array(256 * 256 * 4);
   runtime.resources.createTexture({ width: 256, height: 256, format: 'rgba8Unorm' }, rawPixelBytes);
 
-  const rawAudioBytes = createMinimalWav();
+  const rawAudioBytes = createSynthesizedWav(1.0, 180.0);
   const soundId = runtime.audio.loadSound(rawAudioBytes);
-  const spatialVoice = runtime.audio.playSoundSpatial(soundId, [0, 2, 0], {
-    volume: 0.8,
-    maxDistance: 40,
+  const spatialVoice = runtime.audio.playSoundSpatial(soundId, [0, 1.5, 0], {
+    volume: 0.85,
+    minDistance: 2.0,
+    maxDistance: 45.0,
     looping: true
   });
-  runtime.audio.setListenerPosition(0, 6, -11);
+  runtime.audio.setListenerPosition(camPos[0], camPos[1], camPos[2]);
 
   // 7. Interactive Precision Frame Loop
   console.log('[7/7] Launching Interactive Precision Frame Loop...');
