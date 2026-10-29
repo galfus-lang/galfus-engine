@@ -51,3 +51,17 @@ export function toDegree(rad: number): number {
 export function equalsApprox(a: number, b: number, epsilon: number = EPSILON): boolean {
   return Math.abs(a - b) <= epsilon * Math.max(1.0, Math.abs(a), Math.abs(b));
 }
+
+/**
+ * Clamps a scalar value between a minimum and maximum limit.
+ */
+export function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+/**
+ * Linearly interpolates between two numbers.
+ */
+export function lerp(a: number, b: number, t: number): number {
+  return a + t * (b - a);
+}

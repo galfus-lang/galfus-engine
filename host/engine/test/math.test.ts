@@ -12,6 +12,7 @@ describe('@galfus/engine-core > Math', () => {
     expect(out[1]).toBe(6);
 
     expect(vec2.dot(v1, v2)).toBe(11);
+    expect(vec2.cross(v1, v2)).toBe(-2);
     expect(vec2.distance(v1, v2)).toBeCloseTo(Math.hypot(2, 2));
 
     const m = mat2d.create();

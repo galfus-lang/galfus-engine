@@ -156,6 +156,27 @@ export function conjugate(out: Quat, a: ReadonlyQuat): Quat {
   return out;
 }
 
+export function normalize(out: Quat, a: ReadonlyQuat): Quat {
+  const x = a[0];
+  const y = a[1];
+  const z = a[2];
+  const w = a[3];
+  let len = Math.hypot(x, y, z, w);
+  if (len === 0) {
+    out[0] = 0;
+    out[1] = 0;
+    out[2] = 0;
+    out[3] = 1;
+  } else {
+    len = 1 / len;
+    out[0] = x * len;
+    out[1] = y * len;
+    out[2] = z * len;
+    out[3] = w * len;
+  }
+  return out;
+}
+
 export function slerp(out: Quat, a: ReadonlyQuat, b: ReadonlyQuat, t: number): Quat {
   const ax = a[0];
   const ay = a[1];
@@ -192,6 +213,68 @@ export function slerp(out: Quat, a: ReadonlyQuat, b: ReadonlyQuat, t: number): Q
   out[1] = scale0 * ay + scale1 * by;
   out[2] = scale0 * az + scale1 * bz;
   out[3] = scale0 * aw + scale1 * bw;
+  return out;
+}
+
+/**
+ * Normalized linear interpolation (nlerp) between two quaternions along the shortest path.
+ */
+export function lerp(out: Quat, a: ReadonlyQuat, b: ReadonlyQuat, t: number): Quat {
+  const ax = a[0];
+  const ay = a[1];
+  const az = a[2];
+  const aw = a[3];
+  let bx = b[0];
+  let by = b[1];
+  let bz = b[2];
+  let bw = b[3];
+
+  if (ax * bx + ay * by + az * bz + aw * bw < 0) {
+    bx = -bx;
+    by = -by;
+    bz = -bz;
+    bw = -bw;
+  }
+
+  const x = ax + t * (bx - ax);
+  const y = ay + t * (by - ay);
+  const z = az + t * (bz - az);
+  const w = aw + t * (bw - aw);
+
+  let len = Math.hypot(x, y, z, w);
+  if (len === 0) {
+    out[0] = 0;
+    out[1] = 0;
+    out[2] = 0;
+    out[3] = 1;
+  } else {
+    len = 1 / len;
+    out[0] = x * len;
+    out[1] = y * len;
+    out[2] = z * len;
+    out[3] = w * len;
+  }
+  return out;
+}
+
+export function clamp(
+  out: Quat,
+  a: ReadonlyQuat,
+  min: ReadonlyQuat | number,
+  max: ReadonlyQuat | number
+): Quat {
+  const minX = typeof min === 'number' ? min : min[0];
+  const minY = typeof min === 'number' ? min : min[1];
+  const minZ = typeof min === 'number' ? min : min[2];
+  const minW = typeof min === 'number' ? min : min[3];
+  const maxX = typeof max === 'number' ? max : max[0];
+  const maxY = typeof max === 'number' ? max : max[1];
+  const maxZ = typeof max === 'number' ? max : max[2];
+  const maxW = typeof max === 'number' ? max : max[3];
+  out[0] = Math.min(Math.max(a[0], minX), maxX);
+  out[1] = Math.min(Math.max(a[1], minY), maxY);
+  out[2] = Math.min(Math.max(a[2], minZ), maxZ);
+  out[3] = Math.min(Math.max(a[3], minW), maxW);
   return out;
 }
 

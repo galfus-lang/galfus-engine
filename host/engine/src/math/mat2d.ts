@@ -275,3 +275,33 @@ export function getTranslation(out: Vec2, mat: ReadonlyMat2d): Vec2 {
   out[1] = mat[5];
   return out;
 }
+
+/**
+ * Performs a component-wise linear interpolation between two 2D affine transformation matrices.
+ */
+export function lerp(out: Mat2d, a: ReadonlyMat2d, b: ReadonlyMat2d, t: number): Mat2d {
+  out[0] = a[0] + t * (b[0] - a[0]);
+  out[1] = a[1] + t * (b[1] - a[1]);
+  out[2] = a[2] + t * (b[2] - a[2]);
+  out[3] = a[3] + t * (b[3] - a[3]);
+  out[4] = a[4] + t * (b[4] - a[4]);
+  out[5] = a[5] + t * (b[5] - a[5]);
+  return out;
+}
+
+/**
+ * Clamps each component of a 2D affine transformation matrix between min and max.
+ */
+export function clamp(
+  out: Mat2d,
+  a: ReadonlyMat2d,
+  min: ReadonlyMat2d | number,
+  max: ReadonlyMat2d | number
+): Mat2d {
+  for (let i = 0; i < 6; i++) {
+    const minVal = typeof min === 'number' ? min : min[i]!;
+    const maxVal = typeof max === 'number' ? max : max[i]!;
+    out[i] = Math.min(Math.max(a[i]!, minVal), maxVal);
+  }
+  return out;
+}

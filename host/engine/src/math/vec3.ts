@@ -124,6 +124,24 @@ export function lerp(out: Vec3, a: ReadonlyVec3, b: ReadonlyVec3, t: number): Ve
   return out;
 }
 
+export function clamp(
+  out: Vec3,
+  a: ReadonlyVec3,
+  min: ReadonlyVec3 | number,
+  max: ReadonlyVec3 | number
+): Vec3 {
+  const minX = typeof min === 'number' ? min : min[0];
+  const minY = typeof min === 'number' ? min : min[1];
+  const minZ = typeof min === 'number' ? min : min[2];
+  const maxX = typeof max === 'number' ? max : max[0];
+  const maxY = typeof max === 'number' ? max : max[1];
+  const maxZ = typeof max === 'number' ? max : max[2];
+  out[0] = Math.min(Math.max(a[0], minX), maxX);
+  out[1] = Math.min(Math.max(a[1], minY), maxY);
+  out[2] = Math.min(Math.max(a[2], minZ), maxZ);
+  return out;
+}
+
 export function transformQuat(out: Vec3, a: ReadonlyVec3, q: ReadonlyQuat): Vec3 {
   const qx = q[0];
   const qy = q[1];

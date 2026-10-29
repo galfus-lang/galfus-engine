@@ -87,7 +87,7 @@ export function dot(a: ReadonlyVec2, b: ReadonlyVec2): number {
   return a[0] * b[0] + a[1] * b[1];
 }
 
-export function cross(out: Vec2, a: ReadonlyVec2, b: ReadonlyVec2): number {
+export function cross(a: ReadonlyVec2, b: ReadonlyVec2): number {
   return a[0] * b[1] - a[1] * b[0];
 }
 
@@ -96,6 +96,21 @@ export function lerp(out: Vec2, a: ReadonlyVec2, b: ReadonlyVec2, t: number): Ve
   const ay = a[1];
   out[0] = ax + t * (b[0] - ax);
   out[1] = ay + t * (b[1] - ay);
+  return out;
+}
+
+export function clamp(
+  out: Vec2,
+  a: ReadonlyVec2,
+  min: ReadonlyVec2 | number,
+  max: ReadonlyVec2 | number
+): Vec2 {
+  const minX = typeof min === 'number' ? min : min[0];
+  const minY = typeof min === 'number' ? min : min[1];
+  const maxX = typeof max === 'number' ? max : max[0];
+  const maxY = typeof max === 'number' ? max : max[1];
+  out[0] = Math.min(Math.max(a[0], minX), maxX);
+  out[1] = Math.min(Math.max(a[1], minY), maxY);
   return out;
 }
 

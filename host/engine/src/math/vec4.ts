@@ -123,6 +123,27 @@ export function lerp(out: Vec4, a: ReadonlyVec4, b: ReadonlyVec4, t: number): Ve
   return out;
 }
 
+export function clamp(
+  out: Vec4,
+  a: ReadonlyVec4,
+  min: ReadonlyVec4 | number,
+  max: ReadonlyVec4 | number
+): Vec4 {
+  const minX = typeof min === 'number' ? min : min[0];
+  const minY = typeof min === 'number' ? min : min[1];
+  const minZ = typeof min === 'number' ? min : min[2];
+  const minW = typeof min === 'number' ? min : min[3];
+  const maxX = typeof max === 'number' ? max : max[0];
+  const maxY = typeof max === 'number' ? max : max[1];
+  const maxZ = typeof max === 'number' ? max : max[2];
+  const maxW = typeof max === 'number' ? max : max[3];
+  out[0] = Math.min(Math.max(a[0], minX), maxX);
+  out[1] = Math.min(Math.max(a[1], minY), maxY);
+  out[2] = Math.min(Math.max(a[2], minZ), maxZ);
+  out[3] = Math.min(Math.max(a[3], minW), maxW);
+  return out;
+}
+
 export function transformMat4(out: Vec4, a: ReadonlyVec4, m: ReadonlyMat4): Vec4 {
   const x = a[0];
   const y = a[1];

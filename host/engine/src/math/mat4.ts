@@ -36,58 +36,34 @@ export function copy(out: Mat4, a: ReadonlyMat4): Mat4 {
 }
 
 export function multiply(out: Mat4, a: ReadonlyMat4, b: ReadonlyMat4): Mat4 {
-  const a00 = a[0];
-  const a01 = a[1];
-  const a02 = a[2];
-  const a03 = a[3];
-  const a10 = a[4];
-  const a11 = a[5];
-  const a12 = a[6];
-  const a13 = a[7];
-  const a20 = a[8];
-  const a21 = a[9];
-  const a22 = a[10];
-  const a23 = a[11];
-  const a30 = a[12];
-  const a31 = a[13];
-  const a32 = a[14];
-  const a33 = a[15];
+  const a00 = a[0],
+    a01 = a[1],
+    a02 = a[2],
+    a03 = a[3];
+  const a10 = a[4],
+    a11 = a[5],
+    a12 = a[6],
+    a13 = a[7];
+  const a20 = a[8],
+    a21 = a[9],
+    a22 = a[10],
+    a23 = a[11];
+  const a30 = a[12],
+    a31 = a[13],
+    a32 = a[14],
+    a33 = a[15];
 
-  let b0 = b[0];
-  let b1 = b[1];
-  let b2 = b[2];
-  let b3 = b[3];
-  out[0] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
-  out[1] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
-  out[2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
-  out[3] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
-
-  b0 = b[4];
-  b1 = b[5];
-  b2 = b[6];
-  b3 = b[7];
-  out[4] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
-  out[5] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
-  out[6] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
-  out[7] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
-
-  b0 = b[8];
-  b1 = b[9];
-  b2 = b[10];
-  b3 = b[11];
-  out[8] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
-  out[9] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
-  out[10] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
-  out[11] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
-
-  b0 = b[12];
-  b1 = b[13];
-  b2 = b[14];
-  b3 = b[15];
-  out[12] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
-  out[13] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
-  out[14] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
-  out[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+  for (let i = 0; i < 4; i++) {
+    const i4 = i * 4;
+    const b0 = (b as ArrayLike<number>)[i4] ?? 0;
+    const b1 = (b as ArrayLike<number>)[i4 + 1] ?? 0;
+    const b2 = (b as ArrayLike<number>)[i4 + 2] ?? 0;
+    const b3 = (b as ArrayLike<number>)[i4 + 3] ?? 0;
+    out[i4] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+    out[i4 + 1] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+    out[i4 + 2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+    out[i4 + 3] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+  }
   return out;
 }
 
@@ -155,26 +131,25 @@ export function fromRotationTranslationScale(
   v: ReadonlyVec3,
   s: ReadonlyVec3
 ): Mat4 {
-  const x = q[0];
-  const y = q[1];
-  const z = q[2];
-  const w = q[3];
-  const x2 = x + x;
-  const y2 = y + y;
-  const z2 = z + z;
-
-  const xx = x * x2;
-  const xy = x * y2;
-  const xz = x * z2;
-  const yy = y * y2;
-  const yz = y * z2;
-  const zz = z * z2;
-  const wx = w * x2;
-  const wy = w * y2;
-  const wz = w * z2;
-  const sx = s[0];
-  const sy = s[1];
-  const sz = s[2];
+  const x = q[0],
+    y = q[1],
+    z = q[2],
+    w = q[3];
+  const x2 = x + x,
+    y2 = y + y,
+    z2 = z + z;
+  const xx = x * x2,
+    xy = x * y2,
+    xz = x * z2;
+  const yy = y * y2,
+    yz = y * z2,
+    zz = z * z2;
+  const wx = w * x2,
+    wy = w * y2,
+    wz = w * z2;
+  const sx = s[0],
+    sy = s[1],
+    sz = s[2];
 
   out[0] = (1 - (yy + zz)) * sx;
   out[1] = (xy + wz) * sx;
@@ -384,22 +359,22 @@ export function scale(out: Mat4, a: ReadonlyMat4, v: ReadonlyVec3): Mat4 {
 }
 
 export function invert(out: Mat4, a: ReadonlyMat4): Mat4 | null {
-  const a00 = a[0];
-  const a01 = a[1];
-  const a02 = a[2];
-  const a03 = a[3];
-  const a10 = a[4];
-  const a11 = a[5];
-  const a12 = a[6];
-  const a13 = a[7];
-  const a20 = a[8];
-  const a21 = a[9];
-  const a22 = a[10];
-  const a23 = a[11];
-  const a30 = a[12];
-  const a31 = a[13];
-  const a32 = a[14];
-  const a33 = a[15];
+  const a00 = a[0],
+    a01 = a[1],
+    a02 = a[2],
+    a03 = a[3];
+  const a10 = a[4],
+    a11 = a[5],
+    a12 = a[6],
+    a13 = a[7];
+  const a20 = a[8],
+    a21 = a[9],
+    a22 = a[10],
+    a23 = a[11];
+  const a30 = a[12],
+    a31 = a[13],
+    a32 = a[14],
+    a33 = a[15];
 
   const b00 = a00 * a11 - a01 * a10;
   const b01 = a00 * a12 - a02 * a10;
@@ -447,19 +422,9 @@ export function getTranslation(out: Vec3, mat: ReadonlyMat4): Vec3 {
 }
 
 export function getScaling(out: Vec3, mat: ReadonlyMat4): Vec3 {
-  const m11 = mat[0];
-  const m12 = mat[1];
-  const m13 = mat[2];
-  const m21 = mat[4];
-  const m22 = mat[5];
-  const m23 = mat[6];
-  const m31 = mat[8];
-  const m32 = mat[9];
-  const m33 = mat[10];
-
-  out[0] = Math.hypot(m11, m12, m13);
-  out[1] = Math.hypot(m21, m22, m23);
-  out[2] = Math.hypot(m31, m32, m33);
+  out[0] = Math.hypot(mat[0], mat[1], mat[2]);
+  out[1] = Math.hypot(mat[4], mat[5], mat[6]);
+  out[2] = Math.hypot(mat[8], mat[9], mat[10]);
   return out;
 }
 
@@ -576,5 +541,35 @@ export function copyRotation(out: Mat4, from: ReadonlyMat4): Mat4 {
   out[9] = (from[9] / fsz) * sz;
   out[10] = (from[10] / fsz) * sz;
 
+  return out;
+}
+
+/**
+ * Performs a component-wise linear interpolation between two 4x4 transformation matrices.
+ */
+export function lerp(out: Mat4, a: ReadonlyMat4, b: ReadonlyMat4, t: number): Mat4 {
+  for (let i = 0; i < 16; i++) {
+    const ai = a[i as keyof ReadonlyMat4] as number;
+    const bi = b[i as keyof ReadonlyMat4] as number;
+    out[i] = ai + t * (bi - ai);
+  }
+  return out;
+}
+
+/**
+ * Clamps each component of a 4x4 transformation matrix between min and max.
+ */
+export function clamp(
+  out: Mat4,
+  a: ReadonlyMat4,
+  min: ReadonlyMat4 | number,
+  max: ReadonlyMat4 | number
+): Mat4 {
+  for (let i = 0; i < 16; i++) {
+    const ai = a[i as keyof ReadonlyMat4] as number;
+    const minVal = typeof min === 'number' ? min : (min[i as keyof ReadonlyMat4] as number);
+    const maxVal = typeof max === 'number' ? max : (max[i as keyof ReadonlyMat4] as number);
+    out[i] = Math.min(Math.max(ai, minVal), maxVal);
+  }
   return out;
 }
