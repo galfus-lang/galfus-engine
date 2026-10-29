@@ -2,6 +2,7 @@
  * Realm 3D component declarations.
  */
 import type { Component } from '../ecs/component';
+import type { EntityId } from '../ecs/entity';
 import type {
   Camera3DDesc,
   InstancedModel3DDesc,
@@ -162,6 +163,33 @@ export function createInstancedModel3D(
     type: 'InstancedModel3D',
     instancedModelId,
     desc,
+    isDirty: true
+  };
+}
+
+export interface Skin3DComponent extends Component {
+  readonly type: 'Skin3D';
+  readonly skinId: number;
+  readonly modelEntityId: EntityId;
+  readonly joints: EntityId[];
+  readonly inverseBindMatrices: Float32Array;
+  readonly jointMatrices: Float32Array;
+  isDirty?: boolean;
+}
+
+export function createSkin3D(
+  skinId: number,
+  modelEntityId: EntityId,
+  joints: EntityId[],
+  inverseBindMatrices: Float32Array
+): Skin3DComponent {
+  return {
+    type: 'Skin3D',
+    skinId,
+    modelEntityId,
+    joints,
+    inverseBindMatrices,
+    jointMatrices: new Float32Array(joints.length * 16),
     isDirty: true
   };
 }

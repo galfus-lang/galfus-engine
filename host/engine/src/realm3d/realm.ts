@@ -35,10 +35,12 @@ import {
   createModel3D,
   createParticleEmitter3D,
   createPortal3D,
+  createSkin3D,
   type Camera3DComponent,
   type Model3DComponent,
   type ParticleEmitter3DComponent,
-  type Primitive3DKind
+  type Primitive3DKind,
+  type Skin3DComponent
 } from './components';
 import {
   type GeometryData,
@@ -46,6 +48,7 @@ import {
   packGeometryData,
   packMorphTargets
 } from './geometry';
+import { SkinningSolveSystem } from './skinning';
 import { Realm3DSyncSystem } from './sync';
 
 export class Realm3D implements RealmConnector {
@@ -53,6 +56,7 @@ export class Realm3D implements RealmConnector {
   readonly realmId: RealmId;
   readonly world = new EcsWorld();
   readonly solver = new AnchorSolveSystem();
+  readonly skinningSystem: SkinningSolveSystem;
   readonly syncSystem: Realm3DSyncSystem;
   readonly hierarchy: HierarchyCoordinator<'3d'>;
 
@@ -63,10 +67,15 @@ export class Realm3D implements RealmConnector {
     this.realmId = realmId as RealmId;
     assertValidLogicalId(this.realmId, 'RealmId');
     this.hierarchy = new HierarchyCoordinator(this.world, '3d');
+    this.skinningSystem = new SkinningSolveSystem(this.realmId, this.solver.cache);
     this.syncSystem = new Realm3DSyncSystem(this.realmId, this.solver.cache);
 
-    // Register anchor solver in preRender
+    // Register anchor solver and skinning solver in preRender
     this.world.addSystem('preRender', this.solver.createSystem());
+    this.world.addSystem(
+      'preRender',
+      this.skinningSystem.createSystem(() => this._engine)
+    );
   }
 
   allocateResourceId(): number {
@@ -115,6 +124,20 @@ export class Realm3D implements RealmConnector {
     this.world.attachComponent(entityId, createTransform3D(transform));
     this.world.attachComponent(entityId, createModel3D(modelId, desc));
     return entityId;
+  }
+
+  createSkin(
+    modelEntityId: EntityId,
+    joints: EntityId[],
+    inverseBindMatrices: Float32Array
+  ): { entityId: EntityId; skinId: number } {
+    const entityId = this.world.createEntity();
+    const skinId = this.allocateResourceId();
+    this.world.attachComponent(
+      entityId,
+      createSkin3D(skinId, modelEntityId, joints, inverseBindMatrices)
+    );
+    return { entityId, skinId };
   }
 
   createCamera(
