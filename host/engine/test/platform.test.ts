@@ -15,6 +15,8 @@ describe('@galfus/engine > PlatformCoordinator & WindowManager', () => {
       windowSetTitle: (id: number, title: string) => calls.push(`setTitle:${id}:${title}`),
       windowSetCursorGrab: (id: number, mode: number) => calls.push(`setGrab:${id}:${mode}`),
       windowSetCursorIcon: (id: number, icon: number) => calls.push(`setIcon:${id}:${icon}`),
+      windowSetIcon: (id: number, _data: Uint8Array, len: number) =>
+        calls.push(`setWindowIcon:${id}:${len}`),
       platformGetWindowSize: (id: number) => [1280, 720],
       multiverseUpdateWindowSize: (id: number, w: number, h: number) =>
         calls.push(`updateSize:${id}:${w}x${h}`),
@@ -67,6 +69,10 @@ describe('@galfus/engine > PlatformCoordinator & WindowManager', () => {
 
     runtime.platform.window.setCursorIcon(win1, 'crosshair');
     expect(calls).toContain('setIcon:1:4');
+
+    const fakeIconBytes = new Uint8Array([0, 0, 1, 0, 1, 0]);
+    runtime.platform.window.setIcon(win1, fakeIconBytes);
+    expect(calls).toContain('setWindowIcon:1:6');
 
     const size = runtime.platform.window.getSize(win1);
     expect(size).toEqual([1280, 720]);

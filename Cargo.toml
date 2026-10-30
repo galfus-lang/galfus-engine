@@ -13,6 +13,7 @@ license = "MIT"
 
 [workspace.dependencies]
 # Shared external crates
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "ico"] }
 thiserror = "2.0"
 glam = { version = "0.30", features = ["serde", "bytemuck"] }
 

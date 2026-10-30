@@ -87,6 +87,15 @@ pub fn window_set_cursor_icon(window_id: u32, icon: u32) -> Result<()> {
 }
 
 #[napi]
+pub fn window_set_icon(window_id: u32, data: Uint8Array, _data_len: Option<i64>) -> Result<()> {
+    with_context_mut(|ctx| {
+        let win = ctx.get_window_mut(window_id).map_err(|e| e.to_string())?;
+        win.set_icon(data.as_ref()).map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
 pub fn window_get_size(window_id: u32) -> Result<Vec<u32>> {
     with_context(|ctx| {
         let win = ctx.get_window(window_id).map_err(|e| e.to_string())?;

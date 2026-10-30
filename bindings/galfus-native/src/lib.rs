@@ -1,5 +1,6 @@
 pub mod ffi;
 pub mod ffi_animation;
+pub mod ffi_audio;
 pub mod ffi_event_batch;
 pub mod ffi_multiverse;
 pub mod ffi_native_structs;
@@ -25,6 +26,7 @@ pub mod wasm_shim;
 
 pub use ffi::*;
 pub use ffi_animation::*;
+pub use ffi_audio::*;
 pub use ffi_multiverse::*;
 pub use ffi_realm_2d::*;
 pub use ffi_realm_2d_svg::*;

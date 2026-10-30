@@ -34,9 +34,7 @@
     "tour:browser": "bun examples/feature-tour/runners/browser/index.ts"
   },
   "devDependencies": {
-    "@galfus/engine-core": "workspace:*",
-    "@galfus/engine-realm2d": "workspace:*",
-    "@galfus/engine-realm3d": "workspace:*",
+    "@galfus/engine": "workspace:*",
     "@galfus/transport-browser": "workspace:*",
     "@galfus/transport-bun": "workspace:*",
     "@galfus/transport-node": "workspace:*",

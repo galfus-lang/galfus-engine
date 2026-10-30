@@ -121,6 +121,15 @@ pub fn window_set_cursor_icon(window_id: u32, icon: u32) -> Result<()> {
     .map_err(|e| Error::from_reason(Status::GenericFailure, e))
 }
 
+#[wasm_bindgen(js_name = "windowSetIcon")]
+pub fn window_set_icon(window_id: u32, data: Uint8Array, _data_len: Option<f64>) -> Result<()> {
+    with_context_mut(|ctx| {
+        let win = ctx.get_window_mut(window_id).map_err(|e| e.to_string())?;
+        win.set_icon(data.as_ref()).map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::from_reason(Status::GenericFailure, e))
+}
+
 #[wasm_bindgen(js_name = "windowGetSize")]
 pub fn window_get_size(window_id: u32) -> Result<Vec<u32>> {
     with_context(|ctx| {

@@ -18,10 +18,10 @@ describe('@galfus/engine > ResourceManager & AudioManager', () => {
 
     // 1. Textures
     const texData = new Uint8Array([255, 0, 0, 255]);
-    const texId = resources.createTexture({ width: 1, height: 1, format: 'rgba8Unorm' }, texData);
+    const texId = resources.createTexture(texData, { width: 1, height: 1, format: 'rgba8Unorm' });
     expect(calls).toContain(`createTex:${texId}`);
 
-    resources.updateTexture(texId, { x: 0, y: 0, width: 1, height: 1 }, texData);
+    resources.updateTexture(texId, texData, { x: 0, y: 0, width: 1, height: 1 });
     expect(calls).toContain(`updateTex:${texId}`);
 
     // 2. Dispose

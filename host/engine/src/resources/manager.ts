@@ -4,6 +4,13 @@
 import type { GalfusEngine, GpuTextureDesc, TextureUpdateDesc } from '@galfus/transport-types';
 import { IdAllocator, type TextureId } from '../types';
 
+export interface LoadTextureOptions {
+  /** Debug label for the GPU texture resource */
+  label?: string;
+  /** Whether pixels represent sRGB color (defaults to true; set false for normal/data maps) */
+  srgb?: boolean;
+}
+
 export class ResourceManager {
   private _engine: GalfusEngine | null = null;
   private readonly _idAllocator = new IdAllocator<TextureId>(1);
@@ -14,9 +21,32 @@ export class ResourceManager {
   }
 
   /**
-   * Creates a shared GPU texture from raw byte data under a tracked logical TextureId.
+   * Loads raw image bytes (PNG, JPEG, WebP, ICO) directly into a tracked GPU texture.
+   * Auto-detection and decoding are handled natively inside the Galfus core.
+   * Follows payload-first convention: (data, options?).
+   *
+   * @param data Encoded image file bytes (PNG, JPEG, WebP, ICO).
+   * @param options Configuration options (sRGB color space, debug label).
+   * @returns The allocated logical TextureId.
    */
-  createTexture(desc: GpuTextureDesc, data: Uint8Array): TextureId {
+  loadTexture(data: Uint8Array, options?: LoadTextureOptions): TextureId {
+    const srgb = options?.srgb ?? true;
+    return this.createTexture(data, {
+      label: options?.label ?? 'image-texture',
+      width: 0,
+      height: 0,
+      format: srgb ? 'rgba8UnormSrgb' : 'rgba8Unorm'
+    });
+  }
+
+  /**
+   * Creates a shared GPU texture from raw byte data under a tracked logical TextureId.
+   * If `data` contains encoded image container bytes (PNG, JPEG, WebP, ICO), the Galfus core
+   * automatically decodes it into RGBA8 and derives width/height.
+   *
+   * Follows payload-first convention: (data, desc).
+   */
+  createTexture(data: Uint8Array, desc: GpuTextureDesc): TextureId {
     const textureId = this._idAllocator.allocate('TextureId');
     if (this._engine) {
       this._engine.resourceCreateTexture(textureId, desc, data, data.byteLength);
@@ -27,8 +57,9 @@ export class ResourceManager {
 
   /**
    * Updates a sub-rectangle of an existing GPU texture.
+   * Follows payload-first convention: (textureId, data, rect).
    */
-  updateTexture(textureId: TextureId, rect: TextureUpdateDesc, data: Uint8Array): void {
+  updateTexture(textureId: TextureId, data: Uint8Array, rect: TextureUpdateDesc): void {
     if (this._engine) {
       this._engine.resourceUpdateTexture(textureId, rect, data, data.byteLength);
     }

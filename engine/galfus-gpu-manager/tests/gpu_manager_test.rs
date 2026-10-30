@@ -446,3 +446,51 @@ fn test_logical_texture_lifecycle() {
         .expect("Dispose should succeed");
     assert!(gpu.textures.get_logical_handle(valid_id).is_err());
 }
+
+#[test]
+fn test_texture_auto_decode_image() {
+    let context = GpuContext::new_headless().expect("GPU context needed");
+    let mut manager = TextureManager::new();
+
+    // 1. Encoded PNG bytes (512x512)
+    let png_bytes = include_bytes!("../../../.old/assets/alpha_test_texture.png");
+    let desc = GpuTextureDesc {
+        label: Some("Auto PNG Texture".into()),
+        width: 0,
+        height: 0,
+        depth_or_layers: 1,
+        mip_levels: 1,
+        sample_count: 1,
+        dimension: TextureDimension::D2,
+        format: NormalizedTextureFormat::Rgba8UnormSrgb,
+        usages: TextureUsageFlags::default(),
+    };
+
+    let handle = manager
+        .create_texture_with_data(context.device(), context.queue(), &desc, png_bytes)
+        .expect("PNG auto-decoding should succeed");
+    let tex = manager.get_texture(handle).unwrap();
+    assert_eq!(tex.width(), 512);
+    assert_eq!(tex.height(), 512);
+
+    // 2. Encoded JPEG bytes (256x256)
+    let jpeg_bytes = include_bytes!("../../../.old/assets/normal_test_texture.png");
+    let jpeg_desc = GpuTextureDesc {
+        label: Some("Auto JPEG Texture".into()),
+        width: 0,
+        height: 0,
+        depth_or_layers: 1,
+        mip_levels: 1,
+        sample_count: 1,
+        dimension: TextureDimension::D2,
+        format: NormalizedTextureFormat::Rgba8Unorm,
+        usages: TextureUsageFlags::default(),
+    };
+
+    let handle_jpeg = manager
+        .create_texture_with_data(context.device(), context.queue(), &jpeg_desc, jpeg_bytes)
+        .expect("JPEG auto-decoding should succeed");
+    let tex_jpeg = manager.get_texture(handle_jpeg).unwrap();
+    assert_eq!(tex_jpeg.width(), 256);
+    assert_eq!(tex_jpeg.height(), 256);
+}

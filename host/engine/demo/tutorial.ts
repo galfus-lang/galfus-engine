@@ -321,7 +321,7 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
   // 6. GPU Textures & Audio Setup
   console.log('[6/7] Initializing Shared Resources & Spatial Audio...');
   const rawPixelBytes = new Uint8Array(256 * 256 * 4);
-  runtime.resources.createTexture({ width: 256, height: 256, format: 'rgba8Unorm' }, rawPixelBytes);
+  runtime.resources.createTexture(rawPixelBytes, { width: 256, height: 256, format: 'rgba8Unorm' });
 
   const rawAudioBytes = createSynthesizedWav(1.0, 180.0);
   const soundId = runtime.audio.loadSound(rawAudioBytes);

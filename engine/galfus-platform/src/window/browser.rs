@@ -237,6 +237,11 @@ impl BrowserWindow {
     /// CSS cursor styling.
     pub fn set_cursor_icon(&self, _icon: CursorIcon) {}
 
+    /// Sets application window icon (graceful no-op in browser canvas environment).
+    pub fn set_icon(&self, _data: &[u8]) -> PlatformResult<()> {
+        Ok(())
+    }
+
     /// Schedules `requestAnimationFrame`.
     pub fn request_redraw(&self) {}
 

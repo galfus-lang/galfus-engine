@@ -119,6 +119,29 @@ export const platformFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_window_set_icon',
+    methodName: 'windowSetIcon',
+    doc: 'Sets the visual application icon of a window using raw encoded image bytes (ICO, PNG, WebP, JPEG).',
+    params: [
+      {
+        name: 'windowId',
+        type: 'u32',
+        doc: 'Host logical ID of the window'
+      },
+      {
+        name: 'data',
+        type: 'ptr',
+        doc: 'Pointer to raw icon image bytes'
+      },
+      {
+        name: 'dataLen',
+        type: 'u64',
+        doc: 'Length of icon image data in bytes'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_platform_pump_events',
     methodName: 'platformPumpEvents',
     doc: 'Pumps platform input events into a fixed-layout batch; its pointers expire on release or shutdown.',

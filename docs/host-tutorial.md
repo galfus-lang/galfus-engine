@@ -437,10 +437,11 @@ Galfus avoids generic unstructured buffers in favor of **domain-semantic structu
 
 ```ts
 // 1. Upload typed pixel buffer to GPU as a Texture (returns strongly-typed TextureId)
-const textureId = runtime.resources.createTexture(
-  { width: 256, height: 256, format: 'rgba8Unorm' },
-  rawPixelBytes
-);
+const textureId = runtime.resources.createTexture(rawPixelBytes, {
+  width: 256,
+  height: 256,
+  format: 'rgba8Unorm'
+});
 
 // 2. Create custom 3D Geometry directly from semantic vertex & index arrays:
 const { geometryId, entityId } = realm3D.createGeometry(

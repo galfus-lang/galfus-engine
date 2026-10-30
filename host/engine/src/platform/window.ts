@@ -135,6 +135,16 @@ export class WindowManager {
   }
 
   /**
+   * Sets the visual application icon of this window using raw image bytes (ICO, PNG, WebP, JPEG).
+   * Follows payload-first convention: (windowId, data).
+   */
+  setIcon(windowId: WindowId, data: Uint8Array): void {
+    if (this._engine && this._engine.windowSetIcon) {
+      this._engine.windowSetIcon(windowId, data, data.byteLength);
+    }
+  }
+
+  /**
    * Disposes and closes all active windows.
    */
   dispose(): void {

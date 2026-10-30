@@ -83,6 +83,32 @@ impl Default for TextureManager {
     }
 }
 
+fn is_encoded_image(data: &[u8]) -> bool {
+    if data.len() < 4 {
+        return false;
+    }
+    // PNG: \x89PNG\r\n\x1a\n
+    if data.len() >= 8 && data[0..8] == [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] {
+        return true;
+    }
+    // JPEG: \xFF\xD8\xFF
+    if data[0..3] == [0xff, 0xd8, 0xff] {
+        return true;
+    }
+    // WebP: RIFF....WEBP
+    if data.len() >= 12 && &data[0..4] == b"RIFF" && &data[8..12] == b"WEBP" {
+        return true;
+    }
+    // ICO: 0x00, 0x00, 0x01, 0x00 with at least 1 image
+    if data.len() >= 6
+        && data[0..4] == [0x00, 0x00, 0x01, 0x00]
+        && u16::from_le_bytes([data[4], data[5]]) >= 1
+    {
+        return true;
+    }
+    false
+}
+
 impl TextureManager {
     pub fn new() -> Self {
         Self {
@@ -159,6 +185,7 @@ impl TextureManager {
     }
 
     /// Creates a GPU texture and writes initial pixel data to it.
+    /// If `data` contains encoded image bytes (PNG, JPEG, WebP), it is automatically decoded into RGBA8.
     pub fn create_texture_with_data(
         &mut self,
         device: &wgpu::Device,
@@ -167,13 +194,34 @@ impl TextureManager {
         data: &[u8],
     ) -> GpuResult<GpuTextureHandle> {
         let mut upload_desc = desc.clone();
+        let decoded_storage: Option<Vec<u8>> = if is_encoded_image(data) {
+            let img = image::load_from_memory(data).map_err(|e| {
+                GpuError::InvalidArgument(format!("Failed to auto-decode image: {e}"))
+            })?;
+            upload_desc.width = img.width();
+            upload_desc.height = img.height();
+            if upload_desc.depth_or_layers == 0 {
+                upload_desc.depth_or_layers = 1;
+            }
+            if upload_desc.mip_levels == 0 {
+                upload_desc.mip_levels = 1;
+            }
+            if upload_desc.sample_count == 0 {
+                upload_desc.sample_count = 1;
+            }
+            Some(img.to_rgba8().into_raw())
+        } else {
+            None
+        };
+        let data = decoded_storage.as_deref().unwrap_or(data);
+
         upload_desc.usages.copy_dst = true;
         validate_texture_desc(&upload_desc)?;
-        let bytes_per_pixel = bytes_per_pixel(desc.format)?;
+        let bytes_per_pixel = bytes_per_pixel(upload_desc.format)?;
         let expected_bytes = expected_byte_len(
-            desc.width,
-            desc.height,
-            desc.depth_or_layers,
+            upload_desc.width,
+            upload_desc.height,
+            upload_desc.depth_or_layers,
             bytes_per_pixel,
         )?;
         if data.len() < expected_bytes {
@@ -183,7 +231,7 @@ impl TextureManager {
             )));
         }
 
-        let bytes_per_row = desc
+        let bytes_per_row = upload_desc
             .width
             .checked_mul(bytes_per_pixel)
             .ok_or_else(|| GpuError::InvalidArgument("Texture row byte size overflow".into()))?;
@@ -201,12 +249,12 @@ impl TextureManager {
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(bytes_per_row),
-                rows_per_image: Some(desc.height),
+                rows_per_image: Some(upload_desc.height),
             },
             wgpu::Extent3d {
-                width: desc.width,
-                height: desc.height,
-                depth_or_array_layers: desc.depth_or_layers.max(1),
+                width: upload_desc.width,
+                height: upload_desc.height,
+                depth_or_array_layers: upload_desc.depth_or_layers.max(1),
             },
         );
 
