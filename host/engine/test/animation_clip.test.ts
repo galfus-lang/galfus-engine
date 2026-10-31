@@ -7,7 +7,7 @@ import {
 } from '../src/animation/index';
 import { blendPoses, createAnimationPose, evaluateClip } from '../src/animation/blending';
 import { sampleTrack } from '../src/animation/clip';
-import { createTransform3D } from '../src/anchors/component';
+import { createModel3D, type Model3DComponent } from '../src/realm3d/components';
 import { EcsWorld } from '../src/ecs/world';
 import { quat } from '../src/math/index';
 import type { SystemContext } from '../src/ecs/system';
@@ -121,14 +121,9 @@ describe('@galfus/engine > Animation Clips, Sampling & Blending', () => {
     world.addSystem('update', playbackSystem);
 
     const targetEntity = world.createEntity();
-    world.attachComponent(
-      targetEntity,
-      createTransform3D({
-        position: [0, 0, 0],
-        rotation: [0, 0, 0, 1],
-        scale: [1, 1, 1]
-      })
-    );
+    const model = createModel3D(1);
+    model.setPosition(0, 0, 0);
+    world.attachComponent(targetEntity, model);
 
     // Clip 1: Idle (Moves Y from 0 to 4 over 2 seconds)
     const idleClip: AnimationClip = {
@@ -175,9 +170,9 @@ describe('@galfus/engine > Animation Clips, Sampling & Blending', () => {
     // Step 0.5s -> Y should reach ~1.0
     stepFrame(0.5);
 
-    const tf = world.getComponent(targetEntity, 'Transform3D') as any;
-    expect(tf.position[0]).toBeCloseTo(0);
-    expect(tf.position[1]).toBeCloseTo(1.0);
+    const m = world.getComponent<Model3DComponent>(targetEntity, 'Model3D')!;
+    expect(m.localMatrix[12]).toBeCloseTo(0);
+    expect(m.localMatrix[13]).toBeCloseTo(1.0);
 
     // Crossfade to Run over 1.0s
     playerComp.crossfade('Run', 1.0);
@@ -187,13 +182,13 @@ describe('@galfus/engine > Animation Clips, Sampling & Blending', () => {
     // Run is at time 0.5s (X = 2.5) with 50% weight -> contribution X: 1.25
     stepFrame(0.5);
 
-    expect(tf.position[0]).toBeCloseTo(1.25);
-    expect(tf.position[1]).toBeCloseTo(1.0);
+    expect(m.localMatrix[12]).toBeCloseTo(1.25);
+    expect(m.localMatrix[13]).toBeCloseTo(1.0);
 
     // Step another 0.5s (crossfade finishes, 100% Run at time 1.0s -> X = 5.0)
     stepFrame(0.5);
     expect(playerComp.fadeTransition).toBeUndefined();
-    expect(tf.position[0]).toBeCloseTo(5.0);
-    expect(tf.position[1]).toBeCloseTo(0);
+    expect(m.localMatrix[12]).toBeCloseTo(5.0);
+    expect(m.localMatrix[13]).toBeCloseTo(0);
   });
 });

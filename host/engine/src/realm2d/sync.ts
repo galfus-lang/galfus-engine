@@ -3,7 +3,6 @@
  */
 import type { GalfusEngine, Transform2DDesc } from '@galfus/transport-types';
 import type { AnchorMatrixCache } from '../anchors/cache';
-import type { Transform2DComponent } from '../anchors/component';
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';
 import { SpatialDirtyFlags } from '../spatial/flags';
@@ -36,7 +35,6 @@ export class Realm2DSyncSystem {
   getResolvedTransform(world: EcsWorld, id: EntityId): Transform2DDesc {
     const model = world.getComponent<Model2DComponent>(id, 'Model2D');
     const mat = model ? model.worldMatrix : this.cache.getWorld2D(id);
-    const tf = world.getComponent<Transform2DComponent>(id, 'Transform2D');
 
     if (mat) {
       const a = mat[0];
@@ -54,18 +52,8 @@ export class Realm2DSyncSystem {
         position: [tx, ty],
         rotation,
         scale: [scaleX, scaleY],
-        zLayer: model?.zLayer ?? tf?.zLayer ?? 0,
-        drawOrder: model?.drawOrder ?? tf?.drawOrder ?? 0
-      };
-    }
-
-    if (tf) {
-      return {
-        position: [tf.position[0], tf.position[1]],
-        rotation: tf.rotation,
-        scale: [tf.scale[0], tf.scale[1]],
-        zLayer: tf.zLayer,
-        drawOrder: tf.drawOrder
+        zLayer: model?.zLayer ?? 0,
+        drawOrder: model?.drawOrder ?? 0
       };
     }
 

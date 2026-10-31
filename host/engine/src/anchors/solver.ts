@@ -3,7 +3,8 @@
  *
  * Runs during the `preRender` stage to calculate local and world matrices
  * directly into Model3D/Model2D components and the persistent AnchorMatrixCache,
- * resolving dependencies topologically with cycle detection and SpatialDirtyFlags transitions.
+ * resolving dependencies topologically with cycle detection, incremental dirty propagation,
+ * and SpatialDirtyFlags transitions.
  */
 import type { EntityId } from '../ecs/entity';
 import type { System, SystemContext } from '../ecs/system';
@@ -13,7 +14,7 @@ import type { Model2DComponent } from '../realm2d/components';
 import type { Model3DComponent } from '../realm3d/components';
 import { SpatialDirtyFlags } from '../spatial/flags';
 import { AnchorMatrixCache } from './cache';
-import type { AnchorComponent, Transform2DComponent, Transform3DComponent } from './component';
+import type { AnchorComponent } from './component';
 import { AnchorStrategyRegistry } from './strategy';
 
 export class AnchorSolveSystem {
@@ -32,16 +33,14 @@ export class AnchorSolveSystem {
   // 2D Solving
   // ---------------------------------------------------------------------------
   private solve2D(world: EcsWorld, context: SystemContext): void {
-    // Collect all spatial 2D entities (Model2D prioritized, Transform2D fallback)
-    const modelEntities = world.query('Model2D');
-    const legacyEntities = world.query('Transform2D');
-    const all2DEntities = new Set<EntityId>([...modelEntities, ...legacyEntities]);
+    const all2DEntities = world.query('Model2D');
 
     const visiting = new Set<EntityId>();
     const resolved = new Set<EntityId>();
+    const dirtyTargets = new Set<EntityId>();
 
     for (const id of all2DEntities) {
-      this.resolveEntity2D(id, world, context, visiting, resolved);
+      this.resolveEntity2D(id, world, context, visiting, resolved, dirtyTargets);
     }
   }
 
@@ -50,7 +49,8 @@ export class AnchorSolveSystem {
     world: EcsWorld,
     context: SystemContext,
     visiting: Set<EntityId>,
-    resolved: Set<EntityId>
+    resolved: Set<EntityId>,
+    dirtyTargets: Set<EntityId>
   ): Mat2d {
     const worldMatrix = this.cache.getOrCreateWorld2D(id);
     if (resolved.has(id)) {
@@ -58,42 +58,37 @@ export class AnchorSolveSystem {
     }
 
     const model = world.getComponent<Model2DComponent>(id, 'Model2D');
-    const tf = world.getComponent<Transform2DComponent>(id, 'Transform2D');
-
-    if (!model && !tf) {
+    if (!model) {
       return worldMatrix;
     }
 
     const localMatrix = this.cache.getOrCreateLocal2D(id);
-
-    if (model) {
-      mat2d.copy(localMatrix, model.localMatrix);
-    } else if (tf && tf.isDirty) {
-      mat2d.fromRotationTranslationScale(localMatrix, tf.position, tf.rotation, tf.scale);
-      tf.isDirty = false;
-    }
+    mat2d.copy(localMatrix, model.localMatrix);
 
     const anchor = world.getComponent<AnchorComponent>(id, 'Anchor');
     if (!anchor || !anchor.active) {
-      mat2d.copy(worldMatrix, localMatrix);
-      if (model) {
+      const isLocalDirty = (model.flags & SpatialDirtyFlags.LocalDirty) !== 0;
+      if (isLocalDirty) {
+        mat2d.copy(worldMatrix, localMatrix);
         mat2d.copy(model.worldMatrix, worldMatrix);
         model.flags = (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
+        dirtyTargets.add(id);
+      } else {
+        mat2d.copy(worldMatrix, model.worldMatrix);
       }
       resolved.add(id);
       return worldMatrix;
     }
 
-    // Cycle detection
+    // Cycle detection fallback
     if (visiting.has(id)) {
       console.warn(
         `[AnchorSolveSystem] Cycle detected at entity ${id} in 2D anchor hierarchy. Falling back to local transform.`
       );
       mat2d.copy(worldMatrix, localMatrix);
-      if (model) {
-        mat2d.copy(model.worldMatrix, worldMatrix);
-        model.flags = (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
-      }
+      mat2d.copy(model.worldMatrix, worldMatrix);
+      model.flags = (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
+      dirtyTargets.add(id);
       resolved.add(id);
       return worldMatrix;
     }
@@ -104,9 +99,22 @@ export class AnchorSolveSystem {
       world,
       context,
       visiting,
-      resolved
+      resolved,
+      dirtyTargets
     );
     visiting.delete(id);
+
+    const isTargetDirty = dirtyTargets.has(anchor.targetEntityId);
+    const isLocalDirty = model ? (model.flags & SpatialDirtyFlags.LocalDirty) !== 0 : true;
+
+    // Incremental optimization: skip re-multiplication if neither target nor local changed
+    if (!isTargetDirty && !isLocalDirty) {
+      if (model) {
+        mat2d.copy(worldMatrix, model.worldMatrix);
+      }
+      resolved.add(id);
+      return worldMatrix;
+    }
 
     if (anchor.callback2d) {
       anchor.callback2d(targetWorld, localMatrix, worldMatrix, context);
@@ -118,6 +126,7 @@ export class AnchorSolveSystem {
     if (model) {
       mat2d.copy(model.worldMatrix, worldMatrix);
       model.flags = (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
+      dirtyTargets.add(id);
     }
 
     resolved.add(id);
@@ -128,16 +137,14 @@ export class AnchorSolveSystem {
   // 3D Solving
   // ---------------------------------------------------------------------------
   private solve3D(world: EcsWorld, context: SystemContext): void {
-    // Collect all spatial 3D entities (Model3D prioritized, Transform3D fallback)
-    const modelEntities = world.query('Model3D');
-    const legacyEntities = world.query('Transform3D');
-    const all3DEntities = new Set<EntityId>([...modelEntities, ...legacyEntities]);
+    const all3DEntities = world.query('Model3D');
 
     const visiting = new Set<EntityId>();
     const resolved = new Set<EntityId>();
+    const dirtyTargets = new Set<EntityId>();
 
     for (const id of all3DEntities) {
-      this.resolveEntity3D(id, world, context, visiting, resolved);
+      this.resolveEntity3D(id, world, context, visiting, resolved, dirtyTargets);
     }
   }
 
@@ -146,7 +153,8 @@ export class AnchorSolveSystem {
     world: EcsWorld,
     context: SystemContext,
     visiting: Set<EntityId>,
-    resolved: Set<EntityId>
+    resolved: Set<EntityId>,
+    dirtyTargets: Set<EntityId>
   ): Mat4 {
     const worldMatrix = this.cache.getOrCreateWorld3D(id);
     if (resolved.has(id)) {
@@ -154,42 +162,37 @@ export class AnchorSolveSystem {
     }
 
     const model = world.getComponent<Model3DComponent>(id, 'Model3D');
-    const tf = world.getComponent<Transform3DComponent>(id, 'Transform3D');
-
-    if (!model && !tf) {
+    if (!model) {
       return worldMatrix;
     }
 
     const localMatrix = this.cache.getOrCreateLocal3D(id);
-
-    if (model) {
-      mat4.copy(localMatrix, model.localMatrix);
-    } else if (tf && tf.isDirty) {
-      mat4.fromRotationTranslationScale(localMatrix, tf.rotation, tf.position, tf.scale);
-      tf.isDirty = false;
-    }
+    mat4.copy(localMatrix, model.localMatrix);
 
     const anchor = world.getComponent<AnchorComponent>(id, 'Anchor');
     if (!anchor || !anchor.active) {
-      mat4.copy(worldMatrix, localMatrix);
-      if (model) {
+      const isLocalDirty = (model.flags & SpatialDirtyFlags.LocalDirty) !== 0;
+      if (isLocalDirty) {
+        mat4.copy(worldMatrix, localMatrix);
         mat4.copy(model.worldMatrix, worldMatrix);
         model.flags = (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
+        dirtyTargets.add(id);
+      } else {
+        mat4.copy(worldMatrix, model.worldMatrix);
       }
       resolved.add(id);
       return worldMatrix;
     }
 
-    // Cycle detection
+    // Cycle detection fallback
     if (visiting.has(id)) {
       console.warn(
         `[AnchorSolveSystem] Cycle detected at entity ${id} in 3D anchor hierarchy. Falling back to local transform.`
       );
       mat4.copy(worldMatrix, localMatrix);
-      if (model) {
-        mat4.copy(model.worldMatrix, worldMatrix);
-        model.flags = (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
-      }
+      mat4.copy(model.worldMatrix, worldMatrix);
+      model.flags = (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
+      dirtyTargets.add(id);
       resolved.add(id);
       return worldMatrix;
     }
@@ -200,9 +203,22 @@ export class AnchorSolveSystem {
       world,
       context,
       visiting,
-      resolved
+      resolved,
+      dirtyTargets
     );
     visiting.delete(id);
+
+    const isTargetDirty = dirtyTargets.has(anchor.targetEntityId);
+    const isLocalDirty = model ? (model.flags & SpatialDirtyFlags.LocalDirty) !== 0 : true;
+
+    // Incremental optimization: skip re-multiplication if neither target nor local changed
+    if (!isTargetDirty && !isLocalDirty) {
+      if (model) {
+        mat4.copy(worldMatrix, model.worldMatrix);
+      }
+      resolved.add(id);
+      return worldMatrix;
+    }
 
     if (anchor.callback3d) {
       anchor.callback3d(targetWorld, localMatrix, worldMatrix, context);
@@ -214,6 +230,7 @@ export class AnchorSolveSystem {
     if (model) {
       mat4.copy(model.worldMatrix, worldMatrix);
       model.flags = (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
+      dirtyTargets.add(id);
     }
 
     resolved.add(id);

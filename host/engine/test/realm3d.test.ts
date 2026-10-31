@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { Realm3D } from '../src/realm3d/index';
-import { createAnchor, createTransform3D } from '../src/anchors/index';
+import { createAnchor } from '../src/anchors/index';
 import type { GalfusEngine, Transform3D } from '@galfus/transport-types';
 
 describe('@galfus/engine > Realm3D', () => {
@@ -37,8 +37,7 @@ describe('@galfus/engine > Realm3D', () => {
     expect(calls).toContain('realm3dCreate:20');
 
     // 1. Create a parent entity at [0, 50, 0]
-    const parentEntity = realm.world.createEntity();
-    realm.world.attachComponent(parentEntity, createTransform3D({ position: [0, 50, 0] }));
+    const parentEntity = realm.createSpatialNode({ position: [0, 50, 0] });
 
     // 2. Create material and a cube anchored to parent at [10, 5, 0]
     const { materialId } = realm.createMaterial({ baseColor: [1, 1, 1, 1] });
@@ -54,10 +53,10 @@ describe('@galfus/engine > Realm3D', () => {
     realm.sync({ time: 0, dt: 0.016, frameId: 1, engine: mockEngine });
 
     // Verify calls
-    expect(calls).toContain('createMaterial:20:1');
-    expect(calls).toContain('createCube:20:2');
+    expect(calls).toContain('createMaterial:20:2');
+    expect(calls).toContain('createCube:20:3');
     expect(calls).toContain(`createModel:20:${modelId}`);
-    expect(calls).toContain('createCamera:20:4');
+    expect(calls).toContain('createCamera:20:5');
 
     // Verify anchored world transform: [0 + 10, 50 + 5, 0 + 0] = [10, 55, 0]
     const tf = modelTransforms.get(modelId);
@@ -69,12 +68,12 @@ describe('@galfus/engine > Realm3D', () => {
       expect(pos[2]).toBeCloseTo(0);
     }
 
-    // 5. Destroy cube entity and re-sync
+    // 5. Destroy cube entity and re-sync (Geometry survives entity destruction HOST-024)
     realm.world.destroyEntity(cubeEntity);
     realm.sync({ time: 0.016, dt: 0.016, frameId: 2, engine: mockEngine });
 
     expect(calls).toContain(`destroyModel:20:${modelId}`);
-    expect(calls).toContain('destroyGeometry:20:2');
+    expect(calls).not.toContain('destroyGeometry:20:3');
 
     // 6. Dispose realm
     realm.dispose();

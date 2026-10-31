@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { Realm2D } from '../src/realm2d/index';
-import { createAnchor, createTransform2D } from '../src/anchors/index';
+import { createAnchor } from '../src/anchors/index';
 import type { GalfusEngine, Transform2DDesc } from '@galfus/transport-types';
 
 describe('@galfus/engine > Realm2D', () => {
@@ -36,8 +36,7 @@ describe('@galfus/engine > Realm2D', () => {
     expect(calls).toContain('realm2dCreate:10');
 
     // 1. Create a parent entity
-    const parentEntity = realm.world.createEntity();
-    realm.world.attachComponent(parentEntity, createTransform2D({ position: [100, 200] }));
+    const parentEntity = realm.createSpatialNode({ position: [100, 200] });
 
     // 2. Create child sprite anchored to parent
     const childEntity = realm.createSprite({ dimensions: [32, 32] }, { position: [10, 20] });
@@ -50,11 +49,11 @@ describe('@galfus/engine > Realm2D', () => {
     realm.sync({ time: 0, dt: 0.016, frameId: 1, engine: mockEngine });
 
     // Verify calls
-    expect(calls).toContain('createSprite:10:1');
-    expect(calls).toContain('createCamera:10:2');
+    expect(calls).toContain('createSprite:10:2');
+    expect(calls).toContain('createCamera:10:3');
 
     // Verify resolved anchored transform
-    const tf = spriteTransforms.get(1);
+    const tf = spriteTransforms.get(2);
     expect(tf).toBeDefined();
     // 100 + 10 = 110, 200 + 20 = 220
     expect(tf!.position[0]).toBeCloseTo(110);
@@ -64,7 +63,7 @@ describe('@galfus/engine > Realm2D', () => {
     realm.world.destroyEntity(childEntity);
     realm.sync({ time: 0.016, dt: 0.016, frameId: 2, engine: mockEngine });
 
-    expect(calls).toContain('destroySprite:10:1');
+    expect(calls).toContain('destroySprite:10:2');
 
     realm.dispose();
     expect(calls).toContain('realm2dDestroy:10');

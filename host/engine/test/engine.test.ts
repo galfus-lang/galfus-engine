@@ -8,7 +8,7 @@ import type {
   Transform2DDesc,
   Transform3DDesc
 } from '@galfus/transport-types';
-import { createAnchor, createRuntime, createTransform2D, createTransform3D } from '../src/index';
+import { createAnchor, createRuntime } from '../src/index';
 
 function createMockTransport() {
   const calls: string[] = [];
@@ -140,14 +140,12 @@ describe('@galfus/engine > Unified MultiverseRuntime', () => {
     expect(calls).toContain('createInvocation:200');
 
     // 4. Add 2D Anchored Entities
-    const parent2D = realm2D.world.createEntity();
-    realm2D.world.attachComponent(parent2D, createTransform2D({ position: [50, 50] }));
+    const parent2D = realm2D.createSpatialNode({ position: [50, 50] });
     const childSprite = realm2D.createSprite({ dimensions: [16, 16] }, { position: [10, 10] });
     realm2D.world.attachComponent(childSprite, createAnchor({ targetEntityId: parent2D }));
 
     // 5. Add 3D Anchored Entities
-    const parent3D = realm3D.world.createEntity();
-    realm3D.world.attachComponent(parent3D, createTransform3D({ position: [0, 100, 0] }));
+    const parent3D = realm3D.createSpatialNode({ position: [0, 100, 0] });
     const { materialId } = realm3D.createMaterial({ baseColor: [1, 0, 0, 1] });
     const { entityId: cubeEntity } = realm3D.createCube(2.0, materialId, { position: [0, 5, 0] });
     realm3D.world.attachComponent(cubeEntity, createAnchor({ targetEntityId: parent3D }));

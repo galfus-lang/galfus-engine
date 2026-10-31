@@ -16,7 +16,7 @@ import { assertValidLogicalId } from '@galfus/transport-types';
 import type { AnimationCoordinator } from '../animation/coordinator';
 import { AnchorSolveSystem } from '../anchors/solver';
 import { HierarchyCoordinator } from '../anchors/hierarchy';
-import { createTransform2D, type Transform2DProps } from '../anchors/component';
+import type { Transform2DProps } from '../anchors/component';
 import type { EntityId } from '../ecs/entity';
 import type { SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
@@ -155,7 +155,11 @@ export class Realm2D implements RealmConnector {
   createLight(desc: Light2DDesc, transform?: Transform2DProps): EntityId {
     const entityId = this.world.createEntity();
     const lightId = this.allocateResourceId();
-    this.world.attachComponent(entityId, createTransform2D(transform));
+    const model = createModel2D(lightId);
+    if (transform) {
+      model.setTRS(transform.position, transform.rotation, transform.scale);
+    }
+    this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createLight2D(lightId, desc));
     return entityId;
   }
@@ -166,7 +170,11 @@ export class Realm2D implements RealmConnector {
   ): { entityId: EntityId; cameraId: number } {
     const entityId = this.world.createEntity();
     const cameraId = this.allocateResourceId();
-    this.world.attachComponent(entityId, createTransform2D(transform));
+    const model = createModel2D(cameraId);
+    if (transform) {
+      model.setTRS(transform.position, transform.rotation, transform.scale);
+    }
+    this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createCamera2D(cameraId, desc));
     return { entityId, cameraId };
   }
@@ -288,7 +296,11 @@ export class Realm2D implements RealmConnector {
   ): { entityId: EntityId; emitterId: number } {
     const entityId = this.world.createEntity();
     const emitterId = this.allocateResourceId();
-    this.world.attachComponent(entityId, createTransform2D(transform));
+    const model = createModel2D(emitterId);
+    if (transform) {
+      model.setTRS(transform.position, transform.rotation, transform.scale);
+    }
+    this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createParticleEmitter2D(emitterId, desc));
     return { entityId, emitterId };
   }

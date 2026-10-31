@@ -59,7 +59,6 @@ export const StaticAnchorStrategy2D: AnchorStrategy2D = {
   name: 'static',
   apply(targetWorld, local, outWorld, offset) {
     if (offset) {
-      // out = targetWorld * offset * local
       const temp = mat2d.create();
       mat2d.multiply(temp, offset, local);
       mat2d.multiply(outWorld, targetWorld, temp);
@@ -86,6 +85,31 @@ export const StaticAnchorStrategy3D: AnchorStrategy3D = {
 };
 
 /**
+ * Pure 'translation' 2D strategy: follows targetWorld translation only without inheriting orientation or scale.
+ */
+export const TranslationAnchorStrategy2D: AnchorStrategy2D = {
+  name: 'translation',
+  apply(targetWorld, local, outWorld, offset) {
+    mat2d.copy(outWorld, local);
+    outWorld[4] += targetWorld[4] + (offset ? offset[4] : 0);
+    outWorld[5] += targetWorld[5] + (offset ? offset[5] : 0);
+  }
+};
+
+/**
+ * Pure 'translation' 3D strategy: follows targetWorld translation only without inheriting orientation or scale.
+ */
+export const TranslationAnchorStrategy3D: AnchorStrategy3D = {
+  name: 'translation',
+  apply(targetWorld, local, outWorld, offset) {
+    mat4.copy(outWorld, local);
+    outWorld[12] += targetWorld[12] + (offset ? offset[12] : 0);
+    outWorld[13] += targetWorld[13] + (offset ? offset[13] : 0);
+    outWorld[14] += targetWorld[14] + (offset ? offset[14] : 0);
+  }
+};
+
+/**
  * Registry holding custom Anchor strategies.
  */
 export class AnchorStrategyRegistry {
@@ -94,7 +118,9 @@ export class AnchorStrategyRegistry {
 
   constructor() {
     this.register2D(StaticAnchorStrategy2D);
+    this.register2D(TranslationAnchorStrategy2D);
     this.register3D(StaticAnchorStrategy3D);
+    this.register3D(TranslationAnchorStrategy3D);
   }
 
   register2D(strategy: AnchorStrategy2D): void {

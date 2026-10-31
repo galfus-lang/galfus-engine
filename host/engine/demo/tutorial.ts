@@ -16,7 +16,7 @@ import {
   mat4,
   quat,
   type TargetId,
-  type Transform3DComponent,
+  type Model3DComponent,
   type WindowId
 } from '@galfus/engine';
 import { presets3D } from '@galfus/engine/realm3d';
@@ -396,10 +396,7 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
   });
 
   // Continuous Frame Loop Update
-  const turretTransform = realm3D.world.getComponent<Transform3DComponent>(
-    turret.entityId,
-    'Transform3D'
-  );
+  const turretModel = realm3D.world.getComponent<Model3DComponent>(turret.entityId, 'Model3D');
 
   const rotQuat = quat.create();
 
@@ -408,11 +405,11 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
     totalFrames++;
 
     // A) Rotate turret smoothly relative to tank body
-    if (turretTransform) {
+    if (turretModel) {
       turretAngle += dt * 0.9;
       quat.setAxisAngle(rotQuat, [0, 1, 0], turretAngle);
-      quat.copy(turretTransform.rotation, rotQuat);
-      turretTransform.isDirty = true;
+      turretModel.setRotation(rotQuat[0], rotQuat[1], rotQuat[2], rotQuat[3]);
+      // turretModel.setRotation(...rotQuat);
     }
 
     // B) Update 3D spatial audio emitter position in real-time

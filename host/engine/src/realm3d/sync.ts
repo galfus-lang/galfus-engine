@@ -3,7 +3,6 @@
  */
 import type { GalfusEngine, Model3DDesc, Transform3D } from '@galfus/transport-types';
 import type { AnchorMatrixCache } from '../anchors/cache';
-import type { Transform3DComponent } from '../anchors/component';
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';
 import { mat4, quat, vec3 } from '../math/index';
@@ -47,7 +46,6 @@ export class Realm3DSyncSystem {
   getResolvedTransform(world: EcsWorld, id: EntityId): Transform3D {
     const model = world.getComponent<Model3DComponent>(id, 'Model3D');
     const mat = model ? model.worldMatrix : this.cache.getWorld3D(id);
-    const tf = world.getComponent<Transform3DComponent>(id, 'Transform3D');
 
     if (mat) {
       const trans = vec3.create();
@@ -62,14 +60,6 @@ export class Realm3DSyncSystem {
         position: [trans[0], trans[1], trans[2]],
         rotation: [rot[0], rot[1], rot[2], rot[3]],
         scale: [sc[0], sc[1], sc[2]]
-      };
-    }
-
-    if (tf) {
-      return {
-        position: [tf.position[0], tf.position[1], tf.position[2]],
-        rotation: [tf.rotation[0], tf.rotation[1], tf.rotation[2], tf.rotation[3]],
-        scale: [tf.scale[0], tf.scale[1], tf.scale[2]]
       };
     }
 

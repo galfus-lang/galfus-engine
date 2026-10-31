@@ -46,6 +46,17 @@ export class Model3DComponent implements Component {
     return this;
   }
 
+  setRotation(x: number, y: number, z: number, w: number): this {
+    const p = vec3.create();
+    const s = vec3.create();
+    mat4.getTranslation(p, this.localMatrix);
+    mat4.getScaling(s, this.localMatrix);
+    const q = quat.fromValues(x, y, z, w);
+    mat4.fromRotationTranslationScale(this.localMatrix, q, p, s);
+    this.flags |= SpatialDirtyFlags.LocalDirty;
+    return this;
+  }
+
   setScale(x: number, y: number, z: number): this {
     this.localMatrix[0] = x;
     this.localMatrix[5] = y;

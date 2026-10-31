@@ -116,10 +116,7 @@ describe('Phase F01 — Baseline, Contratos e Métricas ABI', () => {
     runtime.tick(0.016);
     const frame2Snapshot = tracker.getSnapshot();
 
-    // In the CURRENT implementation before F13 (HOST-030), line 208 of realm3d/sync.ts
-    // calls realm3dSetModelTransform for every model on every frame unconditionally:
-    expect(frame2Snapshot.byCategory.updateTransform).toBe(MODEL_COUNT);
-    // This baseline explicitly documents that CURRENTLY static scenes waste 10 ABI calls/frame.
-    // In Phase F13, with SpatialDirtyFlags and incremental sync, this will drop to ZERO!
+    // With SpatialDirtyFlags and incremental solving/sync, static scenes issue ZERO ABI transform calls:
+    expect(frame2Snapshot.byCategory.updateTransform).toBe(0);
   });
 });

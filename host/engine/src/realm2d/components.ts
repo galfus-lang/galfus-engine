@@ -3,7 +3,7 @@
  * Incorporates spatial Model2D with contiguous local/world matrices and SpatialDirtyFlags.
  */
 import type { Component } from '../ecs/component';
-import { mat2d, type Mat2d, type Vec2 } from '../math/index';
+import { mat2d, vec2, type Mat2d, type Vec2 } from '../math/index';
 import { SpatialDirtyFlags } from '../spatial/flags';
 import type {
   Camera2DDesc,
@@ -43,6 +43,15 @@ export class Model2DComponent implements Component {
   setPosition(x: number, y: number): this {
     this.localMatrix[4] = x;
     this.localMatrix[5] = y;
+    this.flags |= SpatialDirtyFlags.LocalDirty;
+    return this;
+  }
+
+  setRotation(rad: number): this {
+    const p = vec2.fromValues(this.localMatrix[4], this.localMatrix[5]);
+    const sx = Math.hypot(this.localMatrix[0], this.localMatrix[1]);
+    const sy = Math.hypot(this.localMatrix[2], this.localMatrix[3]);
+    mat2d.fromRotationTranslationScale(this.localMatrix, p, rad, [sx, sy]);
     this.flags |= SpatialDirtyFlags.LocalDirty;
     return this;
   }

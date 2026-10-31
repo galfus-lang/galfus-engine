@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
 import type { GalfusEngine } from '@galfus/transport-types';
-import { createTransform3D } from '../src/anchors/component';
 import type { SystemContext } from '../src/ecs/system';
 import { mat4, type Mat4, vec3 } from '../src/math/index';
 import { Realm3D } from '../src/realm3d/realm';
@@ -39,24 +38,12 @@ describe('@galfus/engine > Skeletal Skinning & Hierarchy', () => {
 
     // 2. Create Skeletal Hierarchy:
     // Root bone "Hips" at position [10, 1, 0]
-    const hipsBone = realm.world.createEntity();
+    const hipsBone = realm.createSpatialNode({ position: [10, 1, 0] });
     realm.setEntityName(hipsBone, 'Hips');
-    realm.world.attachComponent(
-      hipsBone,
-      createTransform3D({
-        position: [10, 1, 0]
-      })
-    );
 
     // Child bone "Spine" with local offset [0, 1.5, 0] attached to Hips via HierarchyCoordinator
-    const spineBone = realm.world.createEntity();
+    const spineBone = realm.createSpatialNode({ position: [0, 1.5, 0] });
     realm.setEntityName(spineBone, 'Spine');
-    realm.world.attachComponent(
-      spineBone,
-      createTransform3D({
-        position: [0, 1.5, 0]
-      })
-    );
     realm.hierarchy.attach(spineBone, hipsBone);
 
     // 3. Define Inverse Bind Matrices (Rest Pose)
@@ -139,24 +126,12 @@ describe('@galfus/engine > Skeletal Skinning & Hierarchy', () => {
     const realm = new Realm3D(2);
 
     // Bone at [0, 5, 0]
-    const handBone = realm.world.createEntity();
+    const handBone = realm.createSpatialNode({ position: [0, 5, 0] });
     realm.setEntityName(handBone, 'RightHand');
-    realm.world.attachComponent(
-      handBone,
-      createTransform3D({
-        position: [0, 5, 0]
-      })
-    );
 
     // Sword accessory attached to hand bone with local offset [0, 0, 1]
-    const sword = realm.world.createEntity();
+    const sword = realm.createSpatialNode({ position: [0, 0, 1] });
     realm.setEntityName(sword, 'Excalibur');
-    realm.world.attachComponent(
-      sword,
-      createTransform3D({
-        position: [0, 0, 1]
-      })
-    );
 
     realm.hierarchy.attach(sword, handBone);
 

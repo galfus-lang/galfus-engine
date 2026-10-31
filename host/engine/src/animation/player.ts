@@ -1,7 +1,6 @@
 /**
  * Multi-track Animation Player component and ECS evaluation system.
  */
-import type { Transform3DComponent } from '../anchors/component';
 import type { Component } from '../ecs/component';
 import type { EntityId } from '../ecs/entity';
 import type { System } from '../ecs/system';
@@ -253,35 +252,25 @@ export function createAnimationPlaybackSystem(realm3d?: Realm3D): System<EcsWorl
       // 4. Apply combined pose to ECS entities
       // Apply Translations
       for (const [id, t] of SCRATCH_COMBINED_POSE.translations) {
-        const tf = world.getComponent<Transform3DComponent>(id, 'Transform3D');
-        if (tf) {
-          tf.position[0] = t[0];
-          tf.position[1] = t[1];
-          tf.position[2] = t[2];
-          tf.isDirty = true;
+        const model = world.getComponent<Model3DComponent>(id, 'Model3D');
+        if (model) {
+          model.setPosition(t[0], t[1], t[2]);
         }
       }
 
       // Apply Rotations
       for (const [id, r] of SCRATCH_COMBINED_POSE.rotations) {
-        const tf = world.getComponent<Transform3DComponent>(id, 'Transform3D');
-        if (tf) {
-          tf.rotation[0] = r[0];
-          tf.rotation[1] = r[1];
-          tf.rotation[2] = r[2];
-          tf.rotation[3] = r[3];
-          tf.isDirty = true;
+        const model = world.getComponent<Model3DComponent>(id, 'Model3D');
+        if (model) {
+          model.setRotation(r[0], r[1], r[2], r[3]);
         }
       }
 
       // Apply Scales
       for (const [id, s] of SCRATCH_COMBINED_POSE.scales) {
-        const tf = world.getComponent<Transform3DComponent>(id, 'Transform3D');
-        if (tf) {
-          tf.scale[0] = s[0];
-          tf.scale[1] = s[1];
-          tf.scale[2] = s[2];
-          tf.isDirty = true;
+        const model = world.getComponent<Model3DComponent>(id, 'Model3D');
+        if (model) {
+          model.setScale(s[0], s[1], s[2]);
         }
       }
 
