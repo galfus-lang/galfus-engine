@@ -1,11 +1,11 @@
 import {
-  DEFAULT_TARGET_FPS,
-  GalfusLoopError,
-  GalfusTransportError,
   calculateFrameTiming,
+  DEFAULT_TARGET_FPS,
   type FrameCallback,
   type GalfusEngine,
+  GalfusLoopError,
   type GalfusTransport,
+  GalfusTransportError,
   type LoopOptions,
   type TransportInitOptions
 } from '@galfus/transport-types';

@@ -3,6 +3,7 @@
  * - F09: Anchor graph origin/target terminology, O(1) reverse index, cycle prevention, and world-transform preservation upon target loss.
  * - F10: Incremental topological solver, pure translation strategy, observable anchor mutations, and SpatialDirtyFlags propagation.
  */
+
 import { describe, expect, it } from 'bun:test';
 import { setAnchorDistance, setAnchorStrategy } from '../src/anchors/component';
 import { HierarchyCoordinator } from '../src/anchors/hierarchy';

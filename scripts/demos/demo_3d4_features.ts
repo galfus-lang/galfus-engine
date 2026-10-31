@@ -10,8 +10,6 @@
 
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
 import { createDemo3d4Environment } from './demo_3d4_environment.ts';
-import { extractKey, quatFromEuler, quatFromLookAt } from './utils.ts';
-
 import {
   CAMERA_ID,
   GEOM_CAPSULE,
@@ -45,6 +43,7 @@ import {
   REALM_3D,
   TARGET_WINDOW
 } from './demo_3d4_scene.ts';
+import { extractKey, quatFromEuler, quatFromLookAt } from './utils.ts';
 
 export async function runDemo3d4(): Promise<void> {
   console.log(`================================================================

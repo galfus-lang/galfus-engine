@@ -1,6 +1,7 @@
 /**
  * Animation track and clip structures supporting keyframe sampling for glTF animations.
  */
+
 import type { EntityId } from '../ecs/entity';
 import { common, quat, type Quat } from '../math/index';
 

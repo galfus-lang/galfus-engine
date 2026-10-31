@@ -1,6 +1,7 @@
 /**
  * Multiverse coordinator managing targets, invocations, and realm orchestration.
  */
+
 import type {
   AntiAliasingMode,
   GalfusEngine,

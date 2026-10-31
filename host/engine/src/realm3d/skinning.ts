@@ -4,11 +4,13 @@
  * Runs during the `preRender` stage after AnchorSolveSystem, reading world matrices
  * directly from AnchorMatrixCache and uploading deformation matrices via realm3dUpdateBones.
  */
+
 import type { GalfusEngine } from '@galfus/transport-types';
 import type { AnchorMatrixCache } from '../anchors/cache';
 import type { System } from '../ecs/system';
 import type { EcsWorld } from '../ecs/world';
 import { mat4, type Mat4 } from '../math/index';
+import { SpatialDirtyFlags } from '../spatial/flags';
 import type { Model3DComponent, Skin3DComponent } from './components';
 
 export class SkinningSolveSystem {
@@ -35,11 +37,37 @@ export class SkinningSolveSystem {
       const skin = world.getComponent<Skin3DComponent>(skinEntityId, 'Skin3D');
       if (!skin || skin.joints.length === 0) continue;
 
+      if (
+        !world.isAlive(skin.modelEntityId) ||
+        !world.getComponent<Model3DComponent>(skin.modelEntityId, 'Model3D')
+      ) {
+        world.destroyEntity(skinEntityId);
+        continue;
+      }
+
       const model = world.getComponent<Model3DComponent>(skin.modelEntityId, 'Model3D');
       if (!model) continue;
 
-      // 1. Get model world matrix from cache (or identity if not in cache)
-      const modelWorld = this.cache.getWorld3D(skin.modelEntityId) ?? this._identityMat;
+      // Incremental optimization: skip re-computation and upload if model, joints, and skin are clean
+      const isModelDirty = (model.flags & SpatialDirtyFlags.WorldDirty) !== 0;
+      let isAnyJointDirty = false;
+      for (let j = 0; j < skin.joints.length; j++) {
+        const jointEntityId = skin.joints[j];
+        if (jointEntityId === undefined) continue;
+        const jointModel = world.getComponent<Model3DComponent>(jointEntityId, 'Model3D');
+        if (jointModel && (jointModel.flags & SpatialDirtyFlags.WorldDirty) !== 0) {
+          isAnyJointDirty = true;
+          break;
+        }
+      }
+
+      if (!skin.isDirty && !isModelDirty && !isAnyJointDirty) {
+        continue;
+      }
+
+      // 1. Get model world matrix (from model component or cache)
+      const modelWorld =
+        model.worldMatrix ?? this.cache.getWorld3D(skin.modelEntityId) ?? this._identityMat;
 
       // 2. Invert model world matrix
       if (!mat4.invert(this._invModelMat, modelWorld)) {
@@ -52,7 +80,9 @@ export class SkinningSolveSystem {
         const jointEntityId = skin.joints[j];
         if (jointEntityId === undefined) continue;
 
-        const jointWorld = this.cache.getWorld3D(jointEntityId) ?? this._identityMat;
+        const jointModel = world.getComponent<Model3DComponent>(jointEntityId, 'Model3D');
+        const jointWorld =
+          jointModel?.worldMatrix ?? this.cache.getWorld3D(jointEntityId) ?? this._identityMat;
         const offset = j * 16;
 
         // Copy 16 floats of the inverse bind matrix into scratch
@@ -81,6 +111,8 @@ export class SkinningSolveSystem {
           skin.jointMatrices.length
         );
       }
+
+      skin.isDirty = false;
     }
   }
 

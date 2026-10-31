@@ -4,8 +4,9 @@
  * Keeps pre-allocated TypedArray buffers in memory and mutates them in-place
  * across frames to eliminate Garbage Collector overhead and allocation jitter.
  */
+
 import type { EntityId } from '../ecs/entity';
-import { mat2d, mat4, type Mat2d, type Mat4 } from '../math/index';
+import { mat2d, type Mat2d, mat4, type Mat4 } from '../math/index';
 
 export class AnchorMatrixCache {
   // 2D Matrix Buffers: Float32Array(6)

@@ -1,8 +1,6 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
 import { createDemo3d7Environment } from './demo_3d7_environment.ts';
 import { updateDemo3d7MirrorMaterial } from './demo_3d7_materials.ts';
-import { extractKey, quatFromLookAt } from './utils.ts';
-
 import {
   CAMERA_ID,
   EMITTER_FOUNTAIN_ID,
@@ -47,6 +45,7 @@ import {
   REALM_3D,
   TARGET_WINDOW
 } from './demo_3d7_scene.ts';
+import { extractKey, quatFromLookAt } from './utils.ts';
 
 export async function runDemo3d7(): Promise<void> {
   console.log(

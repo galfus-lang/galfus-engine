@@ -1,8 +1,8 @@
 /**
  * High-level Realm3D manager combining an ECS World, Anchor solver, and core sync.
  */
+
 import type {
-  AnimValue,
   Camera3DDesc,
   CameraLookAt3D,
   CameraLookAt3DStateDesc,
@@ -27,6 +27,7 @@ import { EcsWorld } from '../ecs/world';
 import type { RealmConnector, RealmId, RealmKind } from '../multiverse/realm';
 import type { TransitionId } from '../types';
 import {
+  type Camera3DComponent,
   createCamera3D,
   createInstancedModel3D,
   createLight3D,
@@ -35,7 +36,6 @@ import {
   createParticleEmitter3D,
   createPortal3D,
   createSkin3D,
-  type Camera3DComponent,
   type GeometryResourceEntry,
   type MaterialResourceEntry,
   type Mesh3DComponent,
@@ -45,13 +45,13 @@ import {
   type Primitive3DKind
 } from './components';
 import {
-  packGeometryData,
-  packMorphTargets,
   type GeometryData,
-  type MorphTargetData
+  type MorphTargetData,
+  packGeometryData,
+  packMorphTargets
 } from './geometry';
 import { SkinningSolveSystem } from './skinning';
-import { Realm3DSyncSystem, type Realm3DResourceProvider } from './sync';
+import { type Realm3DResourceProvider, Realm3DSyncSystem } from './sync';
 
 export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   readonly realmKind: RealmKind = '3d';
@@ -548,21 +548,15 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   }
 
   /**
-   * Helper to animate a model transform directly without manual target ID construction.
+   * Helper to animate a model transform directly through ECS.
    */
   animateModel(
     entityId: EntityId,
-    targetValue: AnimValue,
+    targetValue: unknown,
     config: TransitionConfig,
     animation: AnimationCoordinator
   ): TransitionId | undefined {
-    const model = this.world.getComponent<Model3DComponent>(entityId, 'Model3D');
-    if (!model) return undefined;
-    return animation.createTransition(targetValue, config, {
-      kind: 'modelTransform3D',
-      realmId: this.realmId,
-      modelId: model.modelId
-    });
+    return animation.animateEcsProperty(this.world, entityId, 'transform3d', targetValue, config);
   }
 
   // ---------------------------------------------------------------------------

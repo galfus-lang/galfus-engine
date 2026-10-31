@@ -1,7 +1,8 @@
 /**
  * Extensible Anchor strategies for 2D and 3D hierarchical solving.
  */
-import { mat2d, mat4, type Mat2d, type Mat4 } from '../math/index';
+
+import { mat2d, type Mat2d, mat4, type Mat4 } from '../math/index';
 
 export interface AnchorContext {
   /** Delta time of the frame in seconds. */

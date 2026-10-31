@@ -4,6 +4,7 @@
  * - F05 & F06: Spatial Model3D with contiguous dual 4x4 matrices, Mesh3D component, and external geometry/material registries.
  * - F07 & F08: Spatial Model2D with contiguous dual affine matrices, visual attachment requirements, and 2D/3D parity.
  */
+
 import { describe, expect, it } from 'bun:test';
 import { IntentStore } from '../src/ecs/intent';
 import { EcsWorld } from '../src/ecs/world';

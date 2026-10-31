@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  assertValidLogicalId,
+  calculateFrameTiming,
   CORE_RESERVED_IDS_COUNT,
   CORE_RESERVED_RANGE_END,
   CORE_RESERVED_RANGE_START,
   DEFAULT_TARGET_FPS,
+  detectRuntime,
   GalfusLoopError,
   GalfusPolicyError,
   GalfusTransportError,
-  U32_MAX,
-  assertValidLogicalId,
-  calculateFrameTiming,
-  detectRuntime,
   isBrowserRuntime,
   isLogicalIdReserved,
-  isNativeRuntime
+  isNativeRuntime,
+  U32_MAX
 } from '../src/index';
 
 describe('@galfus/transport-types', () => {

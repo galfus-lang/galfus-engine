@@ -4,8 +4,8 @@ import { homedir } from 'os';
 import { resolve } from 'path';
 import {
   getArtifactFileName,
-  resolveNativePlatform,
-  type NativePlatform
+  type NativePlatform,
+  resolveNativePlatform
 } from '../host/transport-types/src/platform';
 
 const rootDir = resolve(import.meta.dir, '..');
@@ -78,7 +78,7 @@ async function syncTypeScriptSdk(): Promise<void> {
 
   // Inject deterministic binary loader
   const bunLocateCustom = `
-import { resolveNativePlatform, getArtifactFileName } from '@galfus/transport-types';
+import { getArtifactFileName, resolveNativePlatform } from '@galfus/transport-types';
 
 function locateLibrary(): string {
   const platform = resolveNativePlatform();
@@ -107,7 +107,7 @@ function locateLibrary(): string {
   nodeCode = nodeCode.replaceAll('../typescript/galfus.ts', '@galfus/transport-types');
 
   const nodeLocateCustom = `
-import { resolveNativePlatform, getArtifactFileName } from '@galfus/transport-types';
+import { getArtifactFileName, resolveNativePlatform } from '@galfus/transport-types';
 
 function locateAddon(): string {
   const platform = resolveNativePlatform();

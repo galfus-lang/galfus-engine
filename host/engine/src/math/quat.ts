@@ -2,6 +2,7 @@
  * Quaternion operations.
  * Stored as a 4-element Float32Array: [x, y, z, w]
  */
+
 import { EPSILON, equalsApprox } from './common';
 import type { ReadonlyVec3 } from './vec3';
 

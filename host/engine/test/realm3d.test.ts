@@ -1,5 +1,5 @@
-import type { GalfusEngine, Transform3D } from '@galfus/transport-types';
 import { describe, expect, it } from 'bun:test';
+import type { GalfusEngine, Transform3D } from '@galfus/transport-types';
 import { createAnchor } from '../src/anchors/index';
 import { Realm3D } from '../src/realm3d/index';
 

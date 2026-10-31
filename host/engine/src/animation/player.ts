@@ -1,6 +1,7 @@
 /**
  * Multi-track Animation Player component and ECS evaluation system.
  */
+
 import type { Component } from '../ecs/component';
 import type { System } from '../ecs/system';
 import type { EcsWorld } from '../ecs/world';

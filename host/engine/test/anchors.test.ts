@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { AnchorSolveSystem, createAnchor, type AnchorStrategy3D } from '../src/anchors/index';
+import { AnchorSolveSystem, type AnchorStrategy3D, createAnchor } from '../src/anchors/index';
 import { EcsWorld } from '../src/ecs/index';
 import { mat4, vec3 } from '../src/math/index';
 import { createModel2D } from '../src/realm2d/components';

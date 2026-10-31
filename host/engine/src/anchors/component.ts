@@ -1,6 +1,7 @@
 /**
  * Spatial transform components and Anchor components for hierarchical relationships.
  */
+
 import type { Component } from '../ecs/component';
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';

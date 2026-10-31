@@ -1,5 +1,5 @@
-import type { GalfusEngine } from '@galfus/transport-types';
 import { describe, expect, it } from 'bun:test';
+import type { GalfusEngine } from '@galfus/transport-types';
 import { AudioManager } from '../src/audio/manager';
 import { ResourceManager } from '../src/resources/manager';
 

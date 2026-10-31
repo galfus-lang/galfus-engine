@@ -4,6 +4,7 @@
  * The modular Node-API source is recomposed before the browser module reuses its function bodies
  * through `wasm_shim.rs` and rewrites only attributes and signatures that differ between runtimes.
  */
+
 import { readFile, writeFile } from 'fs/promises';
 import { resolve } from 'path';
 

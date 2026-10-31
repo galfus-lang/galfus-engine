@@ -1,6 +1,7 @@
 /**
  * Entity management and ID allocation with policy enforcement.
  */
+
 import { assertValidLogicalId } from '@galfus/transport-types';
 
 export type EntityId = number;

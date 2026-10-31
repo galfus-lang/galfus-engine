@@ -3,13 +3,14 @@
  * Maintains an O(1) reverse lookup (target -> dependents), prevents cyclic relationships,
  * and enforces safe world-transform preservation upon target detachment.
  */
+
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';
 import { mat2d, mat4 } from '../math/index';
 import type { Model2DComponent } from '../realm2d/components';
 import type { Model3DComponent } from '../realm3d/components';
 import { SpatialDirtyFlags } from '../spatial/flags';
-import { createAnchor, type AnchorComponent } from './component';
+import { type AnchorComponent, createAnchor } from './component';
 import type { AnchorConstraintCallback2D, AnchorConstraintCallback3D } from './strategy';
 
 export type EntityLike = EntityId | { entityId: EntityId };

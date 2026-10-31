@@ -1,16 +1,17 @@
 /**
  * Generic ECS World orchestrating entities, components, systems, and intents.
  */
-import { ComponentStore, type Component } from './component';
-import { EntityManager, type EntityId } from './entity';
-import { IntentStore, type IntentFlusher } from './intent';
+
+import { type Component, ComponentStore } from './component';
+import { type EntityId, EntityManager } from './entity';
+import { type IntentFlusher, IntentStore } from './intent';
 import { createMetadata, createName, type MetadataComponent, type NameComponent } from './metadata';
 import {
-  SystemPipeline,
   type System,
   type SystemContext,
   type SystemDescriptor,
   type SystemKind,
+  SystemPipeline,
   type SystemStep
 } from './system';
 

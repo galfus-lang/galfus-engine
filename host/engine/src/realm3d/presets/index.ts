@@ -1,6 +1,7 @@
 /**
  * Realm 3D presets for camera and lighting configurations.
  */
+
 import type { Camera3DDesc, Light3DDesc, Material3DDesc } from '@galfus/transport-types';
 
 export function createPerspectiveCamera3DPreset(

@@ -1,11 +1,11 @@
+import { describe, expect, it } from 'bun:test';
 import { createBunTransport } from '@galfus/transport-bun';
 import {
-  GalfusLoopError,
-  GalfusTransportError,
   type GalfusEngine,
-  type GalfusTransport
+  GalfusLoopError,
+  type GalfusTransport,
+  GalfusTransportError
 } from '@galfus/transport-types';
-import { describe, expect, it } from 'bun:test';
 import { EcsWorld } from '../src/ecs/world';
 import { createRuntime } from '../src/runtime';
 

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'bun:test';
 import { blendPoses, createAnimationPose, evaluateClip } from '../src/animation/blending';
 import { sampleTrack } from '../src/animation/clip';
 import {
+  type AnimationClip,
   createAnimationPlaybackSystem,
   createAnimationPlayer3D,
-  type AnimationClip,
   type KeyframeTrack
 } from '../src/animation/index';
 import type { SystemContext } from '../src/ecs/system';

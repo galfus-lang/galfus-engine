@@ -1,6 +1,7 @@
 /**
  * High-level Realm2D manager combining an ECS World, Anchor solver, and core sync.
  */
+
 import type {
   Camera2DDesc,
   GalfusEngine,
@@ -10,7 +11,8 @@ import type {
   Shadow2DConfigDesc,
   Shape2DDesc,
   Sprite2DDesc,
-  Svg2DDesc
+  Svg2DDesc,
+  TransitionConfig
 } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
 import type { Transform2DProps } from '../anchors/component';
@@ -328,6 +330,18 @@ export class Realm2D implements RealmConnector {
       }
       this._engine.realm2dParticleEmitterBurst(this.realmId, emitterId, count);
     }
+  }
+
+  /**
+   * Helper to animate a 2D model transform directly through ECS.
+   */
+  animateModel(
+    entityId: EntityId,
+    targetValue: unknown,
+    config: TransitionConfig,
+    animation: AnimationCoordinator
+  ): TransitionId | undefined {
+    return animation.animateEcsProperty(this.world, entityId, 'transform2d', targetValue, config);
   }
 
   /**

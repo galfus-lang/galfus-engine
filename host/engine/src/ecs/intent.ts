@@ -2,6 +2,7 @@
  * Intent store for atomic and deferred ECS state mutations.
  * Built on a strictly FIFO linked list with isolated error recovery and recursion bounds.
  */
+
 import type { Component } from './component';
 import type { EntityId } from './entity';
 

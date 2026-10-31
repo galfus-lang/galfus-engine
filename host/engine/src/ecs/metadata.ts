@@ -1,6 +1,7 @@
 /**
  * Name and Metadata components for ECS entities.
  */
+
 import type { Component } from './component';
 
 export interface NameComponent extends Component {

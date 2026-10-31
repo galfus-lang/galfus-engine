@@ -7,6 +7,7 @@
  * | b  d  ty |
  * | 0  0  1  |
  */
+
 import { EPSILON, equalsApprox } from './common';
 import type { ReadonlyVec2, Vec2 } from './vec2';
 

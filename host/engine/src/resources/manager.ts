@@ -1,6 +1,7 @@
 /**
  * ResourceManager manages allocation and GPU binding for shared textures.
  */
+
 import type { GalfusEngine, GpuTextureDesc, TextureUpdateDesc } from '@galfus/transport-types';
 import { IdAllocator, type TextureId } from '../types';
 

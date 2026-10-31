@@ -1,6 +1,7 @@
 /**
  * Realm 2D presets for quick entity and camera setup.
  */
+
 import type { Camera2DDesc, Light2DDesc } from '@galfus/transport-types';
 
 export function createOrthoCamera2DPreset(

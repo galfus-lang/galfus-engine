@@ -1,5 +1,5 @@
-import type { AnimationEvent, GalfusEngine } from '@galfus/transport-types';
 import { describe, expect, it } from 'bun:test';
+import type { AnimationEvent, GalfusEngine } from '@galfus/transport-types';
 import { AnimationCoordinator } from '../src/animation/coordinator';
 
 describe('@galfus/engine > AnimationCoordinator', () => {

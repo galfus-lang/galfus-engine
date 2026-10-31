@@ -1,6 +1,7 @@
 /**
  * 4D vector operations.
  */
+
 import { EPSILON, equalsApprox } from './common';
 import type { ReadonlyMat4 } from './mat4';
 

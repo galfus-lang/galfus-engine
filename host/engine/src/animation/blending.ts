@@ -1,9 +1,10 @@
 /**
  * Pose extraction, blending, and crossfading routines.
  */
+
 import type { EntityId } from '../ecs/entity';
 import { common, quat, vec3 } from '../math/index';
-import { sampleTrack, type AnimationClip } from './clip';
+import { type AnimationClip, sampleTrack } from './clip';
 
 export interface AnimationPose {
   translations: Map<EntityId, [number, number, number]>;

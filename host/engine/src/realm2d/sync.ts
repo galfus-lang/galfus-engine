@@ -1,6 +1,7 @@
 /**
  * Realm 2D synchronization system syncing ECS state with core GalfusEngine.
  */
+
 import type { GalfusEngine, Transform2DDesc } from '@galfus/transport-types';
 import type { AnchorMatrixCache } from '../anchors/cache';
 import type { EntityId } from '../ecs/entity';

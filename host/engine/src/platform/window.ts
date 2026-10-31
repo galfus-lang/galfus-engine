@@ -1,6 +1,7 @@
 /**
  * WindowManager coordinates native OS and browser canvas display surfaces.
  */
+
 import type { GalfusEngine, WindowConfig, WindowState } from '@galfus/transport-types';
 import { IdAllocator, type WindowId } from '../types';
 

@@ -1,6 +1,6 @@
-import type { GalfusEngine, GpuTextureDesc, TextureUpdateDesc } from '@galfus/transport-types';
-import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
+import { describe, expect, it } from 'bun:test';
+import type { GalfusEngine, GpuTextureDesc, TextureUpdateDesc } from '@galfus/transport-types';
 import { ResourceManager } from '../src/resources/index';
 
 describe('@galfus/engine > ResourceManager & Texture Auto-loading', () => {

@@ -1,6 +1,7 @@
 /**
  * Realm connector contract for domain-specific realms (2D, 3D, Custom).
  */
+
 import type { GalfusEngine } from '@galfus/transport-types';
 import type { SystemContext } from '../ecs/system';
 import type { RealmId } from '../types';

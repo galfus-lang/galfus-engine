@@ -1,6 +1,7 @@
 /**
  * Component contracts and storage registry.
  */
+
 import type { EntityId } from './entity';
 
 /**

@@ -1,12 +1,11 @@
 import { isJson, isJsonArray, isNativeStruct } from '../spec.ts';
-import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-
 import {
   escapeIdent,
   mapNativeType,
   renderCSharpDescriptor,
   toPascalCase
 } from './csharp_types.ts';
+import type { CodegenContext, CodegenStrategy } from './strategy.ts';
 
 export class CSharpStrategy implements CodegenStrategy {
   readonly id = 'csharp';

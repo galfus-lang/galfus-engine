@@ -1,11 +1,11 @@
-import { CORE_RESERVED_RANGE_START, GalfusPolicyError } from '@galfus/transport-types';
 import { describe, expect, it } from 'bun:test';
+import { CORE_RESERVED_RANGE_START, GalfusPolicyError } from '@galfus/transport-types';
 import {
+  type Component,
   ComponentStore,
   EcsWorld,
   EntityManager,
   IntentStore,
-  type Component,
   type SystemContext
 } from '../src/ecs/index';
 

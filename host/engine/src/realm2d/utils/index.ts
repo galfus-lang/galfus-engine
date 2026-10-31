@@ -1,6 +1,7 @@
 /**
  * Realm 2D math, geometry and spatial utility functions.
  */
+
 import type { Vec2 } from '../../math/vec2';
 
 export interface AABB2D {

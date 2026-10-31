@@ -2,6 +2,7 @@
  * 4x4 matrix operations for 3D graphics.
  * Stored as a 16-element Float32Array in column-major order.
  */
+
 import { EPSILON, equalsApprox } from './common';
 import type { Quat, ReadonlyQuat } from './quat';
 import type { ReadonlyVec3, Vec3 } from './vec3';

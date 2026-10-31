@@ -2,6 +2,7 @@
  * ABI Call Metrics Tracker for monitoring, diagnostics, and zero-ABI regression testing.
  * Intercepts GalfusEngine calls and categorizes them.
  */
+
 import type { GalfusEngine } from '@galfus/transport-types';
 
 export type AbiCallCategory =

@@ -1,5 +1,5 @@
-import type { GalfusEngine } from '@galfus/transport-types';
 import { describe, expect, test } from 'bun:test';
+import type { GalfusEngine } from '@galfus/transport-types';
 import {
   EcsWorld,
   RESERVED_PRIORITY_INTERNAL_RESOLVERS,

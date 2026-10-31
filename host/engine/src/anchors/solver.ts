@@ -6,10 +6,11 @@
  * resolving dependencies topologically with cycle detection, incremental dirty propagation,
  * and SpatialDirtyFlags transitions.
  */
+
 import type { EntityId } from '../ecs/entity';
 import type { System, SystemContext } from '../ecs/system';
 import type { EcsWorld } from '../ecs/world';
-import { mat2d, mat4, type Mat2d, type Mat4 } from '../math/index';
+import { mat2d, type Mat2d, mat4, type Mat4 } from '../math/index';
 import type { Model2DComponent } from '../realm2d/components';
 import type { Model3DComponent } from '../realm3d/components';
 import { SpatialDirtyFlags } from '../spatial/flags';

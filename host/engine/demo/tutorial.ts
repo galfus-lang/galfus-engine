@@ -9,12 +9,13 @@
  * - Overlays a responsive 2D Realm HUD with dynamic SVG scoreboard and instructions
  * - Keeps the window open and alive, smoothly animated at 60 FPS until closed or ESC is pressed
  */
+
 import {
   createRuntime,
   isKey,
   mat4,
-  quat,
   type Model3DComponent,
+  quat,
   type TargetId,
   type WindowId
 } from '@galfus/engine';

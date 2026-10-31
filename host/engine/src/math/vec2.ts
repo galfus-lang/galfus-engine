@@ -1,6 +1,7 @@
 /**
  * 2D vector operations.
  */
+
 import { EPSILON, equalsApprox } from './common';
 import type { ReadonlyMat2d } from './mat2d';
 

@@ -1,6 +1,7 @@
 /**
  * Execution pipeline and 4-phase system scheduler.
  */
+
 import type { GalfusEngine } from '@galfus/transport-types';
 
 /**

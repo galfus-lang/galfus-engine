@@ -1,14 +1,14 @@
 import {
-  GalfusLoopError,
-  GalfusTransportError,
   calculateFrameTiming,
   type FrameCallback,
   type GalfusEngine,
+  GalfusLoopError,
   type GalfusTransport,
+  GalfusTransportError,
   type LoopOptions,
   type TransportInitOptions
 } from '@galfus/transport-types';
-import { GalfusBrowser, initializeGalfusBrowser, type GalfusBrowserWasmModule } from './sdk/galfus';
+import { GalfusBrowser, type GalfusBrowserWasmModule, initializeGalfusBrowser } from './sdk/galfus';
 
 export * from './sdk/galfus';
 

@@ -1,13 +1,14 @@
 /**
  * MultiverseRuntime orchestrates platform transports, frame loops, and multiverse realms.
  */
+
 import {
-  GalfusLoopError,
-  GalfusTransportError,
   type FrameCallback,
   type FrameTiming,
   type GalfusEngine,
+  GalfusLoopError,
   type GalfusTransport,
+  GalfusTransportError,
   type LoopOptions,
   type TransportInitOptions
 } from '@galfus/transport-types';

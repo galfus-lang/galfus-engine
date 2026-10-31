@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import type {
   FrameCallback,
   FrameTiming,
@@ -7,7 +8,6 @@ import type {
   Transform2DDesc,
   Transform3DDesc
 } from '@galfus/transport-types';
-import { describe, expect, it } from 'bun:test';
 import { createAnchor, createRuntime } from '../src/index';
 
 function createMockTransport() {

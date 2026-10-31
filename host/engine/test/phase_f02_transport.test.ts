@@ -1,12 +1,12 @@
+import { describe, expect, it } from 'bun:test';
 import { BrowserTransport } from '@galfus/transport-browser';
 import { createBunTransport } from '@galfus/transport-bun';
 import { createNodeTransport } from '@galfus/transport-node';
 import {
+  calculateFrameTiming,
   GalfusLoopError,
-  GalfusTransportError,
-  calculateFrameTiming
+  GalfusTransportError
 } from '@galfus/transport-types';
-import { describe, expect, it } from 'bun:test';
 
 describe('Phase F02 — Transport: Inicialização, FPS, Delta e Loop', () => {
   describe('Factory Contract: Ready-by-Default', () => {

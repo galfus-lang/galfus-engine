@@ -2,13 +2,14 @@
  * Baseline Metrics & Contract Tests for Phase F01.
  * Measures current ABI call overhead in static and dynamic scenes before refactoring.
  */
+
+import { describe, expect, it } from 'bun:test';
 import type {
   GalfusEngine,
   GalfusTransport,
   Model3DDesc,
   Transform3D
 } from '@galfus/transport-types';
-import { describe, expect, it } from 'bun:test';
 import { MultiverseRuntime } from '../src/runtime';
 import { AbiMetricsTracker, SpatialDirtyFlags } from '../src/spatial/index';
 

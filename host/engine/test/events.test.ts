@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import type {
   AnimationEvent,
   FrameTiming,
@@ -6,7 +7,6 @@ import type {
   PlatformEvent,
   WindowEvent
 } from '@galfus/transport-types';
-import { describe, expect, it } from 'bun:test';
 import { MultiverseRuntime } from '../src/runtime';
 
 describe('@galfus/engine > Unified Event System (.on and off)', () => {

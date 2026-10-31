@@ -1,6 +1,7 @@
 /**
  * Realm 3D math and spatial utilities.
  */
+
 import { vec3 } from '../../math/index';
 import type { Vec3 } from '../../math/vec3';
 

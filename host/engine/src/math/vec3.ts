@@ -1,6 +1,7 @@
 /**
  * 3D vector operations.
  */
+
 import { EPSILON, equalsApprox } from './common';
 import type { ReadonlyMat4 } from './mat4';
 import type { ReadonlyQuat } from './quat';

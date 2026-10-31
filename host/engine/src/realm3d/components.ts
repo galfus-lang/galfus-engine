@@ -2,6 +2,7 @@
  * Realm 3D component declarations.
  * Incorporates spatial Model3D with contiguous local/world matrices and SpatialDirtyFlags.
  */
+
 import type {
   Camera3DDesc,
   InstancedModel3DDesc,
@@ -12,7 +13,7 @@ import type {
 } from '@galfus/transport-types';
 import type { Component } from '../ecs/component';
 import type { EntityId } from '../ecs/entity';
-import { mat4, quat, vec3, type Mat4, type Quat, type Vec3 } from '../math/index';
+import { mat4, type Mat4, quat, type Quat, vec3, type Vec3 } from '../math/index';
 import { SpatialDirtyFlags } from '../spatial/flags';
 
 const SCRATCH_P = vec3.create();
