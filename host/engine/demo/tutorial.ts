@@ -408,8 +408,7 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
     if (turretModel) {
       turretAngle += dt * 0.9;
       quat.setAxisAngle(rotQuat, [0, 1, 0], turretAngle);
-      turretModel.setRotation(rotQuat[0], rotQuat[1], rotQuat[2], rotQuat[3]);
-      // turretModel.setRotation(...rotQuat);
+      turretModel.setRotation(rotQuat);
     }
 
     // B) Update 3D spatial audio emitter position in real-time

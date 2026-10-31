@@ -16,6 +16,10 @@ import type {
   Portal3DDesc
 } from '@galfus/transport-types';
 
+const SCRATCH_P = vec3.create();
+const SCRATCH_S = vec3.create();
+const SCRATCH_Q = quat.create();
+
 /**
  * 3D Spatial node component holding dual 4x4 matrices (local and resolved world)
  * and a two-stage dirty flag state machine (LocalDirty -> WorldDirty -> Clean).
@@ -38,29 +42,56 @@ export class Model3DComponent implements Component {
     this.flags = SpatialDirtyFlags.LocalDirty | SpatialDirtyFlags.WorldDirty;
   }
 
-  setPosition(x: number, y: number, z: number): this {
-    this.localMatrix[12] = x;
-    this.localMatrix[13] = y;
-    this.localMatrix[14] = z;
+  setPosition(x: number, y: number, z: number): this;
+  setPosition(position: [number, number, number] | Vec3): this;
+  setPosition(xOrPos: number | [number, number, number] | Vec3, y?: number, z?: number): this {
+    if (typeof xOrPos === 'number') {
+      this.localMatrix[12] = xOrPos;
+      this.localMatrix[13] = y ?? 0;
+      this.localMatrix[14] = z ?? 0;
+    } else {
+      this.localMatrix[12] = xOrPos[0];
+      this.localMatrix[13] = xOrPos[1];
+      this.localMatrix[14] = xOrPos[2];
+    }
     this.flags |= SpatialDirtyFlags.LocalDirty;
     return this;
   }
 
-  setRotation(x: number, y: number, z: number, w: number): this {
-    const p = vec3.create();
-    const s = vec3.create();
-    mat4.getTranslation(p, this.localMatrix);
-    mat4.getScaling(s, this.localMatrix);
-    const q = quat.fromValues(x, y, z, w);
-    mat4.fromRotationTranslationScale(this.localMatrix, q, p, s);
+  setRotation(x: number, y: number, z: number, w: number): this;
+  setRotation(rotation: [number, number, number, number] | Quat): this;
+  setRotation(
+    xOrRot: number | [number, number, number, number] | Quat,
+    y?: number,
+    z?: number,
+    w?: number
+  ): this {
+    mat4.getTranslation(SCRATCH_P, this.localMatrix);
+    mat4.getScaling(SCRATCH_S, this.localMatrix);
+    let q: Quat;
+    if (typeof xOrRot === 'number') {
+      quat.set(SCRATCH_Q, xOrRot, y ?? 0, z ?? 0, w ?? 1);
+      q = SCRATCH_Q;
+    } else {
+      q = xOrRot as Quat;
+    }
+    mat4.fromRotationTranslationScale(this.localMatrix, q, SCRATCH_P, SCRATCH_S);
     this.flags |= SpatialDirtyFlags.LocalDirty;
     return this;
   }
 
-  setScale(x: number, y: number, z: number): this {
-    this.localMatrix[0] = x;
-    this.localMatrix[5] = y;
-    this.localMatrix[10] = z;
+  setScale(x: number, y: number, z: number): this;
+  setScale(scale: [number, number, number] | Vec3): this;
+  setScale(xOrScale: number | [number, number, number] | Vec3, y?: number, z?: number): this {
+    if (typeof xOrScale === 'number') {
+      this.localMatrix[0] = xOrScale;
+      this.localMatrix[5] = y ?? 1;
+      this.localMatrix[10] = z ?? 1;
+    } else {
+      this.localMatrix[0] = xOrScale[0];
+      this.localMatrix[5] = xOrScale[1];
+      this.localMatrix[10] = xOrScale[2];
+    }
     this.flags |= SpatialDirtyFlags.LocalDirty;
     return this;
   }

@@ -14,6 +14,9 @@ import type {
   Svg2DDesc
 } from '@galfus/transport-types';
 
+const SCRATCH_P2D = vec2.create();
+const SCRATCH_S2D = vec2.create();
+
 /**
  * 2D Spatial node component holding dual 2D affine matrices (local and resolved world)
  * and a two-stage dirty flag state machine (LocalDirty -> WorldDirty -> Clean).
@@ -40,18 +43,26 @@ export class Model2DComponent implements Component {
     this.flags = SpatialDirtyFlags.LocalDirty | SpatialDirtyFlags.WorldDirty;
   }
 
-  setPosition(x: number, y: number): this {
-    this.localMatrix[4] = x;
-    this.localMatrix[5] = y;
+  setPosition(x: number, y: number): this;
+  setPosition(position: [number, number] | Vec2): this;
+  setPosition(xOrPos: number | [number, number] | Vec2, y?: number): this {
+    if (typeof xOrPos === 'number') {
+      this.localMatrix[4] = xOrPos;
+      this.localMatrix[5] = y ?? 0;
+    } else {
+      this.localMatrix[4] = xOrPos[0];
+      this.localMatrix[5] = xOrPos[1];
+    }
     this.flags |= SpatialDirtyFlags.LocalDirty;
     return this;
   }
 
   setRotation(rad: number): this {
-    const p = vec2.fromValues(this.localMatrix[4], this.localMatrix[5]);
+    vec2.set(SCRATCH_P2D, this.localMatrix[4], this.localMatrix[5]);
     const sx = Math.hypot(this.localMatrix[0], this.localMatrix[1]);
     const sy = Math.hypot(this.localMatrix[2], this.localMatrix[3]);
-    mat2d.fromRotationTranslationScale(this.localMatrix, p, rad, [sx, sy]);
+    vec2.set(SCRATCH_S2D, sx, sy);
+    mat2d.fromRotationTranslationScale(this.localMatrix, SCRATCH_P2D, rad, SCRATCH_S2D);
     this.flags |= SpatialDirtyFlags.LocalDirty;
     return this;
   }
