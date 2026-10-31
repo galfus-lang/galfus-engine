@@ -236,3 +236,30 @@ The Galfus Engine maintains strict automated quality standards:
 3. **Binding checks**: `bun run test:ffi`, `bun run test:binds`, and `bun run test:napi` exercise their respective exported surfaces.
 4. **Realtime demos**:
    - `scripts/demos/main.ts`: Realtime interactive validation of Forward+ PBR, SSAO, skeleton animation, 3D portals/mirrors, 2D dynamic shadows, and Multiverse split-screen post-processing.
+
+---
+
+## 9. Host Engine Architecture (`@galfus/engine`)
+
+The high-level TypeScript engine layer builds on top of `@galfus/transport-*` with strict separation of concerns:
+
+1. **ECS as Source of Truth**:
+   - Entities hold spatial `Model3D` or `Model2D` components representing contiguous local transforms and resolved world matrices.
+   - Renderable visuals (`Mesh3D`, `Sprite2D`, `Shape2D`, `Svg2D`) require a Model component on the same entity and consume its spatial pose.
+   - Assets (`Geometry`, `Material`, `Texture`) are stored in realm/global resource registries outside the ECS and survive entity destruction.
+2. **Anchor Hierarchy Graph**:
+   - Explicit `origin` (dependent) and `target` (reference) terminology with \(O(1)\) reverse index lookup.
+   - Cycle detection and automatic detachment with world-to-local transform preservation when targets are removed.
+3. **Deterministic System Pipeline**:
+   - Strict stage ordering: `preRender` $\rightarrow$ Anchor Resolve (last spatial solver) $\rightarrow$ Realm Sync (last stage before render) $\rightarrow$ Multiverse Dispatch $\rightarrow$ `postRender`.
+4. **Incremental Dirty Synchronization**:
+   - `DirtyRegistry` coalesces mutations per frame into revision tracking.
+   - Static scenes generate **zero** ABI calls per frame.
+   - Camera and emitter lifecycle is tracked with tombstones ensuring clean native teardown upon entity destruction.
+5. **Dynamic Multiverse Presentation**:
+   - Viewports belong to Invocations (not Targets) and support dynamic mutations via `invocation.update({ viewport })` preserving underlying realm and target bindings.
+6. **Scoped Lifecycle Management**:
+   - `realm.reset()`: Purges ECS entities and realm-owned assets while preserving the realm handle and reinstalling internal systems.
+   - `realm.dispose()`: Terminal teardown of the realm, unregistering associated multiverse invocations.
+   - `runtime.reset()`: Purges all scenes, resources, audio, and invocations while leaving the underlying transport initialized and ready.
+   - `runtime.dispose()`: Terminal teardown of the runtime and transport backend.

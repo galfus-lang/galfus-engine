@@ -27,6 +27,9 @@ High-performance 2D rendering realm implementing the `galfus-realm-core` contrac
   - Evaluates occluder silhouette edges in polar coordinates to render physically-inspired soft shadows and penumbrae.
 - **Custom WGSL 2D Surface Effects**:
   - Enables materials to run custom procedural shaders (e.g. plasma swirls, scanline holograms, caustics, and animated dissolve patterns) receiving lighting and time parameters.
+- **Decoupled Spatial Nodes (`Model2D`) & Visual Attachments**:
+  - Spatial entities maintain affine 2D transforms and draw order independently of visual components (sprites, shapes, SVGs).
+  - Pure 2D spatial nodes can serve as anchor targets and locator points without attaching visual assets.
 
 ## Invariants & Design Principles
 

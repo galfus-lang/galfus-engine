@@ -29,6 +29,9 @@ Full-featured 3D graphics realm implementing the `galfus-realm-core` contract, f
   - Axis-colored translation arrows, rotation rings, and scale handles rendered with custom depth bias for host manipulation.
 - **Custom WGSL 3D Surface Effects**:
   - Injects user-defined procedural vertex and fragment modifications (`fn surface_effect(in: SurfaceInput3D) -> SurfaceOutput3D`).
+- **Decoupled Spatial Nodes (`Model3D`) & Renderables (`Mesh3D`)**:
+  - Spatial nodes maintain world transforms independently of visual meshes, enabling pure anchor nodes and bone hierarchies without dummy geometry.
+  - Assets (geometries and materials) are retained independently, surviving mesh or model destruction.
 
 ## Invariants & Design Principles
 
