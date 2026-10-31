@@ -77,6 +77,18 @@ impl Realm2DContext {
         self.pipeline_manager = Some(pipeline_manager);
         self.gpu_res = Some(gpu_res);
     }
+
+    /// Returns the number of active sprites currently registered in this realm.
+    #[inline]
+    pub fn sprite_count(&self) -> usize {
+        self.sprites.len()
+    }
+
+    /// Returns the number of active shapes currently registered in this realm.
+    #[inline]
+    pub fn shape_count(&self) -> usize {
+        self.shapes.len()
+    }
 }
 
 impl Realm for Realm2DContext {

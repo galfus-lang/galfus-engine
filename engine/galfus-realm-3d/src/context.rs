@@ -118,6 +118,24 @@ impl Realm3DContext {
         self.dirty = true;
     }
 
+    /// Returns the number of active models currently registered in this realm.
+    #[inline]
+    pub fn model_count(&self) -> usize {
+        self.models.len()
+    }
+
+    /// Returns the number of active geometries currently registered in this realm.
+    #[inline]
+    pub fn geometry_count(&self) -> usize {
+        self.geometries.len()
+    }
+
+    /// Returns the number of active materials currently registered in this realm.
+    #[inline]
+    pub fn material_count(&self) -> usize {
+        self.materials.len()
+    }
+
     /// Drops offscreen pipelines whose model no longer owns an active mirror/portal surface.
     pub(crate) fn prune_portal_pipelines(&mut self) {
         let has_active_portal = |model_id| {

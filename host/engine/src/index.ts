@@ -12,4 +12,5 @@ export * from './realm3d/index';
 export * from './resources/index';
 export * from './audio/index';
 export * from './animation/index';
+export * from './spatial/index';
 export * from './runtime';
