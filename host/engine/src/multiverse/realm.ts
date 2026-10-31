@@ -38,6 +38,11 @@ export interface RealmConnector {
   postRender?(context: SystemContext): void;
 
   /**
+   * Resets this realm: clears ECS and local resources and reinitializes native core realm state.
+   */
+  reset?(): void;
+
+  /**
    * Shuts down and cleans up native resources allocated for this realm in the core.
    */
   dispose(): void;

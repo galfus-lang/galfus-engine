@@ -26,6 +26,7 @@ export class MultiverseCoordinator {
   private readonly _realms = new Map<RealmId, RealmConnector>();
   private readonly _targets = new Map<TargetId, TargetDesc>();
   private readonly _invocations = new Set<InvocationId>();
+  private readonly _invocationRealms = new Map<InvocationId, RealmId>();
 
   get engine(): GalfusEngine | null {
     return this._engine;
@@ -108,16 +109,23 @@ export class MultiverseCoordinator {
   }
 
   /**
-   * Unregisters and disposes a realm connector.
+   * Unregisters and disposes a realm connector, removing any dependent invocations.
    */
   unregisterRealm(realmId: RealmId | number): void {
     const id = realmId as RealmId;
     const realm = this._realms.get(id);
     if (!realm) return;
 
+    // Automatically destroy all invocations associated with this realm
+    for (const [invId, rId] of this._invocationRealms) {
+      if (rId === id) {
+        this.destroyInvocation(invId);
+      }
+    }
+
     realm.dispose();
     if (this._engine) {
-      this._engine.multiverseUnregisterRealm(id);
+      this._engine.multiverseUnregisterRealm?.(id);
     }
     this._realms.delete(id);
   }
@@ -127,6 +135,13 @@ export class MultiverseCoordinator {
    */
   getRealm<T extends RealmConnector = RealmConnector>(realmId: RealmId | number): T | undefined {
     return this._realms.get(realmId as RealmId) as T | undefined;
+  }
+
+  /**
+   * Returns all registered realm connectors.
+   */
+  getRealms(): Iterable<RealmConnector> {
+    return this._realms.values();
   }
 
   /**
@@ -158,6 +173,7 @@ export class MultiverseCoordinator {
       this._engine.multiverseCreateInvocation(invocationId, desc);
     }
     this._invocations.add(invocationId);
+    this._invocationRealms.set(invocationId, desc.realmId as RealmId);
     return invocationId;
   }
 
@@ -171,6 +187,7 @@ export class MultiverseCoordinator {
       this._engine.multiverseDestroyInvocation(id);
     }
     this._invocations.delete(id);
+    this._invocationRealms.delete(id);
   }
 
   /**
@@ -360,21 +377,29 @@ export class MultiverseCoordinator {
   }
 
   /**
-   * Releases all multiverse resources.
+   * Resets all invocations, targets, and realms.
    */
-  dispose(): void {
-    for (const invocationId of this._invocations) {
+  reset(): void {
+    for (const invocationId of [...this._invocations]) {
       this.destroyInvocation(invocationId);
     }
-    for (const realm of this._realms.values()) {
-      realm.dispose();
+    for (const realm of [...this._realms.values()]) {
+      this.unregisterRealm(realm.realmId);
     }
-    for (const targetId of this._targets.keys()) {
+    for (const targetId of [...this._targets.keys()]) {
       this.destroyTarget(targetId);
     }
     this._realms.clear();
     this._targets.clear();
     this._invocations.clear();
+    this._invocationRealms.clear();
+  }
+
+  /**
+   * Releases all multiverse resources.
+   */
+  dispose(): void {
+    this.reset();
     this._engine = null;
   }
 }

@@ -48,15 +48,22 @@ export class Realm2D implements RealmConnector {
   private _engine: GalfusEngine | null = null;
   private _nextResourceLogicalId = 1;
   private _preRenderSteppedFrame = -1;
+  private _disposed = false;
 
   constructor(realmId: RealmId | number) {
     this.realmId = realmId as RealmId;
     assertValidLogicalId(this.realmId, 'RealmId');
     this.hierarchy = new HierarchyCoordinator(this.world, '2d');
     this.syncSystem = new Realm2DSyncSystem(this.realmId, this.solver.cache);
+    this._registerInternalSystems();
+  }
 
-    // Register anchor solver in preRender with reserved internal priority
+  private _registerInternalSystems(): void {
     this.world.addSystem('preRender', this.solver.createSystem(), { kind: 'anchor' });
+  }
+
+  get isDisposed(): boolean {
+    return this._disposed;
   }
 
   allocateResourceId(): number {
@@ -66,16 +73,19 @@ export class Realm2D implements RealmConnector {
   }
 
   bindEngine(engine: GalfusEngine): void {
+    if (this._disposed) return;
     this._engine = engine;
     engine.realm2dCreate(this.realmId);
   }
 
   preRender(context: SystemContext): void {
+    if (this._disposed) return;
     this.world.stepPreRender(context);
     this._preRenderSteppedFrame = context.frameId;
   }
 
   sync(context: SystemContext): void {
+    if (this._disposed) return;
     if (this._preRenderSteppedFrame !== context.frameId) {
       this.preRender(context);
     }
@@ -85,16 +95,33 @@ export class Realm2D implements RealmConnector {
   }
 
   postRender(context: SystemContext): void {
+    if (this._disposed) return;
     this.world.stepPostRender(context);
   }
 
   flush(): void {
+    if (this._disposed) return;
     if (this._engine) {
       this.syncSystem.sync(this.world, this._engine);
     }
   }
 
+  reset(): void {
+    if (this._disposed) throw new Error('Cannot reset a disposed Realm2D.');
+    this.world.clear();
+    this.solver.cache.clear();
+    this._preRenderSteppedFrame = -1;
+    this._registerInternalSystems();
+    if (this._engine) {
+      this.syncSystem.dispose(this._engine);
+      this._engine.realm2dDestroy(this.realmId);
+      this._engine.realm2dCreate(this.realmId);
+    }
+  }
+
   dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
     this.syncSystem.dispose(this._engine);
     if (this._engine) {
       this._engine.realm2dDestroy(this.realmId);
@@ -102,6 +129,14 @@ export class Realm2D implements RealmConnector {
     this._engine = null;
     this.world.clear();
     this.solver.cache.clear();
+  }
+
+  destroyEntity(entityId: EntityId): boolean {
+    if (!this.world.isAlive(entityId)) return false;
+    this.hierarchy.detach(entityId);
+    this.hierarchy.handleTargetDestroyed(entityId);
+    this.solver.cache.remove(entityId);
+    return this.world.destroyEntity(entityId);
   }
 
   // ---------------------------------------------------------------------------

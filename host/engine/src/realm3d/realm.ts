@@ -45,10 +45,10 @@ import {
   type Primitive3DKind
 } from './components';
 import {
+  applyGeometryMorphTargets,
   type GeometryData,
   type MorphTargetData,
-  packGeometryData,
-  packMorphTargets
+  packGeometryData
 } from './geometry';
 import { SkinningSolveSystem } from './skinning';
 import { type Realm3DResourceProvider, Realm3DSyncSystem } from './sync';
@@ -67,6 +67,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   private _engine: GalfusEngine | null = null;
   private _nextResourceLogicalId = 1;
   private _preRenderSteppedFrame = -1;
+  private _disposed = false;
 
   constructor(realmId: RealmId | number) {
     this.realmId = realmId as RealmId;
@@ -74,17 +75,20 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     this.hierarchy = new HierarchyCoordinator(this.world, '3d');
     this.skinningSystem = new SkinningSolveSystem(this.realmId, this.solver.cache);
     this.syncSystem = new Realm3DSyncSystem(this.realmId, this.solver.cache);
+    this._registerInternalSystems();
+  }
 
-    // Register anchor solver and skinning solver in preRender with reserved internal priorities
+  private _registerInternalSystems(): void {
     this.world.addSystem('preRender', this.solver.createSystem(), { kind: 'anchor' });
     this.world.addSystem(
       'preRender',
       this.skinningSystem.createSystem(() => this._engine),
-      {
-        kind: 'sync',
-        priority: RESERVED_PRIORITY_INTERNAL_RESOLVERS
-      }
+      { kind: 'sync', priority: RESERVED_PRIORITY_INTERNAL_RESOLVERS }
     );
+  }
+
+  get isDisposed(): boolean {
+    return this._disposed;
   }
 
   getGeometries(): Iterable<GeometryResourceEntry> {
@@ -102,16 +106,19 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   }
 
   bindEngine(engine: GalfusEngine): void {
+    if (this._disposed) return;
     this._engine = engine;
     engine.realm3dCreate(this.realmId);
   }
 
   preRender(context: SystemContext): void {
+    if (this._disposed) return;
     this.world.stepPreRender(context);
     this._preRenderSteppedFrame = context.frameId;
   }
 
   sync(context: SystemContext): void {
+    if (this._disposed) return;
     if (this._preRenderSteppedFrame !== context.frameId) {
       this.preRender(context);
     }
@@ -121,10 +128,28 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   }
 
   postRender(context: SystemContext): void {
+    if (this._disposed) return;
     this.world.stepPostRender(context);
   }
 
+  reset(): void {
+    if (this._disposed) throw new Error('Cannot reset a disposed Realm3D.');
+    this.world.clear();
+    this.solver.cache.clear();
+    this._geometries.clear();
+    this._materials.clear();
+    this._preRenderSteppedFrame = -1;
+    this._registerInternalSystems();
+    if (this._engine) {
+      this.syncSystem.dispose(this._engine);
+      this._engine.realm3dDestroy(this.realmId);
+      this._engine.realm3dCreate(this.realmId);
+    }
+  }
+
   dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
     this.syncSystem.dispose(this._engine);
     if (this._engine) {
       this._engine.realm3dDestroy(this.realmId);
@@ -134,6 +159,14 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     this.solver.cache.clear();
     this._geometries.clear();
     this._materials.clear();
+  }
+
+  destroyEntity(entityId: EntityId): boolean {
+    if (!this.world.isAlive(entityId)) return false;
+    this.hierarchy.detach(entityId);
+    this.hierarchy.handleTargetDestroyed(entityId);
+    this.solver.cache.remove(entityId);
+    return this.world.destroyEntity(entityId);
   }
 
   flush(): void {
@@ -293,71 +326,61 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     return this.createPrimitive({ kind: 'sphere', radius, rings, sectors }, materialId, transform);
   }
 
-  createCylinder(
-    radius: number,
-    height: number,
-    sectors: number,
-    materialId: number,
-    transform?: Transform3DProps
-  ) {
-    return this.createPrimitive(
-      { kind: 'cylinder', radius, height, sectors },
-      materialId,
-      transform
-    );
+  createCylinder(r: number, h: number, s: number, matId: number, t?: Transform3DProps) {
+    return this.createPrimitive({ kind: 'cylinder', radius: r, height: h, sectors: s }, matId, t);
   }
 
   createCapsule(
-    radius: number,
-    cylinderHeight: number,
+    r: number,
+    ch: number,
     rings: number,
-    sectors: number,
-    materialId: number,
-    transform?: Transform3DProps
+    s: number,
+    matId: number,
+    t?: Transform3DProps
   ) {
     return this.createPrimitive(
-      { kind: 'capsule', radius, cylinderHeight, rings, sectors },
-      materialId,
-      transform
+      { kind: 'capsule', radius: r, cylinderHeight: ch, rings, sectors: s },
+      matId,
+      t
     );
   }
 
-  createPyramid(
-    width: number,
-    depth: number,
-    height: number,
-    materialId: number,
-    transform?: Transform3DProps
-  ) {
-    return this.createPrimitive({ kind: 'pyramid', width, depth, height }, materialId, transform);
+  createPyramid(w: number, d: number, h: number, matId: number, t?: Transform3DProps) {
+    return this.createPrimitive({ kind: 'pyramid', width: w, depth: d, height: h }, matId, t);
   }
 
   createTorus(
-    majorRadius: number,
-    minorRadius: number,
-    majorSegments: number,
-    minorSegments: number,
-    materialId: number,
-    transform?: Transform3DProps
+    majR: number,
+    minR: number,
+    majS: number,
+    minS: number,
+    matId: number,
+    t?: Transform3DProps
   ) {
     return this.createPrimitive(
-      { kind: 'torus', majorRadius, minorRadius, majorSegments, minorSegments },
-      materialId,
-      transform
+      {
+        kind: 'torus',
+        majorRadius: majR,
+        minorRadius: minR,
+        majorSegments: majS,
+        minorSegments: minS
+      },
+      matId,
+      t
     );
   }
 
   createCustomGeometry(
-    topology: number,
-    vertexData: Uint8Array,
-    indices: Uint32Array,
-    materialId: number,
-    transform?: Transform3DProps
+    top: number,
+    vData: Uint8Array,
+    idx: Uint32Array,
+    matId: number,
+    t?: Transform3DProps
   ) {
     return this.createPrimitive(
-      { kind: 'custom', topology, vertexData, indices },
-      materialId,
-      transform
+      { kind: 'custom', topology: top, vertexData: vData, indices: idx },
+      matId,
+      t
     );
   }
 
@@ -512,26 +535,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     targetData: Uint8Array | MorphTargetData[],
     vertexCount?: number
   ): void {
-    if (!this._engine) return;
-    if (targetData instanceof Uint8Array) {
-      const count = vertexCount ? Math.floor(targetData.byteLength / (vertexCount * 48)) : 1;
-      this._engine.realm3dSetGeometryMorphTargets(
-        this.realmId,
-        geometryId,
-        targetData,
-        targetData.byteLength,
-        count
-      );
-    } else {
-      const packed = packMorphTargets(targetData, vertexCount ?? 0);
-      this._engine.realm3dSetGeometryMorphTargets(
-        this.realmId,
-        geometryId,
-        packed.targetData,
-        packed.targetData.byteLength,
-        packed.targetCount
-      );
-    }
+    applyGeometryMorphTargets(this._engine, this.realmId, geometryId, targetData, vertexCount);
   }
 
   setInstancedModelMorphWeights(instancedModelId: number, weights: Float32Array): void {

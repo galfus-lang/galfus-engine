@@ -25,6 +25,7 @@ describe('@galfus/engine > PlatformCoordinator & WindowManager', () => {
       multiverseAttachWindow: () => {},
       multiverseCreateTarget: () => {},
       multiverseDestroyTarget: () => {},
+      multiverseUnregisterRealm: () => {},
       multiverseCreateInvocation: () => {},
       multiverseDestroyInvocation: () => {},
       multiverseDispatch: () => {},

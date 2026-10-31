@@ -204,3 +204,40 @@ export function packMorphTargets(
 
   return { targetData, targetCount };
 }
+
+export function applyGeometryMorphTargets(
+  engine: {
+    realm3dSetGeometryMorphTargets: (
+      rId: number,
+      gId: number,
+      data: Uint8Array,
+      len: number,
+      count: number
+    ) => void;
+  } | null,
+  realmId: number,
+  geometryId: number,
+  targetData: Uint8Array | MorphTargetData[],
+  vertexCount?: number
+): void {
+  if (!engine) return;
+  if (targetData instanceof Uint8Array) {
+    const count = vertexCount ? Math.floor(targetData.byteLength / (vertexCount * 48)) : 1;
+    engine.realm3dSetGeometryMorphTargets(
+      realmId,
+      geometryId,
+      targetData,
+      targetData.byteLength,
+      count
+    );
+  } else {
+    const packed = packMorphTargets(targetData, vertexCount ?? 0);
+    engine.realm3dSetGeometryMorphTargets(
+      realmId,
+      geometryId,
+      packed.targetData,
+      packed.targetData.byteLength,
+      packed.targetCount
+    );
+  }
+}

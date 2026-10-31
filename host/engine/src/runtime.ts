@@ -245,6 +245,60 @@ export class MultiverseRuntime {
   }
 
   /**
+   * Resets the entire multiverse runtime, realms, invocations, windows, audio, and caches,
+   * keeping the transport and engine alive and ready for a fresh scene.
+   */
+  reset(): void {
+    if (this._state === 'disposed') {
+      throw new Error('Cannot reset a disposed MultiverseRuntime.');
+    }
+
+    try {
+      this.stop();
+      this.clearListeners();
+      this._elapsedSeconds = 0;
+      this._frameId = 0;
+
+      // 1. Multiverse: Invocations, Realms, and Targets
+      this.multiverse.reset();
+
+      // 2. Audio: Stop and unload all sounds
+      this.audio.dispose();
+      if (this.transport.engine) {
+        this.audio.bindEngine(this.transport.engine);
+      }
+
+      // 3. Animation: Clear transitions and paths
+      this.animation.dispose();
+      if (this.transport.engine) {
+        this.animation.bindEngine(this.transport.engine);
+      }
+
+      // 4. Windows: Close all open windows
+      this.platform.dispose();
+      if (this.transport.engine) {
+        this.platform.bindEngine(this.transport.engine);
+      }
+
+      // 5. Global Texture Resources
+      this.resources.dispose();
+      if (this.transport.engine) {
+        this.resources.bindEngine(this.transport.engine);
+      }
+
+      // Re-bind engine to multiverse
+      if (this.transport.engine) {
+        this.multiverse.bindEngine(this.transport.engine);
+      }
+
+      this._state = 'ready';
+    } catch (err) {
+      this._state = 'failed';
+      throw err;
+    }
+  }
+
+  /**
    * Disposes the runtime, multiverse coordinator, all realms, and the transport.
    */
   dispose(): void {
