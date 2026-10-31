@@ -1,22 +1,30 @@
 /**
- * Realm 3D synchronization system syncing ECS state with core GalfusEngine.
+ * Realm 3D synchronization system syncing ECS state and resource registries with core GalfusEngine.
  */
-import type { GalfusEngine, Transform3D } from '@galfus/transport-types';
+import type { GalfusEngine, Model3DDesc, Transform3D } from '@galfus/transport-types';
 import type { AnchorMatrixCache } from '../anchors/cache';
 import type { Transform3DComponent } from '../anchors/component';
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';
 import { mat4, quat, vec3 } from '../math/index';
+import { SpatialDirtyFlags } from '../spatial/flags';
 import type {
   Camera3DComponent,
-  Geometry3DComponent,
+  GeometryResourceEntry,
   InstancedModel3DComponent,
   Light3DComponent,
-  Material3DComponent,
+  MaterialResourceEntry,
+  Mesh3DComponent,
   Model3DComponent,
   ParticleEmitter3DComponent,
-  Portal3DComponent
+  Portal3DComponent,
+  Primitive3DKind
 } from './components';
+
+export interface Realm3DResourceProvider {
+  getGeometries(): Iterable<GeometryResourceEntry>;
+  getMaterials(): Iterable<MaterialResourceEntry>;
+}
 
 export class Realm3DSyncSystem {
   private readonly _syncedGeometries = new Set<number>();
@@ -34,10 +42,11 @@ export class Realm3DSyncSystem {
   ) {}
 
   /**
-   * Extracts a Transform3D from the persistent cache and component metadata.
+   * Extracts a Transform3D from the resolved model world matrix or cache.
    */
   getResolvedTransform(world: EcsWorld, id: EntityId): Transform3D {
-    const mat = this.cache.getWorld3D(id);
+    const model = world.getComponent<Model3DComponent>(id, 'Model3D');
+    const mat = model ? model.worldMatrix : this.cache.getWorld3D(id);
     const tf = world.getComponent<Transform3DComponent>(id, 'Transform3D');
 
     if (mat) {
@@ -67,98 +76,110 @@ export class Realm3DSyncSystem {
     return { position: [0, 0, 0] };
   }
 
+  private _uploadPrimitive(
+    engine: GalfusEngine,
+    geometryId: number,
+    primitive: Primitive3DKind
+  ): void {
+    switch (primitive.kind) {
+      case 'cube':
+        engine.realm3dCreateCube(this.realmId, geometryId, primitive.size);
+        break;
+      case 'plane':
+        engine.realm3dCreatePlane(this.realmId, geometryId, primitive.width, primitive.depth);
+        break;
+      case 'quad':
+        engine.realm3dCreateQuad(this.realmId, geometryId, primitive.width, primitive.height);
+        break;
+      case 'sphere':
+        engine.realm3dCreateSphere(
+          this.realmId,
+          geometryId,
+          primitive.radius,
+          primitive.rings,
+          primitive.sectors
+        );
+        break;
+      case 'cylinder':
+        engine.realm3dCreateCylinder(
+          this.realmId,
+          geometryId,
+          primitive.radius,
+          primitive.height,
+          primitive.sectors
+        );
+        break;
+      case 'capsule':
+        engine.realm3dCreateCapsule(
+          this.realmId,
+          geometryId,
+          primitive.radius,
+          primitive.cylinderHeight,
+          primitive.rings,
+          primitive.sectors
+        );
+        break;
+      case 'pyramid':
+        engine.realm3dCreatePyramid(
+          this.realmId,
+          geometryId,
+          primitive.width,
+          primitive.depth,
+          primitive.height
+        );
+        break;
+      case 'torus':
+        engine.realm3dCreateTorus(
+          this.realmId,
+          geometryId,
+          primitive.majorRadius,
+          primitive.minorRadius,
+          primitive.majorSegments,
+          primitive.minorSegments
+        );
+        break;
+      case 'custom':
+        engine.realm3dCreateGeometry(
+          this.realmId,
+          geometryId,
+          primitive.topology,
+          primitive.vertexData,
+          primitive.vertexData.byteLength,
+          primitive.indices,
+          primitive.indices.length
+        );
+        break;
+    }
+  }
+
   /**
-   * Synchronizes all active 3D components to the engine driver.
+   * Synchronizes all active 3D resources and ECS components to the engine driver.
    */
-  sync(world: EcsWorld, engine: GalfusEngine): void {
-    // 1. Sync Geometries
-    const geoEntities = world.query('Geometry3D');
+  sync(world: EcsWorld, engine: GalfusEngine, resourceProvider?: Realm3DResourceProvider): void {
+    // 1. Sync Geometries from resource registry (primary) or legacy ECS entities (fallback)
     const currentGeometries = new Set<number>();
+    if (resourceProvider) {
+      for (const geo of resourceProvider.getGeometries()) {
+        currentGeometries.add(geo.geometryId);
+        if (!this._syncedGeometries.has(geo.geometryId) || geo.isDirty) {
+          this._uploadPrimitive(engine, geo.geometryId, geo.primitive);
+          this._syncedGeometries.add(geo.geometryId);
+          geo.isDirty = false;
+        }
+      }
+    }
+    const geoEntities = world.query('Geometry3D');
     for (const id of geoEntities) {
-      const geo = world.getComponent<Geometry3DComponent>(id, 'Geometry3D');
+      const geo = world.getComponent<{
+        type: string;
+        geometryId: number;
+        primitive: Primitive3DKind;
+        isDirty: boolean;
+      }>(id, 'Geometry3D');
       if (!geo) continue;
       currentGeometries.add(geo.geometryId);
-
       if (!this._syncedGeometries.has(geo.geometryId) || geo.isDirty) {
-        switch (geo.primitive.kind) {
-          case 'cube':
-            engine.realm3dCreateCube(this.realmId, geo.geometryId, geo.primitive.size);
-            break;
-          case 'plane':
-            engine.realm3dCreatePlane(
-              this.realmId,
-              geo.geometryId,
-              geo.primitive.width,
-              geo.primitive.depth
-            );
-            break;
-          case 'quad':
-            engine.realm3dCreateQuad(
-              this.realmId,
-              geo.geometryId,
-              geo.primitive.width,
-              geo.primitive.height
-            );
-            break;
-          case 'sphere':
-            engine.realm3dCreateSphere(
-              this.realmId,
-              geo.geometryId,
-              geo.primitive.radius,
-              geo.primitive.rings,
-              geo.primitive.sectors
-            );
-            break;
-          case 'cylinder':
-            engine.realm3dCreateCylinder(
-              this.realmId,
-              geo.geometryId,
-              geo.primitive.radius,
-              geo.primitive.height,
-              geo.primitive.sectors
-            );
-            break;
-          case 'capsule':
-            engine.realm3dCreateCapsule(
-              this.realmId,
-              geo.geometryId,
-              geo.primitive.radius,
-              geo.primitive.cylinderHeight,
-              geo.primitive.rings,
-              geo.primitive.sectors
-            );
-            break;
-          case 'pyramid':
-            engine.realm3dCreatePyramid(
-              this.realmId,
-              geo.geometryId,
-              geo.primitive.width,
-              geo.primitive.depth,
-              geo.primitive.height
-            );
-            break;
-          case 'torus':
-            engine.realm3dCreateTorus(
-              this.realmId,
-              geo.geometryId,
-              geo.primitive.majorRadius,
-              geo.primitive.minorRadius,
-              geo.primitive.majorSegments,
-              geo.primitive.minorSegments
-            );
-            break;
-          case 'custom':
-            engine.realm3dCreateGeometry(
-              this.realmId,
-              geo.geometryId,
-              geo.primitive.topology,
-              geo.primitive.vertexData,
-              geo.primitive.vertexData.byteLength,
-              geo.primitive.indices,
-              geo.primitive.indices.length
-            );
-            break;
-        }
+        this._uploadPrimitive(engine, geo.geometryId, geo.primitive);
         this._syncedGeometries.add(geo.geometryId);
         geo.isDirty = false;
       }
@@ -170,14 +191,28 @@ export class Realm3DSyncSystem {
       }
     }
 
-    // 2. Sync Materials
-    const matEntities = world.query('Material3D');
+    // 2. Sync Materials from resource registry (primary) or legacy ECS entities (fallback)
     const currentMaterials = new Set<number>();
+    if (resourceProvider) {
+      for (const mat of resourceProvider.getMaterials()) {
+        currentMaterials.add(mat.materialId);
+        if (!this._syncedMaterials.has(mat.materialId) || mat.isDirty) {
+          engine.realm3dCreateMaterial(this.realmId, mat.materialId, mat.desc);
+          this._syncedMaterials.add(mat.materialId);
+          mat.isDirty = false;
+        }
+      }
+    }
+    const matEntities = world.query('Material3D');
     for (const id of matEntities) {
-      const matComp = world.getComponent<Material3DComponent>(id, 'Material3D');
+      const matComp = world.getComponent<{
+        type: string;
+        materialId: number;
+        desc: any;
+        isDirty: boolean;
+      }>(id, 'Material3D');
       if (!matComp) continue;
       currentMaterials.add(matComp.materialId);
-
       if (!this._syncedMaterials.has(matComp.materialId) || matComp.isDirty) {
         engine.realm3dCreateMaterial(this.realmId, matComp.materialId, matComp.desc);
         this._syncedMaterials.add(matComp.materialId);
@@ -191,7 +226,7 @@ export class Realm3DSyncSystem {
       }
     }
 
-    // 3. Sync Models
+    // 3. Sync Models & Meshes
     const modelEntities = world.query('Model3D');
     const currentModels = new Set<number>();
     for (const id of modelEntities) {
@@ -199,13 +234,31 @@ export class Realm3DSyncSystem {
       if (!model) continue;
       currentModels.add(model.modelId);
 
+      const mesh = world.getComponent<Mesh3DComponent>(id, 'Mesh3D');
       const tf = this.getResolvedTransform(world, id);
-      if (!this._syncedModels.has(model.modelId) || model.isDirty) {
-        engine.realm3dCreateModel(this.realmId, model.modelId, model.desc, tf);
+      const isRegistered = this._syncedModels.has(model.modelId);
+      const isSpatialDirty = (model.flags & SpatialDirtyFlags.WorldDirty) !== 0;
+      const isMeshDirty = mesh ? mesh.isDirty : false;
+
+      if (!isRegistered || isMeshDirty) {
+        const desc: Model3DDesc = {
+          geometryId: mesh ? mesh.geometryId : 0,
+          materialId: mesh ? mesh.materialId : 0,
+          castShadow: mesh ? mesh.castShadow : true,
+          receiveShadow: mesh ? mesh.receiveShadow : true,
+          castOutline: mesh ? mesh.castOutline : false,
+          outlineColor: mesh ? mesh.outlineColor : [1, 1, 1, 1],
+          active: mesh ? mesh.active : true,
+          boneOffset: mesh ? mesh.boneOffset : 0,
+          boneCount: mesh ? mesh.boneCount : 0
+        };
+        engine.realm3dCreateModel(this.realmId, model.modelId, desc, tf);
         this._syncedModels.add(model.modelId);
-        model.isDirty = false;
-      } else {
+        if (mesh) mesh.isDirty = false;
+        model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      } else if (isSpatialDirty) {
         engine.realm3dSetModelTransform(this.realmId, model.modelId, tf);
+        model.flags &= ~SpatialDirtyFlags.WorldDirty;
       }
     }
     for (const modelId of this._syncedModels) {

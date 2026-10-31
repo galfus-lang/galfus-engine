@@ -25,10 +25,12 @@ import type { TransitionId } from '../types';
 import {
   createCamera2D,
   createLight2D,
+  createModel2D,
   createParticleEmitter2D,
   createShape2D,
   createSprite2D,
   createSvg2D,
+  type Model2DComponent,
   type ParticleEmitter2DComponent,
   type Svg2DComponent
 } from './components';
@@ -104,10 +106,33 @@ export class Realm2D implements RealmConnector {
   // ---------------------------------------------------------------------------
   // Fluent Entity Spawning Helpers
   // ---------------------------------------------------------------------------
+  /**
+   * Creates a pure 2D spatial node holding Model2DComponent without visual attachment.
+   */
+  createSpatialNode(transform?: Transform2DProps): EntityId {
+    const entityId = this.world.createEntity();
+    const modelId = this.allocateResourceId();
+    const model = createModel2D(modelId);
+    if (transform) {
+      model.setTRS(transform.position, transform.rotation, transform.scale);
+      model.zLayer = transform.zLayer ?? 0;
+      model.drawOrder = transform.drawOrder ?? 0;
+    }
+    this.world.attachComponent(entityId, model);
+    return entityId;
+  }
+
   createSprite(desc: Sprite2DDesc, transform?: Transform2DProps): EntityId {
     const entityId = this.world.createEntity();
     const spriteId = this.allocateResourceId();
-    this.world.attachComponent(entityId, createTransform2D(transform));
+
+    const model = createModel2D(spriteId);
+    if (transform) {
+      model.setTRS(transform.position, transform.rotation, transform.scale);
+      model.zLayer = transform.zLayer ?? 0;
+      model.drawOrder = transform.drawOrder ?? 0;
+    }
+    this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createSprite2D(spriteId, desc));
     return entityId;
   }
@@ -115,7 +140,14 @@ export class Realm2D implements RealmConnector {
   createShape(desc: Shape2DDesc, transform?: Transform2DProps): EntityId {
     const entityId = this.world.createEntity();
     const shapeId = this.allocateResourceId();
-    this.world.attachComponent(entityId, createTransform2D(transform));
+
+    const model = createModel2D(shapeId);
+    if (transform) {
+      model.setTRS(transform.position, transform.rotation, transform.scale);
+      model.zLayer = transform.zLayer ?? 0;
+      model.drawOrder = transform.drawOrder ?? 0;
+    }
+    this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createShape2D(shapeId, desc));
     return entityId;
   }
@@ -142,7 +174,14 @@ export class Realm2D implements RealmConnector {
   createSvg(desc: Svg2DDesc, transform?: Transform2DProps): { entityId: EntityId; svgId: number } {
     const entityId = this.world.createEntity();
     const svgId = this.allocateResourceId();
-    this.world.attachComponent(entityId, createTransform2D(transform));
+
+    const model = createModel2D(svgId);
+    if (transform) {
+      model.setTRS(transform.position, transform.rotation, transform.scale);
+      model.zLayer = transform.zLayer ?? 0;
+      model.drawOrder = transform.drawOrder ?? 0;
+    }
+    this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createSvg2D(svgId, desc));
     return { entityId, svgId };
   }

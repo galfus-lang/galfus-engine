@@ -95,13 +95,12 @@ describe('@galfus/engine > PlatformCoordinator & WindowManager', () => {
     const realm2D = runtime.createRealm2D();
     expect(realm2D.realmId).toBe(2 as any);
 
-    // 5. Semantic Geometry Creation
-    const { geometryId, entityId } = realm3D.createGeometry({
+    // 5. Semantic Geometry Creation (resource outside ECS)
+    const { geometryId } = realm3D.createGeometry({
       positions: new Float32Array([-1, 0, 0, 1, 0, 0, 0, 1, 0]),
       indices: new Uint16Array([0, 1, 2])
     });
     expect(geometryId).toBeDefined();
-    expect(entityId).toBeDefined();
 
     // 6. Close and dispose
     runtime.platform.window.close(win1);

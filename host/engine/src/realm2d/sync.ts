@@ -6,9 +6,11 @@ import type { AnchorMatrixCache } from '../anchors/cache';
 import type { Transform2DComponent } from '../anchors/component';
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';
+import { SpatialDirtyFlags } from '../spatial/flags';
 import type {
   Camera2DComponent,
   Light2DComponent,
+  Model2DComponent,
   ParticleEmitter2DComponent,
   Shape2DComponent,
   Sprite2DComponent,
@@ -32,7 +34,8 @@ export class Realm2DSyncSystem {
    * Extracts a Transform2DDesc from the persistent cache and component metadata.
    */
   getResolvedTransform(world: EcsWorld, id: EntityId): Transform2DDesc {
-    const mat = this.cache.getWorld2D(id);
+    const model = world.getComponent<Model2DComponent>(id, 'Model2D');
+    const mat = model ? model.worldMatrix : this.cache.getWorld2D(id);
     const tf = world.getComponent<Transform2DComponent>(id, 'Transform2D');
 
     if (mat) {
@@ -51,8 +54,8 @@ export class Realm2DSyncSystem {
         position: [tx, ty],
         rotation,
         scale: [scaleX, scaleY],
-        zLayer: tf?.zLayer ?? 0,
-        drawOrder: tf?.drawOrder ?? 0
+        zLayer: model?.zLayer ?? tf?.zLayer ?? 0,
+        drawOrder: model?.drawOrder ?? tf?.drawOrder ?? 0
       };
     }
 
@@ -81,16 +84,21 @@ export class Realm2DSyncSystem {
       if (!sprite) continue;
       currentSprites.add(sprite.spriteId);
 
+      const model = world.getComponent<Model2DComponent>(id, 'Model2D');
       const tf = this.getResolvedTransform(world, id);
-      if (!this._syncedSprites.has(sprite.spriteId) || sprite.isDirty) {
+      const isRegistered = this._syncedSprites.has(sprite.spriteId);
+      const isSpatialDirty = model ? (model.flags & SpatialDirtyFlags.WorldDirty) !== 0 : false;
+
+      if (!isRegistered || sprite.isDirty) {
         engine.realm2dCreateSprite(this.realmId, sprite.spriteId, sprite.desc, tf);
         this._syncedSprites.add(sprite.spriteId);
         sprite.isDirty = false;
-      } else {
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      } else if (isSpatialDirty) {
         engine.realm2dSetSpriteTransform(this.realmId, sprite.spriteId, tf);
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
       }
     }
-    // Cleanup destroyed sprites
     for (const spriteId of this._syncedSprites) {
       if (!currentSprites.has(spriteId)) {
         engine.realm2dDestroySprite(this.realmId, spriteId);
@@ -106,13 +114,19 @@ export class Realm2DSyncSystem {
       if (!shape) continue;
       currentShapes.add(shape.shapeId);
 
+      const model = world.getComponent<Model2DComponent>(id, 'Model2D');
       const tf = this.getResolvedTransform(world, id);
-      if (!this._syncedShapes.has(shape.shapeId) || shape.isDirty) {
+      const isRegistered = this._syncedShapes.has(shape.shapeId);
+      const isSpatialDirty = model ? (model.flags & SpatialDirtyFlags.WorldDirty) !== 0 : false;
+
+      if (!isRegistered || shape.isDirty) {
         engine.realm2dCreateShape(this.realmId, shape.shapeId, shape.desc, tf);
         this._syncedShapes.add(shape.shapeId);
         shape.isDirty = false;
-      } else {
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      } else if (isSpatialDirty) {
         engine.realm2dSetShapeTransform(this.realmId, shape.shapeId, tf);
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
       }
     }
     for (const shapeId of this._syncedShapes) {
@@ -170,13 +184,19 @@ export class Realm2DSyncSystem {
       if (!svg) continue;
       currentSvgs.add(svg.svgId);
 
+      const model = world.getComponent<Model2DComponent>(id, 'Model2D');
       const tf = this.getResolvedTransform(world, id);
-      if (!this._syncedSvgs.has(svg.svgId) || svg.isDirty) {
+      const isRegistered = this._syncedSvgs.has(svg.svgId);
+      const isSpatialDirty = model ? (model.flags & SpatialDirtyFlags.WorldDirty) !== 0 : false;
+
+      if (!isRegistered || svg.isDirty) {
         engine.realm2dCreateSvg(this.realmId, svg.svgId, svg.desc, tf);
         this._syncedSvgs.add(svg.svgId);
         svg.isDirty = false;
-      } else {
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      } else if (isSpatialDirty) {
         engine.realm2dSetSvgTransform(this.realmId, svg.svgId, tf);
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
       }
     }
     for (const svgId of this._syncedSvgs) {

@@ -1,7 +1,10 @@
 /**
  * Realm 2D component declarations.
+ * Incorporates spatial Model2D with contiguous local/world matrices and SpatialDirtyFlags.
  */
 import type { Component } from '../ecs/component';
+import { mat2d, type Mat2d, type Vec2 } from '../math/index';
+import { SpatialDirtyFlags } from '../spatial/flags';
 import type {
   Camera2DDesc,
   Light2DDesc,
@@ -10,6 +13,91 @@ import type {
   Sprite2DDesc,
   Svg2DDesc
 } from '@galfus/transport-types';
+
+/**
+ * 2D Spatial node component holding dual 2D affine matrices (local and resolved world)
+ * and a two-stage dirty flag state machine (LocalDirty -> WorldDirty -> Clean).
+ */
+export class Model2DComponent implements Component {
+  readonly type = 'Model2D' as const;
+  readonly modelId: number;
+  readonly localMatrix: Mat2d;
+  readonly worldMatrix: Mat2d;
+  zLayer: number;
+  drawOrder: number;
+  flags: SpatialDirtyFlags;
+
+  constructor(modelId: number, initialLocal?: Float32Array | number[]) {
+    this.modelId = modelId;
+    this.localMatrix = mat2d.create();
+    this.worldMatrix = mat2d.create();
+    if (initialLocal) {
+      this.localMatrix.set(initialLocal);
+      this.worldMatrix.set(initialLocal);
+    }
+    this.zLayer = 0;
+    this.drawOrder = 0;
+    this.flags = SpatialDirtyFlags.LocalDirty | SpatialDirtyFlags.WorldDirty;
+  }
+
+  setPosition(x: number, y: number): this {
+    this.localMatrix[4] = x;
+    this.localMatrix[5] = y;
+    this.flags |= SpatialDirtyFlags.LocalDirty;
+    return this;
+  }
+
+  setTRS(
+    position?: [number, number] | Vec2,
+    rotationRad = 0,
+    scale?: [number, number] | Vec2
+  ): this {
+    const p = (position ?? [0, 0]) as unknown as Vec2;
+    const s = (scale ?? [1, 1]) as unknown as Vec2;
+    mat2d.fromRotationTranslationScale(this.localMatrix, p, rotationRad, s);
+    this.flags |= SpatialDirtyFlags.LocalDirty;
+    return this;
+  }
+
+  setLocalMatrix(mat: Float32Array | number[]): this {
+    this.localMatrix.set(mat);
+    this.flags |= SpatialDirtyFlags.LocalDirty;
+    return this;
+  }
+
+  setWorldMatrix(mat: Float32Array | number[]): this {
+    this.worldMatrix.set(mat);
+    this.flags |= SpatialDirtyFlags.WorldDirty;
+    return this;
+  }
+
+  markLocalDirty(): void {
+    this.flags |= SpatialDirtyFlags.LocalDirty;
+  }
+
+  markWorldDirty(): void {
+    this.flags |= SpatialDirtyFlags.WorldDirty;
+  }
+
+  get isDirty(): boolean {
+    return this.flags !== SpatialDirtyFlags.Clean;
+  }
+
+  set isDirty(val: boolean) {
+    if (val) {
+      this.flags |= SpatialDirtyFlags.WorldDirty;
+    } else {
+      this.flags = SpatialDirtyFlags.Clean;
+    }
+  }
+}
+
+export function createModel2D(
+  modelId: number,
+  initialLocal?: Float32Array | number[]
+): Model2DComponent {
+  return new Model2DComponent(modelId, initialLocal);
+}
 
 export interface Sprite2DComponent extends Component {
   readonly type: 'Sprite2D';

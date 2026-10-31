@@ -23,19 +23,30 @@ export type PathId = Brand<number, 'PathId'>;
  */
 export class IdAllocator<T extends number = number> {
   private _nextId: number;
+  private readonly _used = new Set<number>();
 
   constructor(initialId = 1) {
     this._nextId = initialId;
   }
 
   allocate(context = 'LogicalId'): T {
+    while (this._used.has(this._nextId)) {
+      this._nextId++;
+    }
     const id = this._nextId++;
     assertValidLogicalId(id, context);
+    this._used.add(id);
     return id as T;
+  }
+
+  markUsed(id: number, context = 'LogicalId'): void {
+    assertValidLogicalId(id, context);
+    this._used.add(id);
   }
 
   reset(startId = 1): void {
     this._nextId = startId;
+    this._used.clear();
   }
 }
 

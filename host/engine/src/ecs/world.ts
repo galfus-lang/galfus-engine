@@ -46,12 +46,32 @@ export class EcsWorld implements IntentFlusher {
   }
 
   /**
-   * Attaches or updates a component on an entity.
+   * Attaches or updates a component on an entity with strict structural integrity checks.
    */
   attachComponent(entityId: EntityId, component: Component): void {
     if (!this.entities.isAlive(entityId)) {
       throw new Error(`Cannot attach component: Entity ${entityId} is not alive.`);
     }
+
+    // Structural integrity enforcement (F04, F06, F08)
+    if (component.type === 'Mesh3D') {
+      if (!this.components.has(entityId, 'Model3D')) {
+        throw new Error(
+          `Integrity violation: Entity ${entityId} cannot have Mesh3D attached without a Model3D spatial component.`
+        );
+      }
+    } else if (
+      component.type === 'Sprite2D' ||
+      component.type === 'Shape2D' ||
+      component.type === 'Svg2D'
+    ) {
+      if (!this.components.has(entityId, 'Model2D')) {
+        throw new Error(
+          `Integrity violation: Entity ${entityId} cannot have ${component.type} attached without a Model2D spatial component.`
+        );
+      }
+    }
+
     this.components.set(entityId, component);
   }
 
@@ -150,7 +170,12 @@ export class EcsWorld implements IntentFlusher {
     for (const id of ids) {
       const comp = this.components.get<NameComponent>(id, 'Name');
       if (!comp) continue;
-      if (isRegex ? pattern.test(comp.name) : comp.name === pattern) {
+      if (isRegex) {
+        pattern.lastIndex = 0;
+        if (pattern.test(comp.name)) {
+          matches.push(id);
+        }
+      } else if (comp.name === pattern) {
         matches.push(id);
       }
     }

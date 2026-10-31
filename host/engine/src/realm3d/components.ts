@@ -1,8 +1,11 @@
 /**
  * Realm 3D component declarations.
+ * Incorporates spatial Model3D with contiguous local/world matrices and SpatialDirtyFlags.
  */
 import type { Component } from '../ecs/component';
 import type { EntityId } from '../ecs/entity';
+import { mat4, quat, vec3, type Mat4, type Quat, type Vec3 } from '../math/index';
+import { SpatialDirtyFlags } from '../spatial/flags';
 import type {
   Camera3DDesc,
   InstancedModel3DDesc,
@@ -13,18 +16,142 @@ import type {
   Portal3DDesc
 } from '@galfus/transport-types';
 
-export interface Model3DComponent extends Component {
-  readonly type: 'Model3D';
+/**
+ * 3D Spatial node component holding dual 4x4 matrices (local and resolved world)
+ * and a two-stage dirty flag state machine (LocalDirty -> WorldDirty -> Clean).
+ */
+export class Model3DComponent implements Component {
+  readonly type = 'Model3D' as const;
   readonly modelId: number;
-  desc: Model3DDesc;
+  readonly localMatrix: Mat4;
+  readonly worldMatrix: Mat4;
+  flags: SpatialDirtyFlags;
+
+  constructor(modelId: number, initialLocal?: Float32Array | number[]) {
+    this.modelId = modelId;
+    this.localMatrix = mat4.create();
+    this.worldMatrix = mat4.create();
+    if (initialLocal) {
+      this.localMatrix.set(initialLocal);
+      this.worldMatrix.set(initialLocal);
+    }
+    this.flags = SpatialDirtyFlags.LocalDirty | SpatialDirtyFlags.WorldDirty;
+  }
+
+  setPosition(x: number, y: number, z: number): this {
+    this.localMatrix[12] = x;
+    this.localMatrix[13] = y;
+    this.localMatrix[14] = z;
+    this.flags |= SpatialDirtyFlags.LocalDirty;
+    return this;
+  }
+
+  setScale(x: number, y: number, z: number): this {
+    this.localMatrix[0] = x;
+    this.localMatrix[5] = y;
+    this.localMatrix[10] = z;
+    this.flags |= SpatialDirtyFlags.LocalDirty;
+    return this;
+  }
+
+  setTRS(
+    position?: [number, number, number] | Vec3,
+    rotation?: [number, number, number, number] | Quat,
+    scale?: [number, number, number] | Vec3
+  ): this {
+    const p = (position ?? [0, 0, 0]) as unknown as Vec3;
+    const r = (rotation ?? [0, 0, 0, 1]) as unknown as Quat;
+    const s = (scale ?? [1, 1, 1]) as unknown as Vec3;
+    mat4.fromRotationTranslationScale(this.localMatrix, r, p, s);
+    this.flags |= SpatialDirtyFlags.LocalDirty;
+    return this;
+  }
+
+  setLocalMatrix(mat: Float32Array | number[]): this {
+    this.localMatrix.set(mat);
+    this.flags |= SpatialDirtyFlags.LocalDirty;
+    return this;
+  }
+
+  setWorldMatrix(mat: Float32Array | number[]): this {
+    this.worldMatrix.set(mat);
+    this.flags |= SpatialDirtyFlags.WorldDirty;
+    return this;
+  }
+
+  markLocalDirty(): void {
+    this.flags |= SpatialDirtyFlags.LocalDirty;
+  }
+
+  markWorldDirty(): void {
+    this.flags |= SpatialDirtyFlags.WorldDirty;
+  }
+
+  get isDirty(): boolean {
+    return this.flags !== SpatialDirtyFlags.Clean;
+  }
+
+  set isDirty(val: boolean) {
+    if (val) {
+      this.flags |= SpatialDirtyFlags.WorldDirty;
+    } else {
+      this.flags = SpatialDirtyFlags.Clean;
+    }
+  }
+}
+
+export function createModel3D(
+  modelId: number,
+  initialLocal?: Float32Array | number[]
+): Model3DComponent {
+  return new Model3DComponent(modelId, initialLocal);
+}
+
+/**
+ * 3D Mesh rendering component linked to an existing spatial Model3D on the same entity.
+ */
+export interface Mesh3DDesc {
+  geometryId: number;
+  materialId: number;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  castOutline?: boolean;
+  outlineColor?: [number, number, number, number];
+  active?: boolean;
+  boneOffset?: number;
+  boneCount?: number;
+}
+
+export interface Mesh3DComponent extends Component {
+  readonly type: 'Mesh3D';
+  readonly meshId: number;
+  readonly modelId: number;
+  geometryId: number;
+  materialId: number;
+  castShadow: boolean;
+  receiveShadow: boolean;
+  castOutline: boolean;
+  outlineColor: [number, number, number, number];
+  active: boolean;
+  boneOffset: number;
+  boneCount: number;
   isDirty: boolean;
 }
 
-export function createModel3D(modelId: number, desc: Model3DDesc): Model3DComponent {
+export function createMesh3D(meshId: number, modelId: number, desc: Mesh3DDesc): Mesh3DComponent {
   return {
-    type: 'Model3D',
+    type: 'Mesh3D',
+    meshId,
     modelId,
-    desc,
+    geometryId: desc.geometryId,
+    materialId: desc.materialId,
+    castShadow: desc.castShadow ?? true,
+    receiveShadow: desc.receiveShadow ?? true,
+    castOutline: desc.castOutline ?? false,
+    outlineColor: desc.outlineColor ?? [1, 1, 1, 1],
+    active: desc.active ?? true,
+    boneOffset: desc.boneOffset ?? 0,
+    boneCount: desc.boneCount ?? 0,
     isDirty: true
   };
 }
@@ -61,22 +188,6 @@ export function createLight3D(lightId: number, desc: Light3DDesc): Light3DCompon
   };
 }
 
-export interface Material3DComponent extends Component {
-  readonly type: 'Material3D';
-  readonly materialId: number;
-  desc: Material3DDesc;
-  isDirty: boolean;
-}
-
-export function createMaterial3D(materialId: number, desc: Material3DDesc): Material3DComponent {
-  return {
-    type: 'Material3D',
-    materialId,
-    desc,
-    isDirty: true
-  };
-}
-
 export type Primitive3DKind =
   | { kind: 'cube'; size: number }
   | { kind: 'plane'; width: number; depth: number }
@@ -94,23 +205,16 @@ export type Primitive3DKind =
     }
   | { kind: 'custom'; topology: number; vertexData: Uint8Array; indices: Uint32Array };
 
-export interface Geometry3DComponent extends Component {
-  readonly type: 'Geometry3D';
-  readonly geometryId: number;
+export interface GeometryResourceEntry {
+  geometryId: number;
   primitive: Primitive3DKind;
   isDirty: boolean;
 }
 
-export function createGeometry3D(
-  geometryId: number,
-  primitive: Primitive3DKind
-): Geometry3DComponent {
-  return {
-    type: 'Geometry3D',
-    geometryId,
-    primitive,
-    isDirty: true
-  };
+export interface MaterialResourceEntry {
+  materialId: number;
+  desc: Material3DDesc;
+  isDirty: boolean;
 }
 
 export interface ParticleEmitter3DComponent extends Component {
