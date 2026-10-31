@@ -11,6 +11,10 @@ const COMMANDS: Command[] = [
     args: ['cargo', 'fmt', '--all', ...(isCheck ? ['--check'] : [])]
   },
   {
+    label: 'clean imports (ts)',
+    args: ['bun', 'scripts/clean-imports.ts', ...(isCheck ? ['--check'] : [])]
+  },
+  {
     label: 'prettier',
     args: ['bunx', 'prettier', isCheck ? '--check' : '--write', '.']
   },

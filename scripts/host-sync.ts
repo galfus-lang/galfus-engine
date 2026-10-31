@@ -1,7 +1,7 @@
-import { copyFile, mkdir, readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
+import { copyFile, mkdir, readFile, writeFile } from 'fs/promises';
 import { homedir } from 'os';
-import { dirname, resolve } from 'path';
+import { resolve } from 'path';
 import {
   getArtifactFileName,
   resolveNativePlatform,

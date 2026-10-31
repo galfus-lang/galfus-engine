@@ -1,5 +1,5 @@
-import type { CodegenContext, CodegenStrategy } from './strategy.ts';
 import { type DataType, isBuffer, isJson, isJsonArray, isNativeStruct } from '../spec.ts';
+import type { CodegenContext, CodegenStrategy } from './strategy.ts';
 
 function mapFFIType(type: DataType): string {
   if (typeof type === 'object') {

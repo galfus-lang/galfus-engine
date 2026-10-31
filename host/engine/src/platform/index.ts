@@ -1,2 +1,2 @@
-export * from './window';
 export * from './platform';
+export * from './window';

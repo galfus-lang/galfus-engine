@@ -1,15 +1,15 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { resolve } from 'path';
 import { API_DESCRIPTORS, API_FUNCTIONS } from './codegen/spec.ts';
-import type { CodegenStrategy } from './codegen/strategies/strategy.ts';
-import { CHeaderStrategy } from './codegen/strategies/c_header.ts';
-import { PythonStrategy } from './codegen/strategies/python.ts';
-import { LuaStrategy } from './codegen/strategies/lua.ts';
-import { TypeScriptStrategy } from './codegen/strategies/typescript.ts';
-import { BunFfiStrategy } from './codegen/strategies/bun_ffi.ts';
-import { NodeApiStrategy } from './codegen/strategies/node_api.ts';
-import { CSharpStrategy } from './codegen/strategies/csharp.ts';
 import { BrowserWasmStrategy } from './codegen/strategies/browser_wasm.ts';
+import { BunFfiStrategy } from './codegen/strategies/bun_ffi.ts';
+import { CHeaderStrategy } from './codegen/strategies/c_header.ts';
+import { CSharpStrategy } from './codegen/strategies/csharp.ts';
+import { LuaStrategy } from './codegen/strategies/lua.ts';
+import { NodeApiStrategy } from './codegen/strategies/node_api.ts';
+import { PythonStrategy } from './codegen/strategies/python.ts';
+import type { CodegenStrategy } from './codegen/strategies/strategy.ts';
+import { TypeScriptStrategy } from './codegen/strategies/typescript.ts';
 
 const rootDir = resolve(import.meta.dir, '..');
 const browserAudioTemplate = resolve(import.meta.dir, 'codegen/templates/browser_audio.ts');

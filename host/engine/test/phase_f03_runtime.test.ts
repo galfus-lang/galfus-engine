@@ -1,14 +1,13 @@
-import { describe, expect, it } from 'bun:test';
 import { createBunTransport } from '@galfus/transport-bun';
 import {
   GalfusLoopError,
   GalfusTransportError,
-  type FrameTiming,
   type GalfusEngine,
   type GalfusTransport
 } from '@galfus/transport-types';
-import { MultiverseRuntime, createRuntime, type RuntimeState } from '../src/runtime';
+import { describe, expect, it } from 'bun:test';
 import { EcsWorld } from '../src/ecs/world';
+import { createRuntime } from '../src/runtime';
 
 describe('Phase F03 — Runtime Pronto e Scheduler Preparatório', () => {
   describe('Ready Transport & Idempotent Binding', () => {

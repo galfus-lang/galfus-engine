@@ -2,7 +2,7 @@
  * Animation track and clip structures supporting keyframe sampling for glTF animations.
  */
 import type { EntityId } from '../ecs/entity';
-import { common, quat, vec3, type Quat, type Vec3 } from '../math/index';
+import { common, quat, type Quat } from '../math/index';
 
 export type InterpolationMode = 'step' | 'linear' | 'cubicspline';
 export type AnimationPath = 'translation' | 'rotation' | 'scale' | 'weights';

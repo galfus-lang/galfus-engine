@@ -1,11 +1,10 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
-import type { Transform3DDesc } from '../../sdk/typescript/galfus.ts';
-import { extractKey, eulerToQuat, quatFromLookAt } from './utils.ts';
 import {
   FRESNEL_SURFACE_SNIPPET,
-  WORLD_WAVE_SURFACE_SNIPPET,
-  HOLOGRAM_SURFACE_SNIPPET
+  HOLOGRAM_SURFACE_SNIPPET,
+  WORLD_WAVE_SURFACE_SNIPPET
 } from './shaders_3d.ts';
+import { eulerToQuat, extractKey, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
 const REALM_3D = 10;

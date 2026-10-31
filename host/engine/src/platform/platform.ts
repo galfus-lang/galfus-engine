@@ -1,6 +1,6 @@
 import type {
-  GamepadEvent,
   GalfusEngine,
+  GamepadEvent,
   KeyboardEvent,
   PlatformCapabilities,
   PlatformEvent,

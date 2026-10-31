@@ -1,5 +1,5 @@
-import { detectRuntime, type RuntimeInfo } from './factory';
 import { GalfusPolicyError } from './errors';
+import { detectRuntime, type RuntimeInfo } from './factory';
 
 /**
  * Enumeration of supported native OS and CPU architecture platforms.

@@ -1,12 +1,4 @@
-import {
-  type DataType,
-  type DescSpec,
-  type FieldType,
-  isJson,
-  isJsonArray,
-  isNativeStruct,
-  type ParamSpec
-} from '../spec.ts';
+import { type DataType, type DescSpec, type FieldType, isNativeStruct } from '../spec.ts';
 
 const CSHARP_KEYWORDS = new Set([
   'abstract',

@@ -9,18 +9,18 @@
  * - Overlays a responsive 2D Realm HUD with dynamic SVG scoreboard and instructions
  * - Keeps the window open and alive, smoothly animated at 60 FPS until closed or ESC is pressed
  */
-import { createBunTransport } from '@galfus/transport-bun';
 import {
   createRuntime,
   isKey,
   mat4,
   quat,
-  type TargetId,
   type Model3DComponent,
+  type TargetId,
   type WindowId
 } from '@galfus/engine';
-import { presets3D } from '@galfus/engine/realm3d';
 import { presets2D } from '@galfus/engine/realm2d';
+import { presets3D } from '@galfus/engine/realm3d';
+import { createBunTransport } from '@galfus/transport-bun';
 
 /** Synthesizes an audible, looping 16-bit PCM WAV audio waveform (sci-fi tank engine hum). */
 function createSynthesizedWav(durationSecs = 1.0, freq = 180.0): Uint8Array {

@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'bun:test';
-import { MultiverseCoordinator, type RealmConnector } from '../src/multiverse/index';
 import type { GalfusEngine } from '@galfus/transport-types';
 import { CORE_RESERVED_RANGE_START, GalfusPolicyError } from '@galfus/transport-types';
+import { describe, expect, it } from 'bun:test';
+import { MultiverseCoordinator, type RealmConnector } from '../src/multiverse/index';
 
 describe('@galfus/engine > Multiverse', () => {
   it('enforces ID policy on targets and invocations', () => {

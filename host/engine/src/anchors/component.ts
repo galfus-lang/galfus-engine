@@ -4,18 +4,7 @@
 import type { Component } from '../ecs/component';
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';
-import {
-  mat2d,
-  mat4,
-  quat,
-  vec2,
-  vec3,
-  type Mat2d,
-  type Mat4,
-  type Quat,
-  type Vec2,
-  type Vec3
-} from '../math/index';
+import { type Mat2d, type Mat4, type Quat, type Vec2, type Vec3 } from '../math/index';
 import type { Model2DComponent } from '../realm2d/components';
 import type { Model3DComponent } from '../realm3d/components';
 import { SpatialDirtyFlags } from '../spatial/flags';

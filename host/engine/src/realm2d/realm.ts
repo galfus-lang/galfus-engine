@@ -13,10 +13,10 @@ import type {
   Svg2DDesc
 } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
-import type { AnimationCoordinator } from '../animation/coordinator';
-import { AnchorSolveSystem } from '../anchors/solver';
-import { HierarchyCoordinator } from '../anchors/hierarchy';
 import type { Transform2DProps } from '../anchors/component';
+import { HierarchyCoordinator } from '../anchors/hierarchy';
+import { AnchorSolveSystem } from '../anchors/solver';
+import type { AnimationCoordinator } from '../animation/coordinator';
 import type { EntityId } from '../ecs/entity';
 import type { SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
@@ -30,7 +30,6 @@ import {
   createShape2D,
   createSprite2D,
   createSvg2D,
-  type Model2DComponent,
   type ParticleEmitter2DComponent,
   type Svg2DComponent
 } from './components';
@@ -54,8 +53,8 @@ export class Realm2D implements RealmConnector {
     this.hierarchy = new HierarchyCoordinator(this.world, '2d');
     this.syncSystem = new Realm2DSyncSystem(this.realmId, this.solver.cache);
 
-    // Register anchor solver in preRender
-    this.world.addSystem('preRender', this.solver.createSystem());
+    // Register anchor solver in preRender with reserved internal priority
+    this.world.addSystem('preRender', this.solver.createSystem(), { kind: 'anchor' });
   }
 
   allocateResourceId(): number {

@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'bun:test';
-import { Realm2D } from '../src/realm2d/index';
-import { createAnchor } from '../src/anchors/index';
 import type { GalfusEngine, Transform2DDesc } from '@galfus/transport-types';
+import { describe, expect, it } from 'bun:test';
+import { createAnchor } from '../src/anchors/index';
+import { Realm2D } from '../src/realm2d/index';
 
 describe('@galfus/engine > Realm2D', () => {
   it('creates entities and synchronizes them to GalfusEngine with resolved anchors', () => {

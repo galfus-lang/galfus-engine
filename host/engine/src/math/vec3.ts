@@ -2,8 +2,8 @@
  * 3D vector operations.
  */
 import { EPSILON, equalsApprox } from './common';
-import type { ReadonlyQuat } from './quat';
 import type { ReadonlyMat4 } from './mat4';
+import type { ReadonlyQuat } from './quat';
 
 export type Vec3 = Float32Array & {
   0: number;

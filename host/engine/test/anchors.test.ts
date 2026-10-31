@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { EcsWorld } from '../src/ecs/index';
 import { AnchorSolveSystem, createAnchor, type AnchorStrategy3D } from '../src/anchors/index';
+import { EcsWorld } from '../src/ecs/index';
 import { mat4, vec3 } from '../src/math/index';
 import { createModel2D } from '../src/realm2d/components';
 import { createModel3D } from '../src/realm3d/components';

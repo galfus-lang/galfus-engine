@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  MORPH_VERTEX_STRIDE_BYTES,
   packGeometryData,
   packMorphTargets,
-  VERTEX_STRIDE_BYTES,
-  MORPH_VERTEX_STRIDE_BYTES
+  VERTEX_STRIDE_BYTES
 } from '../src/realm3d/geometry';
 
 describe('@galfus/engine > Geometry 136-Byte & Morph Packing', () => {

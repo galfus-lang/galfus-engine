@@ -1,5 +1,5 @@
-import type { GalfusEngine } from './sdk/galfus';
 import type { EngineLoopController } from './loop';
+import type { GalfusEngine } from './sdk/galfus';
 
 /**
  * Options supplied when initializing a Galfus transport backend.

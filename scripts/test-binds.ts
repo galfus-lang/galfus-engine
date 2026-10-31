@@ -1,5 +1,5 @@
 import { spawnSync } from 'child_process';
-import { existsSync, unlinkSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 const rootDir = resolve(import.meta.dir, '..');

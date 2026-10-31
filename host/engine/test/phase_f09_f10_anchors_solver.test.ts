@@ -4,17 +4,13 @@
  * - F10: Incremental topological solver, pure translation strategy, observable anchor mutations, and SpatialDirtyFlags propagation.
  */
 import { describe, expect, it } from 'bun:test';
-import { EcsWorld } from '../src/ecs/world';
-import { mat4, quat, vec3 } from '../src/math/index';
+import { setAnchorDistance, setAnchorStrategy } from '../src/anchors/component';
 import { HierarchyCoordinator } from '../src/anchors/hierarchy';
 import { AnchorSolveSystem } from '../src/anchors/solver';
-import {
-  setAnchorDistance,
-  setAnchorStrategy,
-  type AnchorComponent
-} from '../src/anchors/component';
-import { createModel3D, Model3DComponent } from '../src/realm3d/components';
-import { createModel2D, Model2DComponent } from '../src/realm2d/components';
+import { EcsWorld } from '../src/ecs/world';
+import { mat4, quat } from '../src/math/index';
+import { createModel2D } from '../src/realm2d/components';
+import { createModel3D } from '../src/realm3d/components';
 import { SpatialDirtyFlags } from '../src/spatial/flags';
 
 describe('Phase F09 & F10 — Anchor Graph, Reverse Lookup & Incremental Solver', () => {

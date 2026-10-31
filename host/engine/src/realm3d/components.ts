@@ -2,19 +2,18 @@
  * Realm 3D component declarations.
  * Incorporates spatial Model3D with contiguous local/world matrices and SpatialDirtyFlags.
  */
-import type { Component } from '../ecs/component';
-import type { EntityId } from '../ecs/entity';
-import { mat4, quat, vec3, type Mat4, type Quat, type Vec3 } from '../math/index';
-import { SpatialDirtyFlags } from '../spatial/flags';
 import type {
   Camera3DDesc,
   InstancedModel3DDesc,
   Light3DDesc,
   Material3DDesc,
-  Model3DDesc,
   ParticleEmitter3DDesc,
   Portal3DDesc
 } from '@galfus/transport-types';
+import type { Component } from '../ecs/component';
+import type { EntityId } from '../ecs/entity';
+import { mat4, quat, vec3, type Mat4, type Quat, type Vec3 } from '../math/index';
+import { SpatialDirtyFlags } from '../spatial/flags';
 
 const SCRATCH_P = vec3.create();
 const SCRATCH_S = vec3.create();

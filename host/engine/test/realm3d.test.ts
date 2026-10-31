@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'bun:test';
-import { Realm3D } from '../src/realm3d/index';
-import { createAnchor } from '../src/anchors/index';
 import type { GalfusEngine, Transform3D } from '@galfus/transport-types';
+import { describe, expect, it } from 'bun:test';
+import { createAnchor } from '../src/anchors/index';
+import { Realm3D } from '../src/realm3d/index';
 
 describe('@galfus/engine > Realm3D', () => {
   it('creates entities and synchronizes them to GalfusEngine with resolved anchors', () => {

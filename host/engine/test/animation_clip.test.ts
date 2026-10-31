@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'bun:test';
+import { blendPoses, createAnimationPose, evaluateClip } from '../src/animation/blending';
+import { sampleTrack } from '../src/animation/clip';
 import {
-  createAnimationPlayer3D,
   createAnimationPlaybackSystem,
+  createAnimationPlayer3D,
   type AnimationClip,
   type KeyframeTrack
 } from '../src/animation/index';
-import { blendPoses, createAnimationPose, evaluateClip } from '../src/animation/blending';
-import { sampleTrack } from '../src/animation/clip';
-import { createModel3D, type Model3DComponent } from '../src/realm3d/components';
+import type { SystemContext } from '../src/ecs/system';
 import { EcsWorld } from '../src/ecs/world';
 import { quat } from '../src/math/index';
-import type { SystemContext } from '../src/ecs/system';
+import { createModel3D, type Model3DComponent } from '../src/realm3d/components';
 
 describe('@galfus/engine > Animation Clips, Sampling & Blending', () => {
   it('samples keyframe tracks with step, linear, and cubic spline interpolation', () => {

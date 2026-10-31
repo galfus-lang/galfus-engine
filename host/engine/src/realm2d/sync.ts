@@ -132,13 +132,17 @@ export class Realm2DSyncSystem {
       if (!light) continue;
       currentLights.add(light.lightId);
 
+      const model = world.getComponent<Model2DComponent>(id, 'Model2D');
+      const isSpatialDirty = model ? (model.flags & SpatialDirtyFlags.WorldDirty) !== 0 : false;
       const tf = this.getResolvedTransform(world, id);
       if (!this._syncedLights.has(light.lightId) || light.isDirty) {
         engine.realm2dCreateLight(this.realmId, light.lightId, light.desc, tf);
         this._syncedLights.add(light.lightId);
         light.isDirty = false;
-      } else {
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      } else if (isSpatialDirty) {
         engine.realm2dSetLightTransform(this.realmId, light.lightId, tf);
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
       }
     }
     for (const lightId of this._syncedLights) {
@@ -150,17 +154,29 @@ export class Realm2DSyncSystem {
 
     // 4. Sync Cameras
     const cameraEntities = world.query('Camera2D');
+    const currentCameras = new Set<number>();
     for (const id of cameraEntities) {
       const camera = world.getComponent<Camera2DComponent>(id, 'Camera2D');
       if (!camera) continue;
+      currentCameras.add(camera.cameraId);
 
+      const model = world.getComponent<Model2DComponent>(id, 'Model2D');
+      const isSpatialDirty = model ? (model.flags & SpatialDirtyFlags.WorldDirty) !== 0 : false;
       const tf = this.getResolvedTransform(world, id);
       if (!this._syncedCameras.has(camera.cameraId) || camera.isDirty) {
         engine.realm2dCreateCamera(this.realmId, camera.cameraId, camera.desc, tf);
         this._syncedCameras.add(camera.cameraId);
         camera.isDirty = false;
-      } else {
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      } else if (isSpatialDirty) {
         engine.realm2dSetCameraTransform(this.realmId, camera.cameraId, tf);
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      }
+    }
+    for (const camId of this._syncedCameras) {
+      if (!currentCameras.has(camId)) {
+        engine.realm2dDestroyCamera(this.realmId, camId);
+        this._syncedCameras.delete(camId);
       }
     }
 
@@ -202,19 +218,31 @@ export class Realm2DSyncSystem {
       if (!emitter) continue;
       currentEmitters.add(emitter.emitterId);
 
+      const model = world.getComponent<Model2DComponent>(id, 'Model2D');
+      const isSpatialDirty = model ? (model.flags & SpatialDirtyFlags.WorldDirty) !== 0 : false;
       const tf = this.getResolvedTransform(world, id);
       if (!this._syncedEmitters.has(emitter.emitterId) || emitter.isDirty) {
         engine.realm2dCreateParticleEmitter(this.realmId, emitter.emitterId, emitter.desc, tf);
         this._syncedEmitters.add(emitter.emitterId);
         emitter.isDirty = false;
-      } else {
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      } else if (isSpatialDirty) {
         engine.realm2dSetParticleEmitterTransform(this.realmId, emitter.emitterId, tf);
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
       }
     }
     for (const emitterId of this._syncedEmitters) {
       if (!currentEmitters.has(emitterId)) {
         engine.realm2dDestroyParticleEmitter(this.realmId, emitterId);
         this._syncedEmitters.delete(emitterId);
+      }
+    }
+
+    // 7. Clear remaining WorldDirty on pure spatial Model2D entities
+    for (const id of world.query('Model2D')) {
+      const model = world.getComponent<Model2DComponent>(id, 'Model2D');
+      if (model) {
+        model.flags &= ~SpatialDirtyFlags.WorldDirty;
       }
     }
   }

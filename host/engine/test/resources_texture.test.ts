@@ -1,7 +1,7 @@
+import type { GalfusEngine, GpuTextureDesc, TextureUpdateDesc } from '@galfus/transport-types';
 import { describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import { ResourceManager } from '../src/resources/index';
-import type { GalfusEngine, GpuTextureDesc, TextureUpdateDesc } from '@galfus/transport-types';
 
 describe('@galfus/engine > ResourceManager & Texture Auto-loading', () => {
   const alphaPngBytes = fs.readFileSync('.old/assets/alpha_test_texture.png');

@@ -1,7 +1,7 @@
 /**
  * 2D vector operations.
  */
-import { EPSILON, equalsApprox, type IndexedCollection } from './common';
+import { EPSILON, equalsApprox } from './common';
 import type { ReadonlyMat2d } from './mat2d';
 
 export type Vec2 = Float32Array & {

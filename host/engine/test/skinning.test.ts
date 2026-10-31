@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'bun:test';
 import type { GalfusEngine } from '@galfus/transport-types';
+import { describe, expect, it } from 'bun:test';
 import type { SystemContext } from '../src/ecs/system';
 import { mat4, type Mat4, vec3 } from '../src/math/index';
 import { Realm3D } from '../src/realm3d/realm';

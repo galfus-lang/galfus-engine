@@ -1,13 +1,5 @@
+import { isJson, isJsonArray, isNativeStruct } from '../spec.ts';
 import type { CodegenContext, CodegenStrategy } from './strategy.ts';
-import {
-  type DataType,
-  type DescSpec,
-  type FieldType,
-  isJson,
-  isJsonArray,
-  isNativeStruct,
-  type ParamSpec
-} from '../spec.ts';
 
 import {
   escapeIdent,

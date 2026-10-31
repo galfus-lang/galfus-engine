@@ -1,4 +1,5 @@
 import {
+  DEFAULT_TARGET_FPS,
   GalfusLoopError,
   GalfusTransportError,
   calculateFrameTiming,
@@ -6,8 +7,7 @@ import {
   type GalfusEngine,
   type GalfusTransport,
   type LoopOptions,
-  type TransportInitOptions,
-  DEFAULT_TARGET_FPS
+  type TransportInitOptions
 } from '@galfus/transport-types';
 import { GalfusNode } from './sdk/galfus';
 

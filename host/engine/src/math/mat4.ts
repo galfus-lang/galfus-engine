@@ -3,7 +3,7 @@
  * Stored as a 16-element Float32Array in column-major order.
  */
 import { EPSILON, equalsApprox } from './common';
-import type { ReadonlyQuat, Quat } from './quat';
+import type { Quat, ReadonlyQuat } from './quat';
 import type { ReadonlyVec3, Vec3 } from './vec3';
 
 export type Mat4Index = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;

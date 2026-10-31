@@ -1,8 +1,8 @@
 /**
  * Realm 3D math and spatial utilities.
  */
-import type { Vec3 } from '../../math/vec3';
 import { vec3 } from '../../math/index';
+import type { Vec3 } from '../../math/vec3';
 
 export interface BoundingSphere3D {
   center: [number, number, number];

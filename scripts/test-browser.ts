@@ -1,8 +1,8 @@
+import { chromium } from '@playwright/test';
 import { existsSync } from 'fs';
 import { mkdir, rm } from 'fs/promises';
 import { homedir } from 'os';
 import { resolve } from 'path';
-import { chromium } from '@playwright/test';
 
 const rootDir = resolve(import.meta.dir, '..');
 const testDir = resolve(rootDir, '.tmp/browser-sdk-test');

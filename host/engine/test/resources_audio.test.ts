@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'bun:test';
 import type { GalfusEngine } from '@galfus/transport-types';
-import { ResourceManager } from '../src/resources/manager';
+import { describe, expect, it } from 'bun:test';
 import { AudioManager } from '../src/audio/manager';
+import { ResourceManager } from '../src/resources/manager';
 
 describe('@galfus/engine > ResourceManager & AudioManager', () => {
   it('manages GPU texture creation, updates, and disposal with typed TextureId tracking', () => {

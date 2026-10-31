@@ -1,5 +1,5 @@
-import { GalfusBun, ViewportRect } from '../sdk/bun/galfus.ts';
 import { resolve } from 'path';
+import { GalfusBun, ViewportRect } from '../sdk/bun/galfus.ts';
 
 const libPath = resolve(import.meta.dir, '../build/cargo-target/debug/libgalfus_native.so');
 

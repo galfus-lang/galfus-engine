@@ -1,5 +1,5 @@
-import type { CodegenContext } from './strategy.ts';
 import { type DataType, isBuffer, isJson, isJsonArray, isNativeStruct } from '../spec.ts';
+import type { CodegenContext } from './strategy.ts';
 
 export function mapParamTsType(type: DataType): string {
   if (isNativeStruct(type)) {

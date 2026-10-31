@@ -2,7 +2,6 @@
  * Multi-track Animation Player component and ECS evaluation system.
  */
 import type { Component } from '../ecs/component';
-import type { EntityId } from '../ecs/entity';
 import type { System } from '../ecs/system';
 import type { EcsWorld } from '../ecs/world';
 import { common } from '../math/index';
@@ -13,8 +12,7 @@ import {
   clearAnimationPose,
   copyAnimationPose,
   createAnimationPose,
-  evaluateClip,
-  type AnimationPose
+  evaluateClip
 } from './blending';
 import type { AnimationClip } from './clip';
 

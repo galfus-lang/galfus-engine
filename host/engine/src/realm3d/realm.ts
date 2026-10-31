@@ -17,12 +17,12 @@ import type {
   TransitionConfig
 } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
-import type { AnimationCoordinator } from '../animation/coordinator';
 import type { Transform3DProps } from '../anchors/component';
-import { AnchorSolveSystem } from '../anchors/solver';
 import { HierarchyCoordinator } from '../anchors/hierarchy';
+import { AnchorSolveSystem } from '../anchors/solver';
+import type { AnimationCoordinator } from '../animation/coordinator';
 import type { EntityId } from '../ecs/entity';
-import type { SystemContext } from '../ecs/system';
+import { RESERVED_PRIORITY_INTERNAL_RESOLVERS, type SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
 import type { RealmConnector, RealmId, RealmKind } from '../multiverse/realm';
 import type { TransitionId } from '../types';
@@ -42,14 +42,13 @@ import {
   type Mesh3DDesc,
   type Model3DComponent,
   type ParticleEmitter3DComponent,
-  type Primitive3DKind,
-  type Skin3DComponent
+  type Primitive3DKind
 } from './components';
 import {
-  type GeometryData,
-  type MorphTargetData,
   packGeometryData,
-  packMorphTargets
+  packMorphTargets,
+  type GeometryData,
+  type MorphTargetData
 } from './geometry';
 import { SkinningSolveSystem } from './skinning';
 import { Realm3DSyncSystem, type Realm3DResourceProvider } from './sync';
@@ -76,11 +75,15 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     this.skinningSystem = new SkinningSolveSystem(this.realmId, this.solver.cache);
     this.syncSystem = new Realm3DSyncSystem(this.realmId, this.solver.cache);
 
-    // Register anchor solver and skinning solver in preRender
-    this.world.addSystem('preRender', this.solver.createSystem());
+    // Register anchor solver and skinning solver in preRender with reserved internal priorities
+    this.world.addSystem('preRender', this.solver.createSystem(), { kind: 'anchor' });
     this.world.addSystem(
       'preRender',
-      this.skinningSystem.createSystem(() => this._engine)
+      this.skinningSystem.createSystem(() => this._engine),
+      {
+        kind: 'sync',
+        priority: RESERVED_PRIORITY_INTERNAL_RESOLVERS
+      }
     );
   }
 

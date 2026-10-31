@@ -25,6 +25,17 @@ export const SYSTEM_STEPS: readonly SystemStep[] = [
 export type SystemKind = 'ordinary' | 'anchor' | 'sync' | 'cleanup' | 'custom';
 
 /**
+ * Reserved internal system execution priorities.
+ * User-registered ordinary systems are clamped to [MIN_USER_PRIORITY, MAX_USER_PRIORITY]
+ * to ensure that internal stages (anchor solving, skinning, realm sync) execute in strict order.
+ */
+export const RESERVED_PRIORITY_ANCHOR_RESOLVE = -1_000_000;
+export const RESERVED_PRIORITY_INTERNAL_RESOLVERS = -2_000_000;
+export const RESERVED_PRIORITY_REALM_SYNC = -3_000_000;
+export const MIN_USER_PRIORITY = -999_999;
+export const MAX_USER_PRIORITY = 999_999;
+
+/**
  * Execution context passed to every system during frame execution.
  */
 export interface SystemContext {
@@ -102,19 +113,33 @@ export class SystemPipeline<TWorld = unknown> {
       desc = {
         step: stepOrDesc,
         fn: systemFn,
-        priority: options?.priority ?? 0,
+        priority: options?.priority,
         kind: options?.kind ?? 'ordinary'
       };
     } else {
       desc = stepOrDesc;
     }
 
+    const kind = desc.kind ?? 'ordinary';
+    let priority: number;
+    if (kind === 'ordinary' || kind === 'custom') {
+      priority = Math.max(MIN_USER_PRIORITY, Math.min(MAX_USER_PRIORITY, desc.priority ?? 0));
+    } else if (desc.priority !== undefined) {
+      priority = desc.priority;
+    } else if (kind === 'anchor') {
+      priority = RESERVED_PRIORITY_ANCHOR_RESOLVE;
+    } else if (kind === 'sync') {
+      priority = RESERVED_PRIORITY_REALM_SYNC;
+    } else {
+      priority = RESERVED_PRIORITY_INTERNAL_RESOLVERS;
+    }
+
     const entry: RegisteredSystem<TWorld> = {
       step: desc.step,
       fn: desc.fn,
-      priority: desc.priority ?? 0,
+      priority,
       insertionOrder: ++this._insertionCounter,
-      kind: desc.kind ?? 'ordinary'
+      kind
     };
 
     const list = this._systems[desc.step];

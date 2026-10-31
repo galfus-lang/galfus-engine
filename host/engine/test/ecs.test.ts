@@ -1,14 +1,13 @@
+import { CORE_RESERVED_RANGE_START, GalfusPolicyError } from '@galfus/transport-types';
 import { describe, expect, it } from 'bun:test';
 import {
   ComponentStore,
   EcsWorld,
   EntityManager,
   IntentStore,
-  SystemPipeline,
   type Component,
   type SystemContext
 } from '../src/ecs/index';
-import { CORE_RESERVED_RANGE_START, GalfusPolicyError } from '@galfus/transport-types';
 
 interface PositionComponent extends Component {
   type: 'Position';

@@ -260,17 +260,29 @@ export class Realm3DSyncSystem {
 
     // 4. Sync Cameras
     const cameraEntities = world.query('Camera3D');
+    const currentCameras = new Set<number>();
     for (const id of cameraEntities) {
       const camera = world.getComponent<Camera3DComponent>(id, 'Camera3D');
       if (!camera) continue;
+      currentCameras.add(camera.cameraId);
 
+      const model = world.getComponent<Model3DComponent>(id, 'Model3D');
+      const isSpatialDirty = model ? (model.flags & SpatialDirtyFlags.WorldDirty) !== 0 : false;
       const tf = this.getResolvedTransform(world, id);
       if (!this._syncedCameras.has(camera.cameraId) || camera.isDirty) {
         engine.realm3dCreateCamera(this.realmId, camera.cameraId, camera.desc, tf);
         this._syncedCameras.add(camera.cameraId);
         camera.isDirty = false;
-      } else {
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      } else if (isSpatialDirty) {
         engine.realm3dSetCameraTransform(this.realmId, camera.cameraId, tf);
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      }
+    }
+    for (const camId of this._syncedCameras) {
+      if (!currentCameras.has(camId)) {
+        engine.realm3dDestroyCamera(this.realmId, camId);
+        this._syncedCameras.delete(camId);
       }
     }
 
@@ -282,13 +294,17 @@ export class Realm3DSyncSystem {
       if (!light) continue;
       currentLights.add(light.lightId);
 
+      const model = world.getComponent<Model3DComponent>(id, 'Model3D');
+      const isSpatialDirty = model ? (model.flags & SpatialDirtyFlags.WorldDirty) !== 0 : false;
       const tf = this.getResolvedTransform(world, id);
       if (!this._syncedLights.has(light.lightId) || light.isDirty) {
         engine.realm3dCreateLight(this.realmId, light.lightId, light.desc, tf);
         this._syncedLights.add(light.lightId);
         light.isDirty = false;
-      } else {
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      } else if (isSpatialDirty) {
         engine.realm3dSetLightTransform(this.realmId, light.lightId, tf);
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
       }
     }
     for (const lightId of this._syncedLights) {
@@ -306,13 +322,17 @@ export class Realm3DSyncSystem {
       if (!emitter) continue;
       currentEmitters.add(emitter.emitterId);
 
+      const model = world.getComponent<Model3DComponent>(id, 'Model3D');
+      const isSpatialDirty = model ? (model.flags & SpatialDirtyFlags.WorldDirty) !== 0 : false;
       const tf = this.getResolvedTransform(world, id);
       if (!this._syncedEmitters.has(emitter.emitterId) || emitter.isDirty) {
         engine.realm3dCreateParticleEmitter(this.realmId, emitter.emitterId, emitter.desc, tf);
         this._syncedEmitters.add(emitter.emitterId);
         emitter.isDirty = false;
-      } else {
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      } else if (isSpatialDirty) {
         engine.realm3dSetParticleEmitterTransform(this.realmId, emitter.emitterId, tf);
+        if (model) model.flags &= ~SpatialDirtyFlags.WorldDirty;
       }
     }
     for (const emitterId of this._syncedEmitters) {

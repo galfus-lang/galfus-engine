@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'bun:test';
 import type { GalfusEngine, GalfusTransport } from '@galfus/transport-types';
+import { describe, expect, it } from 'bun:test';
 import { MultiverseRuntime } from '../src/runtime';
 
 describe('@galfus/engine > PlatformCoordinator & WindowManager', () => {

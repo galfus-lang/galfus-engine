@@ -2,9 +2,6 @@
  * Realm 2D component declarations.
  * Incorporates spatial Model2D with contiguous local/world matrices and SpatialDirtyFlags.
  */
-import type { Component } from '../ecs/component';
-import { mat2d, vec2, type Mat2d, type Vec2 } from '../math/index';
-import { SpatialDirtyFlags } from '../spatial/flags';
 import type {
   Camera2DDesc,
   Light2DDesc,
@@ -13,6 +10,9 @@ import type {
   Sprite2DDesc,
   Svg2DDesc
 } from '@galfus/transport-types';
+import type { Component } from '../ecs/component';
+import { mat2d, vec2, type Mat2d, type Vec2 } from '../math/index';
+import { SpatialDirtyFlags } from '../spatial/flags';
 
 const SCRATCH_P2D = vec2.create();
 const SCRATCH_S2D = vec2.create();

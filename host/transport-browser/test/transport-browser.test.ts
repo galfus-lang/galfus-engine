@@ -1,7 +1,7 @@
+import { chromium } from '@playwright/test';
 import { describe, expect, it } from 'bun:test';
 import { copyFile, mkdir, rm, writeFile } from 'fs/promises';
 import { resolve } from 'path';
-import { chromium } from '@playwright/test';
 
 describe('@galfus/transport-browser', () => {
   it('should initialize, create window on canvas, and drive rAF frame loop via Playwright', async () => {

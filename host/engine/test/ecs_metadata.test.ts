@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
 import { EcsWorld } from '../src/ecs/world';
-import { createMetadata, createName } from '../src/ecs/metadata';
 import { Realm3D } from '../src/realm3d/realm';
 
 describe('@galfus/engine > ECS Name & Metadata', () => {

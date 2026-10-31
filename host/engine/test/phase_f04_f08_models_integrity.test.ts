@@ -5,15 +5,14 @@
  * - F07 & F08: Spatial Model2D with contiguous dual affine matrices, visual attachment requirements, and 2D/3D parity.
  */
 import { describe, expect, it } from 'bun:test';
-import { EcsWorld } from '../src/ecs/world';
-import { IdAllocator } from '../src/types';
 import { IntentStore } from '../src/ecs/intent';
-import { SpatialDirtyFlags } from '../src/spatial/flags';
-import { Realm3D } from '../src/realm3d/realm';
-import { createModel3D, createMesh3D, Model3DComponent } from '../src/realm3d/components';
-import { Realm2D } from '../src/realm2d/realm';
+import { EcsWorld } from '../src/ecs/world';
 import { createModel2D, createSprite2D, Model2DComponent } from '../src/realm2d/components';
-import { createAnchor } from '../src/anchors/component';
+import { Realm2D } from '../src/realm2d/realm';
+import { createMesh3D, createModel3D, Model3DComponent } from '../src/realm3d/components';
+import { Realm3D } from '../src/realm3d/realm';
+import { SpatialDirtyFlags } from '../src/spatial/flags';
+import { IdAllocator } from '../src/types';
 
 describe('Phase F04 to F08 — Compact Spatial Models & ECS Integrity', () => {
   describe('F04: IdAllocator & Logical ID Boundary Enforcement', () => {
