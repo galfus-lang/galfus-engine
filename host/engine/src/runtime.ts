@@ -91,6 +91,13 @@ export class MultiverseRuntime {
   }
 
   /**
+   * Whether the runtime has been terminated and disposed.
+   */
+  get isDisposed(): boolean {
+    return this._state === 'disposed';
+  }
+
+  /**
    * Initializes the transport backend (if not ready) and binds engine to all subsystems.
    * Calling init repeatedly is an idempotent no-op.
    */

@@ -172,11 +172,16 @@ export class SystemPipeline<TWorld = unknown> {
 
   /**
    * Runs all systems registered in a specific stage in sorted order.
+   * Safe against removal during iteration and isolates individual system exceptions.
    */
   runStep(step: SystemStep, world: TWorld, context: SystemContext): void {
-    const list = this._systems[step];
+    const list = [...this._systems[step]];
     for (const entry of list) {
-      entry.fn(world, context);
+      try {
+        entry.fn(world, context);
+      } catch (err) {
+        console.error(`[SystemPipeline] Error executing system in stage '${step}':`, err);
+      }
     }
   }
 

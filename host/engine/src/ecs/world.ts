@@ -279,10 +279,17 @@ export class EcsWorld implements IntentFlusher {
   /**
    * Resets the entire world, clearing entities, components, systems, and intents.
    */
-  clear(): void {
+  reset(): void {
     this.components.clear();
     this.entities.clear();
     this.intents.clear();
     this.systems.clear();
+  }
+
+  /**
+   * Alias for `reset()`.
+   */
+  clear(): void {
+    this.reset();
   }
 }

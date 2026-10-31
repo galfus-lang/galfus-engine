@@ -237,13 +237,15 @@ export class Realm2D implements RealmConnector {
     if (typeof svg === 'number') {
       return this.world.getComponent<Svg2DComponent>(svg as EntityId, 'Svg2D')?.svgId ?? svg;
     }
-    return (
+    const resolved =
       svg.svgId ??
       (svg.entityId
         ? this.world.getComponent<Svg2DComponent>(svg.entityId, 'Svg2D')?.svgId
-        : undefined) ??
-      1
-    );
+        : undefined);
+    if (resolved === undefined) {
+      throw new Error('Cannot resolve Svg2D ID: entity does not have a Svg2DComponent.');
+    }
+    return resolved;
   }
 
   setSvgSource(svg: number | { svgId?: number; entityId?: EntityId }, source: string): void {
@@ -357,8 +359,12 @@ export class Realm2D implements RealmConnector {
                 emitter.entityId,
                 'ParticleEmitter2D'
               )?.emitterId
-            : undefined) ??
-          1);
+            : undefined));
+    if (emitterId === undefined) {
+      throw new Error(
+        'Cannot resolve ParticleEmitter2D ID: entity does not have a ParticleEmitter2DComponent.'
+      );
+    }
     if (this._engine) {
       if (!this.syncSystem.isEmitterSynced(emitterId)) {
         this.flush();

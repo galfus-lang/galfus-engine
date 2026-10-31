@@ -476,13 +476,15 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
         camera
       );
     }
-    return (
+    const resolved =
       camera.cameraId ??
       (camera.entityId
         ? this.world.getComponent<Camera3DComponent>(camera.entityId, 'Camera3D')?.cameraId
-        : undefined) ??
-      1
-    );
+        : undefined);
+    if (resolved === undefined) {
+      throw new Error('Cannot resolve Camera3D ID: entity does not have a Camera3DComponent.');
+    }
+    return resolved;
   }
 
   private _resolveEmitterId(emitter: number | { emitterId?: number; entityId?: EntityId }): number {
@@ -494,14 +496,18 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
         )?.emitterId ?? emitter
       );
     }
-    return (
+    const resolved =
       emitter.emitterId ??
       (emitter.entityId
         ? this.world.getComponent<ParticleEmitter3DComponent>(emitter.entityId, 'ParticleEmitter3D')
             ?.emitterId
-        : undefined) ??
-      1
-    );
+        : undefined);
+    if (resolved === undefined) {
+      throw new Error(
+        'Cannot resolve ParticleEmitter3D ID: entity does not have a ParticleEmitter3DComponent.'
+      );
+    }
+    return resolved;
   }
 
   createPortal(desc: Portal3DDesc): EntityId {
