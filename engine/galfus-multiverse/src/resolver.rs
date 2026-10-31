@@ -85,7 +85,12 @@ pub fn resolve_schedule(
             target_invs.sort_by_key(|(id, inv)| (inv.z_index, *id));
 
             for (inv_id, inv) in target_invs {
-                let resolved_viewport = inv.viewport.resolve(target_size);
+                let Some(resolved_viewport) = inv.viewport.resolve_clipped(target_size) else {
+                    continue;
+                };
+                if resolved_viewport.z == 0 || resolved_viewport.w == 0 {
+                    continue;
+                }
                 block_invocations.push(ResolvedInvocationStep {
                     invocation_id: inv_id,
                     realm_id: inv.realm_id,

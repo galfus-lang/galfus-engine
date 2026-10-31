@@ -19,13 +19,24 @@ import type { RealmConnector } from './realm';
 
 export { type InvocationId, type TargetId } from '../types';
 
+export interface InvocationUpdateProps {
+  viewport?: ViewportRect;
+  zIndex?: number;
+  cameraSlot?: number | null;
+  filters?: InvocationFilter[];
+  enabled?: boolean;
+  clearColor?: [number, number, number, number] | null;
+  antiAliasing?: AntiAliasingMode | null;
+}
+
 export class MultiverseCoordinator {
   private _engine: GalfusEngine | null = null;
   private readonly _targetIdAllocator = new IdAllocator<TargetId>(1);
   private readonly _invocationIdAllocator = new IdAllocator<InvocationId>(1);
   private readonly _realms = new Map<RealmId, RealmConnector>();
   private readonly _targets = new Map<TargetId, TargetDesc>();
-  private readonly _invocations = new Set<InvocationId>();
+  private readonly _invocations = new Map<InvocationId, InvocationDesc>();
+  private readonly _dirtyInvocations = new Map<InvocationId, InvocationUpdateProps>();
   private readonly _invocationRealms = new Map<InvocationId, RealmId>();
 
   get engine(): GalfusEngine | null {
@@ -169,12 +180,91 @@ export class MultiverseCoordinator {
       throw new Error(`Invocation ${invocationId} is already created.`);
     }
 
+    const storedDesc: InvocationDesc = {
+      ...desc,
+      viewport: desc.viewport ? { ...desc.viewport } : { width: { vw: 100 }, height: { vh: 100 } },
+      filters: desc.filters ? [...desc.filters] : []
+    };
+
     if (this._engine) {
-      this._engine.multiverseCreateInvocation(invocationId, desc);
+      this._engine.multiverseCreateInvocation(invocationId, storedDesc);
     }
-    this._invocations.add(invocationId);
+    this._invocations.set(invocationId, storedDesc);
     this._invocationRealms.set(invocationId, desc.realmId as RealmId);
     return invocationId;
+  }
+
+  /**
+   * Retrieves the current stored presentation descriptor of an invocation.
+   */
+  getInvocation(invocationId: InvocationId | number): InvocationDesc | undefined {
+    return this._invocations.get(invocationId as InvocationId);
+  }
+
+  /**
+   * Updates an invocation's presentation descriptor (viewport, filters, clearColor, etc.).
+   * Preserves realmId and targetId as strictly immutable.
+   * Multiple calls within the same frame are coalesced into a single ABI update before dispatch.
+   */
+  updateInvocation(
+    invocationId: InvocationId | number,
+    patch: Partial<InvocationUpdateProps>
+  ): void {
+    const id = invocationId as InvocationId;
+    const inv = this._invocations.get(id);
+    if (!inv) {
+      throw new Error(`Cannot update non-existent invocation ${id}.`);
+    }
+    if ('realmId' in patch || 'targetId' in patch) {
+      throw new Error('Cannot mutate realmId or targetId of an existing invocation.');
+    }
+
+    if (patch.viewport !== undefined) inv.viewport = { ...patch.viewport };
+    if (patch.zIndex !== undefined) inv.zIndex = patch.zIndex;
+    if (patch.cameraSlot !== undefined) inv.cameraSlot = patch.cameraSlot ?? undefined;
+    if (patch.filters !== undefined) inv.filters = [...patch.filters];
+    if (patch.enabled !== undefined) inv.enabled = patch.enabled;
+    if (patch.clearColor !== undefined) inv.clearColor = patch.clearColor ?? undefined;
+    if (patch.antiAliasing !== undefined) inv.antiAliasing = patch.antiAliasing ?? undefined;
+
+    const existing = this._dirtyInvocations.get(id) ?? {};
+    this._dirtyInvocations.set(id, { ...existing, ...patch });
+  }
+
+  /**
+   * Flushes all coalesced dirty invocation updates to the native engine driver.
+   */
+  flushUpdates(): void {
+    if (!this._engine || this._dirtyInvocations.size === 0) return;
+    for (const [id, patch] of this._dirtyInvocations) {
+      if (!this._invocations.has(id)) continue;
+      const inv = this._invocations.get(id)!;
+      if (
+        patch.viewport !== undefined &&
+        inv.viewport &&
+        this._engine.multiverseSetInvocationViewport
+      ) {
+        this._engine.multiverseSetInvocationViewport(id, inv.viewport);
+      }
+      if (patch.enabled !== undefined && this._engine.multiverseSetInvocationEnabled) {
+        this._engine.multiverseSetInvocationEnabled(id, inv.enabled ?? true);
+      }
+      if (patch.filters !== undefined && this._engine.multiverseSetInvocationFilters) {
+        this._engine.multiverseSetInvocationFilters(id, inv.filters ?? []);
+      }
+      if (patch.clearColor !== undefined && this._engine.multiverseSetInvocationClearColor) {
+        const [r, g, b, a] = inv.clearColor ?? [0, 0, 0, 0];
+        this._engine.multiverseSetInvocationClearColor(id, r, g, b, a, !!inv.clearColor);
+      }
+      if (patch.cameraSlot !== undefined && this._engine.multiverseSetInvocationCameraSlot) {
+        this._engine.multiverseSetInvocationCameraSlot(
+          id,
+          inv.cameraSlot ?? 0,
+          inv.cameraSlot !== undefined && inv.cameraSlot !== null
+        );
+      }
+    }
+    this._dirtyInvocations.clear();
   }
 
   /**
@@ -186,6 +276,7 @@ export class MultiverseCoordinator {
     if (this._engine) {
       this._engine.multiverseDestroyInvocation(id);
     }
+    this._dirtyInvocations.delete(id);
     this._invocations.delete(id);
     this._invocationRealms.delete(id);
   }
@@ -194,27 +285,21 @@ export class MultiverseCoordinator {
    * Enables or disables an invocation.
    */
   setInvocationEnabled(invocationId: InvocationId | number, enabled: boolean): void {
-    if (this._engine) {
-      this._engine.multiverseSetInvocationEnabled(invocationId as InvocationId, enabled);
-    }
+    this.updateInvocation(invocationId, { enabled });
   }
 
   /**
    * Updates the responsive viewport rectangle of an invocation.
    */
   setInvocationViewport(invocationId: InvocationId | number, viewport: ViewportRect): void {
-    if (this._engine) {
-      this._engine.multiverseSetInvocationViewport(invocationId as InvocationId, viewport);
-    }
+    this.updateInvocation(invocationId, { viewport });
   }
 
   /**
    * Updates the post-process filter chain for an invocation.
    */
   setInvocationFilters(invocationId: InvocationId | number, filters: InvocationFilter[]): void {
-    if (this._engine) {
-      this._engine.multiverseSetInvocationFilters(invocationId as InvocationId, filters);
-    }
+    this.updateInvocation(invocationId, { filters });
   }
 
   /**
@@ -228,16 +313,7 @@ export class MultiverseCoordinator {
     a: number,
     hasClear = true
   ): void {
-    if (this._engine) {
-      this._engine.multiverseSetInvocationClearColor(
-        invocationId as InvocationId,
-        r,
-        g,
-        b,
-        a,
-        hasClear
-      );
-    }
+    this.updateInvocation(invocationId, { clearColor: hasClear ? [r, g, b, a] : null });
   }
 
   /**
@@ -248,13 +324,7 @@ export class MultiverseCoordinator {
     cameraSlot: number,
     hasSlot = true
   ): void {
-    if (this._engine) {
-      this._engine.multiverseSetInvocationCameraSlot(
-        invocationId as InvocationId,
-        cameraSlot,
-        hasSlot
-      );
-    }
+    this.updateInvocation(invocationId, { cameraSlot: hasSlot ? cameraSlot : null });
   }
 
   /**
@@ -354,6 +424,7 @@ export class MultiverseCoordinator {
    * Resolves responsive multiverse viewports and scheduling before dispatch.
    */
   resolve(): any {
+    this.flushUpdates();
     if (this._engine && typeof (this._engine as any).multiverseResolve === 'function') {
       return (this._engine as any).multiverseResolve();
     }
@@ -364,6 +435,7 @@ export class MultiverseCoordinator {
    * Dispatches the native multiverse rendering pass for all active invocations.
    */
   dispatch(frameId?: number, dt?: number): void {
+    this.flushUpdates();
     if (this._engine) {
       (this._engine as any).multiverseDispatch(frameId, dt);
     }
@@ -380,7 +452,7 @@ export class MultiverseCoordinator {
    * Resets all invocations, targets, and realms.
    */
   reset(): void {
-    for (const invocationId of [...this._invocations]) {
+    for (const invocationId of [...this._invocations.keys()]) {
       this.destroyInvocation(invocationId);
     }
     for (const realm of [...this._realms.values()]) {
@@ -392,6 +464,7 @@ export class MultiverseCoordinator {
     this._realms.clear();
     this._targets.clear();
     this._invocations.clear();
+    this._dirtyInvocations.clear();
     this._invocationRealms.clear();
   }
 

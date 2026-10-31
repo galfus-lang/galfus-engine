@@ -137,11 +137,12 @@ impl Default for UnitValue {
 impl UnitValue {
     /// Resolves the unit value to physical pixels given target dimensions.
     pub fn resolve(&self, target_size: UVec2) -> f32 {
-        match *self {
+        let val = match *self {
             Self::Px(val) => val,
             Self::Vw(pct) => (pct / 100.0) * target_size.x as f32,
             Self::Vh(pct) => (pct / 100.0) * target_size.y as f32,
-        }
+        };
+        if val.is_finite() { val } else { 0.0 }
     }
 }
 
@@ -219,10 +220,12 @@ impl ViewportRect {
         }
     }
 
-    /// Resolves the viewport against target dimensions into physical pixels [x, y, width, height].
-    pub fn resolve(&self, target_size: UVec2) -> UVec4 {
-        let w = self.width.resolve(target_size).max(1.0).round() as u32;
-        let h = self.height.resolve(target_size).max(1.0).round() as u32;
+    /// Resolves the unclipped logical viewport [x, y, width, height] in target space.
+    /// Supports coordinates partially or fully outside the Target during slide transitions,
+    /// and does not clamp dimensions prematurely.
+    pub fn resolve_logical(&self, target_size: UVec2) -> glam::IVec4 {
+        let w = self.width.resolve(target_size).max(0.0).round() as i32;
+        let h = self.height.resolve(target_size).max(0.0).round() as i32;
 
         let base_x = match self.anchor_x {
             AnchorX::Left => 0.0,
@@ -246,14 +249,43 @@ impl ViewportRect {
             AnchorY::Bottom => 1.0,
         };
 
-        let raw_x = base_x - (pivot_x * w as f32) + self.offset_x.resolve(target_size);
-        let raw_y = base_y - (pivot_y * h as f32) + self.offset_y.resolve(target_size);
+        let raw_x =
+            (base_x - (pivot_x * w as f32) + self.offset_x.resolve(target_size)).round() as i32;
+        let raw_y =
+            (base_y - (pivot_y * h as f32) + self.offset_y.resolve(target_size)).round() as i32;
 
-        let px = (raw_x.round() as i64).clamp(0, target_size.x as i64) as u32;
-        let py = (raw_y.round() as i64).clamp(0, target_size.y as i64) as u32;
-        let pw = w.min(target_size.x.saturating_sub(px)).max(1);
-        let ph = h.min(target_size.y.saturating_sub(py)).max(1);
-        UVec4::new(px, py, pw, ph)
+        glam::IVec4::new(raw_x, raw_y, w, h)
+    }
+
+    /// Resolves the visible clipped viewport rectangle intersecting the Target surface.
+    /// Returns `None` if the logical viewport has zero size or is entirely off-screen.
+    pub fn resolve_clipped(&self, target_size: UVec2) -> Option<UVec4> {
+        let logical = self.resolve_logical(target_size);
+        if logical.z <= 0 || logical.w <= 0 || target_size.x == 0 || target_size.y == 0 {
+            return None;
+        }
+
+        let clip_left = logical.x.max(0);
+        let clip_top = logical.y.max(0);
+        let clip_right = (logical.x + logical.z).min(target_size.x as i32);
+        let clip_bottom = (logical.y + logical.w).min(target_size.y as i32);
+
+        if clip_right <= clip_left || clip_bottom <= clip_top {
+            return None;
+        }
+
+        Some(UVec4::new(
+            clip_left as u32,
+            clip_top as u32,
+            (clip_right - clip_left) as u32,
+            (clip_bottom - clip_top) as u32,
+        ))
+    }
+
+    /// Resolves the viewport against target dimensions into physical pixels [x, y, width, height].
+    /// Returns UVec4::ZERO if empty or entirely off-screen.
+    pub fn resolve(&self, target_size: UVec2) -> UVec4 {
+        self.resolve_clipped(target_size).unwrap_or(UVec4::ZERO)
     }
 }
 
@@ -473,5 +505,68 @@ mod tests {
         // x: 1920 - 302 - 24 = 1594
         assert_eq!(res.x, 1594);
         assert_eq!(res.y, 24);
+    }
+
+    #[test]
+    fn test_viewport_slide_clipping_and_zero_size() {
+        let target = UVec2::new(800, 600);
+
+        // 1. Partial slide-out to the left: 800x600 with offsetX = -300px
+        let sliding_left = ViewportRect::anchored(
+            AnchorX::Left,
+            AnchorY::Top,
+            UnitValue::Px(-300.0),
+            UnitValue::Px(0.0),
+            UnitValue::Px(800.0),
+            UnitValue::Px(600.0),
+        );
+        let logical = sliding_left.resolve_logical(target);
+        assert_eq!(logical, glam::IVec4::new(-300, 0, 800, 600));
+
+        let clipped = sliding_left.resolve_clipped(target).unwrap();
+        // Visible region on screen is from x=0 to x=500 (width = 500)
+        assert_eq!(clipped, UVec4::new(0, 0, 500, 600));
+
+        // 2. Completely off-screen to the left: offsetX = -900px
+        let fully_offscreen = ViewportRect::anchored(
+            AnchorX::Left,
+            AnchorY::Top,
+            UnitValue::Px(-900.0),
+            UnitValue::Px(0.0),
+            UnitValue::Px(800.0),
+            UnitValue::Px(600.0),
+        );
+        assert_eq!(fully_offscreen.resolve_clipped(target), None);
+        assert_eq!(fully_offscreen.resolve(target), UVec4::ZERO);
+
+        // 3. Completely off-screen to the right: offsetX = 850px
+        let fully_offscreen_right = ViewportRect::anchored(
+            AnchorX::Left,
+            AnchorY::Top,
+            UnitValue::Px(850.0),
+            UnitValue::Px(0.0),
+            UnitValue::Px(800.0),
+            UnitValue::Px(600.0),
+        );
+        assert_eq!(fully_offscreen_right.resolve_clipped(target), None);
+        assert_eq!(fully_offscreen_right.resolve(target), UVec4::ZERO);
+
+        // 4. Zero-size viewport: width = 0px
+        let zero_size = ViewportRect::anchored(
+            AnchorX::Left,
+            AnchorY::Top,
+            UnitValue::Px(0.0),
+            UnitValue::Px(0.0),
+            UnitValue::Px(0.0),
+            UnitValue::Px(600.0),
+        );
+        assert_eq!(zero_size.resolve_clipped(target), None);
+        assert_eq!(zero_size.resolve(target), UVec4::ZERO);
+
+        // 5. Non-finite input protection: NaN / Infinity falls back safely to 0
+        let nan_unit = UnitValue::Px(f32::NAN);
+        assert_eq!(nan_unit.resolve(target), 0.0);
+        let inf_unit = UnitValue::Vw(f32::INFINITY);
+        assert_eq!(inf_unit.resolve(target), 0.0);
     }
 }
