@@ -5,7 +5,14 @@ import { ComponentStore, type Component } from './component';
 import { EntityManager, type EntityId } from './entity';
 import { IntentStore, type IntentFlusher } from './intent';
 import { createMetadata, createName, type MetadataComponent, type NameComponent } from './metadata';
-import { SystemPipeline, type System, type SystemContext, type SystemStep } from './system';
+import {
+  SystemPipeline,
+  type System,
+  type SystemContext,
+  type SystemDescriptor,
+  type SystemKind,
+  type SystemStep
+} from './system';
 
 export class EcsWorld implements IntentFlusher {
   readonly entities = new EntityManager();
@@ -191,10 +198,14 @@ export class EcsWorld implements IntentFlusher {
   }
 
   /**
-   * Adds a system to a given execution stage.
+   * Adds a system to a given execution stage with optional priority and kind.
    */
-  addSystem(step: SystemStep, system: System<EcsWorld>): this {
-    this.systems.add(step, system);
+  addSystem(
+    stepOrDesc: SystemStep | SystemDescriptor<EcsWorld>,
+    system?: System<EcsWorld>,
+    options?: { priority?: number; kind?: SystemKind }
+  ): this {
+    this.systems.add(stepOrDesc, system, options);
     return this;
   }
 
@@ -206,17 +217,12 @@ export class EcsWorld implements IntentFlusher {
   }
 
   /**
-   * Executes a single frame cycle:
-   * 1. Runs `input` stage systems.
-   * 2. Flushes intents.
-   * 3. Runs `update` stage systems.
-   * 4. Flushes intents.
-   * 5. Runs `preRender` stage systems.
-   * 6. Flushes intents.
-   * 7. Runs `postRender` stage systems.
-   * 8. Final flush of any cleanup intents.
+   * Executes the pre-render phases:
+   * 1. Runs `input` stage systems & flushes intents.
+   * 2. Runs `update` stage systems & flushes intents.
+   * 3. Runs `preRender` stage systems & flushes intents.
    */
-  step(context: SystemContext): void {
+  stepPreRender(context: SystemContext): void {
     this.systems.runStep('input', this, context);
     this.flushIntents();
 
@@ -225,9 +231,23 @@ export class EcsWorld implements IntentFlusher {
 
     this.systems.runStep('preRender', this, context);
     this.flushIntents();
+  }
 
+  /**
+   * Executes the post-render phase (runs after GPU dispatch):
+   * 4. Runs `postRender` stage systems & final flush of intents.
+   */
+  stepPostRender(context: SystemContext): void {
     this.systems.runStep('postRender', this, context);
     this.flushIntents();
+  }
+
+  /**
+   * Executes a full frame cycle (used for standalone test stepping):
+   */
+  step(context: SystemContext): void {
+    this.stepPreRender(context);
+    this.stepPostRender(context);
   }
 
   /**

@@ -44,6 +44,7 @@ export class Realm2D implements RealmConnector {
 
   private _engine: GalfusEngine | null = null;
   private _nextResourceLogicalId = 1;
+  private _preRenderSteppedFrame = -1;
 
   constructor(realmId: RealmId | number) {
     this.realmId = realmId as RealmId;
@@ -66,14 +67,22 @@ export class Realm2D implements RealmConnector {
     engine.realm2dCreate(this.realmId);
   }
 
-  sync(context: SystemContext): void {
-    // 1. Advance ECS world simulation
-    this.world.step(context);
+  preRender(context: SystemContext): void {
+    this.world.stepPreRender(context);
+    this._preRenderSteppedFrame = context.frameId;
+  }
 
-    // 2. Synchronize state with native core
+  sync(context: SystemContext): void {
+    if (this._preRenderSteppedFrame !== context.frameId) {
+      this.preRender(context);
+    }
     if (this._engine) {
       this.syncSystem.sync(this.world, this._engine);
     }
+  }
+
+  postRender(context: SystemContext): void {
+    this.world.stepPostRender(context);
   }
 
   flush(): void {

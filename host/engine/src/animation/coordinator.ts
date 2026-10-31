@@ -219,7 +219,7 @@ export class AnimationCoordinator {
     if (dt !== undefined && this._engine.animationStep) {
       this._engine.animationStep(dt);
     }
-    const events = this._engine.animationPumpEvents();
+    const events = this._engine.animationPumpEvents ? this._engine.animationPumpEvents() : [];
     if (events && events.length > 0) {
       for (const event of events) {
         for (const listener of this._eventListeners) {

@@ -22,9 +22,19 @@ export interface RealmConnector {
   bindEngine(engine: GalfusEngine): void;
 
   /**
+   * Runs pre-render systems: input, update, preRender (anchors, hierarchies).
+   */
+  preRender?(context: SystemContext): void;
+
+  /**
    * Synchronizes ECS entity data (transforms, components, lights, cameras) to the core.
    */
   sync(context: SystemContext): void;
+
+  /**
+   * Runs post-render systems (metrics, cleanup after GPU dispatch).
+   */
+  postRender?(context: SystemContext): void;
 
   /**
    * Shuts down and cleans up native resources allocated for this realm in the core.

@@ -1,13 +1,15 @@
 /**
  * MultiverseRuntime orchestrates platform transports, frame loops, and multiverse realms.
  */
-import type {
-  FrameCallback,
-  FrameTiming,
-  GalfusEngine,
-  GalfusTransport,
-  LoopOptions,
-  TransportInitOptions
+import {
+  GalfusLoopError,
+  GalfusTransportError,
+  type FrameCallback,
+  type FrameTiming,
+  type GalfusEngine,
+  type GalfusTransport,
+  type LoopOptions,
+  type TransportInitOptions
 } from '@galfus/transport-types';
 import type { SystemContext } from './ecs/system';
 import { MultiverseCoordinator } from './multiverse/coordinator';
@@ -25,6 +27,11 @@ import {
   type RuntimeEventType
 } from './types';
 
+/**
+ * Lifecycle states of the MultiverseRuntime orchestrator.
+ */
+export type RuntimeState = 'ready' | 'running' | 'resetting' | 'disposing' | 'disposed' | 'failed';
+
 export class MultiverseRuntime {
   readonly platform = new PlatformCoordinator();
   readonly multiverse = new MultiverseCoordinator();
@@ -34,12 +41,30 @@ export class MultiverseRuntime {
   private readonly _realmIdAllocator = new IdAllocator<RealmId>(1);
   private readonly _eventListeners = new Map<RuntimeEventType, Set<(event: any) => void>>();
   private _animationUnsubscribe: (() => void) | null = null;
+  private _isSubsystemsBound = false;
 
   private _frameId = 0;
   private _elapsedSeconds = 0;
   private _isRunning = false;
+  private _state: RuntimeState;
 
-  constructor(readonly transport: GalfusTransport) {}
+  constructor(readonly transport: GalfusTransport) {
+    if (transport.isDisposed) {
+      this._state = 'disposed';
+    } else {
+      this._state = 'ready';
+      if (transport.isInitialized) {
+        this.bindSubsystems();
+      }
+    }
+  }
+
+  /**
+   * Current lifecycle state of the runtime.
+   */
+  get state(): RuntimeState {
+    return this._state;
+  }
 
   /**
    * Underlying native or WASM GalfusEngine driver.
@@ -70,25 +95,40 @@ export class MultiverseRuntime {
   }
 
   /**
-   * Initializes the transport backend and binds the engine to all subsystem coordinators.
+   * Initializes the transport backend (if not ready) and binds engine to all subsystems.
+   * Calling init repeatedly is an idempotent no-op.
    */
   async init(options?: TransportInitOptions): Promise<void> {
-    await this.transport.init(options);
-    this.platform.bindEngine(this.transport.engine);
-    this.multiverse.bindEngine(this.transport.engine);
-    this.resources.bindEngine(this.transport.engine);
-    this.audio.bindEngine(this.transport.engine);
-    this.animation.bindEngine(this.transport.engine);
+    if (this._state === 'disposed' || this._state === 'failed') {
+      throw new GalfusTransportError(`Cannot initialize runtime in state '${this._state}'.`);
+    }
+    if (!this.transport.isInitialized) {
+      await this.transport.init(options);
+    }
+    this.bindSubsystems();
+    this._state = 'ready';
+  }
 
-    // Forward animation events from coordinator to runtime listeners
-    this._animationUnsubscribe = this.animation.on('animation', (event) => {
-      const animListeners = this._eventListeners.get('animation');
-      if (animListeners && animListeners.size > 0) {
-        for (const listener of animListeners) {
-          listener(event);
+  private bindSubsystems(): void {
+    if (this._isSubsystemsBound) return;
+    const engine = this.transport.engine;
+    this.platform.bindEngine(engine);
+    this.multiverse.bindEngine(engine);
+    this.resources.bindEngine(engine);
+    this.audio.bindEngine(engine);
+    this.animation.bindEngine(engine);
+
+    if (!this._animationUnsubscribe) {
+      this._animationUnsubscribe = this.animation.on('animation', (event) => {
+        const animListeners = this._eventListeners.get('animation');
+        if (animListeners && animListeners.size > 0) {
+          for (const listener of animListeners) {
+            listener(event);
+          }
         }
-      }
-    });
+      });
+    }
+    this._isSubsystemsBound = true;
   }
 
   /**
@@ -148,12 +188,21 @@ export class MultiverseRuntime {
    * Starts the transport frame loop.
    */
   start(options?: LoopOptions): void {
-    if (this._isRunning) return;
+    if (this._state === 'disposed' || this._state === 'failed' || this._state === 'disposing') {
+      throw new GalfusLoopError(`Cannot start runtime in state '${this._state}'.`);
+    }
+    if (this._state === 'running') return;
+    if (this._state !== 'ready') {
+      throw new GalfusLoopError(
+        `Cannot start runtime before ready (current state: '${this._state}').`
+      );
+    }
 
     this.transport.startLoop((timing) => {
       this.tickFrame(timing);
     }, options);
 
+    this._state = 'running';
     this._isRunning = true;
   }
 
@@ -161,23 +210,28 @@ export class MultiverseRuntime {
    * Halts the active frame loop.
    */
   stop(): void {
-    if (!this._isRunning) return;
+    if (this._state !== 'running') return;
     this.transport.stopLoop();
     this._isRunning = false;
+    this._state = 'ready';
   }
 
   /**
    * Manually steps a single frame (useful for deterministic simulations, testing, or headless runs).
    */
   tick(dt: number = 0.016): void {
-    this._frameId++;
-    this._elapsedSeconds += dt;
+    if (this._state === 'disposed' || this._state === 'failed' || this._state === 'disposing') {
+      throw new GalfusLoopError(`Cannot tick runtime in state '${this._state}'.`);
+    }
+
+    const nextFrameId = this._frameId + 1;
+    const nextElapsed = this._elapsedSeconds + dt;
 
     const timing: FrameTiming = {
-      timeMs: this._elapsedSeconds * 1000,
+      timeMs: nextElapsed * 1000,
       deltaMs: dt * 1000,
       dt,
-      frameId: this._frameId,
+      frameId: nextFrameId,
       fps: dt > 0 ? 1 / dt : 0
     };
 
@@ -198,25 +252,37 @@ export class MultiverseRuntime {
    * Disposes the runtime, multiverse coordinator, all realms, and the transport.
    */
   dispose(): void {
-    this.stop();
-    this.clearListeners();
-    if (this._animationUnsubscribe) {
-      this._animationUnsubscribe();
-      this._animationUnsubscribe = null;
+    if (this._state === 'disposed') return;
+    this._state = 'disposing';
+    try {
+      this.stop();
+      this.clearListeners();
+      if (this._animationUnsubscribe) {
+        this._animationUnsubscribe();
+        this._animationUnsubscribe = null;
+      }
+      this.animation.dispose();
+      this.audio.dispose();
+      this.resources.dispose();
+      this.multiverse.dispose();
+      this.platform.dispose();
+      this.transport.dispose();
+      this._state = 'disposed';
+    } catch (err) {
+      this._state = 'failed';
+      throw err;
     }
-    this.animation.dispose();
-    this.audio.dispose();
-    this.resources.dispose();
-    this.multiverse.dispose();
-    this.platform.dispose();
-    this.transport.dispose();
   }
 
   // ---------------------------------------------------------------------------
   // Internal Frame Tick Pipeline
   // ---------------------------------------------------------------------------
   private tickFrame(timing: FrameTiming): void {
-    // 1. Pump platform events internally
+    // 1. Advance frameId and elapsed simulation time exactly once
+    this._frameId = timing.frameId;
+    this._elapsedSeconds += timing.dt;
+
+    // 2. Pump platform events internally
     const platformEvents = this.platform.pumpEvents();
     if (platformEvents.length > 0) {
       const platformListeners = this._eventListeners.get('platform');
@@ -246,7 +312,7 @@ export class MultiverseRuntime {
       }
     }
 
-    // 2. Dispatch frame tick listeners ('tick')
+    // 3. Dispatch frame tick listeners ('tick')
     const tickListeners = this._eventListeners.get('tick');
     if (tickListeners && tickListeners.size > 0) {
       for (const listener of tickListeners) {
@@ -254,10 +320,10 @@ export class MultiverseRuntime {
       }
     }
 
-    // 3. Step animations (this also pumps animation events and triggers registered listeners)
+    // 4. Step animations (this also pumps animation events and triggers registered listeners)
     this.animation.step(timing.dt);
 
-    // 4. Prepare ECS context
+    // 5. Prepare ECS context
     const context: SystemContext = {
       time: this._elapsedSeconds,
       dt: timing.dt,
@@ -265,12 +331,18 @@ export class MultiverseRuntime {
       engine: this.transport.engine
     };
 
-    // 5. Step all ECS worlds and sync with core
-    this.multiverse.syncAllRealms(context);
+    // 6. Step pre-render stages: input -> update -> preRender (anchors, hierarchies)
+    this.multiverse.stepRealmsPreRender(context);
 
-    // 6. Resolve multiverse schedule and dispatch to GPU
+    // 7. Synchronize dirty entity state to native core
+    this.multiverse.syncRealms(context);
+
+    // 8. Resolve multiverse schedule and dispatch to GPU
     this.multiverse.resolve();
     this.multiverse.dispatch(timing.frameId, timing.dt);
+
+    // 9. Step post-render stage: postRender (metrics, cleanups) AFTER dispatch
+    this.multiverse.stepRealmsPostRender(context);
   }
 }
 

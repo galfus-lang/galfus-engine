@@ -277,6 +277,30 @@ export class MultiverseCoordinator {
   }
 
   /**
+   * Steps all registered realms through pre-render stages (input, update, preRender).
+   */
+  stepRealmsPreRender(context: SystemContext): void {
+    for (const realm of this._realms.values()) {
+      if (typeof realm.preRender === 'function') {
+        realm.preRender(context);
+      } else if ('step' in realm && typeof (realm as any).step === 'function') {
+        (realm as any).step(context);
+      }
+    }
+  }
+
+  /**
+   * Steps all registered realms through post-render stage (postRender) after dispatch.
+   */
+  stepRealmsPostRender(context: SystemContext): void {
+    for (const realm of this._realms.values()) {
+      if (typeof realm.postRender === 'function') {
+        realm.postRender(context);
+      }
+    }
+  }
+
+  /**
    * Steps all registered realms with the system context.
    */
   stepRealms(context: SystemContext): void {
