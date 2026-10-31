@@ -14,6 +14,7 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
     const mockTransport: GalfusTransport = {
       engine: {} as unknown as GalfusEngine,
       isInitialized: true,
+      isDisposed: false,
       isRunning: false,
       init: async () => {},
       startLoop: () => {},
@@ -72,6 +73,7 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
     const mockTransport: GalfusTransport = {
       engine: mockEngine,
       isInitialized: true,
+      isDisposed: false,
       isRunning: false,
       init: async () => {},
       startLoop: () => {},
@@ -132,6 +134,7 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
     const mockTransport: GalfusTransport = {
       engine: mockEngine,
       isInitialized: true,
+      isDisposed: false,
       isRunning: false,
       init: async () => {},
       startLoop: () => {},
@@ -158,6 +161,7 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
     const mockTransport: GalfusTransport = {
       engine: {} as unknown as GalfusEngine,
       isInitialized: true,
+      isDisposed: false,
       isRunning: false,
       init: async () => {},
       startLoop: () => {},

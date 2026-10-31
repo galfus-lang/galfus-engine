@@ -73,6 +73,9 @@ function createMockTransport() {
     get isInitialized() {
       return isInitialized;
     },
+    get isDisposed() {
+      return false;
+    },
     get isRunning() {
       return loopCallback !== null;
     },

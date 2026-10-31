@@ -82,6 +82,7 @@ describe('Phase F01 — Baseline, Contratos e Métricas ABI', () => {
     const mockTransport: GalfusTransport = {
       engine: mockEngine,
       isInitialized: true,
+      isDisposed: false,
       isRunning: false,
       init: async () => {},
       startLoop: () => {},

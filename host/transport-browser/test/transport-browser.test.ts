@@ -50,7 +50,7 @@ describe('@galfus/transport-browser', () => {
       import { createBrowserTransport } from './bundle.js';
 
       window.__RUN_TEST__ = async () => {
-        const transport = createBrowserTransport({ ...wasm, default: init });
+        const transport = await createBrowserTransport({ ...wasm, default: init });
         await transport.init();
 
         const caps = transport.engine.platformGetCapabilities();

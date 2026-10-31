@@ -5,19 +5,12 @@
 export const DEFAULT_TARGET_FPS = 120;
 
 /**
- * Default upper limit for single-frame delta in milliseconds.
- * Prevents simulation jumps (the "spiral of death") when the window is dragged,
- * paused by the debugger, or temporarily unfocused.
- */
-export const DEFAULT_MAX_DELTA_MS = 100;
-
-/**
  * Snapshot of frame timing passed to every frame update callback.
  */
 export interface FrameTiming {
   /** Monotonically increasing time timestamp in milliseconds (e.g. from `performance.now()`). */
   timeMs: number;
-  /** Elapsed time since the previous frame in milliseconds, capped by `maxDeltaMs`. */
+  /** Elapsed time since the previous frame in milliseconds, reflecting real measured duration. */
   deltaMs: number;
   /** Elapsed time in seconds (`deltaMs / 1000`), convenient for physics and game updates. */
   dt: number;
@@ -48,17 +41,9 @@ export type FrameCallback = (timing: FrameTiming) => void;
 export interface LoopOptions {
   /**
    * Target frames per second for native precision loops (Bun and Node-API).
-   * Defaults to {@link DEFAULT_TARGET_FPS} (120 FPS).
-   * Note: in browsers, this option is respected as a throttle if specified,
-   * but by default the browser aligns with `requestAnimationFrame`.
+   * Overrides the transport default if specified.
    */
   targetFps?: number;
-
-  /**
-   * Maximum allowed delta time per frame in milliseconds.
-   * Defaults to {@link DEFAULT_MAX_DELTA_MS} (100 ms).
-   */
-  maxDeltaMs?: number;
 }
 
 /**
@@ -70,17 +55,17 @@ export interface EngineLoopController {
    *
    * On browser transports, this binds to `window.requestAnimationFrame`.
    * On native desktop transports (Bun and Node-API), this runs a precision
-   * high-resolution loop targeting 120 FPS.
+   * high-resolution loop targeting configured targetFps (defaults to 120 FPS).
    *
    * @param callback The function called on every frame tick.
-   * @param options Optional loop configuration (target FPS, max delta).
-   * @throws {@link GalfusLoopError} if the loop is already running.
+   * @param options Optional loop configuration (target FPS).
+   * @throws {@link GalfusLoopError} if the loop is already running or transport disposed.
    *
    * @example
    * ```ts
    * transport.startLoop((timing) => {
    *   world.tick(timing.timeMs, timing.deltaMs);
-   * }, { targetFps: 120 });
+   * });
    * ```
    */
   startLoop(callback: FrameCallback, options?: LoopOptions): void;
@@ -106,14 +91,17 @@ export interface EngineLoopController {
    *
    * @param timeMs Optional explicit timestamp in milliseconds. Defaults to current performance time.
    * @param deltaMs Optional explicit delta in milliseconds. Defaults to time elapsed since last step.
+   * @param callback Optional one-off frame callback. Defaults to registered loop callback.
    *
    * @example
    * ```ts
    * // Fixed deterministic stepping in a unit test:
-   * transport.step(1000, 16.666);
+   * transport.step(1000, 16.666, (timing) => {
+   *   console.log(timing.dt);
+   * });
    * ```
    */
-  step(timeMs?: number, deltaMs?: number): void;
+  step(timeMs?: number, deltaMs?: number, callback?: FrameCallback): void;
 
   /** Alias for {@link startLoop}. */
   start?(callback: FrameCallback, options?: LoopOptions): void;
@@ -132,17 +120,21 @@ export interface EngineLoopController {
  * @param nowMs Current monotonic timestamp in milliseconds.
  * @param lastTimeMs Previous frame monotonic timestamp in milliseconds.
  * @param frameId Monotonically increasing frame index.
- * @param maxDeltaMs Maximum allowable delta in milliseconds.
+ * @param explicitDeltaMs Optional explicit delta in milliseconds (used for manual stepping).
  * @returns Fully populated {@link FrameTiming} structure.
  */
 export function calculateFrameTiming(
   nowMs: number,
   lastTimeMs: number,
   frameId: number,
-  maxDeltaMs: number = DEFAULT_MAX_DELTA_MS
+  explicitDeltaMs?: number
 ): FrameTiming {
-  const rawDelta = lastTimeMs > 0 ? Math.max(0, nowMs - lastTimeMs) : 0;
-  const deltaMs = Math.min(rawDelta, maxDeltaMs);
+  const deltaMs =
+    explicitDeltaMs !== undefined
+      ? Math.max(0, explicitDeltaMs)
+      : lastTimeMs > 0
+        ? Math.max(0, nowMs - lastTimeMs)
+        : 0;
   const dt = deltaMs / 1000;
   const fps = deltaMs > 0 ? 1000 / deltaMs : 0;
 

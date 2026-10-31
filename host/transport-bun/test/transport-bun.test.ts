@@ -3,11 +3,9 @@ import { createBunTransport } from '../src/index';
 
 describe('@galfus/transport-bun', () => {
   it('should initialize headless and retrieve capabilities using the local compiled binary', () => {
-    const transport = createBunTransport();
-    expect(transport.isInitialized).toBe(false);
-
-    transport.init({ headless: true });
+    const transport = createBunTransport({ headless: true });
     expect(transport.isInitialized).toBe(true);
+    expect(transport.isDisposed).toBe(false);
 
     const caps = transport.engine.platformGetCapabilities();
     expect(caps).toBeDefined();
@@ -15,11 +13,12 @@ describe('@galfus/transport-bun', () => {
 
     transport.dispose();
     expect(transport.isInitialized).toBe(false);
+    expect(transport.isDisposed).toBe(true);
+    expect(() => transport.engine).toThrow();
   });
 
   it('should execute Multiverse and Realm commands via native FFI', () => {
-    const transport = createBunTransport();
-    transport.init({ headless: true });
+    const transport = createBunTransport({ headless: true });
 
     const engine = transport.engine;
 
@@ -66,8 +65,7 @@ describe('@galfus/transport-bun', () => {
   });
 
   it('should execute 2D and 3D Realm bindings via native FFI', () => {
-    const transport = createBunTransport();
-    transport.init({ headless: true });
+    const transport = createBunTransport({ headless: true });
     try {
       const engine = transport.engine;
 
@@ -109,18 +107,14 @@ describe('@galfus/transport-bun', () => {
   });
 
   it('should drive frames and manage 120 FPS loop lifecycle', async () => {
-    const transport = createBunTransport();
-    transport.init({ headless: true });
+    const transport = createBunTransport({ headless: true, targetFps: 120 });
 
     let framesReceived = 0;
-    transport.startLoop(
-      (timing) => {
-        framesReceived++;
-        expect(timing.frameId).toBeGreaterThan(0);
-        expect(timing.timeMs).toBeGreaterThan(0);
-      },
-      { targetFps: 120 }
-    );
+    transport.startLoop((timing) => {
+      framesReceived++;
+      expect(timing.frameId).toBeGreaterThan(0);
+      expect(timing.timeMs).toBeGreaterThan(0);
+    });
 
     expect(transport.isRunning).toBe(true);
 

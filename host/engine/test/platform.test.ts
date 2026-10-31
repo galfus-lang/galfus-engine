@@ -37,6 +37,7 @@ describe('@galfus/engine > PlatformCoordinator & WindowManager', () => {
     const mockTransport: GalfusTransport = {
       engine: mockEngine,
       isInitialized: true,
+      isDisposed: false,
       isRunning: false,
       init: async () => {},
       startLoop: () => {},

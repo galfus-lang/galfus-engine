@@ -3,7 +3,6 @@ import {
   CORE_RESERVED_IDS_COUNT,
   CORE_RESERVED_RANGE_END,
   CORE_RESERVED_RANGE_START,
-  DEFAULT_MAX_DELTA_MS,
   DEFAULT_TARGET_FPS,
   GalfusLoopError,
   GalfusPolicyError,
@@ -74,7 +73,6 @@ describe('@galfus/transport-types', () => {
   describe('Frame Timing & Loop Helpers', () => {
     it('should have standard default constants', () => {
       expect(DEFAULT_TARGET_FPS).toBe(120);
-      expect(DEFAULT_MAX_DELTA_MS).toBe(100);
     });
 
     it('should calculate initial frame timing with zero delta', () => {
@@ -96,12 +94,19 @@ describe('@galfus/transport-types', () => {
       expect(timing.frameId).toBe(2);
     });
 
-    it('should cap large deltas using maxDeltaMs to prevent spiral of death', () => {
-      // 500 ms pause (e.g. window dragged)
-      const timing = calculateFrameTiming(1500, 1000, 10, 100);
-      expect(timing.deltaMs).toBe(100);
-      expect(timing.dt).toBe(0.1);
-      expect(timing.fps).toBe(10);
+    it('should report real measured duration without clamping large deltas (HOST-023)', () => {
+      // 500 ms pause (e.g. window dragged or heavy frame)
+      const timing = calculateFrameTiming(1500, 1000, 10);
+      expect(timing.deltaMs).toBe(500);
+      expect(timing.dt).toBe(0.5);
+      expect(timing.fps).toBe(2);
+    });
+
+    it('should respect explicit delta when passed for manual stepping', () => {
+      const timing = calculateFrameTiming(2000, 1000, 11, 200);
+      expect(timing.deltaMs).toBe(200);
+      expect(timing.dt).toBe(0.2);
+      expect(timing.fps).toBe(5);
     });
   });
 
