@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'bun:test';
 import { createRuntime } from '@galfus/engine';
 import type { GalfusTransport } from '@galfus/transport-types';
-import { loadGltfAsset, parseGltf } from '../src/index';
+import { zipSync } from 'fflate';
+import { type GlTF, GltfAssetFactory, loadGltfAsset, parseGltf } from '../src/index';
 
 /**
  * Creates an in-memory mock Galfus transport for testing.
@@ -26,8 +27,8 @@ function createMockTransport(): GalfusTransport {
     realm3dSetInstancedModelData: () => {},
     realm3dDestroyInstancedModel: () => {},
     realm3dUpdateBones: () => {},
-    resourcesCreateTexture: () => nextId++,
-    resourcesDestroyTexture: () => {},
+    resourceCreateTexture: () => nextId++,
+    resourceDestroyTexture: () => {},
     multiverseResolve: () => {},
     multiverseDispatch: () => {}
   };
@@ -95,7 +96,7 @@ function createSyntheticGlb(jsonObj: any, binaryData?: Uint8Array): Uint8Array {
 }
 
 describe('@galfus/gltf-loader', () => {
-  it('parses binary GLB containers and extracts JSON and BIN chunks accurately', () => {
+  it('parses binary GLB containers and extracts JSON and BIN chunks accurately', async () => {
     const mockJson = {
       asset: { version: '2.0', generator: 'Galfus_Test' },
       nodes: [{ name: 'TestNode' }]
@@ -103,7 +104,7 @@ describe('@galfus/gltf-loader', () => {
     const mockBin = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
     const glbBytes = createSyntheticGlb(mockJson, mockBin);
 
-    const { gltf, buffers } = parseGltf(glbBytes);
+    const { gltf, buffers } = await parseGltf(glbBytes);
     expect(gltf.asset.version).toBe('2.0');
     expect(gltf.asset.generator).toBe('Galfus_Test');
     expect(gltf.nodes?.length).toBe(1);
@@ -438,5 +439,105 @@ describe('@galfus/gltf-loader', () => {
 
     const glbBytes = createSyntheticGlb(gltfDoc);
     expect(loadGltfAsset(realm, glbBytes)).rejects.toThrow('KHR_draco_mesh_compression');
+  });
+
+  it('loads glTF models directly from multi-file ZIP archives with external buffers and textures', async () => {
+    const transport = createMockTransport();
+    const runtime = createRuntime(transport);
+    const realm = runtime.createRealm3D(1);
+
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const binData = new Uint8Array(positions.buffer);
+
+    // Minimal 1x1 white PNG texture
+    const dummyPng = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+      0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f,
+      0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00,
+      0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+      0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82
+    ]);
+
+    const gltfDoc = {
+      asset: { version: '2.0', generator: 'ZipArchiveTest' },
+      buffers: [{ uri: 'geometry.bin', byteLength: binData.byteLength }],
+      bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: binData.byteLength }],
+      accessors: [{ bufferView: 0, byteOffset: 0, componentType: 5126, count: 3, type: 'VEC3' }],
+      images: [{ uri: 'textures/diffuse.png' }],
+      textures: [{ source: 0 }],
+      materials: [
+        {
+          pbrMetallicRoughness: {
+            baseColorTexture: { index: 0 }
+          }
+        }
+      ],
+      meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0 }] }],
+      nodes: [{ name: 'ZipDrone', mesh: 0 }]
+    };
+
+    const encoder = new TextEncoder();
+    const gltfText = encoder.encode(JSON.stringify(gltfDoc));
+
+    // Create a multi-file ZIP archive in memory
+    const zipArchive = zipSync({
+      'drone_model/scene.gltf': gltfText,
+      'drone_model/geometry.bin': binData,
+      'drone_model/textures/diffuse.png': dummyPng
+    });
+
+    const factory = await loadGltfAsset(realm, zipArchive);
+    expect(factory.isDisposed).toBe(false);
+
+    const instance = factory.instantiate();
+    expect(instance.entities.length).toBe(2); // Root container + ZipDrone node
+    expect(instance.getEntityByName('ZipDrone')).toBeDefined();
+
+    factory.dispose();
+    expect(factory.isDisposed).toBe(true);
+  });
+
+  it('computes spatial bounding box and extents for glTF assets', async () => {
+    const transport = createMockTransport();
+    const runtime = createRuntime(transport);
+    const realm = runtime.createRealm3D(1);
+    const mockGltf: GlTF = {
+      asset: { version: '2.0' },
+      scenes: [{ nodes: [0] }],
+      scene: 0,
+      nodes: [{ mesh: 0, scale: [2, 2, 2] }],
+      meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+      accessors: [
+        {
+          componentType: 5126,
+          count: 2,
+          type: 'VEC3',
+          min: [-1, -2, -3],
+          max: [1, 2, 3]
+        }
+      ]
+    };
+
+    const factory = new GltfAssetFactory({
+      assetName: 'BoundsTest',
+      realm,
+      gltf: mockGltf,
+      buffers: [],
+      resources: {
+        geometryMap: new Map(),
+        materialMap: new Map(),
+        textureMap: new Map(),
+        createdGeometryIds: [],
+        createdMaterialIds: [],
+        createdTextureIds: []
+      }
+    });
+
+    expect(factory.bounds).toBeDefined();
+    expect(factory.bounds?.min).toEqual([-2, -4, -6]);
+    expect(factory.bounds?.max).toEqual([2, 4, 6]);
+    expect(factory.bounds?.size).toEqual([4, 8, 12]);
+    expect(factory.bounds?.center).toEqual([0, 0, 0]);
+    expect(factory.bounds?.radius).toBeCloseTo(Math.hypot(4, 8, 12) * 0.5);
   });
 });

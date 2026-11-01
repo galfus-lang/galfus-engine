@@ -417,7 +417,7 @@ fn sample_shadow_layer(
     }
     let shadow_uv = clamp(vec2<f32>(shadow_ndc.x * 0.5 + 0.5, -shadow_ndc.y * 0.5 + 0.5), vec2<f32>(0.0), vec2<f32>(1.0));
     let bias = 0.00002 + 0.00004 * slope;
-    let ref_depth = clamp(shadow_ndc.z + bias, 0.0, 1.0);
+    let ref_depth = clamp(shadow_ndc.z - bias, 0.0, 1.0);
     let texel = 1.0 / 2048.0;
     let s0 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(-texel, -texel), i32(layer), ref_depth);
     let s1 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(texel, -texel), i32(layer), ref_depth);

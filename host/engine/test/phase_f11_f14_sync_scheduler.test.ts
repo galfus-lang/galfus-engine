@@ -7,6 +7,8 @@ import {
 } from '../src/ecs/index';
 import { Realm2D } from '../src/realm2d/realm';
 import { Realm3D } from '../src/realm3d/realm';
+import type { Light2DComponent } from '../src/realm2d/components';
+import type { Light3DComponent } from '../src/realm3d/components';
 import { MultiverseRuntime } from '../src/runtime';
 import { DirtyRegistry } from '../src/spatial/dirty_registry';
 
@@ -329,6 +331,47 @@ describe('Phases F11 to F14 — Scheduler, DirtyRegistry & Incremental Sync', ()
       expect(calls).toContain(`3dDestroyCamera:10:${cam.cameraId}`);
       expect(calls).toContain(`3dDestroyLight:10:${lightComp.lightId}`);
     });
+
+    test('synchronizes transforms for compound entities (Mesh3D + Light3D) without premature dirty clearance', () => {
+      const calls: string[] = [];
+      const engine = createMockEngine(calls);
+      const realm = new Realm3D(10);
+      realm.bindEngine(engine);
+
+      // Create an entity with both Mesh3D and Light3D
+      const entityId = realm.createSpatialNode({ position: [0, 1, 0] });
+      realm.createMesh(entityId, { geometryId: 1, materialId: 2 });
+      const lightComp: Light3DComponent = {
+        type: 'Light3D',
+        lightId: 101,
+        desc: { kind: 'point', color: [1, 1, 0], intensity: 10 },
+        isDirty: false
+      };
+      realm.world.attachComponent(entityId, lightComp);
+      const model = realm.world.getComponent<any>(entityId, 'Model3D');
+
+      // Frame 1: Creation
+      realm.sync({ time: 0, dt: 0.016, frameId: 1, engine });
+      expect(calls).toContain(`3dCreateModel:10:${model.modelId}`);
+      expect(calls).toContain('3dCreateLight:10:101');
+
+      calls.length = 0;
+
+      // Frame 2: Static
+      realm.sync({ time: 0.016, dt: 0.016, frameId: 2, engine });
+      expect(calls.filter((c) => c.startsWith('3dSetModelTransform:'))).toHaveLength(0);
+      expect(calls.filter((c) => c.startsWith('3dSetLightTransform:'))).toHaveLength(0);
+
+      // Frame 3: Move the compound entity
+      model.setPosition([10, 20, 30]);
+      realm.sync({ time: 0.032, dt: 0.016, frameId: 3, engine });
+
+      // BOTH model and light MUST receive the updated transform!
+      const modelTfCalls = calls.filter((c) => c.startsWith('3dSetModelTransform:'));
+      const lightTfCalls = calls.filter((c) => c.startsWith('3dSetLightTransform:'));
+      expect(modelTfCalls).toHaveLength(1);
+      expect(lightTfCalls).toHaveLength(1);
+    });
   });
 
   describe('F14: Incremental Sync for Realm2D', () => {
@@ -384,6 +427,48 @@ describe('Phases F11 to F14 — Scheduler, DirtyRegistry & Incremental Sync', ()
       realm.sync({ time: 0.016, dt: 0.016, frameId: 2, engine });
       expect(calls).toContain(`2dDestroyCamera:20:${cam.cameraId}`);
       expect(calls).toContain(`2dDestroyLight:20:${lightComp.lightId}`);
+    });
+
+    test('synchronizes transforms for compound entities (Sprite2D + Light2D) without premature dirty clearance', () => {
+      const calls: string[] = [];
+      const engine = createMockEngine(calls);
+      const realm = new Realm2D(20);
+      realm.bindEngine(engine);
+
+      // Create an entity with both Sprite2D and Light2D
+      const spriteEntity = realm.createSprite({ dimensions: [32, 32] }, { position: [5, 15] });
+      const spriteComp = realm.world.getComponent<any>(spriteEntity, 'Sprite2D');
+      const modelComp = realm.world.getComponent<any>(spriteEntity, 'Model2D');
+
+      const lightComp: Light2DComponent = {
+        type: 'Light2D',
+        lightId: 202,
+        desc: { color: [1, 0, 0], intensity: 2, range: 50 },
+        isDirty: false
+      };
+      realm.world.attachComponent(spriteEntity, lightComp);
+
+      // Frame 1: Creation
+      realm.sync({ time: 0, dt: 0.016, frameId: 1, engine });
+      expect(calls).toContain(`2dCreateSprite:20:${spriteComp.spriteId}`);
+      expect(calls).toContain('2dCreateLight:20:202');
+
+      calls.length = 0;
+
+      // Frame 2: Static
+      realm.sync({ time: 0.016, dt: 0.016, frameId: 2, engine });
+      expect(calls.filter((c) => c.startsWith('2dSetSpriteTransform:'))).toHaveLength(0);
+      expect(calls.filter((c) => c.startsWith('2dSetLightTransform:'))).toHaveLength(0);
+
+      // Frame 3: Move the compound entity
+      modelComp.setPosition([100, 200]);
+      realm.sync({ time: 0.032, dt: 0.016, frameId: 3, engine });
+
+      // BOTH sprite and light MUST receive the updated transform!
+      const spriteTfCalls = calls.filter((c) => c.startsWith('2dSetSpriteTransform:'));
+      const lightTfCalls = calls.filter((c) => c.startsWith('2dSetLightTransform:'));
+      expect(spriteTfCalls).toHaveLength(1);
+      expect(lightTfCalls).toHaveLength(1);
     });
   });
 });

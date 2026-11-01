@@ -1,6 +1,6 @@
 {
   "name": "@galfus/gltf-loader",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -10,6 +10,7 @@
   "dependencies": {
     "@galfus/engine": "workspace:*",
     "@galfus/model-loader-types": "workspace:*",
-    "@galfus/transport-types": "workspace:*"
+    "@galfus/transport-types": "workspace:*",
+    "fflate": "^0.8.3"
   }
 }

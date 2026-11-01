@@ -24,7 +24,7 @@ export interface GeometryData {
   weights1?: Float32Array;
   /** Index buffer (Optional. If omitted, sequential indices [0..N-1] are generated) */
   indices?: Uint32Array | Uint16Array;
-  /** Primitive topology: 0 = TriangleList, 1 = TriangleStrip, 2 = LineList, etc. Default: 0 */
+  /** Primitive topology: 0 = Points, 1 = Lines, 2 = LineStrip, 3 = Triangles, 4 = TriangleStrip. Default: 3 */
   topology?: number;
 }
 
@@ -140,7 +140,7 @@ export function packGeometryData(data: GeometryData): {
   }
 
   return {
-    topology: data.topology ?? 0,
+    topology: data.topology ?? 3,
     vertexData,
     indices
   };

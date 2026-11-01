@@ -24,6 +24,7 @@
     "demo": "cargo build -p galfus-native && bun scripts/demos/main.ts",
     "demo:tutorial": "bun host/engine/demo/tutorial.ts",
     "demo:tutorial:headless": "bun host/engine/demo/tutorial.ts --headless",
+    "gltf": "bun scripts/gltf-viewer.ts",
     "tour": "bun examples/feature-tour/runners/bun/index.ts",
     "tour:bun": "bun examples/feature-tour/runners/bun/index.ts",
     "tour:node": "bun examples/feature-tour/runners/node/index.ts",

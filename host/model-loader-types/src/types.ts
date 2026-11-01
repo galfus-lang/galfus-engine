@@ -43,6 +43,19 @@ export interface ModelNodeDesc {
   readonly extras?: Record<string, unknown>;
 }
 
+export interface ModelBounds {
+  /** Minimum axis coordinates [minX, minY, minZ] in model space. */
+  readonly min: [number, number, number];
+  /** Maximum axis coordinates [maxX, maxY, maxZ] in model space. */
+  readonly max: [number, number, number];
+  /** Center point coordinates [(min + max) / 2] in model space. */
+  readonly center: [number, number, number];
+  /** Extents size [width, height, depth] along each coordinate axis. */
+  readonly size: [number, number, number];
+  /** Approximate bounding sphere radius from the center. */
+  readonly radius: number;
+}
+
 /**
  * General configuration options controlling how a 3D model file is parsed and imported.
  *
@@ -248,6 +261,9 @@ export interface ModelAssetFactory {
 
   /** Read-only collection of all shared GPU texture IDs created and managed by this factory. */
   readonly createdTextureIds: readonly number[];
+
+  /** Approximate spatial bounding box and radius of the model asset, if computable. */
+  readonly bounds?: ModelBounds;
 
   /**
    * Spawns a new independent instance of the complete model graph in the ECS.

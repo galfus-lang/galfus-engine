@@ -19,11 +19,12 @@ export interface UploadedGltfResources {
 /**
  * Extracts raw image bytes from a glTF image descriptor.
  */
-function getImageBytes(
+async function getImageBytes(
   gltf: GlTF,
   buffers: Uint8Array[],
-  imageIndex: number
-): Uint8Array | undefined {
+  imageIndex: number,
+  externalResolver?: (uri: string) => Promise<Uint8Array>
+): Promise<Uint8Array | undefined> {
   const image = gltf.images?.[imageIndex];
   if (!image) return undefined;
 
@@ -49,7 +50,43 @@ function getImageBytes(
     }
   }
 
+  if (image.uri && externalResolver) {
+    try {
+      return await externalResolver(image.uri);
+    } catch {
+      return undefined;
+    }
+  }
+
   return undefined;
+}
+
+/**
+ * Maps glTF 2.0 primitive rendering mode to the Galfus Engine PrimitiveTopology3D enum.
+ *
+ * glTF specification:
+ * - 0: POINTS         -> 0 (Points)
+ * - 1: LINES          -> 1 (Lines)
+ * - 2: LINE_LOOP      -> 2 (LineStrip)
+ * - 3: LINE_STRIP     -> 2 (LineStrip)
+ * - 4: TRIANGLES      -> 3 (Triangles / TriangleList)
+ * - 5: TRIANGLE_STRIP -> 4 (TriangleStrip)
+ */
+function mapGltfPrimitiveTopology(mode?: number): number {
+  switch (mode) {
+    case 0:
+      return 0; // Points
+    case 1:
+      return 1; // Lines
+    case 2:
+    case 3:
+      return 2; // LineStrip
+    case 5:
+      return 4; // TriangleStrip
+    case 4:
+    default:
+      return 3; // Triangles
+  }
 }
 
 /**
@@ -59,6 +96,7 @@ function getImageBytes(
  * @param gltf The root glTF descriptor.
  * @param buffers Array of resolved binary buffers.
  * @param decoders Object holding optional active decoders (Draco, Meshopt).
+ * @param externalResolver Optional resolver callback for loading relative external assets.
  * @returns Map of created GPU resource handles and ID registries.
  *
  * @example
@@ -71,7 +109,8 @@ export async function uploadGltfResources(
   realm: Realm3D,
   gltf: GlTF,
   buffers: Uint8Array[],
-  decoders: ResolvedDecoders
+  decoders: ResolvedDecoders,
+  externalResolver?: (uri: string) => Promise<Uint8Array>
 ): Promise<UploadedGltfResources> {
   const textureMap = new Map<number, number>();
   const materialMap = new Map<number, number>();
@@ -81,12 +120,16 @@ export async function uploadGltfResources(
   const createdMaterialIds: number[] = [];
   const createdGeometryIds: number[] = [];
 
-  // Determine which textures are used as sRGB color maps (baseColor / emissive)
+  // Determine which textures are used as sRGB color maps (baseColor / emissive / diffuse)
   const srgbTextureIndices = new Set<number>();
   if (gltf.materials) {
     for (const mat of gltf.materials) {
       if (mat.pbrMetallicRoughness?.baseColorTexture) {
         srgbTextureIndices.add(mat.pbrMetallicRoughness.baseColorTexture.index);
+      }
+      const specGloss = mat.extensions?.KHR_materials_pbrSpecularGlossiness;
+      if (specGloss?.diffuseTexture) {
+        srgbTextureIndices.add(specGloss.diffuseTexture.index);
       }
       if (mat.emissiveTexture) {
         srgbTextureIndices.add(mat.emissiveTexture.index);
@@ -100,7 +143,7 @@ export async function uploadGltfResources(
       const tex = gltf.textures[tIdx]!;
       const sourceIdx = tex.source ?? tex.extensions?.KHR_texture_basisu?.source;
       if (sourceIdx !== undefined) {
-        const imageBytes = getImageBytes(gltf, buffers, sourceIdx);
+        const imageBytes = await getImageBytes(gltf, buffers, sourceIdx, externalResolver);
         if (imageBytes && imageBytes.byteLength > 0) {
           const isSrgb = srgbTextureIndices.has(tIdx);
           const textureId = realm.resources.loadTexture(imageBytes, {
@@ -119,18 +162,18 @@ export async function uploadGltfResources(
     for (let mIdx = 0; mIdx < gltf.materials.length; mIdx++) {
       const mat = gltf.materials[mIdx]!;
       const pbr = mat.pbrMetallicRoughness;
+      const specGloss = mat.extensions?.KHR_materials_pbrSpecularGlossiness;
 
-      const baseColor = pbr?.baseColorFactor ?? [1, 1, 1, 1];
-      const metallic = pbr?.metallicFactor ?? 1.0;
-      const roughness = pbr?.roughnessFactor ?? 1.0;
-      const emissiveColor: [number, number, number, number] = mat.emissiveFactor
-        ? [mat.emissiveFactor[0], mat.emissiveFactor[1], mat.emissiveFactor[2], 1]
-        : [0, 0, 0, 1];
-
+      const baseColor = pbr?.baseColorFactor ?? specGloss?.diffuseFactor ?? [1, 1, 1, 1];
+      const metallic = pbr?.metallicFactor ?? 0.0;
+      const roughness =
+        pbr?.roughnessFactor ?? (specGloss ? 1.0 - (specGloss.glossinessFactor ?? 1.0) : 1.0);
       const baseColorTextureId =
         pbr?.baseColorTexture !== undefined
           ? textureMap.get(pbr.baseColorTexture.index)
-          : undefined;
+          : specGloss?.diffuseTexture !== undefined
+            ? textureMap.get(specGloss.diffuseTexture.index)
+            : undefined;
       const normalTextureId =
         mat.normalTexture !== undefined ? textureMap.get(mat.normalTexture.index) : undefined;
       const metallicRoughnessTextureId =
@@ -141,6 +184,40 @@ export async function uploadGltfResources(
         mat.emissiveTexture !== undefined ? textureMap.get(mat.emissiveTexture.index) : undefined;
       const occlusionTextureId =
         mat.occlusionTexture !== undefined ? textureMap.get(mat.occlusionTexture.index) : undefined;
+
+      // The Galfus 3D shader computes emissive as (material.emissive_color.rgb + tex_emissive.rgb).
+      // When an emissive texture is present, avoid adding constant white factor which would blow out the surface.
+      const emissiveColor: [number, number, number, number] =
+        mat.emissiveFactor && emissiveTextureId === undefined
+          ? [mat.emissiveFactor[0], mat.emissiveFactor[1], mat.emissiveFactor[2], 1]
+          : [0, 0, 0, 1];
+
+      // In glTF, many models (such as Sketchfab/Blender exports) accidentally tag solid materials
+      // with alphaMode: "BLEND". A material is only truly translucent if baseColor alpha is below 1.0
+      // or if its name/texture explicitly designates water/glass/transparency.
+      const baseAlpha = baseColor[3] ?? 1.0;
+      const nameLower = (mat.name ?? '').toLowerCase();
+      const isLikelyTranslucent =
+        baseAlpha < 0.99 ||
+        nameLower.includes('glass') ||
+        nameLower.includes('water') ||
+        nameLower.includes('window') ||
+        nameLower.includes('transpar') ||
+        nameLower.includes('ocean') ||
+        nameLower.includes('sea') ||
+        nameLower.includes('ice');
+
+      const surfaceType =
+        mat.alphaMode === 'BLEND'
+          ? isLikelyTranslucent
+            ? 'transparent'
+            : 'masked'
+          : mat.alphaMode === 'MASK'
+            ? 'masked'
+            : 'opaque';
+
+      const alphaCutoff =
+        mat.alphaCutoff ?? (mat.alphaMode === 'BLEND' && !isLikelyTranslucent ? 0.5 : undefined);
 
       const { materialId } = realm.createMaterial({
         baseColor,
@@ -153,13 +230,8 @@ export async function uploadGltfResources(
         emissiveTextureId,
         occlusionTextureId,
         side: mat.doubleSided ? 'double' : 'front',
-        surfaceType:
-          mat.alphaMode === 'BLEND'
-            ? 'transparent'
-            : mat.alphaMode === 'MASK'
-              ? 'masked'
-              : 'opaque',
-        alphaCutoff: mat.alphaCutoff
+        surfaceType,
+        alphaCutoff
       });
 
       materialMap.set(mIdx, materialId);
@@ -252,7 +324,7 @@ export async function uploadGltfResources(
           joints0,
           weights0,
           indices,
-          topology: prim.mode ?? 4 // 4 = TRIANGLES
+          topology: mapGltfPrimitiveTopology(prim.mode)
         });
 
         const key = `${meshIdx}_${primIdx}`;

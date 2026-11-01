@@ -178,6 +178,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
 
   flush(): void {
     if (this._engine) {
+      this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0, engine: this._engine });
       this.syncSystem.sync(this.world, this._engine, this);
     }
   }

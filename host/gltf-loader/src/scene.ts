@@ -276,10 +276,22 @@ export function spawnSceneGraph(
             getDefaultMaterial();
 
           if (geometryId !== undefined) {
-            realm.createMesh(entityId, {
-              geometryId,
-              materialId
-            });
+            if (primIdx === 0) {
+              realm.createMesh(entityId, {
+                geometryId,
+                materialId
+              });
+            } else {
+              // Sub-primitive: spawn a child spatial node attached to the primary entity
+              const subEntityId = realm.createSpatialNode();
+              realm.setEntityName(subEntityId, `${normalizedName}_prim${primIdx}`);
+              realm.createMesh(subEntityId, {
+                geometryId,
+                materialId
+              });
+              realm.hierarchy.attach(subEntityId, entityId);
+              entities.push(subEntityId);
+            }
           }
         }
       }

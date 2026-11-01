@@ -118,10 +118,16 @@ export class PlatformCoordinator {
  * @returns Normalized lowercase key identifier (e.g. `'escape'`, `'w'`, `'enter'`, `'1'`).
  */
 export function getKey(event: { logicalKey?: string; physicalKey?: string }): string {
-  if (typeof event.logicalKey === 'string' && event.logicalKey.length > 0) {
+  if (
+    typeof event.logicalKey === 'string' &&
+    event.logicalKey.length > 0 &&
+    event.logicalKey.toLowerCase() !== 'unidentified'
+  ) {
     return event.logicalKey.toLowerCase();
   }
-  const phys = String(event.physicalKey ?? '').toLowerCase();
+  let phys = String(event.physicalKey ?? '').toLowerCase();
+  const codeMatch = /^code\((.+)\)$/.exec(phys);
+  if (codeMatch) phys = codeMatch[1]!;
   if (phys.startsWith('key') && phys.length === 4) return phys.slice(3);
   if (phys.startsWith('digit') && phys.length === 6) return phys.slice(5);
   return phys;

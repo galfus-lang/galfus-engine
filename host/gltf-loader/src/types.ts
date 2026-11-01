@@ -103,6 +103,14 @@ export interface GlTFMaterialOcclusionTextureInfo extends GlTFTextureInfo {
   strength?: number;
 }
 
+export interface GlTFKHRMaterialsPbrSpecularGlossiness {
+  diffuseFactor?: [number, number, number, number];
+  diffuseTexture?: GlTFTextureInfo;
+  specularFactor?: [number, number, number];
+  glossinessFactor?: number;
+  specularGlossinessTexture?: GlTFTextureInfo;
+}
+
 export interface GlTFPbrMetallicRoughness {
   baseColorFactor?: [number, number, number, number];
   baseColorTexture?: GlTFTextureInfo;
@@ -122,7 +130,9 @@ export interface GlTFMaterial {
   alphaMode?: 'OPAQUE' | 'MASK' | 'BLEND';
   alphaCutoff?: number;
   doubleSided?: boolean;
-  extensions?: Record<string, unknown>;
+  extensions?: {
+    KHR_materials_pbrSpecularGlossiness?: GlTFKHRMaterialsPbrSpecularGlossiness;
+  } & Record<string, unknown>;
   extras?: unknown;
 }
 

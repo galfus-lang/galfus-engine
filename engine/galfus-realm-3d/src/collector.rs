@@ -93,8 +93,11 @@ impl<'a> DrawCollector<'a> {
             let shader_effect = mat_entry.and_then(|m| m.0.shader_effect.as_deref());
             let side = mat_entry.map_or_default(|m| m.0.side);
 
-            // Euclidean distance squared from camera to model center
-            let depth = (model_transform.position - camera_pos).length_squared();
+            // Euclidean distance squared from camera to geometry AABB world center
+            let world_center = model_transform
+                .matrix()
+                .transform_point3(geom.aabb.center());
+            let depth = (world_center - camera_pos).length_squared();
 
             let item = CollectedDrawItem {
                 model_id,

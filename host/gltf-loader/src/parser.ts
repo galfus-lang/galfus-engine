@@ -36,20 +36,12 @@ function decodeDataUri(uri: string): Uint8Array {
 }
 
 /**
- * Parses raw input data (Uint8Array or ArrayBuffer) into a GlTF structure and extracted binary buffers.
- *
- * Automatically distinguishes between binary GLB containers and glTF JSON files.
+ * Synchronously parses GLB binary containers or glTF JSON with embedded data URIs.
  *
  * @param input Raw file bytes.
  * @returns Parsed glTF object and array of decoded binary buffers.
- *
- * @example
- * ```typescript
- * const { gltf, buffers } = parseGltf(data);
- * console.log(`glTF Version: ${gltf.asset.version}, Meshes: ${gltf.meshes?.length}`);
- * ```
  */
-export function parseGltf(input: Uint8Array | ArrayBuffer): ParsedGltf {
+export function parseGltfSync(input: Uint8Array | ArrayBuffer): ParsedGltf {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   const dataView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
@@ -101,7 +93,45 @@ export function parseGltf(input: Uint8Array | ArrayBuffer): ParsedGltf {
       if (buf.uri && buf.uri.startsWith('data:')) {
         buffers.push(decodeDataUri(buf.uri));
       } else {
-        // External buffer: placeholder empty buffer if not preloaded
+        buffers.push(new Uint8Array(buf.byteLength));
+      }
+    }
+  }
+
+  return { gltf: jsonGltf, buffers };
+}
+
+/**
+ * Parses raw input data (Uint8Array or ArrayBuffer) into a GlTF structure and extracted binary buffers.
+ *
+ * Automatically resolves external buffers if an externalResolver is provided.
+ *
+ * @param input Raw file bytes.
+ * @param externalResolver Optional async callback to resolve external buffer URIs.
+ * @returns Parsed glTF object and array of decoded binary buffers.
+ */
+export async function parseGltf(
+  input: Uint8Array | ArrayBuffer,
+  externalResolver?: (uri: string) => Promise<Uint8Array>
+): Promise<ParsedGltf> {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const dataView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+  if (bytes.byteLength >= 12 && dataView.getUint32(0, true) === GLB_MAGIC) {
+    return parseGltfSync(bytes);
+  }
+
+  const jsonText = new TextDecoder().decode(bytes);
+  const jsonGltf = JSON.parse(jsonText) as GlTF;
+  const buffers: Uint8Array[] = [];
+
+  if (jsonGltf.buffers) {
+    for (const buf of jsonGltf.buffers) {
+      if (buf.uri && buf.uri.startsWith('data:')) {
+        buffers.push(decodeDataUri(buf.uri));
+      } else if (buf.uri && externalResolver) {
+        buffers.push(await externalResolver(buf.uri));
+      } else {
         buffers.push(new Uint8Array(buf.byteLength));
       }
     }

@@ -6,12 +6,14 @@ import type { Realm3D, TextureId } from '@galfus/engine';
 import { createAnimationPlayer3D } from '@galfus/engine';
 import type {
   ModelAssetFactory,
+  ModelBounds,
   ModelImportOptions,
   ModelInstance,
   ModelInstantiateOptions,
   SubModelAssetFactory
 } from '@galfus/model-loader-types';
 import { compileAnimationClips, setupSkins } from './animation';
+import { computeGltfBounds } from './bounds';
 import { GltfInstance } from './instance';
 import type { UploadedGltfResources } from './resources';
 import { spawnSceneGraph } from './scene';
@@ -84,6 +86,8 @@ export class GltfAssetFactory implements ModelAssetFactory {
   readonly createdGeometryIds: readonly number[];
   readonly createdMaterialIds: readonly number[];
   readonly createdTextureIds: readonly number[];
+  readonly animationNames: readonly string[];
+  readonly bounds?: ModelBounds;
 
   private readonly _realm: Realm3D;
   private readonly _gltf: GlTF;
@@ -105,6 +109,10 @@ export class GltfAssetFactory implements ModelAssetFactory {
     this.createdGeometryIds = Object.freeze([...init.resources.createdGeometryIds]);
     this.createdMaterialIds = Object.freeze([...init.resources.createdMaterialIds]);
     this.createdTextureIds = Object.freeze([...init.resources.createdTextureIds]);
+    this.animationNames = Object.freeze(
+      (init.gltf.animations ?? []).map((a, i) => a.name ?? `Animation_${i}`)
+    );
+    this.bounds = computeGltfBounds(init.gltf);
   }
 
   /** Indicates whether this factory and its GPU resources have been destroyed. */
