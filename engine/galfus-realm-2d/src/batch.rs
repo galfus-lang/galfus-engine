@@ -4,6 +4,8 @@ use crate::types::{BatchKey2D, BatchRange2D, Item2DInstanceRaw};
 #[derive(Debug, Clone)]
 pub struct PreparedItem2D {
     pub key: BatchKey2D,
+    /// Stable logical resource ID and kind used to break ties in draw order.
+    pub order: (u32, u8),
     pub instance: Item2DInstanceRaw,
     pub occluder_only: bool,
 }
@@ -45,8 +47,9 @@ impl BatchBuilder2D {
             return;
         }
 
-        // Deterministic sorting: Z-layer -> draw order -> surface type -> material -> geometry
-        self.items.sort_by_key(|a| a.key);
+        // Preserve visual order before grouping adjacent items into batches.
+        self.items
+            .sort_by_key(|a| (a.key.z_layer, a.key.draw_order, a.order));
 
         self.sorted_instances.reserve(self.items.len());
 
@@ -106,6 +109,7 @@ mod tests {
         geometry_id: u64,
     ) -> PreparedItem2D {
         PreparedItem2D {
+            order: (material_id, 0),
             key: BatchKey2D {
                 z_layer,
                 draw_order,
@@ -164,5 +168,19 @@ mod tests {
         assert_eq!(ranges[0].key.material_id, 20);
         assert_eq!(ranges[1].key.draw_order, 1);
         assert_eq!(ranges[1].key.material_id, 5);
+    }
+
+    #[test]
+    fn equal_layers_follow_resource_order_instead_of_material_order() {
+        let mut builder = BatchBuilder2D::new();
+        let mut front = make_item(0, 1, 0);
+        front.order = (20, 0);
+        let mut back = make_item(0, 99, 0);
+        back.order = (10, 0);
+        builder.push(front);
+        builder.push(back);
+        builder.build();
+        assert_eq!(builder.ranges()[0].key.material_id, 99);
+        assert_eq!(builder.ranges()[1].key.material_id, 1);
     }
 }

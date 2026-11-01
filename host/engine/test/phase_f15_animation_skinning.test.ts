@@ -212,6 +212,30 @@ describe('Phase 15: Animation ECS, Skinning and Temporal Ownership', () => {
     expect(anim.getEcsBinding(trans2!)?.transitionId).toBe(trans2);
   });
 
+  it('animates 2D scale without changing position or rotation', () => {
+    const engine = createMockEngine();
+    const animation = new AnimationCoordinator();
+    animation.bindEngine(engine);
+    const world = new EcsWorld();
+    const entity = world.createEntity();
+    const model = createModel2D(1).setTRS([12, 34], Math.PI / 3, [2, -3]);
+    world.attachComponent(entity, model);
+    const id = animation.animateEcsProperty(world, entity, 'scale', [4, -5], {
+      duration: 1,
+      easing: 'linear'
+    });
+    const initial = engine.transitions.get(id!)?.current.value as number[];
+    expect(initial[0]).toBeCloseTo(2);
+    expect(initial[1]).toBeCloseTo(-3);
+    animation.step(1);
+    expect(model.localMatrix[4]).toBeCloseTo(12);
+    expect(model.localMatrix[5]).toBeCloseTo(34);
+    expect(Math.atan2(model.localMatrix[1], model.localMatrix[0])).toBeCloseTo(Math.PI / 3);
+    expect(
+      model.localMatrix[0] * model.localMatrix[3] - model.localMatrix[1] * model.localMatrix[2]
+    ).toBeCloseTo(-20);
+  });
+
   it('cleans up transitions when entity is destroyed', () => {
     const mockEngine = createMockEngine();
     const anim = new AnimationCoordinator();

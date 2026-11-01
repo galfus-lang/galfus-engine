@@ -31,6 +31,10 @@ The official TypeScript high-level engine runtime for **Galfus Engine**. Provide
    - `runtime.reset()`: Purges all realms, invocations, targets, audio, and caches while keeping the transport backend ready for new scenes.
    - `runtime.dispose()`: Terminal shutdown of both runtime and transport.
 
+2D materials are realm-owned resources. `Realm2D.createMaterial` returns a logical ID and queues the material for the next sync or `flush()`, even if the realm is not yet bound to an engine. `destroyMaterial(id)` queues its removal without destroying entities that reference it. `reset()` and `dispose()` release the realm's materials.
+
+2D objects are drawn back to front by `zLayer`, then `drawOrder`, then logical resource ID. Set distinct layers or draw orders when overlap must remain independent of resource creation order. Changing `Model2DComponent.zLayer` or `drawOrder` is synchronized on the next frame.
+
 ---
 
 ## Quick Start

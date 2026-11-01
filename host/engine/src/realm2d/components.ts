@@ -27,8 +27,8 @@ export class Model2DComponent implements Component {
   readonly modelId: number;
   readonly localMatrix: Mat2d;
   readonly worldMatrix: Mat2d;
-  zLayer: number;
-  drawOrder: number;
+  private _zLayer = 0;
+  private _drawOrder = 0;
   flags: SpatialDirtyFlags;
 
   constructor(modelId: number, initialLocal?: Float32Array | number[]) {
@@ -39,9 +39,26 @@ export class Model2DComponent implements Component {
       this.localMatrix.set(initialLocal);
       this.worldMatrix.set(initialLocal);
     }
-    this.zLayer = 0;
-    this.drawOrder = 0;
     this.flags = SpatialDirtyFlags.LocalDirty | SpatialDirtyFlags.WorldDirty;
+  }
+
+  get zLayer(): number {
+    return this._zLayer;
+  }
+  set zLayer(value: number) {
+    if (value !== this._zLayer) {
+      this._zLayer = value;
+      this.flags |= SpatialDirtyFlags.WorldDirty;
+    }
+  }
+  get drawOrder(): number {
+    return this._drawOrder;
+  }
+  set drawOrder(value: number) {
+    if (value !== this._drawOrder) {
+      this._drawOrder = value;
+      this.flags |= SpatialDirtyFlags.WorldDirty;
+    }
   }
 
   setPosition(x: number, y: number): this;
@@ -61,9 +78,26 @@ export class Model2DComponent implements Component {
   setRotation(rad: number): this {
     vec2.set(SCRATCH_P2D, this.localMatrix[4], this.localMatrix[5]);
     const sx = Math.hypot(this.localMatrix[0], this.localMatrix[1]);
-    const sy = Math.hypot(this.localMatrix[2], this.localMatrix[3]);
+    const sy =
+      Math.hypot(this.localMatrix[2], this.localMatrix[3]) *
+      (this.localMatrix[0] * this.localMatrix[3] - this.localMatrix[1] * this.localMatrix[2] < 0
+        ? -1
+        : 1);
     vec2.set(SCRATCH_S2D, sx, sy);
     mat2d.fromRotationTranslationScale(this.localMatrix, SCRATCH_P2D, rad, SCRATCH_S2D);
+    this.flags |= SpatialDirtyFlags.LocalDirty;
+    return this;
+  }
+
+  setScale(x: number, y: number): this;
+  setScale(scale: [number, number] | Vec2): this;
+  setScale(xOrScale: number | [number, number] | Vec2, y?: number): this {
+    const x = typeof xOrScale === 'number' ? xOrScale : xOrScale[0];
+    const sy = typeof xOrScale === 'number' ? (y ?? 1) : xOrScale[1];
+    const rotation = Math.atan2(this.localMatrix[1], this.localMatrix[0]);
+    vec2.set(SCRATCH_P2D, this.localMatrix[4], this.localMatrix[5]);
+    vec2.set(SCRATCH_S2D, x, sy);
+    mat2d.fromRotationTranslationScale(this.localMatrix, SCRATCH_P2D, rotation, SCRATCH_S2D);
     this.flags |= SpatialDirtyFlags.LocalDirty;
     return this;
   }

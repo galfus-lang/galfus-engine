@@ -341,7 +341,13 @@ export class AnimationCoordinator {
         }
         case 'scale': {
           const sx = Math.hypot(model2d.localMatrix[0]!, model2d.localMatrix[1]!);
-          const sy = Math.hypot(model2d.localMatrix[2]!, model2d.localMatrix[3]!);
+          const sy =
+            Math.hypot(model2d.localMatrix[2]!, model2d.localMatrix[3]!) *
+            (model2d.localMatrix[0]! * model2d.localMatrix[3]! -
+              model2d.localMatrix[1]! * model2d.localMatrix[2]! <
+            0
+              ? -1
+              : 1);
           initialValue = {
             type: 'vec2',
             value: [sx, sy]
@@ -356,7 +362,13 @@ export class AnimationCoordinator {
           const py = model2d.localMatrix[5]!;
           const rot = Math.atan2(model2d.localMatrix[1]!, model2d.localMatrix[0]!);
           const sx = Math.hypot(model2d.localMatrix[0]!, model2d.localMatrix[1]!);
-          const sy = Math.hypot(model2d.localMatrix[2]!, model2d.localMatrix[3]!);
+          const sy =
+            Math.hypot(model2d.localMatrix[2]!, model2d.localMatrix[3]!) *
+            (model2d.localMatrix[0]! * model2d.localMatrix[3]! -
+              model2d.localMatrix[1]! * model2d.localMatrix[2]! <
+            0
+              ? -1
+              : 1);
           initialValue = {
             type: 'transform2D',
             value: [px, py, rot, sx, sy, 0]
@@ -504,7 +516,7 @@ export class AnimationCoordinator {
         } else if (val.type === 'scalar' && binding.property === 'rotation') {
           model2d.setRotation(val.value);
         } else if (val.type === 'vec2' && binding.property === 'scale') {
-          model2d.setTRS(undefined, undefined, [val.value[0], val.value[1]]);
+          model2d.setScale(val.value[0], val.value[1]);
         } else if (val.type === 'transform2D') {
           const v = val.value;
           model2d.setTRS([v[0], v[1]], v[2], [v[3], v[4]]);

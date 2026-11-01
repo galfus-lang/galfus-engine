@@ -24,3 +24,6 @@ pub use shader::compile_2d_shader;
 pub use shadow::ShadowManager2D;
 pub use surface_effect::compose_surface_shader_2d;
 pub use types::*;
+
+#[cfg(test)]
+mod transparency_tests;

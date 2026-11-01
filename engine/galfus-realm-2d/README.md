@@ -4,7 +4,7 @@ High-performance 2D rendering realm implementing the `galfus-realm-core` contrac
 
 ## Responsibilities
 
-- **2D Batch Rendering**: Collects, groups, and sorts draw instances by `(zLayer, materialId, geometryId, surfaceType)` into optimal GPU batches.
+- **2D Batch Rendering**: Sorts draw instances by layer, draw order, and logical resource ID before grouping adjacent compatible instances into GPU batches.
 - **Dynamic 2D Lighting & Polar Soft Shadows**: Executes angular polar raymarching for 2D occluders, rendering realistic contact hardening and smooth penumbrae.
 - **Reactive SVG Vector Graphics (`SvgManager2D`)**: Rasterizes vector SVGs to GPU textures, synchronizes dirty DOM states, and emits draw items into the batch builder.
 - **Custom WGSL 2D Surface Effects**: Compiles material-specific surface shaders, injecting user-authored `surface_effect` snippets.
@@ -14,7 +14,7 @@ High-performance 2D rendering realm implementing the `galfus-realm-core` contrac
 
 - **High-Throughput Batch Builder (`BatchBuilder2D`)**:
   - Dynamically merges draw calls sharing pipelines and materials.
-  - Stable sorting by `zLayer` utilizing Reverse-Z depth buffers to prevent layer flickering and z-fighting.
+  - Stable painter-order rendering using `zLayer`, `drawOrder`, and logical resource IDs; no depth buffer is used.
 - **Reactive SVG GPU Manager (`SvgManager2D`)**:
   - Precision vector rasterization via `resvg`, `usvg`, and `tiny-skia`.
   - Cached system font database (`fontdb`) with automatic discovery of monospace, sans-serif, and serif font families.

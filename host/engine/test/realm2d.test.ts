@@ -93,7 +93,8 @@ describe('@galfus/engine > Realm2D', () => {
         calls.push(`svgText:${r}:${s}:${el}:${t}`),
       realm2dSetShadowConfig: () => calls.push('setShadowConfig'),
       realm2dLoadFontData: () => 'Roboto',
-      realm2dCreateMaterial: (r: number, m: number) => calls.push(`createMat:${r}:${m}`)
+      realm2dCreateMaterial: (r: number, m: number) => calls.push(`createMat:${r}:${m}`),
+      realm2dDestroyMaterial: () => {}
     } as unknown as GalfusEngine;
 
     realm.bindEngine(mockEngine);

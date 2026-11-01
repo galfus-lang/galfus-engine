@@ -2,7 +2,7 @@
  * Realm 2D synchronization system syncing ECS state with core GalfusEngine.
  */
 
-import type { GalfusEngine, Transform2DDesc } from '@galfus/transport-types';
+import type { GalfusEngine, Material2DDesc, Transform2DDesc } from '@galfus/transport-types';
 import type { AnchorMatrixCache } from '../anchors/cache';
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';
@@ -18,6 +18,7 @@ import type {
 } from './components';
 
 export class Realm2DSyncSystem {
+  private readonly _syncedMaterials = new Set<number>();
   private readonly _syncedSprites = new Set<number>();
   private readonly _syncedShapes = new Set<number>();
   private readonly _syncedLights = new Set<number>();
@@ -46,7 +47,7 @@ export class Realm2DSyncSystem {
       const ty = mat[5];
 
       const scaleX = Math.hypot(a, b);
-      const scaleY = Math.hypot(c, d);
+      const scaleY = Math.hypot(c, d) * (a * d - b * c < 0 ? -1 : 1);
       const rotation = Math.atan2(b, a);
 
       return {
@@ -64,7 +65,23 @@ export class Realm2DSyncSystem {
   /**
    * Synchronizes all active 2D components to the engine driver.
    */
-  sync(world: EcsWorld, engine: GalfusEngine): void {
+  sync(
+    world: EcsWorld,
+    engine: GalfusEngine,
+    materials: ReadonlyMap<number, Material2DDesc> = new Map()
+  ): void {
+    for (const [id, desc] of materials) {
+      if (!this._syncedMaterials.has(id)) {
+        engine.realm2dCreateMaterial(this.realmId, id, desc);
+        this._syncedMaterials.add(id);
+      }
+    }
+    for (const id of this._syncedMaterials) {
+      if (!materials.has(id)) {
+        engine.realm2dDestroyMaterial(this.realmId, id);
+        this._syncedMaterials.delete(id);
+      }
+    }
     // 1. Sync Sprites
     const spriteEntities = world.query('Sprite2D');
     const currentSprites = new Set<number>();
@@ -255,6 +272,7 @@ export class Realm2DSyncSystem {
       for (const id of this._syncedCameras) engine.realm2dDestroyCamera(this.realmId, id);
       for (const id of this._syncedSvgs) engine.realm2dDestroySvg(this.realmId, id);
       for (const id of this._syncedEmitters) engine.realm2dDestroyParticleEmitter(this.realmId, id);
+      for (const id of this._syncedMaterials) engine.realm2dDestroyMaterial(this.realmId, id);
     }
     this._syncedSprites.clear();
     this._syncedShapes.clear();
@@ -262,5 +280,6 @@ export class Realm2DSyncSystem {
     this._syncedCameras.clear();
     this._syncedSvgs.clear();
     this._syncedEmitters.clear();
+    this._syncedMaterials.clear();
   }
 }

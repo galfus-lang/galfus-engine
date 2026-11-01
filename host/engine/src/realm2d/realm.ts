@@ -49,6 +49,7 @@ export class Realm2D implements RealmConnector {
   private _nextResourceLogicalId = 1;
   private _preRenderSteppedFrame = -1;
   private _disposed = false;
+  private readonly _materials = new Map<number, Material2DDesc>();
 
   constructor(realmId: RealmId | number) {
     this.realmId = realmId as RealmId;
@@ -90,7 +91,7 @@ export class Realm2D implements RealmConnector {
       this.preRender(context);
     }
     if (this._engine) {
-      this.syncSystem.sync(this.world, this._engine);
+      this.syncSystem.sync(this.world, this._engine, this._materials);
     }
   }
 
@@ -102,7 +103,8 @@ export class Realm2D implements RealmConnector {
   flush(): void {
     if (this._disposed) return;
     if (this._engine) {
-      this.syncSystem.sync(this.world, this._engine);
+      this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0, engine: this._engine });
+      this.syncSystem.sync(this.world, this._engine, this._materials);
     }
   }
 
@@ -110,6 +112,7 @@ export class Realm2D implements RealmConnector {
     if (this._disposed) throw new Error('Cannot reset a disposed Realm2D.');
     this.world.clear();
     this.solver.cache.clear();
+    this._materials.clear();
     this._preRenderSteppedFrame = -1;
     this._registerInternalSystems();
     if (this._engine) {
@@ -129,6 +132,7 @@ export class Realm2D implements RealmConnector {
     this._engine = null;
     this.world.clear();
     this.solver.cache.clear();
+    this._materials.clear();
   }
 
   destroyEntity(entityId: EntityId): boolean {
@@ -194,6 +198,8 @@ export class Realm2D implements RealmConnector {
     const model = createModel2D(lightId);
     if (transform) {
       model.setTRS(transform.position, transform.rotation, transform.scale);
+      model.zLayer = transform.zLayer ?? 0;
+      model.drawOrder = transform.drawOrder ?? 0;
     }
     this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createLight2D(lightId, desc));
@@ -317,12 +323,16 @@ export class Realm2D implements RealmConnector {
     return this._engine.realm2dLoadFontData(this.realmId, data, data.byteLength);
   }
 
+  /** Registers a material for upload during the next sync or flush. */
   createMaterial(desc: Material2DDesc): number {
     const materialId = this.allocateResourceId();
-    if (this._engine) {
-      this._engine.realm2dCreateMaterial(this.realmId, materialId, desc);
-    }
+    this._materials.set(materialId, desc);
     return materialId;
+  }
+
+  /** Removes a material on the next sync or flush; entities referencing it are not destroyed. */
+  destroyMaterial(materialId: number): void {
+    this._materials.delete(materialId);
   }
 
   // ---------------------------------------------------------------------------
@@ -337,6 +347,8 @@ export class Realm2D implements RealmConnector {
     const model = createModel2D(emitterId);
     if (transform) {
       model.setTRS(transform.position, transform.rotation, transform.scale);
+      model.zLayer = transform.zLayer ?? 0;
+      model.drawOrder = transform.drawOrder ?? 0;
     }
     this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createParticleEmitter2D(emitterId, desc));

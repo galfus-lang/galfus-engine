@@ -255,8 +255,12 @@ impl SvgManager2D {
     }
 
     /// Pushes active SVG geometry into the 2D batch builder.
-    pub fn push_batches(&self, batch_builder: &mut BatchBuilder2D) {
-        for instance in self.instances.values() {
+    pub fn push_batches(
+        &self,
+        batch_builder: &mut BatchBuilder2D,
+        materials: &HashMap<u32, crate::types::Material2D>,
+    ) {
+        for (&id, instance) in &self.instances {
             let Some(handle) = instance.geometry_handle else {
                 continue;
             };
@@ -292,10 +296,13 @@ impl SvgManager2D {
                 .unwrap_or(instance.transform.draw_order);
 
             batch_builder.push(PreparedItem2D {
+                order: (id, 3),
                 key: BatchKey2D {
                     z_layer: instance.transform.z_layer,
                     draw_order,
-                    surface_type: 1, // Transparent
+                    surface_type: materials
+                        .get(&mat_id)
+                        .map_or(1, crate::types::Material2D::surface_type_id),
                     material_id: mat_id,
                     geometry_id: handle.to_u64(),
                 },
