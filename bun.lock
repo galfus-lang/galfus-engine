@@ -6,6 +6,8 @@
       "name": "galfus-engine",
       "devDependencies": {
         "@galfus/engine": "workspace:*",
+        "@galfus/gltf-loader": "workspace:*",
+        "@galfus/model-loader-types": "workspace:*",
         "@galfus/transport-browser": "workspace:*",
         "@galfus/transport-bun": "workspace:*",
         "@galfus/transport-node": "workspace:*",
@@ -23,6 +25,19 @@
       "dependencies": {
         "@galfus/transport-types": "workspace:*",
       },
+    },
+    "host/gltf-loader": {
+      "name": "@galfus/gltf-loader",
+      "version": "0.1.0",
+      "dependencies": {
+        "@galfus/engine": "workspace:*",
+        "@galfus/model-loader-types": "workspace:*",
+        "@galfus/transport-types": "workspace:*",
+      },
+    },
+    "host/model-loader-types": {
+      "name": "@galfus/model-loader-types",
+      "version": "0.1.0",
     },
     "host/transport-browser": {
       "name": "@galfus/transport-browser",
@@ -52,6 +67,10 @@
   },
   "packages": {
     "@galfus/engine": ["@galfus/engine@workspace:host/engine"],
+
+    "@galfus/gltf-loader": ["@galfus/gltf-loader@workspace:host/gltf-loader"],
+
+    "@galfus/model-loader-types": ["@galfus/model-loader-types@workspace:host/model-loader-types"],
 
     "@galfus/transport-browser": ["@galfus/transport-browser@workspace:host/transport-browser"],
 

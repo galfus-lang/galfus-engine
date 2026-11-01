@@ -4,6 +4,7 @@
  */
 
 import { EPSILON, equalsApprox } from './common';
+import type { ReadonlyMat4 } from './mat4';
 import type { ReadonlyVec3 } from './vec3';
 
 export type Quat = Float32Array & {
@@ -343,6 +344,60 @@ export function fromLookAt(
   const m20 = -fx;
   const m21 = -fy;
   const m22 = -fz;
+
+  const trace = m00 + m11 + m22;
+  if (trace > 0) {
+    const s = 0.5 / Math.sqrt(trace + 1.0);
+    out[0] = (m12 - m21) * s;
+    out[1] = (m20 - m02) * s;
+    out[2] = (m01 - m10) * s;
+    out[3] = 0.25 / s;
+  } else if (m00 > m11 && m00 > m22) {
+    const s = 2.0 * Math.sqrt(1.0 + m00 - m11 - m22);
+    out[0] = 0.25 * s;
+    out[1] = (m10 + m01) / s;
+    out[2] = (m20 + m02) / s;
+    out[3] = (m12 - m21) / s;
+  } else if (m11 > m22) {
+    const s = 2.0 * Math.sqrt(1.0 + m11 - m00 - m22);
+    out[0] = (m10 + m01) / s;
+    out[1] = 0.25 * s;
+    out[2] = (m21 + m12) / s;
+    out[3] = (m20 - m02) / s;
+  } else {
+    const s = 2.0 * Math.sqrt(1.0 + m22 - m00 - m11);
+    out[0] = (m20 + m02) / s;
+    out[1] = (m21 + m12) / s;
+    out[2] = 0.25 * s;
+    out[3] = (m01 - m10) / s;
+  }
+  return out;
+}
+
+export function fromMat4(out: Quat, m: ReadonlyMat4): Quat {
+  let m00 = m[0]!;
+  let m01 = m[1]!;
+  let m02 = m[2]!;
+  let m10 = m[4]!;
+  let m11 = m[5]!;
+  let m12 = m[6]!;
+  let m20 = m[8]!;
+  let m21 = m[9]!;
+  let m22 = m[10]!;
+
+  const sx = 1.0 / (Math.hypot(m00, m01, m02) || 1.0);
+  const sy = 1.0 / (Math.hypot(m10, m11, m12) || 1.0);
+  const sz = 1.0 / (Math.hypot(m20, m21, m22) || 1.0);
+
+  m00 *= sx;
+  m01 *= sx;
+  m02 *= sx;
+  m10 *= sy;
+  m11 *= sy;
+  m12 *= sy;
+  m20 *= sz;
+  m21 *= sz;
+  m22 *= sz;
 
   const trace = m00 + m11 + m22;
   if (trace > 0) {

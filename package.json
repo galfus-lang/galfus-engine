@@ -35,6 +35,8 @@
   },
   "devDependencies": {
     "@galfus/engine": "workspace:*",
+    "@galfus/gltf-loader": "workspace:*",
+    "@galfus/model-loader-types": "workspace:*",
     "@galfus/transport-browser": "workspace:*",
     "@galfus/transport-bun": "workspace:*",
     "@galfus/transport-node": "workspace:*",

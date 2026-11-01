@@ -150,6 +150,7 @@ export class MultiverseRuntime {
   createRealm3D(realmId?: RealmId | number): Realm3D {
     const id = (realmId ?? this._realmIdAllocator.allocate('RealmId')) as RealmId;
     const realm = new Realm3D(id);
+    realm.resources = this.resources;
     this.multiverse.registerRealm(realm);
     return realm;
   }

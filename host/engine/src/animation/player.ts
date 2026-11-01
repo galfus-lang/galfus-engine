@@ -30,6 +30,8 @@ export interface ActiveClipState {
   isForward: boolean;
 }
 
+export type AnimationPlayer3D = AnimationPlayer3DComponent;
+
 export interface AnimationPlayer3DComponent extends Component {
   readonly type: 'AnimationPlayer3D';
   clips: Map<string, AnimationClip>;

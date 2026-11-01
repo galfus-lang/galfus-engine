@@ -25,6 +25,7 @@ import type { EntityId } from '../ecs/entity';
 import { RESERVED_PRIORITY_INTERNAL_RESOLVERS, type SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
 import type { RealmConnector, RealmId, RealmKind } from '../multiverse/realm';
+import { ResourceManager } from '../resources/manager';
 import type { TransitionId } from '../types';
 import {
   type Camera3DComponent,
@@ -60,6 +61,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   readonly solver = new AnchorSolveSystem();
   readonly skinningSystem: SkinningSolveSystem;
   readonly syncSystem: Realm3DSyncSystem;
+  resources: ResourceManager = new ResourceManager();
   readonly hierarchy: HierarchyCoordinator<'3d'>;
 
   private readonly _geometries = new Map<number, GeometryResourceEntry>();
@@ -108,7 +110,12 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   bindEngine(engine: GalfusEngine): void {
     if (this._disposed) return;
     this._engine = engine;
+    this.resources.bindEngine(engine);
     engine.realm3dCreate(this.realmId);
+  }
+
+  destroyInstancedModel(instancedModelId: number): void {
+    this._engine?.realm3dDestroyInstancedModel(this.realmId, instancedModelId);
   }
 
   preRender(context: SystemContext): void {
@@ -191,20 +198,8 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
 
   createGeometry(data: GeometryData | Primitive3DKind): { geometryId: number } {
     const geometryId = this.allocateResourceId();
-
-    let primitive: Primitive3DKind;
-    if ('positions' in data) {
-      const packed = packGeometryData(data);
-      primitive = {
-        kind: 'custom',
-        topology: packed.topology,
-        vertexData: packed.vertexData,
-        indices: packed.indices
-      };
-    } else {
-      primitive = data;
-    }
-
+    const primitive: Primitive3DKind =
+      'positions' in data ? { kind: 'custom', ...packGeometryData(data) } : data;
     this._geometries.set(geometryId, { geometryId, primitive, isDirty: true });
     return { geometryId };
   }
@@ -264,13 +259,17 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     return mesh;
   }
 
+  attachMesh(entityId: EntityId, desc: Mesh3DDesc): Mesh3DComponent {
+    return this.createMesh(entityId, desc);
+  }
+
   createSkin(
     modelEntityId: EntityId,
     joints: EntityId[],
     inverseBindMatrices: Float32Array
   ): { entityId: EntityId; skinId: number } {
-    const entityId = this.world.createEntity();
-    const skinId = this.allocateResourceId();
+    const entityId = this.world.createEntity(),
+      skinId = this.allocateResourceId();
     this.world.attachComponent(
       entityId,
       createSkin3D(skinId, modelEntityId, joints, inverseBindMatrices)
@@ -282,16 +281,16 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     desc: Camera3DDesc,
     transform?: Transform3DProps
   ): { entityId: EntityId; cameraId: number } {
-    const entityId = this.world.createEntity();
-    const cameraId = this.allocateResourceId();
+    const entityId = this.world.createEntity(),
+      cameraId = this.allocateResourceId();
     this._attachModel(entityId, cameraId, transform);
     this.world.attachComponent(entityId, createCamera3D(cameraId, desc));
     return { entityId, cameraId };
   }
 
   createLight(desc: Light3DDesc, transform?: Transform3DProps): EntityId {
-    const entityId = this.world.createEntity();
-    const lightId = this.allocateResourceId();
+    const entityId = this.world.createEntity(),
+      lightId = this.allocateResourceId();
     this._attachModel(entityId, lightId, transform);
     this.world.attachComponent(entityId, createLight3D(lightId, desc));
     return entityId;
@@ -481,9 +480,8 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
       (camera.entityId
         ? this.world.getComponent<Camera3DComponent>(camera.entityId, 'Camera3D')?.cameraId
         : undefined);
-    if (resolved === undefined) {
+    if (resolved === undefined)
       throw new Error('Cannot resolve Camera3D ID: entity does not have a Camera3DComponent.');
-    }
     return resolved;
   }
 
@@ -502,11 +500,10 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
         ? this.world.getComponent<ParticleEmitter3DComponent>(emitter.entityId, 'ParticleEmitter3D')
             ?.emitterId
         : undefined);
-    if (resolved === undefined) {
+    if (resolved === undefined)
       throw new Error(
         'Cannot resolve ParticleEmitter3D ID: entity does not have a ParticleEmitter3DComponent.'
       );
-    }
     return resolved;
   }
 
