@@ -1,3 +1,4 @@
+import { advanceFrame } from './controlled-transport';
 import { describe, expect, it } from 'bun:test';
 import type { GalfusEngine, GalfusTransport } from '@galfus/transport-types';
 import { EcsWorld } from '../src/ecs/world';
@@ -55,7 +56,6 @@ function createMockTransport(engine: GalfusEngine): GalfusTransport {
     init: async () => {},
     startLoop: () => {},
     stopLoop: () => {},
-    step: () => {},
     dispose: () => {}
   };
 }
@@ -171,7 +171,7 @@ describe('Phases F21 & F22 — API Safety, Error Isolation, EcsWorld Reset & Ful
 
     // Create 2D realm
     const r2d = runtime.createRealm2D(20);
-    const _mat2dId = r2d.createMaterial({ baseColor: [0, 1, 0, 1] });
+    r2d.createMaterial({ baseColor: [0, 1, 0, 1] });
     r2d.createSprite({ dimensions: [32, 32] }, { position: [100, 100] });
 
     // Target and Invocations
@@ -191,7 +191,7 @@ describe('Phases F21 & F22 — API Safety, Error Isolation, EcsWorld Reset & Ful
 
     // Advance 50 frames
     for (let f = 1; f <= 50; f++) {
-      runtime.tick(0.016);
+      advanceFrame(runtime, transport, 0.016);
     }
     expect(runtime.frameId).toBe(50);
 

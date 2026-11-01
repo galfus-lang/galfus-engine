@@ -21,7 +21,6 @@ export class NodeTransport implements GalfusTransport {
   private _frameId = 0;
   private _lastTime = 0;
   private _loopGeneration = 0;
-  private _loopTimer: ReturnType<typeof setTimeout> | null = null;
   private _callback: FrameCallback | null = null;
   private _targetFps: number = DEFAULT_TARGET_FPS;
 
@@ -98,7 +97,6 @@ export class NodeTransport implements GalfusTransport {
     this._callback = callback;
     this._isRunning = true;
     this._lastTime = performance.now();
-    this._frameId = 0;
 
     const targetFps = options?.targetFps ?? this._targetFps;
     const intervalMs = 1000 / targetFps;
@@ -130,20 +128,6 @@ export class NodeTransport implements GalfusTransport {
   stopLoop(): void {
     this._isRunning = false;
     this._loopGeneration++;
-    if (this._loopTimer !== null) {
-      clearTimeout(this._loopTimer);
-      this._loopTimer = null;
-    }
-  }
-
-  step(timeMs?: number, deltaMs?: number, callback?: FrameCallback): void {
-    if (this._isDisposed) {
-      throw new GalfusLoopError('Cannot step on a disposed NodeTransport.');
-    }
-    const now = timeMs ?? performance.now();
-    const timing = calculateFrameTiming(now, this._lastTime, ++this._frameId, deltaMs);
-    this._lastTime = now;
-    (callback ?? this._callback)?.(timing);
   }
 
   start(callback: FrameCallback, options?: LoopOptions): void {
@@ -152,10 +136,6 @@ export class NodeTransport implements GalfusTransport {
 
   stop(): void {
     this.stopLoop();
-  }
-
-  tick(timeMs?: number, deltaMs?: number): void {
-    this.step(timeMs, deltaMs);
   }
 }
 

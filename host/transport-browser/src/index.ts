@@ -112,7 +112,7 @@ export class BrowserTransport implements GalfusTransport {
     }
     if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
       throw new GalfusLoopError(
-        'BrowserTransport requires requestAnimationFrame. In headless or non-DOM environments, use step() or a native transport.'
+        'BrowserTransport requires requestAnimationFrame. In headless or non-DOM environments, use a native transport.'
       );
     }
 
@@ -120,7 +120,6 @@ export class BrowserTransport implements GalfusTransport {
     this._callback = callback;
     this._isRunning = true;
     this._lastTime = performance.now();
-    this._frameId = 0;
 
     const tick = (now: number) => {
       if (!this._isRunning || this._loopGeneration !== currentGen || this._isDisposed) return;
@@ -159,26 +158,12 @@ export class BrowserTransport implements GalfusTransport {
     }
   }
 
-  step(timeMs?: number, deltaMs?: number, callback?: FrameCallback): void {
-    if (this._isDisposed) {
-      throw new GalfusLoopError('Cannot step on a disposed BrowserTransport.');
-    }
-    const now = timeMs ?? performance.now();
-    const timing = calculateFrameTiming(now, this._lastTime, ++this._frameId, deltaMs);
-    this._lastTime = now;
-    (callback ?? this._callback)?.(timing);
-  }
-
   start(callback: FrameCallback, options?: LoopOptions): void {
     this.startLoop(callback, options);
   }
 
   stop(): void {
     this.stopLoop();
-  }
-
-  tick(timeMs?: number, deltaMs?: number): void {
-    this.step(timeMs, deltaMs);
   }
 }
 

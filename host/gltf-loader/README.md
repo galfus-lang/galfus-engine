@@ -15,7 +15,7 @@ Implements the official Khronos glTF 2.0 specification with automatic compressio
 - **Modular Sub-Factories (`createSubFactory`)**: Isolate and instantiate individual sub-trees or alternate scenes from modular asset packs without duplicating VRAM.
 - **Auto-Decoders (Zero Configuration)**: Automatically detects `KHR_draco_mesh_compression` and `EXT_meshopt_compression` extensions in headers and initializes decoders on demand.
 - **Hardware GPU Instancing**: Automatically maps `EXT_mesh_gpu_instancing` nodes to Galfus native 32-float instance buffers, rendering thousands of objects in a single draw call.
-- **Skeletal Skinning & Animations**: Binds glTF skins to `Skin3DComponent` (solved via `HierarchyCoordinator`) and compiles multi-channel animations for `AnimationPlayer3D`.
+- **Skeletal Skinning & Animations**: Binds glTF skins to `Skin3DComponent` (solved via `HierarchyCoordinator`) and compiles multi-channel animations for `AnimationPlayer3DComponent`.
 
 ---
 

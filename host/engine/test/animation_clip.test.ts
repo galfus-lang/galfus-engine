@@ -13,6 +13,48 @@ import { quat } from '../src/math/index';
 import { createModel3D, type Model3DComponent } from '../src/realm3d/components';
 
 describe('@galfus/engine > Animation Clips, Sampling & Blending', () => {
+  it('preserves joint rotation when a looping animation also updates scale', () => {
+    const world = new EcsWorld();
+    world.addSystem('update', createAnimationPlaybackSystem());
+    const joint = world.createEntity();
+    const model = createModel3D(1);
+    world.attachComponent(joint, model);
+    const half = Math.SQRT1_2;
+    const clip: AnimationClip = {
+      name: 'joint',
+      duration: 1,
+      tracks: [
+        {
+          targetEntity: joint,
+          path: 'rotation',
+          timestamps: new Float32Array([0, 1]),
+          values: new Float32Array([0, 0, half, half, 0, 0, half, half]),
+          interpolation: 'linear'
+        },
+        {
+          targetEntity: joint,
+          path: 'scale',
+          timestamps: new Float32Array([0, 1]),
+          values: new Float32Array([2, 3, 1, 2, 3, 1]),
+          interpolation: 'linear'
+        }
+      ]
+    };
+    const player = createAnimationPlayer3D([clip]);
+    world.attachComponent(world.createEntity(), player);
+    player.play('joint');
+
+    for (let frame = 0; frame < 120; frame++) {
+      world.step({ time: frame / 60, dt: 1 / 60, frameId: frame + 1 });
+      const m = model.localMatrix;
+      expect(m[0]).toBeCloseTo(0, 4);
+      expect(m[1]).toBeCloseTo(2, 4);
+      expect(m[4]).toBeCloseTo(-3, 4);
+      expect(m[5]).toBeCloseTo(0, 4);
+      expect(m[10]).toBeCloseTo(1, 4);
+    }
+  });
+
   it('samples keyframe tracks with step, linear, and cubic spline interpolation', () => {
     // 1. Linear Translation Track: (t=0 -> [0, 0, 0], t=2 -> [10, 20, 30])
     const linearTrack: KeyframeTrack = {

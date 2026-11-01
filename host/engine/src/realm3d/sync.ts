@@ -147,32 +147,26 @@ export class Realm3DSyncSystem {
    * Synchronizes all active 3D resources and ECS components to the engine driver.
    */
   sync(world: EcsWorld, engine: GalfusEngine, resourceProvider?: Realm3DResourceProvider): void {
-    // 1. Sync Geometries from resource registry (primary) or legacy ECS entities (fallback)
+    // 1. Sync geometries from the resource registry
     const currentGeometries = new Set<number>();
     if (resourceProvider) {
       for (const geo of resourceProvider.getGeometries()) {
         currentGeometries.add(geo.geometryId);
         if (!this._syncedGeometries.has(geo.geometryId) || geo.isDirty) {
           this._uploadPrimitive(engine, geo.geometryId, geo.primitive);
+          if (geo.morphTargets) {
+            const { data, count } = geo.morphTargets;
+            engine.realm3dSetGeometryMorphTargets(
+              this.realmId,
+              geo.geometryId,
+              data,
+              data.byteLength,
+              count
+            );
+          }
           this._syncedGeometries.add(geo.geometryId);
           geo.isDirty = false;
         }
-      }
-    }
-    const geoEntities = world.query('Geometry3D');
-    for (const id of geoEntities) {
-      const geo = world.getComponent<{
-        type: string;
-        geometryId: number;
-        primitive: Primitive3DKind;
-        isDirty: boolean;
-      }>(id, 'Geometry3D');
-      if (!geo) continue;
-      currentGeometries.add(geo.geometryId);
-      if (!this._syncedGeometries.has(geo.geometryId) || geo.isDirty) {
-        this._uploadPrimitive(engine, geo.geometryId, geo.primitive);
-        this._syncedGeometries.add(geo.geometryId);
-        geo.isDirty = false;
       }
     }
     for (const geoId of this._syncedGeometries) {
@@ -182,7 +176,7 @@ export class Realm3DSyncSystem {
       }
     }
 
-    // 2. Sync Materials from resource registry (primary) or legacy ECS entities (fallback)
+    // 2. Sync materials from the resource registry
     const currentMaterials = new Set<number>();
     if (resourceProvider) {
       for (const mat of resourceProvider.getMaterials()) {
@@ -192,22 +186,6 @@ export class Realm3DSyncSystem {
           this._syncedMaterials.add(mat.materialId);
           mat.isDirty = false;
         }
-      }
-    }
-    const matEntities = world.query('Material3D');
-    for (const id of matEntities) {
-      const matComp = world.getComponent<{
-        type: string;
-        materialId: number;
-        desc: any;
-        isDirty: boolean;
-      }>(id, 'Material3D');
-      if (!matComp) continue;
-      currentMaterials.add(matComp.materialId);
-      if (!this._syncedMaterials.has(matComp.materialId) || matComp.isDirty) {
-        engine.realm3dCreateMaterial(this.realmId, matComp.materialId, matComp.desc);
-        this._syncedMaterials.add(matComp.materialId);
-        matComp.isDirty = false;
       }
     }
     for (const matId of this._syncedMaterials) {

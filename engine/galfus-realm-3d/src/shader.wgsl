@@ -252,9 +252,9 @@ fn vs_main(in: VertexInput, @builtin(vertex_index) vertex_index: u32) -> VertexO
     let bone_offset = object.flags.y;
     let bone_count = object.flags.z;
     if (bone_count > 0u) {
-        local_pos = skin_position(in.position, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
-        local_norm = skin_direction(in.normal, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
-        local_tangent = skin_direction(in.tangent.xyz, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+        local_pos = skin_position(local_pos, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+        local_norm = skin_direction(local_norm, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+        local_tangent = skin_direction(local_tangent, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
     }
 
     let world_pos4 = object.model * vec4<f32>(local_pos, 1.0);
@@ -284,9 +284,9 @@ fn vs_instanced_main(in: VertexInput, @builtin(instance_index) instance_index: u
     let bone_offset = object.flags.y;
     let bone_count = object.flags.z;
     if (bone_count > 0u) {
-        local_pos = skin_position(in.position, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
-        local_norm = skin_direction(in.normal, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
-        local_tangent = skin_direction(in.tangent.xyz, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+        local_pos = skin_position(local_pos, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+        local_norm = skin_direction(local_norm, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
+        local_tangent = skin_direction(local_tangent, in.joints0, in.weights0, in.joints1, in.weights1, bone_offset, bone_count);
     }
     var world_pos4 = inst.transform * vec4<f32>(local_pos, 1.0);
 
@@ -426,8 +426,7 @@ fn sample_shadow_layer(
     return (s0 + s1 + s2 + s3) * 0.25;
 }
 
-@fragment
-fn fs_main(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
+fn shade_surface(in: VertexOutput, front_facing: bool) -> vec4<f32> {
     let tex_albedo = sample_material_texture(0u, in.uv0, in.uv1);
     let tex_mr = sample_material_texture(2u, in.uv0, in.uv1);
     let tex_ao = sample_material_texture(3u, in.uv0, in.uv1);
@@ -569,7 +568,8 @@ fn fs_main(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @loca
             let spec = pow(NdotH, max(shininess, 1.0));
 
             let diffuse = albedo.rgb * light.color_intensity.rgb * NdotL * (1.0 - metallic);
-            let specular = light.color_intensity.rgb * spec * mix(vec3<f32>(0.04), albedo.rgb, metallic);
+            let dielectric_f0 = 0.16 * material.pbr_params.z * material.pbr_params.z;
+            let specular = light.color_intensity.rgb * spec * mix(vec3<f32>(dielectric_f0), albedo.rgb, metallic);
 
             direct_light = direct_light + (diffuse + specular) * attenuation * shadow_factor * light.color_intensity.a;
         }
@@ -637,5 +637,28 @@ fn fs_main(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @loca
         out_alpha = 1.0;
     }
     return vec4<f32>(final_color, out_alpha);
+}
+
+@fragment
+fn fs_main(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
+    return shade_surface(in, front_facing);
+}
+
+@fragment
+fn fs_opaque_transparent(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
+    let color = shade_surface(in, front_facing);
+    if color.a < 1.0 {
+        discard;
+    }
+    return color;
+}
+
+@fragment
+fn fs_transparent(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
+    let color = shade_surface(in, front_facing);
+    if color.a >= 1.0 {
+        discard;
+    }
+    return color;
 }
 

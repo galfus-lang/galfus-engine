@@ -1,3 +1,4 @@
+import { advanceFrame } from './controlled-transport';
 import { describe, expect, it } from 'bun:test';
 import type {
   AnimationEvent,
@@ -12,14 +13,13 @@ import { MultiverseRuntime } from '../src/runtime';
 describe('@galfus/engine > Unified Event System (.on and off)', () => {
   it('dispatches tick events and supports functional unsubscription', () => {
     const mockTransport: GalfusTransport = {
-      engine: {} as unknown as GalfusEngine,
+      engine: { multiverseDispatch: () => {} } as unknown as GalfusEngine,
       isInitialized: true,
       isDisposed: false,
       isRunning: false,
       init: async () => {},
       startLoop: () => {},
       stopLoop: () => {},
-      step: () => {},
       dispose: () => {}
     };
 
@@ -31,13 +31,13 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
       tickFrames.push(timing.frameId);
     });
 
-    runtime.tick(0.016);
-    runtime.tick(0.016);
+    advanceFrame(runtime, mockTransport, 0.016);
+    advanceFrame(runtime, mockTransport, 0.016);
     expect(tickFrames).toEqual([1, 2]);
 
     // Unsubscribe via returned off function
     off();
-    runtime.tick(0.016);
+    advanceFrame(runtime, mockTransport, 0.016);
     expect(tickFrames).toEqual([1, 2]);
   });
 
@@ -78,7 +78,6 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
       init: async () => {},
       startLoop: () => {},
       stopLoop: () => {},
-      step: () => {},
       dispose: () => {}
     };
 
@@ -92,7 +91,7 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
     });
 
     // Step a frame: platform events must be pumped and processed internally
-    runtime.tick(0.016);
+    advanceFrame(runtime, mockTransport, 0.016);
 
     // 1. Window events received by listener
     expect(windowEvents.length).toBe(2);
@@ -110,7 +109,7 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
       windowId: 1,
       focused: true
     });
-    runtime.tick(0.016);
+    advanceFrame(runtime, mockTransport, 0.016);
     expect(windowEvents.length).toBe(2);
   });
 
@@ -139,7 +138,6 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
       init: async () => {},
       startLoop: () => {},
       stopLoop: () => {},
-      step: () => {},
       dispose: () => {}
     };
 
@@ -152,21 +150,20 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
       animationEvents.push(ev);
     });
 
-    runtime.tick(0.016);
+    advanceFrame(runtime, mockTransport, 0.016);
     expect(animationEvents.length).toBe(1);
     expect(animationEvents[0]?.eventType).toBe('completed');
   });
 
   it('supports clearListeners to flush all or specific event types', () => {
     const mockTransport: GalfusTransport = {
-      engine: {} as unknown as GalfusEngine,
+      engine: { multiverseDispatch: () => {} } as unknown as GalfusEngine,
       isInitialized: true,
       isDisposed: false,
       isRunning: false,
       init: async () => {},
       startLoop: () => {},
       stopLoop: () => {},
-      step: () => {},
       dispose: () => {}
     };
 
@@ -177,12 +174,12 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
       tickCount++;
     });
 
-    runtime.tick(0.016);
+    advanceFrame(runtime, mockTransport, 0.016);
     expect(tickCount).toBe(1);
 
     // Clear specific category
     runtime.clearListeners('tick');
-    runtime.tick(0.016);
+    advanceFrame(runtime, mockTransport, 0.016);
     expect(tickCount).toBe(1);
   });
 });

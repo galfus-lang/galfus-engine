@@ -251,6 +251,46 @@ pub fn render_draw_items<'a>(
     items: impl IntoIterator<Item = &'a CollectedDrawItem<'a>>,
     refraction_bg: &'a wgpu::BindGroup,
 ) {
+    render_draw_items_with_state(pass, pipeline, items, refraction_bg, None);
+}
+
+pub(crate) fn render_transparent_opaque<'a>(
+    pass: &mut wgpu::RenderPass<'a>,
+    pipeline: &'a crate::pipeline::Pipeline3D,
+    items: impl IntoIterator<Item = &'a CollectedDrawItem<'a>>,
+    refraction_bg: &'a wgpu::BindGroup,
+) {
+    render_draw_items_with_state(
+        pass,
+        pipeline,
+        items,
+        refraction_bg,
+        Some(SurfacePipelineState::OpaqueTransparent),
+    );
+}
+
+pub(crate) fn render_transparent_partial<'a>(
+    pass: &mut wgpu::RenderPass<'a>,
+    pipeline: &'a crate::pipeline::Pipeline3D,
+    items: impl IntoIterator<Item = &'a CollectedDrawItem<'a>>,
+    refraction_bg: &'a wgpu::BindGroup,
+) {
+    render_draw_items_with_state(
+        pass,
+        pipeline,
+        items,
+        refraction_bg,
+        Some(SurfacePipelineState::AlphaBlendAfterOpaque),
+    );
+}
+
+fn render_draw_items_with_state<'a>(
+    pass: &mut wgpu::RenderPass<'a>,
+    pipeline: &'a crate::pipeline::Pipeline3D,
+    items: impl IntoIterator<Item = &'a CollectedDrawItem<'a>>,
+    refraction_bg: &'a wgpu::BindGroup,
+    override_state: Option<SurfacePipelineState>,
+) {
     pass.set_bind_group(3, refraction_bg, &[]);
     let mut curr_pipe = None;
     let mut curr_mat = None;
@@ -258,7 +298,8 @@ pub fn render_draw_items<'a>(
 
     for item in items {
         let is_instanced = item.instance_buffer.is_some() && item.instance_count > 0;
-        let surface_state = SurfacePipelineState::from_surface_type(item.surface_type);
+        let surface_state = override_state
+            .unwrap_or_else(|| SurfacePipelineState::from_surface_type(item.surface_type));
         let key = (
             item.shader_effect,
             item.topology,

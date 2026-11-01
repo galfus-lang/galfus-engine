@@ -17,7 +17,7 @@ describe('@galfus/engine > PlatformCoordinator & WindowManager', () => {
       windowSetCursorIcon: (id: number, icon: number) => calls.push(`setIcon:${id}:${icon}`),
       windowSetIcon: (id: number, _data: Uint8Array, len: number) =>
         calls.push(`setWindowIcon:${id}:${len}`),
-      platformGetWindowSize: (id: number) => [1280, 720],
+      platformGetWindowSize: (_id: number) => [1280, 720],
       multiverseUpdateWindowSize: (id: number, w: number, h: number) =>
         calls.push(`updateSize:${id}:${w}x${h}`),
       platformPumpEvents: () => [],
@@ -43,7 +43,6 @@ describe('@galfus/engine > PlatformCoordinator & WindowManager', () => {
       init: async () => {},
       startLoop: () => {},
       stopLoop: () => {},
-      step: () => {},
       dispose: () => {}
     };
 

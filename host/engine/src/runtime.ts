@@ -5,7 +5,6 @@
 import {
   type FrameCallback,
   type FrameTiming,
-  type GalfusEngine,
   GalfusLoopError,
   type GalfusTransport,
   GalfusTransportError,
@@ -26,7 +25,8 @@ import { IdAllocator, type RuntimeEventListener, type RuntimeEventType } from '.
 /**
  * Lifecycle states of the MultiverseRuntime orchestrator.
  */
-export type RuntimeState = 'ready' | 'running' | 'resetting' | 'disposing' | 'disposed' | 'failed';
+export type RuntimeState =
+  'ready' | 'running' | 'paused' | 'resetting' | 'disposing' | 'disposed' | 'failed';
 
 export class MultiverseRuntime {
   readonly platform = new PlatformCoordinator();
@@ -44,7 +44,10 @@ export class MultiverseRuntime {
   private _isRunning = false;
   private _state: RuntimeState;
 
-  constructor(readonly transport: GalfusTransport) {
+  readonly #transport: GalfusTransport;
+
+  constructor(transport: GalfusTransport) {
+    this.#transport = transport;
     if (transport.isDisposed) {
       this._state = 'disposed';
     } else {
@@ -60,13 +63,6 @@ export class MultiverseRuntime {
    */
   get state(): RuntimeState {
     return this._state;
-  }
-
-  /**
-   * Underlying native or WASM GalfusEngine driver.
-   */
-  get engine(): GalfusEngine {
-    return this.transport.engine;
   }
 
   /**
@@ -105,8 +101,8 @@ export class MultiverseRuntime {
     if (this._state === 'disposed' || this._state === 'failed') {
       throw new GalfusTransportError(`Cannot initialize runtime in state '${this._state}'.`);
     }
-    if (!this.transport.isInitialized) {
-      await this.transport.init(options);
+    if (!this.#transport.isInitialized) {
+      await this.#transport.init(options);
     }
     this.bindSubsystems();
     this._state = 'ready';
@@ -114,7 +110,7 @@ export class MultiverseRuntime {
 
   private bindSubsystems(): void {
     if (this._isSubsystemsBound) return;
-    const engine = this.transport.engine;
+    const engine = this.#transport.engine;
     this.platform.bindEngine(engine);
     this.multiverse.bindEngine(engine);
     this.resources.bindEngine(engine);
@@ -196,50 +192,42 @@ export class MultiverseRuntime {
       throw new GalfusLoopError(`Cannot start runtime in state '${this._state}'.`);
     }
     if (this._state === 'running') return;
-    if (this._state !== 'ready') {
+    if (this._state !== 'ready' && this._state !== 'paused') {
       throw new GalfusLoopError(
         `Cannot start runtime before ready (current state: '${this._state}').`
       );
     }
 
-    this.transport.startLoop((timing) => {
-      this.tickFrame(timing);
-    }, options);
-
+    const previousState = this._state;
     this._state = 'running';
     this._isRunning = true;
+    try {
+      this.#transport.startLoop((timing) => {
+        this.tickFrame(timing);
+      }, options);
+    } catch (error) {
+      this._state = previousState;
+      this._isRunning = false;
+      throw error;
+    }
   }
 
   /**
    * Halts the active frame loop.
    */
   stop(): void {
-    if (this._state !== 'running') return;
-    this.transport.stopLoop();
+    if (this._state !== 'running' && this._state !== 'paused') return;
+    if (this._state === 'running') this.#transport.stopLoop();
     this._isRunning = false;
     this._state = 'ready';
   }
 
-  /**
-   * Manually steps a single frame (useful for deterministic simulations, testing, or headless runs).
-   */
-  tick(dt: number = 0.016): void {
-    if (this._state === 'disposed' || this._state === 'failed' || this._state === 'disposing') {
-      throw new GalfusLoopError(`Cannot tick runtime in state '${this._state}'.`);
-    }
-
-    const nextFrameId = this._frameId + 1;
-    const nextElapsed = this._elapsedSeconds + dt;
-
-    const timing: FrameTiming = {
-      timeMs: nextElapsed * 1000,
-      deltaMs: dt * 1000,
-      dt,
-      frameId: nextFrameId,
-      fps: dt > 0 ? 1 / dt : 0
-    };
-
-    this.tickFrame(timing);
+  /** Pauses frame execution; call start() to resume. */
+  pause(): void {
+    if (this._state !== 'running') return;
+    this.#transport.stopLoop();
+    this._isRunning = false;
+    this._state = 'paused';
   }
 
   /**
@@ -272,31 +260,31 @@ export class MultiverseRuntime {
 
       // 2. Audio: Stop and unload all sounds
       this.audio.dispose();
-      if (this.transport.engine) {
-        this.audio.bindEngine(this.transport.engine);
+      if (this.#transport.engine) {
+        this.audio.bindEngine(this.#transport.engine);
       }
 
       // 3. Animation: Clear transitions and paths
       this.animation.dispose();
-      if (this.transport.engine) {
-        this.animation.bindEngine(this.transport.engine);
+      if (this.#transport.engine) {
+        this.animation.bindEngine(this.#transport.engine);
       }
 
       // 4. Windows: Close all open windows
       this.platform.dispose();
-      if (this.transport.engine) {
-        this.platform.bindEngine(this.transport.engine);
+      if (this.#transport.engine) {
+        this.platform.bindEngine(this.#transport.engine);
       }
 
       // 5. Global Texture Resources
       this.resources.dispose();
-      if (this.transport.engine) {
-        this.resources.bindEngine(this.transport.engine);
+      if (this.#transport.engine) {
+        this.resources.bindEngine(this.#transport.engine);
       }
 
       // Re-bind engine to multiverse
-      if (this.transport.engine) {
-        this.multiverse.bindEngine(this.transport.engine);
+      if (this.#transport.engine) {
+        this.multiverse.bindEngine(this.#transport.engine);
       }
 
       this._state = 'ready';
@@ -311,9 +299,9 @@ export class MultiverseRuntime {
    */
   dispose(): void {
     if (this._state === 'disposed') return;
-    this._state = 'disposing';
     try {
       this.stop();
+      this._state = 'disposing';
       this.clearListeners();
       if (this._animationUnsubscribe) {
         this._animationUnsubscribe();
@@ -324,7 +312,7 @@ export class MultiverseRuntime {
       this.resources.dispose();
       this.multiverse.dispose();
       this.platform.dispose();
-      this.transport.dispose();
+      this.#transport.dispose();
       this._state = 'disposed';
     } catch (err) {
       this._state = 'failed';
@@ -386,7 +374,7 @@ export class MultiverseRuntime {
       time: this._elapsedSeconds,
       dt: timing.dt,
       frameId: timing.frameId,
-      engine: this.transport.engine
+      engine: this.#transport.engine
     };
 
     // 6. Step pre-render stages: input -> update -> preRender (anchors, hierarchies)

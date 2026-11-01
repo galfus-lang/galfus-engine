@@ -70,7 +70,8 @@ export function evaluateClip(clip: AnimationClip, time: number, outPose: Animati
         break;
 
       case 'weights': {
-        const weightCount = Math.floor(track.values.length / Math.max(1, track.timestamps.length));
+        const records = track.timestamps.length * (track.interpolation === 'cubicspline' ? 3 : 1);
+        const weightCount = Math.floor(track.values.length / Math.max(1, records));
         let weightsBuf = outPose.weights.get(id);
         if (!weightsBuf || weightsBuf.length !== weightCount) {
           weightsBuf = new Float32Array(weightCount);

@@ -2,7 +2,7 @@
  * Scene graph construction, ECS entity spawning, hierarchy resolution, and GPU instancing.
  */
 
-import type { Realm3D } from '@galfus/engine';
+import type { Model3DComponent, Realm3D } from '@galfus/engine';
 import { mat4, quat, vec3 } from '@galfus/engine';
 import type {
   ModelImportOptions,
@@ -17,6 +17,7 @@ export interface SpawnedSceneResult {
   rootEntityId: number;
   entities: number[];
   nodeEntityMap: Map<number, number>; // gltfNodeIndex -> ecsEntityId
+  primitiveEntities: Map<number, number[]>;
   instancedModelIds: number[];
 }
 
@@ -68,6 +69,7 @@ export function spawnSceneGraph(
   const nodeEntityMap = new Map<number, number>();
   const entities: number[] = [];
   const instancedModelIds: number[] = [];
+  const primitiveEntities = new Map<number, number[]>();
 
   // Determine root nodes: either user-specified or from active glTF scene
   let candidateRoots: number[] = [];
@@ -173,7 +175,13 @@ export function spawnSceneGraph(
             ? (readAccessor(gltf, buffers, scaleAcc) as Float32Array)
             : undefined;
 
-        const count = translations ? translations.length / 3 : 1;
+        const count = translations
+          ? translations.length / 3
+          : rotations
+            ? rotations.length / 4
+            : scales
+              ? scales.length / 3
+              : 0;
         // 32 floats per instance record required by Galfus Core
         const instanceData = new Float32Array(count * 32);
 
@@ -276,6 +284,7 @@ export function spawnSceneGraph(
             getDefaultMaterial();
 
           if (geometryId !== undefined) {
+            let primitiveEntityId = entityId;
             if (primIdx === 0) {
               realm.createMesh(entityId, {
                 geometryId,
@@ -284,6 +293,7 @@ export function spawnSceneGraph(
             } else {
               // Sub-primitive: spawn a child spatial node attached to the primary entity
               const subEntityId = realm.createSpatialNode();
+              primitiveEntityId = subEntityId;
               realm.setEntityName(subEntityId, `${normalizedName}_prim${primIdx}`);
               realm.createMesh(subEntityId, {
                 geometryId,
@@ -291,6 +301,18 @@ export function spawnSceneGraph(
               });
               realm.hierarchy.attach(subEntityId, entityId);
               entities.push(subEntityId);
+            }
+            const mapped = primitiveEntities.get(nIdx) ?? [];
+            mapped.push(primitiveEntityId);
+            primitiveEntities.set(nIdx, mapped);
+            if (prim.targets?.length) {
+              const weights =
+                node.weights ?? mesh.weights ?? new Array(prim.targets.length).fill(0);
+              const model = realm.world.getComponent<Model3DComponent>(
+                primitiveEntityId,
+                'Model3D'
+              );
+              if (model) realm.setModelMorphWeights(model.modelId, new Float32Array(weights));
             }
           }
         }
@@ -326,6 +348,7 @@ export function spawnSceneGraph(
     rootEntityId,
     entities,
     nodeEntityMap,
+    primitiveEntities,
     instancedModelIds
   };
 }

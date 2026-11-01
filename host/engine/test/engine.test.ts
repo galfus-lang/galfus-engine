@@ -1,3 +1,4 @@
+import { advanceFrame } from './controlled-transport';
 import { describe, expect, it } from 'bun:test';
 import type {
   FrameCallback,
@@ -91,12 +92,6 @@ function createMockTransport() {
       loopCallback = null;
       calls.push('transport:stopLoop');
     },
-    step: () => {
-      calls.push('transport:step');
-    },
-    tick: (dt?: number) => {
-      calls.push(`transport:tick:${dt?.toFixed(3)}`);
-    },
     dispose: () => {
       isInitialized = false;
       calls.push('transport:dispose');
@@ -159,24 +154,24 @@ describe('@galfus/engine > Unified MultiverseRuntime', () => {
     });
 
     // 7. Step single frame
-    runtime.tick(0.016);
+    advanceFrame(runtime, transport, 0.016);
 
     expect(tickCount).toBe(1);
     expect(lastTiming).not.toBeNull();
     expect(lastTiming!.frameId).toBe(1);
 
-    expect(calls).toContain('createSprite:10:1');
-    expect(calls).toContain('createCube:20:2');
+    expect(calls.some((call) => call.startsWith('createSprite:10:'))).toBe(true);
+    expect(calls.some((call) => call.startsWith('createCube:20:'))).toBe(true);
     expect(calls).toContain('multiverseResolve');
     expect(calls).toContain('multiverseDispatch:1:0.016');
 
     // 8. Step second frame
-    runtime.tick(0.016);
+    advanceFrame(runtime, transport, 0.016);
     expect(tickCount).toBe(2);
     expect(lastTiming!.frameId).toBe(2);
 
     unsub();
-    runtime.tick(0.016);
+    advanceFrame(runtime, transport, 0.016);
     expect(tickCount).toBe(2); // unsubscribed
 
     // 9. Dispose

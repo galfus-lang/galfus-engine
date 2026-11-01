@@ -83,15 +83,14 @@ export class Model3DComponent implements Component {
   setScale(x: number, y: number, z: number): this;
   setScale(scale: [number, number, number] | Vec3): this;
   setScale(xOrScale: number | [number, number, number] | Vec3, y?: number, z?: number): this {
+    mat4.getTranslation(SCRATCH_P, this.localMatrix);
+    mat4.getRotation(SCRATCH_Q, this.localMatrix);
     if (typeof xOrScale === 'number') {
-      this.localMatrix[0] = xOrScale;
-      this.localMatrix[5] = y ?? 1;
-      this.localMatrix[10] = z ?? 1;
+      vec3.set(SCRATCH_S, xOrScale, y ?? 1, z ?? 1);
     } else {
-      this.localMatrix[0] = xOrScale[0];
-      this.localMatrix[5] = xOrScale[1];
-      this.localMatrix[10] = xOrScale[2];
+      vec3.set(SCRATCH_S, xOrScale[0], xOrScale[1], xOrScale[2]);
     }
+    mat4.fromRotationTranslationScale(this.localMatrix, SCRATCH_Q, SCRATCH_P, SCRATCH_S);
     this.flags |= SpatialDirtyFlags.LocalDirty;
     return this;
   }
@@ -251,6 +250,7 @@ export interface GeometryResourceEntry {
   geometryId: number;
   primitive: Primitive3DKind;
   isDirty: boolean;
+  morphTargets?: { data: Uint8Array; count: number };
 }
 
 export interface MaterialResourceEntry {

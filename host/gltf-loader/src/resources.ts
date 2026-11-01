@@ -4,8 +4,8 @@
 
 import type { Realm3D } from '@galfus/engine';
 import type { ResolvedDecoders } from './decoders/resolver';
-import { readAccessor } from './parser';
-import type { GlTF, GlTFPrimitive } from './types';
+import { decodeDataUri, readAccessor } from './parser';
+import type { GlTF, GltfMaterialAlphaModeResolver, GlTFPrimitive } from './types';
 
 export interface UploadedGltfResources {
   geometryMap: Map<string, number>; // key: `${meshIndex}_${primitiveIndex}` -> geometryId
@@ -40,23 +40,14 @@ async function getImageBytes(
   }
 
   if (image.uri && image.uri.startsWith('data:')) {
-    const commaIdx = image.uri.indexOf(',');
-    if (commaIdx !== -1) {
-      const b64 = image.uri.slice(commaIdx + 1);
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      return bytes;
-    }
+    return decodeDataUri(image.uri);
   }
 
   if (image.uri && externalResolver) {
-    try {
-      return await externalResolver(image.uri);
-    } catch {
-      return undefined;
-    }
+    return await externalResolver(image.uri);
   }
+
+  if (image.uri) throw new Error(`Cannot resolve external glTF image: ${image.uri}`);
 
   return undefined;
 }
@@ -110,11 +101,13 @@ export async function uploadGltfResources(
   gltf: GlTF,
   buffers: Uint8Array[],
   decoders: ResolvedDecoders,
-  externalResolver?: (uri: string) => Promise<Uint8Array>
+  externalResolver?: (uri: string) => Promise<Uint8Array>,
+  resolveMaterialAlphaMode?: GltfMaterialAlphaModeResolver
 ): Promise<UploadedGltfResources> {
   const textureMap = new Map<number, number>();
   const materialMap = new Map<number, number>();
   const geometryMap = new Map<string, number>();
+  const textureBytes = new Map<number, Uint8Array>();
 
   const createdTextureIds: number[] = [];
   const createdMaterialIds: number[] = [];
@@ -145,6 +138,7 @@ export async function uploadGltfResources(
       if (sourceIdx !== undefined) {
         const imageBytes = await getImageBytes(gltf, buffers, sourceIdx, externalResolver);
         if (imageBytes && imageBytes.byteLength > 0) {
+          if (resolveMaterialAlphaMode) textureBytes.set(tIdx, imageBytes);
           const isSrgb = srgbTextureIndices.has(tIdx);
           const textureId = realm.resources.loadTexture(imageBytes, {
             srgb: isSrgb,
@@ -164,8 +158,16 @@ export async function uploadGltfResources(
       const pbr = mat.pbrMetallicRoughness;
       const specGloss = mat.extensions?.KHR_materials_pbrSpecularGlossiness;
 
-      const baseColor = pbr?.baseColorFactor ?? specGloss?.diffuseFactor ?? [1, 1, 1, 1];
-      const metallic = pbr?.metallicFactor ?? 0.0;
+      const linearColor = pbr?.baseColorFactor ?? specGloss?.diffuseFactor ?? [1, 1, 1, 1];
+      const linearToSrgb = (value: number): number =>
+        value <= 0.0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - 0.055;
+      const baseColor: [number, number, number, number] = [
+        linearToSrgb(linearColor[0]),
+        linearToSrgb(linearColor[1]),
+        linearToSrgb(linearColor[2]),
+        linearColor[3]
+      ];
+      const metallic = pbr?.metallicFactor ?? (specGloss ? 0 : 1);
       const roughness =
         pbr?.roughnessFactor ?? (specGloss ? 1.0 - (specGloss.glossinessFactor ?? 1.0) : 1.0);
       const baseColorTextureId =
@@ -192,43 +194,41 @@ export async function uploadGltfResources(
           ? [mat.emissiveFactor[0], mat.emissiveFactor[1], mat.emissiveFactor[2], 1]
           : [0, 0, 0, 1];
 
-      // In glTF, many models (such as Sketchfab/Blender exports) accidentally tag solid materials
-      // with alphaMode: "BLEND". A material is only truly translucent if baseColor alpha is below 1.0
-      // or if its name/texture explicitly designates water/glass/transparency.
-      const baseAlpha = baseColor[3] ?? 1.0;
-      const nameLower = (mat.name ?? '').toLowerCase();
-      const isLikelyTranslucent =
-        baseAlpha < 0.99 ||
-        nameLower.includes('glass') ||
-        nameLower.includes('water') ||
-        nameLower.includes('window') ||
-        nameLower.includes('transpar') ||
-        nameLower.includes('ocean') ||
-        nameLower.includes('sea') ||
-        nameLower.includes('ice');
-
+      const baseTextureIndex = pbr?.baseColorTexture?.index ?? specGloss?.diffuseTexture?.index;
+      const alphaMode =
+        resolveMaterialAlphaMode?.(
+          mat,
+          mIdx,
+          baseTextureIndex === undefined ? undefined : textureBytes.get(baseTextureIndex)
+        ) ?? mat.alphaMode;
       const surfaceType =
-        mat.alphaMode === 'BLEND'
-          ? isLikelyTranslucent
-            ? 'transparent'
-            : 'masked'
-          : mat.alphaMode === 'MASK'
-            ? 'masked'
-            : 'opaque';
+        alphaMode === 'BLEND' ? 'transparent' : alphaMode === 'MASK' ? 'masked' : 'opaque';
 
-      const alphaCutoff =
-        mat.alphaCutoff ?? (mat.alphaMode === 'BLEND' && !isLikelyTranslucent ? 0.5 : undefined);
+      const alphaCutoff = mat.alphaCutoff;
+      const ior = mat.extensions?.KHR_materials_ior?.ior ?? 1.5;
+      const reflectance = ior === 0 ? 2.5 : (2.5 * (ior - 1)) / (ior + 1);
 
       const { materialId } = realm.createMaterial({
         baseColor,
         metallic,
         roughness,
+        refractionIndex: ior,
+        reflectance,
         emissiveColor,
         albedoTextureId: baseColorTextureId,
         normalTextureId,
+        normalScale: mat.normalTexture?.scale,
         metallicRoughnessTextureId,
         emissiveTextureId,
         occlusionTextureId,
+        occlusionStrength: mat.occlusionTexture?.strength,
+        textureUvSets: [
+          pbr?.baseColorTexture ?? specGloss?.diffuseTexture,
+          mat.normalTexture,
+          pbr?.metallicRoughnessTexture,
+          mat.occlusionTexture,
+          mat.emissiveTexture
+        ].map((info) => (info?.texCoord === 1 ? 'uv1' : 'uv0')),
         side: mat.doubleSided ? 'double' : 'front',
         surfaceType,
         alphaCutoff
@@ -254,6 +254,8 @@ export async function uploadGltfResources(
         let colors: Float32Array | undefined;
         let joints0: Uint32Array | Uint16Array | undefined;
         let weights0: Float32Array | undefined;
+        let joints1: Uint32Array | Uint16Array | undefined;
+        let weights1: Float32Array | undefined;
         let indices: Uint32Array | Uint16Array | undefined;
 
         // Check for Draco mesh compression extension
@@ -301,6 +303,14 @@ export async function uploadGltfResources(
           }
           if (prim.attributes['COLOR_0'] !== undefined) {
             colors = readAccessor(gltf, buffers, prim.attributes['COLOR_0']) as Float32Array;
+            if (gltf.accessors?.[prim.attributes['COLOR_0']]?.type === 'VEC3') {
+              const rgba = new Float32Array((colors.length / 3) * 4);
+              for (let i = 0; i < colors.length / 3; i++) {
+                rgba.set(colors.subarray(i * 3, i * 3 + 3), i * 4);
+                rgba[i * 4 + 3] = 1;
+              }
+              colors = rgba;
+            }
           }
           if (prim.attributes['JOINTS_0'] !== undefined) {
             joints0 = readAccessor(gltf, buffers, prim.attributes['JOINTS_0']) as
@@ -309,11 +319,27 @@ export async function uploadGltfResources(
           if (prim.attributes['WEIGHTS_0'] !== undefined) {
             weights0 = readAccessor(gltf, buffers, prim.attributes['WEIGHTS_0']) as Float32Array;
           }
+          if (prim.attributes['JOINTS_1'] !== undefined) {
+            joints1 = readAccessor(gltf, buffers, prim.attributes['JOINTS_1']) as
+              Uint32Array | Uint16Array;
+          }
+          if (prim.attributes['WEIGHTS_1'] !== undefined) {
+            weights1 = readAccessor(gltf, buffers, prim.attributes['WEIGHTS_1']) as Float32Array;
+          }
           if (prim.indices !== undefined) {
             indices = readAccessor(gltf, buffers, prim.indices) as Uint32Array | Uint16Array;
           }
         }
 
+        if (prim.mode === 2 || prim.mode === 6) {
+          const src = indices ?? Uint32Array.from({ length: positions.length / 3 }, (_, i) => i);
+          if (prim.mode === 2) indices = Uint32Array.from([...src, src[0]!]);
+          else {
+            const triangles: number[] = [];
+            for (let i = 1; i + 1 < src.length; i++) triangles.push(src[0]!, src[i]!, src[i + 1]!);
+            indices = new Uint32Array(triangles);
+          }
+        }
         const { geometryId } = realm.createGeometry({
           positions,
           normals,
@@ -323,9 +349,29 @@ export async function uploadGltfResources(
           colors,
           joints0,
           weights0,
+          joints1,
+          weights1,
           indices,
           topology: mapGltfPrimitiveTopology(prim.mode)
         });
+
+        if (prim.targets?.length) {
+          const targets = prim.targets.map((target) => ({
+            positions:
+              target['POSITION'] === undefined
+                ? undefined
+                : (readAccessor(gltf, buffers, target['POSITION']) as Float32Array),
+            normals:
+              target['NORMAL'] === undefined
+                ? undefined
+                : (readAccessor(gltf, buffers, target['NORMAL']) as Float32Array),
+            tangents:
+              target['TANGENT'] === undefined
+                ? undefined
+                : (readAccessor(gltf, buffers, target['TANGENT']) as Float32Array)
+          }));
+          realm.setGeometryMorphTargets(geometryId, targets, positions.length / 3);
+        }
 
         const key = `${meshIdx}_${primIdx}`;
         geometryMap.set(key, geometryId);

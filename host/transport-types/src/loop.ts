@@ -85,32 +85,11 @@ export interface EngineLoopController {
    */
   readonly isRunning: boolean;
 
-  /**
-   * Manually steps a single frame forward.
-   * Ideal for deterministic headless simulations, physics unit tests, or server CI.
-   *
-   * @param timeMs Optional explicit timestamp in milliseconds. Defaults to current performance time.
-   * @param deltaMs Optional explicit delta in milliseconds. Defaults to time elapsed since last step.
-   * @param callback Optional one-off frame callback. Defaults to registered loop callback.
-   *
-   * @example
-   * ```ts
-   * // Fixed deterministic stepping in a unit test:
-   * transport.step(1000, 16.666, (timing) => {
-   *   console.log(timing.dt);
-   * });
-   * ```
-   */
-  step(timeMs?: number, deltaMs?: number, callback?: FrameCallback): void;
-
   /** Alias for {@link startLoop}. */
   start?(callback: FrameCallback, options?: LoopOptions): void;
 
   /** Alias for {@link stopLoop}. */
   stop?(): void;
-
-  /** Alias for {@link step}. */
-  tick?(timeMs?: number, deltaMs?: number): void;
 }
 
 /**
@@ -120,21 +99,14 @@ export interface EngineLoopController {
  * @param nowMs Current monotonic timestamp in milliseconds.
  * @param lastTimeMs Previous frame monotonic timestamp in milliseconds.
  * @param frameId Monotonically increasing frame index.
- * @param explicitDeltaMs Optional explicit delta in milliseconds (used for manual stepping).
  * @returns Fully populated {@link FrameTiming} structure.
  */
 export function calculateFrameTiming(
   nowMs: number,
   lastTimeMs: number,
-  frameId: number,
-  explicitDeltaMs?: number
+  frameId: number
 ): FrameTiming {
-  const deltaMs =
-    explicitDeltaMs !== undefined
-      ? Math.max(0, explicitDeltaMs)
-      : lastTimeMs > 0
-        ? Math.max(0, nowMs - lastTimeMs)
-        : 0;
+  const deltaMs = lastTimeMs > 0 ? Math.max(0, nowMs - lastTimeMs) : 0;
   const dt = deltaMs / 1000;
   const fps = deltaMs > 0 ? 1000 / deltaMs : 0;
 

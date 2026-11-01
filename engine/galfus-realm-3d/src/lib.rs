@@ -25,6 +25,9 @@ pub mod ssao_shader;
 pub mod surface_effect;
 pub mod types;
 
+#[cfg(test)]
+mod transparency_tests;
+
 pub use bloom::BloomPipeline3D;
 pub use collector::{DrawCollector, render_draw_items};
 pub use context::Realm3DContext;

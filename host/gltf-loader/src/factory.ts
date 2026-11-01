@@ -156,7 +156,12 @@ export class GltfAssetFactory implements ModelAssetFactory {
     setupSkins(this._realm, this._gltf, this._buffers, sceneResult);
 
     // 3. Compile Animation Clips and bind AnimationPlayer3D
-    const clips = compileAnimationClips(this._gltf, this._buffers, sceneResult.nodeEntityMap);
+    const clips = compileAnimationClips(
+      this._gltf,
+      this._buffers,
+      sceneResult.nodeEntityMap,
+      sceneResult.primitiveEntities
+    );
     let animationPlayer: ReturnType<typeof createAnimationPlayer3D> | undefined;
 
     if (clips.length > 0) {

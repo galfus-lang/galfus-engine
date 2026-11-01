@@ -205,39 +205,20 @@ export function packMorphTargets(
   return { targetData, targetCount };
 }
 
-export function applyGeometryMorphTargets(
-  engine: {
-    realm3dSetGeometryMorphTargets: (
-      rId: number,
-      gId: number,
-      data: Uint8Array,
-      len: number,
-      count: number
-    ) => void;
-  } | null,
-  realmId: number,
-  geometryId: number,
+/** Validates and packs morph targets for a registered custom geometry. */
+export function prepareMorphTargets(
   targetData: Uint8Array | MorphTargetData[],
-  vertexCount?: number
-): void {
-  if (!engine) return;
-  if (targetData instanceof Uint8Array) {
-    const count = vertexCount ? Math.floor(targetData.byteLength / (vertexCount * 48)) : 1;
-    engine.realm3dSetGeometryMorphTargets(
-      realmId,
-      geometryId,
-      targetData,
-      targetData.byteLength,
-      count
-    );
-  } else {
-    const packed = packMorphTargets(targetData, vertexCount ?? 0);
-    engine.realm3dSetGeometryMorphTargets(
-      realmId,
-      geometryId,
-      packed.targetData,
-      packed.targetData.byteLength,
-      packed.targetCount
-    );
-  }
+  vertexCount: number | undefined,
+  vertexDataByteLength?: number
+): { data: Uint8Array; count: number } {
+  const count =
+    vertexCount ??
+    (vertexDataByteLength === undefined ? undefined : vertexDataByteLength / VERTEX_STRIDE_BYTES);
+  if (!count || !Number.isInteger(count)) throw new Error('Morph targets require a vertex count');
+  const packed =
+    targetData instanceof Uint8Array
+      ? { targetData, targetCount: targetData.byteLength / (count * MORPH_VERTEX_STRIDE_BYTES) }
+      : packMorphTargets(targetData, count);
+  if (!Number.isInteger(packed.targetCount)) throw new Error('Invalid morph target data length');
+  return { data: packed.targetData, count: packed.targetCount };
 }

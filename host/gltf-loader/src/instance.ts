@@ -2,7 +2,7 @@
  * Concrete implementation of ModelInstance for spawned glTF scene graphs.
  */
 
-import type { AnimationPlayer3D, Realm3D } from '@galfus/engine';
+import type { AnimationPlayer3DComponent, Realm3D } from '@galfus/engine';
 import type { ModelInstance } from '@galfus/model-loader-types';
 
 export interface GltfInstanceInit {
@@ -11,7 +11,7 @@ export interface GltfInstanceInit {
   rootEntityId: number;
   entities: number[];
   instancedModelIds?: number[];
-  animationPlayer?: AnimationPlayer3D;
+  animationPlayer?: AnimationPlayer3DComponent;
   onDispose?: (instance: GltfInstance) => void;
 }
 
@@ -29,7 +29,7 @@ export class GltfInstance implements ModelInstance {
   readonly instanceId: number;
   readonly rootEntityId: number;
   readonly entities: readonly number[];
-  readonly animationPlayer?: AnimationPlayer3D;
+  readonly animationPlayer?: AnimationPlayer3DComponent;
 
   private readonly _realm: Realm3D;
   private readonly _instancedModelIds: number[];
@@ -114,8 +114,7 @@ export class GltfInstance implements ModelInstance {
     // 3. Destroy all ECS entities belonging to this instance
     for (const entityId of this.entities) {
       try {
-        this._realm.hierarchy.detach(entityId);
-        this._realm.world.destroyEntity(entityId);
+        this._realm.destroyEntity(entityId);
       } catch {
         // Ignored if entity was already destroyed
       }

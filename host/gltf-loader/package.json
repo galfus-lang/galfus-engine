@@ -10,7 +10,9 @@
   "dependencies": {
     "@galfus/engine": "workspace:*",
     "@galfus/model-loader-types": "workspace:*",
-    "@galfus/transport-types": "workspace:*",
     "fflate": "^0.8.3"
+  },
+  "devDependencies": {
+    "@galfus/transport-types": "workspace:*"
   }
 }

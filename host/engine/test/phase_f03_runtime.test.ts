@@ -1,3 +1,4 @@
+import { advanceFrame } from './controlled-transport';
 import { describe, expect, it } from 'bun:test';
 import { createBunTransport } from '@galfus/transport-bun';
 import {
@@ -16,7 +17,6 @@ describe('Phase F03 — Runtime Pronto e Scheduler Preparatório', () => {
       const runtime = createRuntime(transport);
 
       expect(runtime.state).toBe('ready');
-      expect(runtime.transport).toBe(transport);
 
       runtime.dispose();
       expect(runtime.state).toBe('disposed');
@@ -51,7 +51,6 @@ describe('Phase F03 — Runtime Pronto e Scheduler Preparatório', () => {
         init: async () => {},
         startLoop: () => {},
         stopLoop: () => {},
-        step: () => {},
         dispose: () => {}
       };
 
@@ -70,7 +69,7 @@ describe('Phase F03 — Runtime Pronto e Scheduler Preparatório', () => {
       });
 
       // Tick single frame to pump animation events
-      runtime.tick(0.016);
+      advanceFrame(runtime, mockTransport, 0.016);
 
       // Must be received exactly once
       expect(animationEventCount).toBe(1);
@@ -80,6 +79,69 @@ describe('Phase F03 — Runtime Pronto e Scheduler Preparatório', () => {
   });
 
   describe('Runtime State Machine (HOST-002 / HOST-027)', () => {
+    it('pauses and resumes frames using the transport clock', () => {
+      let callback: ((timing: import('@galfus/transport-types').FrameTiming) => void) | undefined;
+      let stops = 0;
+      const engine = {
+        platformPumpEvents: () => [],
+        animationStep: () => {},
+        animationPumpEvents: () => [],
+        multiverseResolve: () => {},
+        multiverseDispatch: () => {}
+      } as unknown as GalfusEngine;
+      const transport: GalfusTransport = {
+        engine,
+        isInitialized: true,
+        isDisposed: false,
+        isRunning: false,
+        init: () => {},
+        startLoop: (fn) => {
+          callback = fn;
+        },
+        stopLoop: () => {
+          callback = undefined;
+          stops++;
+        },
+        dispose: () => {}
+      };
+      const runtime = createRuntime(transport);
+      runtime.start();
+      callback!({ timeMs: 100, deltaMs: 16, dt: 0.016, frameId: 1, fps: 62.5 });
+      runtime.pause();
+      expect(runtime.state).toBe('paused');
+      expect(runtime.isRunning).toBe(false);
+      expect(callback).toBeUndefined();
+      expect(runtime.elapsedSeconds).toBeCloseTo(0.016);
+      runtime.start();
+      callback!({ timeMs: 5000, deltaMs: 20, dt: 0.02, frameId: 2, fps: 50 });
+      expect(runtime.frameId).toBe(2);
+      expect(runtime.elapsedSeconds).toBeCloseTo(0.036);
+      runtime.stop();
+      expect(runtime.state).toBe('ready');
+      expect(stops).toBe(2);
+      runtime.dispose();
+    });
+
+    it('keeps frame IDs increasing across a real transport pause', async () => {
+      const runtime = createRuntime(createBunTransport({ headless: true }));
+      const frames: number[] = [];
+      runtime.on('tick', ({ frameId }) => frames.push(frameId));
+      runtime.start();
+      await Bun.sleep(20);
+      runtime.pause();
+      const beforePause = runtime.elapsedSeconds;
+      const countAtPause = frames.length;
+      await Bun.sleep(20);
+      expect(frames.length).toBe(countAtPause);
+      expect(runtime.elapsedSeconds).toBe(beforePause);
+      runtime.start();
+      await Bun.sleep(20);
+      runtime.stop();
+      expect(frames.length).toBeGreaterThan(countAtPause);
+      for (let i = 1; i < frames.length; i++) expect(frames[i]!).toBeGreaterThan(frames[i - 1]!);
+      runtime.dispose();
+    });
+
     it('transitions through ready -> running -> ready -> disposed', () => {
       const transport = createBunTransport({ headless: true });
       const runtime = createRuntime(transport);
@@ -101,30 +163,29 @@ describe('Phase F03 — Runtime Pronto e Scheduler Preparatório', () => {
       expect(runtime.state).toBe('disposed');
     });
 
-    it('rejects start() and tick() when disposed', () => {
+    it('rejects starting a disposed runtime', () => {
       const transport = createBunTransport({ headless: true });
       const runtime = createRuntime(transport);
       runtime.dispose();
 
       expect(() => runtime.start()).toThrow(GalfusLoopError);
-      expect(() => runtime.tick()).toThrow(GalfusLoopError);
       expect(() => runtime.init()).toThrow(GalfusTransportError);
     });
   });
 
   describe('Coherent Time & Frame Accounting', () => {
-    it('manual tick() advances frameId and elapsedSeconds exactly once', () => {
+    it('transport frames advance frameId and elapsedSeconds exactly once', () => {
       const transport = createBunTransport({ headless: true });
       const runtime = createRuntime(transport);
 
       expect(runtime.frameId).toBe(0);
       expect(runtime.elapsedSeconds).toBe(0);
 
-      runtime.tick(0.016);
+      advanceFrame(runtime, transport, 0.016);
       expect(runtime.frameId).toBe(1);
       expect(runtime.elapsedSeconds).toBeCloseTo(0.016, 4);
 
-      runtime.tick(0.034);
+      advanceFrame(runtime, transport, 0.034);
       expect(runtime.frameId).toBe(2);
       expect(runtime.elapsedSeconds).toBeCloseTo(0.05, 4);
 
@@ -208,7 +269,6 @@ describe('Phase F03 — Runtime Pronto e Scheduler Preparatório', () => {
         init: async () => {},
         startLoop: () => {},
         stopLoop: () => {},
-        step: () => {},
         dispose: () => {}
       };
 
@@ -234,7 +294,7 @@ describe('Phase F03 — Runtime Pronto e Scheduler Preparatório', () => {
       runtime.multiverse.registerRealm(mockRealm);
 
       // Tick single frame
-      runtime.tick(0.016);
+      advanceFrame(runtime, mockTransport, 0.016);
 
       // Verify strict phase ordering: preRender -> sync -> resolve -> dispatch -> postRender
       expect(callTrace).toEqual([

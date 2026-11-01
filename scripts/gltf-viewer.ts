@@ -13,10 +13,10 @@
  */
 
 import { existsSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { basename, resolve } from 'node:path';
+import { basename } from 'node:path';
 import {
-  type AnimationPlayer3D,
+  type AnimationPlayer3DComponent,
+  type Camera3DComponent,
   createRuntime,
   getKey,
   type Mesh3DComponent,
@@ -28,96 +28,8 @@ import {
 import { presets3D } from '@galfus/engine/realm3d';
 import { loadGltfAsset } from '@galfus/gltf-loader';
 import { createBunTransport } from '@galfus/transport-bun';
-
-interface ViewerArgs {
-  filePath?: string;
-  isHeadless: boolean;
-  maxFrames?: number;
-  scale?: number;
-  help: boolean;
-}
-
-function parseArgs(): ViewerArgs {
-  const args = process.argv.slice(2);
-  let filePath: string | undefined;
-  let isHeadless = false;
-  let maxFrames: number | undefined;
-  let scale: number | undefined;
-  let help = false;
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]!;
-    if (arg === '--help' || arg === '-h') {
-      help = true;
-    } else if (arg === '--headless') {
-      isHeadless = true;
-    } else if (arg === '--frames' && i + 1 < args.length) {
-      maxFrames = parseInt(args[++i]!, 10);
-    } else if (arg === '--scale' && i + 1 < args.length) {
-      scale = parseFloat(args[++i]!);
-    } else if (!arg.startsWith('-') && !filePath) {
-      filePath = arg;
-    }
-  }
-
-  // Headless environment auto-detection
-  if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY && process.platform === 'linux') {
-    isHeadless = true;
-  }
-
-  return { filePath, isHeadless, maxFrames, scale, help };
-}
-
-function printUsage(): void {
-  console.log(`
-=============================================================
-             Galfus Engine - 3D glTF Model Viewer            
-=============================================================
-
-Usage:
-  bun gltf <path-to-file> [options]
-  bun scripts/gltf-viewer.ts <path-to-file> [options]
-
-Supported Input Formats:
-  • .glb  - Monolithic glTF 2.0 binary container
-  • .gltf - glTF JSON file (with embedded data URIs or sibling .bin)
-  • .zip  - Compressed multi-file archive (.gltf + .bin + textures)
-
-Options:
-  --headless       Run in offscreen headless mode (for CI / automated testing)
-  --frames <N>     Automatically exit after rendering N frames
-  --scale <N>      Apply custom uniform scaling multiplier
-  -h, --help       Show this help message and exit
-
-Controls:
-  • Left Mouse Drag / [A][D] / [Arrow Left][Right] : Orbit horizontally
-  • [W][S] / [Arrow Up][Down]                      : Orbit vertically (pitch)
-  • Mouse Wheel / [E][Z] / [+][-] / [PgUp][PgDn]   : Smooth zoom in / zoom out
-  • [Shift] (Hold)                                 : Boost navigation speed (2.5x)
-  • [Space]                                        : Play/pause animation (or toggle turntable)
-  • [T]                                            : Toggle turntable auto-rotation
-  • [G]                                            : Toggle ground floor plane
-  • [R]                                            : Reset camera to initial framing
-  • [Esc]                                          : Gracefully exit viewer
-`);
-}
-
-function resolveFilePath(inputPath: string): string {
-  let expanded = inputPath.trim();
-  if (expanded.startsWith('~')) {
-    expanded = homedir() + expanded.slice(1);
-  }
-  if (expanded.startsWith('$HOME')) {
-    expanded = homedir() + expanded.slice(5);
-  }
-  return resolve(process.cwd(), expanded);
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
+import { resolveViewerAlphaMode } from './gltf-alpha';
+import { formatBytes, parseArgs, printUsage, resolveFilePath } from './gltf-viewer-cli';
 
 async function runViewer(): Promise<void> {
   const opts = parseArgs();
@@ -178,19 +90,22 @@ async function runViewer(): Promise<void> {
   const realm = runtime.createRealm3D(1);
 
   const loadStart = performance.now();
-  const factory = await loadGltfAsset(realm, resolvedPath);
+  const factory = await loadGltfAsset(realm, resolvedPath, {
+    resolveMaterialAlphaMode: opts.alphaMode === 'viewer' ? resolveViewerAlphaMode : undefined
+  });
   const loadTimeMs = (performance.now() - loadStart).toFixed(1);
 
   console.log(`[4/5] Instantiating ECS Scene Graph & Binding Animations...`);
   const instance = factory.instantiate({
     transform: {
-      scale: opts.scale ? [opts.scale, opts.scale, opts.scale] : [1, 1, 1]
+      scale: opts.scale !== undefined ? [opts.scale, opts.scale, opts.scale] : [1, 1, 1]
     }
   });
 
   // Auto-play first animation if present
   let isAnimationPlaying = false;
-  const animPlayer = instance.animationPlayer as AnimationPlayer3D | undefined;
+  let currentAnimIndex = 0;
+  const animPlayer = instance.animationPlayer as AnimationPlayer3DComponent | undefined;
   if (animPlayer && factory.animationNames.length > 0) {
     const firstClipName = factory.animationNames[0]!;
     animPlayer.play(firstClipName, 'repeat');
@@ -198,7 +113,22 @@ async function runViewer(): Promise<void> {
   }
 
   // Auto-frame camera based on computed model bounds
-  const bounds = factory.bounds;
+  const scale = opts.scale ?? 1;
+  const sourceBounds = factory.bounds;
+  const bounds = sourceBounds
+    ? {
+        ...sourceBounds,
+        center: sourceBounds.center.map((value) => value * scale) as [number, number, number],
+        min: sourceBounds.min.map((value, i) =>
+          Math.min(value * scale, sourceBounds.max[i]! * scale)
+        ) as [number, number, number],
+        max: sourceBounds.max.map((value, i) =>
+          Math.max(value * scale, sourceBounds.min[i]! * scale)
+        ) as [number, number, number],
+        radius: sourceBounds.radius * Math.abs(scale),
+        size: sourceBounds.size.map((value) => value * Math.abs(scale)) as [number, number, number]
+      }
+    : undefined;
   const initialOrbitTarget: [number, number, number] = bounds ? [...bounds.center] : [0, 0.8, 0];
   const orbitTarget: [number, number, number] = [...initialOrbitTarget];
 
@@ -292,7 +222,7 @@ async function runViewer(): Promise<void> {
     presets3D.createPerspectiveCamera3DPreset({
       fovY: 45.0,
       near: 0.05,
-      far: 2000.0
+      far: Math.max(2000, initialOrbitRadius * 20 + (bounds?.radius ?? 0) * 2)
     }),
     { position: [orbitTarget[0], orbitTarget[1] + 1, orbitTarget[2] + orbitRadius] }
   );
@@ -316,9 +246,10 @@ async function runViewer(): Promise<void> {
   console.log(`  • Entities:    ${instance.entities.length} ECS Nodes`);
   console.log(`  • Geometries:  ${factory.createdGeometryIds.length} uploaded to VRAM`);
   console.log(`  • Materials:   ${factory.createdMaterialIds.length} PBR Materials`);
+  console.log(`  • Alpha mode:  ${opts.alphaMode}`);
   console.log(`  • Textures:    ${factory.createdTextureIds.length} GPU Textures`);
   console.log(
-    `  • Animations:  ${factory.animationNames.length} Clips (${factory.animationNames.join(', ') || 'None'})`
+    `  • Animations:  ${factory.animationNames.length} Clips (${factory.animationNames.join(', ') || 'None'})${isAnimationPlaying ? ` [Playing: "${factory.animationNames[0]}"]` : ''}`
   );
   if (bounds) {
     console.log(
@@ -329,10 +260,17 @@ async function runViewer(): Promise<void> {
 
   if (!opts.isHeadless) {
     console.log('Interactive Viewer is live on your display! Press [ESC] to exit.');
+    if (factory.animationNames.length > 0) {
+      console.log('  [SPACE]: Pause / Resume Animation  |  [N]: Next Animation Clip');
+    }
   }
 
   // Camera updater helper
   const cameraModel = realm.world.getComponent<Model3DComponent>(cameraEntity.entityId, 'Model3D');
+  const cameraComponent = realm.world.getComponent<Camera3DComponent>(
+    cameraEntity.entityId,
+    'Camera3D'
+  );
   function updateCamera(): void {
     if (!cameraModel) return;
     const cx = orbitTarget[0] + orbitRadius * Math.cos(orbitPitch) * Math.sin(orbitYaw);
@@ -343,6 +281,15 @@ async function runViewer(): Promise<void> {
     quat.fromLookAt(camRot, [cx, cy, cz], orbitTarget);
     cameraModel.setPosition([cx, cy, cz]);
     cameraModel.setRotation(camRot);
+    const requiredFar = (orbitRadius + (bounds?.radius ?? 1) * 2) * 1.5;
+    if (cameraComponent && requiredFar > (cameraComponent.desc.far ?? 0)) {
+      cameraComponent.desc = {
+        ...cameraComponent.desc,
+        far: requiredFar,
+        lookAt: { target: [...orbitTarget] }
+      };
+      cameraComponent.isDirty = true;
+    }
     realm.setCameraLookAt(cameraEntity, { target: orbitTarget });
   }
   updateCamera();
@@ -399,17 +346,31 @@ async function runViewer(): Promise<void> {
         } else if (keys.includes('space')) {
           if (animPlayer && factory.animationNames.length > 0) {
             isAnimationPlaying = !isAnimationPlaying;
-            const clipName = factory.animationNames[0]!;
+            const clipName = factory.animationNames[currentAnimIndex]!;
             if (isAnimationPlaying) {
-              animPlayer.play(clipName, 'repeat');
+              const state = animPlayer.activeStates.get(clipName);
+              if (state) state.isPlaying = true;
+              else animPlayer.play(clipName, 'repeat');
               console.log(`[Animation] Resumed '${clipName}'`);
             } else {
-              animPlayer.stop();
+              const state = animPlayer.activeStates.get(clipName);
+              if (state) state.isPlaying = false;
               console.log(`[Animation] Paused`);
             }
           } else {
             autoRotate = !autoRotate;
             console.log(`[Turntable] ${autoRotate ? 'Enabled' : 'Paused'}`);
+          }
+        } else if (keys.includes('n')) {
+          if (animPlayer && factory.animationNames.length > 0) {
+            currentAnimIndex = (currentAnimIndex + 1) % factory.animationNames.length;
+            const nextClip = factory.animationNames[currentAnimIndex]!;
+            animPlayer.stop();
+            animPlayer.play(nextClip, 'repeat');
+            isAnimationPlaying = true;
+            console.log(
+              `[Animation] Switched to clip '${nextClip}' (${currentAnimIndex + 1}/${factory.animationNames.length})`
+            );
           }
         } else if (keys.includes('t')) {
           autoRotate = !autoRotate;

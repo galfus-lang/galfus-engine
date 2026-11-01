@@ -101,13 +101,6 @@ describe('@galfus/transport-types', () => {
       expect(timing.dt).toBe(0.5);
       expect(timing.fps).toBe(2);
     });
-
-    it('should respect explicit delta when passed for manual stepping', () => {
-      const timing = calculateFrameTiming(2000, 1000, 11, 200);
-      expect(timing.deltaMs).toBe(200);
-      expect(timing.dt).toBe(0.2);
-      expect(timing.fps).toBe(5);
-    });
   });
 
   describe('Runtime Environment Detection', () => {

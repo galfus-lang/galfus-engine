@@ -44,6 +44,8 @@ export function setupSkins(
       const jointEntityId = sceneResult.nodeEntityMap.get(jointNodeIdx);
       if (jointEntityId !== undefined) {
         joints.push(jointEntityId);
+      } else {
+        throw new Error(`Skin ${node.skin} references missing joint node ${jointNodeIdx}`);
       }
     }
 
@@ -65,8 +67,10 @@ export function setupSkins(
       }
     }
 
-    const { entityId: skinEntityId } = realm.createSkin(modelEntityId, joints, inverseBindMatrices);
-    sceneResult.entities.push(skinEntityId);
+    for (const entityId of sceneResult.primitiveEntities.get(nIdx) ?? [modelEntityId]) {
+      const { entityId: skinEntityId } = realm.createSkin(entityId, joints, inverseBindMatrices);
+      sceneResult.entities.push(skinEntityId);
+    }
   }
 }
 
@@ -87,7 +91,8 @@ export function setupSkins(
 export function compileAnimationClips(
   gltf: GlTF,
   buffers: Uint8Array[],
-  nodeEntityMap: Map<number, number>
+  nodeEntityMap: Map<number, number>,
+  primitiveEntities?: Map<number, number[]>
 ): AnimationClip[] {
   if (!gltf.animations || gltf.animations.length === 0) {
     return [];
@@ -128,13 +133,18 @@ export function compileAnimationClips(
             ? 'cubicspline'
             : 'linear';
 
-      tracks.push({
-        targetEntity: targetEntityId,
-        path: channel.target.path,
-        timestamps,
-        values,
-        interpolation
-      });
+      const targets =
+        channel.target.path === 'weights'
+          ? (primitiveEntities?.get(targetNodeIdx) ?? [targetEntityId])
+          : [targetEntityId];
+      for (const targetEntity of targets)
+        tracks.push({
+          targetEntity,
+          path: channel.target.path,
+          timestamps,
+          values,
+          interpolation
+        });
     }
 
     if (tracks.length > 0) {

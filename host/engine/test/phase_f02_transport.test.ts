@@ -51,26 +51,6 @@ describe('Phase F02 — Transport: Inicialização, FPS, Delta e Loop', () => {
       expect(timing.dt).toBe(0.2);
       expect(timing.fps).toBe(5);
     });
-
-    it('preserves explicit delta on manual step() without clamping', () => {
-      const transport = createBunTransport({ headless: true });
-      let receivedDeltaMs = 0;
-      let receivedDt = 0;
-      let receivedFps = 0;
-
-      // Step with explicit 200ms delta directly
-      transport.step(1200, 200, (timing) => {
-        receivedDeltaMs = timing.deltaMs;
-        receivedDt = timing.dt;
-        receivedFps = timing.fps;
-      });
-
-      expect(receivedDeltaMs).toBe(200);
-      expect(receivedDt).toBe(0.2);
-      expect(receivedFps).toBe(5);
-
-      transport.dispose();
-    });
   });
 
   describe('Concurrency & Loop Generation Safety', () => {
@@ -125,9 +105,6 @@ describe('Phase F02 — Transport: Inicialização, FPS, Delta e Loop', () => {
       // Starting loop after dispose throws
       expect(() => transport.startLoop(() => {})).toThrow(GalfusLoopError);
 
-      // Stepping after dispose throws
-      expect(() => transport.step()).toThrow(GalfusLoopError);
-
       // Initializing after dispose throws
       expect(() => transport.init()).toThrow(GalfusTransportError);
 
@@ -147,21 +124,10 @@ describe('Phase F02 — Transport: Inicialização, FPS, Delta e Loop', () => {
       }).toThrow(GalfusLoopError);
     });
 
-    it('supports deterministic step() and terminal dispose in headless mode', () => {
+    it('supports terminal dispose in headless mode', () => {
       const transport = new BrowserTransport();
-      let stepReceived = false;
-
-      // Mock callback via startLoop error bypass: register step through alias
-      (transport as unknown as { _callback: (t: unknown) => void })._callback = () => {
-        stepReceived = true;
-      };
-
-      transport.step(100, 16.666);
-      expect(stepReceived).toBe(true);
-
       transport.dispose();
       expect(transport.isDisposed).toBe(true);
-      expect(() => transport.step()).toThrow(GalfusLoopError);
       expect(() => transport.dispose()).not.toThrow();
     });
   });

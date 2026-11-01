@@ -1,3 +1,4 @@
+import { advanceFrame } from './controlled-transport';
 /**
  * Baseline Metrics & Contract Tests for Phase F01.
  * Measures current ABI call overhead in static and dynamic scenes before refactoring.
@@ -88,7 +89,6 @@ describe('Phase F01 — Baseline, Contratos e Métricas ABI', () => {
       init: async () => {},
       startLoop: () => {},
       stopLoop: () => {},
-      step: () => {},
       dispose: () => {}
     };
 
@@ -108,13 +108,13 @@ describe('Phase F01 — Baseline, Contratos e Métricas ABI', () => {
 
     // Frame 1: Initial creation & sync (10 cubes + 10 models = 20 creates)
     tracker.reset();
-    runtime.tick(0.016);
+    advanceFrame(runtime, mockTransport, 0.016);
     const frame1Snapshot = tracker.getSnapshot();
     expect(frame1Snapshot.byCategory.create).toBe(MODEL_COUNT * 2);
 
     // Frame 2: Static scene (NOTHING moved)
     tracker.reset();
-    runtime.tick(0.016);
+    advanceFrame(runtime, mockTransport, 0.016);
     const frame2Snapshot = tracker.getSnapshot();
 
     // With SpatialDirtyFlags and incremental solving/sync, static scenes issue ZERO ABI transform calls:

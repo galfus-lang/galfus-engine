@@ -12,7 +12,7 @@ import { resolveDecoders } from './decoders/resolver';
 import { GltfAssetFactory } from './factory';
 import { parseGltf } from './parser';
 import { uploadGltfResources } from './resources';
-import type { GlTF } from './types';
+import type { GlTF, GltfMaterialAlphaModeResolver } from './types';
 import { createZipResolver, findPrimaryGltfPath, isZipContainer, unpackZipArchive } from './zip';
 
 export * from './animation';
@@ -26,6 +26,11 @@ export * from './scene';
 export * from './types';
 export * from './zip';
 export * from '@galfus/model-loader-types';
+
+export interface GltfLoadOptions extends ModelImportOptions {
+  /** Overrides a material's alpha mode for applications that need a specific rendering policy. */
+  resolveMaterialAlphaMode?: GltfMaterialAlphaModeResolver;
+}
 
 /**
  * Resolves source input into a contiguous Uint8Array byte buffer.
@@ -93,7 +98,7 @@ async function resolveSourceBytes(source: Uint8Array | ArrayBuffer | string): Pr
 export async function loadGltfAsset(
   realm: Realm3D,
   source: Uint8Array | ArrayBuffer | string,
-  options?: ModelImportOptions
+  options?: GltfLoadOptions
 ): Promise<GltfAssetFactory> {
   const bytes = await resolveSourceBytes(source);
 
@@ -117,7 +122,16 @@ export async function loadGltfAsset(
     buffers = parsed.buffers;
   } else {
     // B) Standard GLB binary or standalone glTF JSON
-    const parsed = await parseGltf(bytes);
+    if (typeof source === 'string') {
+      if (/^https?:\/\//i.test(source)) {
+        externalResolver = async (uri) => resolveSourceBytes(new URL(uri, source).href);
+      } else if (typeof process !== 'undefined' && process.versions?.node) {
+        const path = await import('node:path');
+        externalResolver = async (uri) =>
+          resolveSourceBytes(path.resolve(path.dirname(source), decodeURIComponent(uri)));
+      }
+    }
+    const parsed = await parseGltf(bytes, externalResolver);
     gltf = parsed.gltf;
     buffers = parsed.buffers;
   }
@@ -125,8 +139,38 @@ export async function loadGltfAsset(
   // 2. Automatically resolve required compression decoders (Draco, Meshopt)
   const decoders = await resolveDecoders(gltf, options?.decoders);
 
+  if (decoders.meshopt) {
+    for (const view of gltf.bufferViews ?? []) {
+      const ext = view.extensions?.EXT_meshopt_compression;
+      if (!ext) continue;
+      const sourceBuffer = buffers[ext.buffer];
+      if (!sourceBuffer) throw new Error('Missing Meshopt source buffer');
+      const offset = ext.byteOffset ?? 0;
+      const decoded = await decoders.meshopt.decodeGpuBuffer(
+        ext.count,
+        ext.byteStride,
+        sourceBuffer.subarray(offset, offset + ext.byteLength),
+        ext.mode,
+        ext.filter
+      );
+      if (decoded.byteLength !== ext.count * ext.byteStride)
+        throw new Error('Invalid Meshopt decoded buffer length');
+      view.buffer = buffers.length;
+      view.byteOffset = 0;
+      view.byteLength = decoded.byteLength;
+      buffers.push(decoded);
+    }
+  }
+
   // 3. Upload shared GPU resources (geometries in canonical 136-byte format, PBR materials, textures)
-  const resources = await uploadGltfResources(realm, gltf, buffers, decoders, externalResolver);
+  const resources = await uploadGltfResources(
+    realm,
+    gltf,
+    buffers,
+    decoders,
+    externalResolver,
+    options?.resolveMaterialAlphaMode
+  );
 
   // 4. Construct and return primary asset factory
   const assetName = gltf.asset.generator ?? 'glTF_Asset';

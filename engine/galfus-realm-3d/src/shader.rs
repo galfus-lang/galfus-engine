@@ -43,7 +43,7 @@ mod tests {
 
     #[test]
     fn normal_maps_use_tangent_space_and_face_orientation() {
-        assert!(REALM_3D_SHADER.contains("skin_direction(in.tangent.xyz"));
+        assert!(REALM_3D_SHADER.contains("skin_direction(local_tangent"));
         assert!(REALM_3D_SHADER.contains("out.world_tangent"));
         assert!(REALM_3D_SHADER.contains("inverse_transpose_mat3(instance_mat)"));
         assert!(REALM_3D_SHADER.contains("sample_material_texture(1u, in.uv0, in.uv1)"));

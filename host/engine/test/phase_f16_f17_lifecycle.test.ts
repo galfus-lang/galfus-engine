@@ -1,3 +1,4 @@
+import { advanceFrame } from './controlled-transport';
 import { describe, expect, it } from 'bun:test';
 import type {
   GalfusEngine,
@@ -145,6 +146,7 @@ function createMockTransport(engine: GalfusEngine) {
     name: 'mock',
     isHeadless: true,
     fps: 60,
+    stopLoop: () => {},
     dispose: () => {}
   } as any;
 }
@@ -270,7 +272,7 @@ describe('Phases F16 & F17: Lifecycle, Teardown, Reset and Disposal', () => {
     });
 
     // Advance frame
-    runtime.tick();
+    advanceFrame(runtime, transport);
     expect(runtime.frameId).toBeGreaterThan(0);
 
     // Reset runtime

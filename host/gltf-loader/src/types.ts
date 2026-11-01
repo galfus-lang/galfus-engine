@@ -132,9 +132,16 @@ export interface GlTFMaterial {
   doubleSided?: boolean;
   extensions?: {
     KHR_materials_pbrSpecularGlossiness?: GlTFKHRMaterialsPbrSpecularGlossiness;
+    KHR_materials_ior?: { ior?: number };
   } & Record<string, unknown>;
   extras?: unknown;
 }
+
+export type GltfMaterialAlphaModeResolver = (
+  material: GlTFMaterial,
+  index: number,
+  baseColorImage?: Uint8Array
+) => GlTFMaterial['alphaMode'];
 
 export interface GlTFTexture {
   sampler?: number;

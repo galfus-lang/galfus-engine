@@ -21,6 +21,7 @@ import type { Transform3DProps } from '../anchors/component';
 import { HierarchyCoordinator } from '../anchors/hierarchy';
 import { AnchorSolveSystem } from '../anchors/solver';
 import type { AnimationCoordinator } from '../animation/coordinator';
+import { createAnimationPlaybackSystem } from '../animation/player';
 import type { EntityId } from '../ecs/entity';
 import { RESERVED_PRIORITY_INTERNAL_RESOLVERS, type SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
@@ -28,7 +29,6 @@ import type { RealmConnector, RealmId, RealmKind } from '../multiverse/realm';
 import { ResourceManager } from '../resources/manager';
 import type { TransitionId } from '../types';
 import {
-  type Camera3DComponent,
   createCamera3D,
   createInstancedModel3D,
   createLight3D,
@@ -42,15 +42,15 @@ import {
   type Mesh3DComponent,
   type Mesh3DDesc,
   type Model3DComponent,
-  type ParticleEmitter3DComponent,
   type Primitive3DKind
 } from './components';
 import {
-  applyGeometryMorphTargets,
   type GeometryData,
   type MorphTargetData,
-  packGeometryData
+  packGeometryData,
+  prepareMorphTargets
 } from './geometry';
+import { resolveCameraId, resolveEmitterId } from './resource-ids';
 import { SkinningSolveSystem } from './skinning';
 import { type Realm3DResourceProvider, Realm3DSyncSystem } from './sync';
 
@@ -65,6 +65,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   readonly hierarchy: HierarchyCoordinator<'3d'>;
 
   private readonly _geometries = new Map<number, GeometryResourceEntry>();
+  private readonly _pendingMorphWeights = new Map<number, Float32Array>();
   private readonly _materials = new Map<number, MaterialResourceEntry>();
   private _engine: GalfusEngine | null = null;
   private _nextResourceLogicalId = 1;
@@ -81,6 +82,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   }
 
   private _registerInternalSystems(): void {
+    this.world.addSystem('update', createAnimationPlaybackSystem(this), { kind: 'ordinary' });
     this.world.addSystem('preRender', this.solver.createSystem(), { kind: 'anchor' });
     this.world.addSystem(
       'preRender',
@@ -131,6 +133,10 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     }
     if (this._engine) {
       this.syncSystem.sync(this.world, this._engine, this);
+      for (const [modelId, weights] of this._pendingMorphWeights) {
+        this._engine.realm3dSetModelMorphWeights(this.realmId, modelId, weights, weights.length);
+      }
+      this._pendingMorphWeights.clear();
     }
   }
 
@@ -145,6 +151,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     this.solver.cache.clear();
     this._geometries.clear();
     this._materials.clear();
+    this._pendingMorphWeights.clear();
     this._preRenderSteppedFrame = -1;
     this._registerInternalSystems();
     if (this._engine) {
@@ -166,10 +173,13 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     this.solver.cache.clear();
     this._geometries.clear();
     this._materials.clear();
+    this._pendingMorphWeights.clear();
   }
 
   destroyEntity(entityId: EntityId): boolean {
     if (!this.world.isAlive(entityId)) return false;
+    const model = this.world.getComponent<Model3DComponent>(entityId, 'Model3D');
+    if (model) this._pendingMorphWeights.delete(model.modelId);
     this.hierarchy.detach(entityId);
     this.hierarchy.handleTargetDestroyed(entityId);
     this.solver.cache.remove(entityId);
@@ -391,7 +401,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     camera: number | { cameraId?: number; entityId?: EntityId },
     lookAt: CameraLookAt3D
   ): void {
-    const cameraId = this._resolveCameraId(camera);
+    const cameraId = resolveCameraId(this.world, camera);
     if (this._engine) {
       if (!this.syncSystem.isCameraSynced(cameraId)) this.flush();
       this._engine.realm3dSetCameraLookAt(this.realmId, cameraId, lookAt);
@@ -462,50 +472,11 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     emitter: number | { emitterId?: number; entityId?: EntityId },
     count: number
   ): void {
-    const emitterId = this._resolveEmitterId(emitter);
+    const emitterId = resolveEmitterId(this.world, emitter);
     if (this._engine) {
       if (!this.syncSystem.isEmitterSynced(emitterId)) this.flush();
       this._engine.realm3dParticleEmitterBurst(this.realmId, emitterId, count);
     }
-  }
-
-  private _resolveCameraId(camera: number | { cameraId?: number; entityId?: EntityId }): number {
-    if (typeof camera === 'number') {
-      return (
-        this.world.getComponent<Camera3DComponent>(camera as EntityId, 'Camera3D')?.cameraId ??
-        camera
-      );
-    }
-    const resolved =
-      camera.cameraId ??
-      (camera.entityId
-        ? this.world.getComponent<Camera3DComponent>(camera.entityId, 'Camera3D')?.cameraId
-        : undefined);
-    if (resolved === undefined)
-      throw new Error('Cannot resolve Camera3D ID: entity does not have a Camera3DComponent.');
-    return resolved;
-  }
-
-  private _resolveEmitterId(emitter: number | { emitterId?: number; entityId?: EntityId }): number {
-    if (typeof emitter === 'number') {
-      return (
-        this.world.getComponent<ParticleEmitter3DComponent>(
-          emitter as EntityId,
-          'ParticleEmitter3D'
-        )?.emitterId ?? emitter
-      );
-    }
-    const resolved =
-      emitter.emitterId ??
-      (emitter.entityId
-        ? this.world.getComponent<ParticleEmitter3DComponent>(emitter.entityId, 'ParticleEmitter3D')
-            ?.emitterId
-        : undefined);
-    if (resolved === undefined)
-      throw new Error(
-        'Cannot resolve ParticleEmitter3D ID: entity does not have a ParticleEmitter3DComponent.'
-      );
-    return resolved;
   }
 
   createPortal(desc: Portal3DDesc): EntityId {
@@ -531,7 +502,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   }
 
   setModelMorphWeights(modelId: number, weights: Float32Array): void {
-    this._engine?.realm3dSetModelMorphWeights(this.realmId, modelId, weights, weights.length);
+    this._pendingMorphWeights.set(modelId, new Float32Array(weights));
   }
 
   setGeometryMorphTargets(
@@ -539,7 +510,12 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     targetData: Uint8Array | MorphTargetData[],
     vertexCount?: number
   ): void {
-    applyGeometryMorphTargets(this._engine, this.realmId, geometryId, targetData, vertexCount);
+    const geometry = this._geometries.get(geometryId);
+    if (!geometry) throw new Error(`Unknown geometry ${geometryId}`);
+    const vertexBytes =
+      geometry.primitive.kind === 'custom' ? geometry.primitive.vertexData.byteLength : undefined;
+    geometry.morphTargets = prepareMorphTargets(targetData, vertexCount, vertexBytes);
+    geometry.isDirty = true;
   }
 
   setInstancedModelMorphWeights(instancedModelId: number, weights: Float32Array): void {

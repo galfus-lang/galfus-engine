@@ -21,7 +21,7 @@ export interface ParsedGltf {
 /**
  * Decodes a base64 data URI into a raw Uint8Array.
  */
-function decodeDataUri(uri: string): Uint8Array {
+export function decodeDataUri(uri: string): Uint8Array {
   const commaIdx = uri.indexOf(',');
   if (commaIdx === -1) {
     throw new Error('Invalid data URI in glTF buffer');
@@ -93,7 +93,7 @@ export function parseGltfSync(input: Uint8Array | ArrayBuffer): ParsedGltf {
       if (buf.uri && buf.uri.startsWith('data:')) {
         buffers.push(decodeDataUri(buf.uri));
       } else {
-        buffers.push(new Uint8Array(buf.byteLength));
+        throw new Error(`Cannot resolve external glTF buffer: ${buf.uri ?? '(missing URI)'}`);
       }
     }
   }
@@ -132,7 +132,7 @@ export async function parseGltf(
       } else if (buf.uri && externalResolver) {
         buffers.push(await externalResolver(buf.uri));
       } else {
-        buffers.push(new Uint8Array(buf.byteLength));
+        throw new Error(`Cannot resolve external glTF buffer: ${buf.uri ?? '(missing URI)'}`);
       }
     }
   }
@@ -200,6 +200,37 @@ export function readAccessor(
   const accessor = gltf.accessors?.[accessorIndex];
   if (!accessor) {
     throw new Error(`Accessor index out of bounds: ${accessorIndex}`);
+  }
+
+  if (accessor.sparse) {
+    const sparse = accessor.sparse;
+    const base = { ...accessor, sparse: undefined };
+    const indices = {
+      bufferView: sparse.indices.bufferView,
+      byteOffset: sparse.indices.byteOffset,
+      componentType: sparse.indices.componentType,
+      count: sparse.count,
+      type: 'SCALAR' as const
+    };
+    const values = {
+      ...base,
+      bufferView: sparse.values.bufferView,
+      byteOffset: sparse.values.byteOffset,
+      count: sparse.count
+    };
+    const accessors = [...(gltf.accessors ?? []), base, indices, values];
+    const doc = { ...gltf, accessors };
+    const result = readAccessor(doc, buffers, accessors.length - 3);
+    const sparseIndices = readAccessor(doc, buffers, accessors.length - 2);
+    const sparseValues = readAccessor(doc, buffers, accessors.length - 1);
+    const components = getComponentCountForType(accessor.type);
+    for (let i = 0; i < sparse.count; i++) {
+      const index = sparseIndices[i]!;
+      if (index >= accessor.count) throw new Error('Sparse accessor index out of bounds');
+      for (let c = 0; c < components; c++)
+        result[index * components + c] = sparseValues[i * components + c]!;
+    }
+    return result;
   }
 
   const numComponents = getComponentCountForType(accessor.type);

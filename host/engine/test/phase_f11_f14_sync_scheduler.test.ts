@@ -1,3 +1,4 @@
+import { advanceFrame } from './controlled-transport';
 import { describe, expect, test } from 'bun:test';
 import type { GalfusEngine } from '@galfus/transport-types';
 import {
@@ -211,7 +212,7 @@ describe('Phases F11 to F14 — Scheduler, DirtyRegistry & Incremental Sync', ()
         calls.push('postRender_system_executed');
       });
 
-      runtime.tick(0.016);
+      advanceFrame(runtime, fakeTransport, 0.016);
 
       const dispatchIdx = calls.findIndex((c) => c.startsWith('dispatch:'));
       const postRenderIdx = calls.indexOf('postRender_system_executed');

@@ -1,3 +1,4 @@
+import { advanceFrame } from './controlled-transport';
 import { describe, expect, it } from 'bun:test';
 import type {
   GalfusEngine,
@@ -78,7 +79,6 @@ function createMockTransport(engine: GalfusEngine): GalfusTransport {
     init: async () => {},
     startLoop: () => {},
     stopLoop: () => {},
-    step: () => {},
     dispose: () => {}
   };
 }
@@ -242,7 +242,7 @@ describe('Phases F18 & F19 — Viewports, Dynamic Composition & Transitions', ()
     expect(runtime.multiverse.getInvocation(invGameplay)?.realmId).toBe(20);
 
     // Frame 1: Menu centered (0vw), Gameplay offscreen right (100vw)
-    runtime.tick();
+    advanceFrame(runtime, transport);
     expect(calls.multiverseDispatch).toBe(1);
 
     // Frame 2: Mid-transition slide (Menu at -50vw, Gameplay at 50vw)
@@ -253,7 +253,7 @@ describe('Phases F18 & F19 — Viewports, Dynamic Composition & Transitions', ()
       viewport: { offsetX: { vw: 50 }, width: { vw: 100 }, height: { vh: 100 } }
     });
 
-    runtime.tick();
+    advanceFrame(runtime, transport);
     expect(calls.multiverseDispatch).toBe(2);
 
     // Frame 3: Completed transition (Menu fully offscreen at -100vw, Gameplay centered at 0vw)
@@ -264,7 +264,7 @@ describe('Phases F18 & F19 — Viewports, Dynamic Composition & Transitions', ()
       viewport: { offsetX: { vw: 0 }, width: { vw: 100 }, height: { vh: 100 } }
     });
 
-    runtime.tick();
+    advanceFrame(runtime, transport);
     expect(calls.multiverseDispatch).toBe(3);
 
     // Both realms remain alive and intact without rebinding
