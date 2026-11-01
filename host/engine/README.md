@@ -35,6 +35,21 @@ The official TypeScript high-level engine runtime for **Galfus Engine**. Provide
 
 2D objects are drawn back to front by `zLayer`, then `drawOrder`, then logical resource ID. Set distinct layers or draw orders when overlap must remain independent of resource creation order. Changing `Model2DComponent.zLayer` or `drawOrder` is synchronized on the next frame.
 
+## Colliders
+
+Each collider belongs to an entity with a matching `Model2D` or `Model3D` component. `addCollider` returns a realm-owned logical collider ID; multiple colliders may share one entity. Local matrices are column-major and relative to the model. Collision queries resolve the model hierarchy on the host and return hits with collider and entity IDs; ray hits are sorted by distance. Queries do not require a bound engine or call the rendering core. Point-query boundaries are inclusive. Rays starting inside a volume return distance zero and a zero normal. A singular world transform temporarily excludes the collider until its transform is invertible again.
+
+```typescript
+const entity = realm2d.createSpatialNode({ position: [3, 4] });
+const colliderId = realm2d.addCollider(entity, { type: 'circle', radius: 2 }, { sensor: true });
+const inside = realm2d.queryPoint([3, 4]);
+const hits = realm2d.raycast([0, 4], [1, 0], 10);
+const component = realm2d.world.getComponent<Collider2DComponent>(entity, 'Collider2D');
+component?.remove(colliderId);
+```
+
+2D supports circles, rectangles and simple polygons. 3D supports spheres, boxes and finite planes in local XY. Queries use a layer mask; the collider's own mask is retained for future pairwise collision filtering. These APIs perform geometric queries and do not simulate rigid bodies.
+
 ---
 
 ## Quick Start

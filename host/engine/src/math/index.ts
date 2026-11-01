@@ -12,6 +12,6 @@ export * as vec4 from './vec4';
 export type { Mat2d, ReadonlyMat2d } from './mat2d';
 export type { Mat4, ReadonlyMat4 } from './mat4';
 export type { Quat, ReadonlyQuat } from './quat';
-export type { ReadonlyVec2, Vec2 } from './vec2';
-export type { ReadonlyVec3, Vec3 } from './vec3';
+export type { ReadonlyVec2, Vec2, WritableVec2 } from './vec2';
+export type { ReadonlyVec3, Vec3, WritableVec3 } from './vec3';
 export type { ReadonlyVec4, Vec4 } from './vec4';

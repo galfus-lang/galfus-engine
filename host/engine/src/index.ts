@@ -5,6 +5,7 @@ export * from './anchors/index';
 export * from './animation/index';
 export * from './audio/index';
 export * from './ecs/index';
+export * from './collision/index';
 export * from './math/index';
 export * from './multiverse/index';
 export * from './platform/index';

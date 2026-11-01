@@ -55,13 +55,14 @@ export class EcsWorld implements IntentFlusher {
     }
 
     // Structural integrity enforcement (F04, F06, F08)
-    if (component.type === 'Mesh3D') {
+    if (component.type === 'Mesh3D' || component.type === 'Collider3D') {
       if (!this.components.has(entityId, 'Model3D')) {
         throw new Error(
-          `Integrity violation: Entity ${entityId} cannot have Mesh3D attached without a Model3D spatial component.`
+          `Integrity violation: Entity ${entityId} cannot have ${component.type} attached without a Model3D spatial component.`
         );
       }
     } else if (
+      component.type === 'Collider2D' ||
       component.type === 'Sprite2D' ||
       component.type === 'Shape2D' ||
       component.type === 'Svg2D'
@@ -80,6 +81,12 @@ export class EcsWorld implements IntentFlusher {
    * Detaches a component from an entity by component type name.
    */
   detachComponent(entityId: EntityId, componentType: string): boolean {
+    if (
+      (componentType === 'Model2D' && this.components.has(entityId, 'Collider2D')) ||
+      (componentType === 'Model3D' && this.components.has(entityId, 'Collider3D'))
+    ) {
+      throw new Error(`Cannot detach ${componentType} while its collider component exists.`);
+    }
     return this.components.delete(entityId, componentType);
   }
 

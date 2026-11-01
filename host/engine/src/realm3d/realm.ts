@@ -22,6 +22,8 @@ import { HierarchyCoordinator } from '../anchors/hierarchy';
 import { AnchorSolveSystem } from '../anchors/solver';
 import type { AnimationCoordinator } from '../animation/coordinator';
 import { createAnimationPlaybackSystem } from '../animation/player';
+import { Collider3DComponent, type ColliderOptions } from '../collision/components';
+import { raycast3D } from '../collision/query3d';
 import type { EntityId } from '../ecs/entity';
 import { RESERVED_PRIORITY_INTERNAL_RESOLVERS, type SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
@@ -176,6 +178,33 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     this._pendingMorphWeights.clear();
   }
 
+  /** Adds a collider to an entity with a matching Model component. */
+  addCollider(
+    entityId: EntityId,
+    shape: import('../collision/components').ColliderShape3D,
+    options?: ColliderOptions
+  ): number {
+    if (!this.world.isAlive(entityId) || !this.world.hasComponent(entityId, 'Model3D'))
+      throw new Error('Collider requires a live entity with Model3D.');
+    const existing = this.world.getComponent<Collider3DComponent>(entityId, 'Collider3D');
+    const component = existing ?? new Collider3DComponent();
+    const id = this.allocateResourceId();
+    component.add(id, shape, options);
+    if (!existing) this.world.attachComponent(entityId, component);
+    return id;
+  }
+
+  raycast(
+    origin: [number, number, number],
+    direction: [number, number, number],
+    maxDistance: number,
+    mask = 0xffffffff
+  ) {
+    if (this._disposed) throw new Error('Cannot query a disposed Realm3D.');
+    this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0 });
+    return raycast3D(this.world, origin, direction, maxDistance, mask);
+  }
+
   destroyEntity(entityId: EntityId): boolean {
     if (!this.world.isAlive(entityId)) return false;
     const model = this.world.getComponent<Model3DComponent>(entityId, 'Model3D');
@@ -193,9 +222,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     }
   }
 
-  // ---------------------------------------------------------------------------
   // Resource Management (Geometries & Materials outside ECS)
-  // ---------------------------------------------------------------------------
   createMaterial(desc: Material3DDesc): { materialId: number } {
     const materialId = this.allocateResourceId();
     this._materials.set(materialId, { materialId, desc, isDirty: true });
@@ -220,9 +247,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     this._engine?.realm3dDestroyGeometry(this.realmId, geometryId);
   }
 
-  // ---------------------------------------------------------------------------
   // Fluent Entity Spawning Helpers
-  // ---------------------------------------------------------------------------
   private _attachModel(
     entityId: EntityId,
     id: number,
@@ -394,9 +419,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     );
   }
 
-  // ---------------------------------------------------------------------------
   // Camera LookAt, Environment & Debug Gizmos
-  // ---------------------------------------------------------------------------
   setCameraLookAt(
     camera: number | { cameraId?: number; entityId?: EntityId },
     lookAt: CameraLookAt3D
@@ -454,9 +477,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     this._engine?.realm3dClearGizmos(this.realmId);
   }
 
-  // ---------------------------------------------------------------------------
   // Particles, Portals & Advanced Mesh Features
-  // ---------------------------------------------------------------------------
   createParticleEmitter(
     desc: ParticleEmitter3DDesc,
     transform?: Transform3DProps
@@ -543,9 +564,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     return animation.animateEcsProperty(this.world, entityId, 'transform3d', targetValue, config);
   }
 
-  // ---------------------------------------------------------------------------
   // Entity Name & Metadata Helpers
-  // ---------------------------------------------------------------------------
   setEntityName(entityId: EntityId, name: string): void {
     this.world.setEntityName(entityId, name);
   }

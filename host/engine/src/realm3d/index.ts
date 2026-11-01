@@ -8,3 +8,5 @@ export * from './realm';
 export * from './skinning';
 export * from './sync';
 export * as utils3D from './utils/index';
+
+export { Collider3DComponent, createCollider3D } from '../collision/components';

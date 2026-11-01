@@ -135,7 +135,7 @@ export class MultiverseCoordinator {
     }
 
     realm.dispose();
-    if (this._engine) {
+    if (this._engine && realm.realmKind !== '2d' && realm.realmKind !== '3d') {
       this._engine.multiverseUnregisterRealm?.(id);
     }
     this._realms.delete(id);

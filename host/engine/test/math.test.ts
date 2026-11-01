@@ -2,6 +2,41 @@ import { describe, expect, it } from 'bun:test';
 import { mat2d, mat4, quat, vec2, vec3, vec4 } from '../src/math/index';
 
 describe('@galfus/engine-core > Math', () => {
+  it('transforms directions and normals without translation, including in-place output', () => {
+    const matrix2d = mat2d.fromRotationTranslationScale(mat2d.create(), [10, 20], 0, [2, 4]);
+    const inverse2d = mat2d.invert(mat2d.create(), matrix2d)!;
+    const direction2d: [number, number] = [1, 1];
+    vec2.transformDirectionMat2d(direction2d, direction2d, matrix2d);
+    expect(direction2d).toEqual([2, 4]);
+    const normal2d: [number, number] = [1, 1];
+    vec2.transformNormalMat2d(normal2d, normal2d, inverse2d);
+    expect(normal2d).toEqual([0.5, 0.25]);
+
+    const matrix3d = mat4.fromRotationTranslationScale(
+      mat4.create(),
+      [0, 0, 0, 1],
+      [10, 20, 30],
+      [2, 4, 5]
+    );
+    const inverse3d = mat4.invert(mat4.create(), matrix3d)!;
+    const direction3d: [number, number, number] = [1, 1, 1];
+    vec3.transformDirectionMat4(direction3d, direction3d, matrix3d);
+    expect(direction3d).toEqual([2, 4, 5]);
+    const normal3d: [number, number, number] = [1, 1, 1];
+    vec3.transformNormalMat4(normal3d, normal3d, inverse3d);
+    expect(normal3d[0]).toBeCloseTo(0.5);
+    expect(normal3d[1]).toBeCloseTo(0.25);
+    expect(normal3d[2]).toBeCloseTo(0.2);
+  });
+
+  it('normalizes finite vectors across large and small magnitudes', () => {
+    const large = vec2.normalize([0, 0], [1e300, 1e300]);
+    const small = vec3.normalize([0, 0, 0], [1e-300, 0, 0]);
+    expect(large[0]).toBeCloseTo(Math.SQRT1_2);
+    expect(large[1]).toBeCloseTo(Math.SQRT1_2);
+    expect(small).toEqual([1, 0, 0]);
+  });
+
   it('vec2: creates, performs arithmetic, dot, cross, distance and transformMat2d', () => {
     const v1 = vec2.fromValues(1, 2);
     const v2 = vec2.fromValues(3, 4);

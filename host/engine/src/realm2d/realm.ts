@@ -19,6 +19,8 @@ import type { Transform2DProps } from '../anchors/component';
 import { HierarchyCoordinator } from '../anchors/hierarchy';
 import { AnchorSolveSystem } from '../anchors/solver';
 import type { AnimationCoordinator } from '../animation/coordinator';
+import { Collider2DComponent, type ColliderOptions } from '../collision/components';
+import { queryPoint2D, raycast2D } from '../collision/query2d';
 import type { EntityId } from '../ecs/entity';
 import type { SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
@@ -133,6 +135,38 @@ export class Realm2D implements RealmConnector {
     this.world.clear();
     this.solver.cache.clear();
     this._materials.clear();
+  }
+
+  /** Adds a collider to an entity with a matching Model component. */
+  addCollider(
+    entityId: EntityId,
+    shape: import('../collision/components').ColliderShape2D,
+    options?: ColliderOptions
+  ): number {
+    if (!this.world.isAlive(entityId) || !this.world.hasComponent(entityId, 'Model2D'))
+      throw new Error('Collider requires a live entity with Model2D.');
+    const existing = this.world.getComponent<Collider2DComponent>(entityId, 'Collider2D');
+    const component = existing ?? new Collider2DComponent();
+    const id = this.allocateResourceId();
+    component.add(id, shape, options);
+    if (!existing) this.world.attachComponent(entityId, component);
+    return id;
+  }
+
+  queryPoint(point: [number, number], mask = 0xffffffff) {
+    if (this._disposed) throw new Error('Cannot query a disposed Realm2D.');
+    this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0 });
+    return queryPoint2D(this.world, point, mask);
+  }
+  raycast(
+    origin: [number, number],
+    direction: [number, number],
+    maxDistance: number,
+    mask = 0xffffffff
+  ) {
+    if (this._disposed) throw new Error('Cannot query a disposed Realm2D.');
+    this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0 });
+    return raycast2D(this.world, origin, direction, maxDistance, mask);
   }
 
   destroyEntity(entityId: EntityId): boolean {

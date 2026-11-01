@@ -18,6 +18,8 @@ export type ReadonlyVec3 = ArrayLike<number> & {
   2: number;
 };
 
+export type WritableVec3 = Vec3 | [number, number, number];
+
 export function create(): Vec3 {
   return new Float32Array(3) as unknown as Vec3;
 }
@@ -44,7 +46,7 @@ export function set(out: Vec3, x: number, y: number, z: number): Vec3 {
   return out;
 }
 
-export function add(out: Vec3, a: ReadonlyVec3, b: ReadonlyVec3): Vec3 {
+export function add<T extends WritableVec3>(out: T, a: ReadonlyVec3, b: ReadonlyVec3): T {
   out[0] = a[0] + b[0];
   out[1] = a[1] + b[1];
   out[2] = a[2] + b[2];
@@ -65,7 +67,7 @@ export function multiply(out: Vec3, a: ReadonlyVec3, b: ReadonlyVec3): Vec3 {
   return out;
 }
 
-export function scale(out: Vec3, a: ReadonlyVec3, b: number): Vec3 {
+export function scale<T extends WritableVec3>(out: T, a: ReadonlyVec3, b: number): T {
   out[0] = a[0] * b;
   out[1] = a[1] * b;
   out[2] = a[2] * b;
@@ -83,17 +85,14 @@ export function length(a: ReadonlyVec3): number {
   return Math.hypot(a[0], a[1], a[2]);
 }
 
-export function normalize(out: Vec3, a: ReadonlyVec3): Vec3 {
+export function normalize<T extends WritableVec3>(out: T, a: ReadonlyVec3): T {
   const x = a[0];
   const y = a[1];
   const z = a[2];
-  let len = x * x + y * y + z * z;
-  if (len > 0) {
-    len = 1 / Math.sqrt(len);
-  }
-  out[0] = x * len;
-  out[1] = y * len;
-  out[2] = z * len;
+  const len = Math.hypot(x, y, z);
+  out[0] = len === 0 ? 0 : x / len;
+  out[1] = len === 0 ? 0 : y / len;
+  out[2] = len === 0 ? 0 : z / len;
   return out;
 }
 
@@ -175,7 +174,7 @@ export function transformQuat(out: Vec3, a: ReadonlyVec3, q: ReadonlyQuat): Vec3
   return out;
 }
 
-export function transformMat4(out: Vec3, a: ReadonlyVec3, m: ReadonlyMat4): Vec3 {
+export function transformMat4<T extends WritableVec3>(out: T, a: ReadonlyVec3, m: ReadonlyMat4): T {
   const x = a[0];
   const y = a[1];
   const z = a[2];
@@ -184,6 +183,36 @@ export function transformMat4(out: Vec3, a: ReadonlyVec3, m: ReadonlyMat4): Vec3
   out[0] = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w;
   out[1] = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w;
   out[2] = (m[2] * x + m[6] * y + m[10] * z + m[14]) / w;
+  return out;
+}
+
+/** Transforms a direction by the linear part of a 4x4 matrix. */
+export function transformDirectionMat4<T extends WritableVec3>(
+  out: T,
+  a: ReadonlyVec3,
+  m: ReadonlyMat4
+): T {
+  const x = a[0],
+    y = a[1],
+    z = a[2];
+  out[0] = m[0] * x + m[4] * y + m[8] * z;
+  out[1] = m[1] * x + m[5] * y + m[9] * z;
+  out[2] = m[2] * x + m[6] * y + m[10] * z;
+  return out;
+}
+
+/** Transforms a normal using the transpose of an already inverted affine matrix. */
+export function transformNormalMat4<T extends WritableVec3>(
+  out: T,
+  a: ReadonlyVec3,
+  inverse: ReadonlyMat4
+): T {
+  const x = a[0],
+    y = a[1],
+    z = a[2];
+  out[0] = inverse[0] * x + inverse[1] * y + inverse[2] * z;
+  out[1] = inverse[4] * x + inverse[5] * y + inverse[6] * z;
+  out[2] = inverse[8] * x + inverse[9] * y + inverse[10] * z;
   return out;
 }
 

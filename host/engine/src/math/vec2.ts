@@ -15,6 +15,8 @@ export type ReadonlyVec2 = ArrayLike<number> & {
   1: number;
 };
 
+export type WritableVec2 = Vec2 | [number, number];
+
 export function create(): Vec2 {
   return new Float32Array(2) as unknown as Vec2;
 }
@@ -38,13 +40,13 @@ export function set(out: Vec2, x: number, y: number): Vec2 {
   return out;
 }
 
-export function add(out: Vec2, a: ReadonlyVec2, b: ReadonlyVec2): Vec2 {
+export function add<T extends WritableVec2>(out: T, a: ReadonlyVec2, b: ReadonlyVec2): T {
   out[0] = a[0] + b[0];
   out[1] = a[1] + b[1];
   return out;
 }
 
-export function subtract(out: Vec2, a: ReadonlyVec2, b: ReadonlyVec2): Vec2 {
+export function subtract<T extends WritableVec2>(out: T, a: ReadonlyVec2, b: ReadonlyVec2): T {
   out[0] = a[0] - b[0];
   out[1] = a[1] - b[1];
   return out;
@@ -56,7 +58,7 @@ export function multiply(out: Vec2, a: ReadonlyVec2, b: ReadonlyVec2): Vec2 {
   return out;
 }
 
-export function scale(out: Vec2, a: ReadonlyVec2, b: number): Vec2 {
+export function scale<T extends WritableVec2>(out: T, a: ReadonlyVec2, b: number): T {
   out[0] = a[0] * b;
   out[1] = a[1] * b;
   return out;
@@ -72,15 +74,12 @@ export function length(a: ReadonlyVec2): number {
   return Math.hypot(a[0], a[1]);
 }
 
-export function normalize(out: Vec2, a: ReadonlyVec2): Vec2 {
+export function normalize<T extends WritableVec2>(out: T, a: ReadonlyVec2): T {
   const x = a[0];
   const y = a[1];
-  let len = x * x + y * y;
-  if (len > 0) {
-    len = 1 / Math.sqrt(len);
-  }
-  out[0] = x * len;
-  out[1] = y * len;
+  const len = Math.hypot(x, y);
+  out[0] = len === 0 ? 0 : x / len;
+  out[1] = len === 0 ? 0 : y / len;
   return out;
 }
 
@@ -115,11 +114,41 @@ export function clamp(
   return out;
 }
 
-export function transformMat2d(out: Vec2, a: ReadonlyVec2, m: ReadonlyMat2d): Vec2 {
+export function transformMat2d<T extends WritableVec2>(
+  out: T,
+  a: ReadonlyVec2,
+  m: ReadonlyMat2d
+): T {
   const x = a[0];
   const y = a[1];
   out[0] = m[0] * x + m[2] * y + m[4];
   out[1] = m[1] * x + m[3] * y + m[5];
+  return out;
+}
+
+/** Transforms a direction by the linear part of an affine matrix. */
+export function transformDirectionMat2d<T extends WritableVec2>(
+  out: T,
+  a: ReadonlyVec2,
+  m: ReadonlyMat2d
+): T {
+  const x = a[0],
+    y = a[1];
+  out[0] = m[0] * x + m[2] * y;
+  out[1] = m[1] * x + m[3] * y;
+  return out;
+}
+
+/** Transforms a normal using the transpose of an already inverted affine matrix. */
+export function transformNormalMat2d<T extends WritableVec2>(
+  out: T,
+  a: ReadonlyVec2,
+  inverse: ReadonlyMat2d
+): T {
+  const x = a[0],
+    y = a[1];
+  out[0] = inverse[0] * x + inverse[1] * y;
+  out[1] = inverse[2] * x + inverse[3] * y;
   return out;
 }
 
