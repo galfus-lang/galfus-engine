@@ -93,6 +93,39 @@ runtime.start();
 
 ---
 
+## SVG element bounds
+
+`runtime.svg.getRect(realmId, svgId, elementId)` returns the geometric bounds of an SVG
+element or `undefined` if it cannot be found. The result is expressed in the SVG viewport's
+coordinates (top-left origin, Y down), before the entity transform. `viewportWidth` and
+`viewportHeight` describe that coordinate space. Bounds are cached and refreshed after SVG
+edits, font changes, re-creation, and native attribute animations.
+
+## Pointer interaction
+
+Run `bun host:demo interaction` to try direct 2D, SVG, and 3D interaction in a window.
+For a bounded headless smoke test, use `bun host:demo interaction --headless --frames 10`.
+The host tutorial is available as `bun host:demo tutorial`, with the same headless option.
+Use `bun host:demo help` to list the available demos.
+
+For an entity with a `Collider2D` or `Collider3D`, or for an SVG element in a 2D realm:
+
+```ts
+const listener = runtime.interactive(realmId, { type: 'collider', entityId });
+const unsubscribe = listener.on('hover', (event) => console.log(event.pointer.position));
+listener.on('click', () => console.log('clicked'));
+unsubscribe();
+listener.dispose();
+```
+
+Use `{ type: 'svg', svgId, elementId }` for an SVG element. The supported event types are
+`hover`, `leave`, `move`, `down`, `up`, `click`, and `cancel`. When an entity has multiple
+colliders, specify `colliderId`. Events use the most recently submitted presentation state.
+Currently this supports realms presented directly to a window. Traversal through textures
+connecting realms is not implemented yet, and native animations of camera or model transforms
+and camera field of view are not yet reflected in interaction snapshots. Occlusion is resolved
+among registered interactive targets; geometry and colliders without listeners do not block them.
+
 ## Migration Guide
 
 | Legacy Pattern                            | Modern `@galfus/engine` Pattern                                                                    |

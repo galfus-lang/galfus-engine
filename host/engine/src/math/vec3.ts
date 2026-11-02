@@ -53,6 +53,19 @@ export function add<T extends WritableVec3>(out: T, a: ReadonlyVec3, b: Readonly
   return out;
 }
 
+/** Adds a scaled vector to another vector. */
+export function scaleAndAdd<T extends WritableVec3>(
+  out: T,
+  a: ReadonlyVec3,
+  b: ReadonlyVec3,
+  scale: number
+): T {
+  out[0] = a[0] + b[0] * scale;
+  out[1] = a[1] + b[1] * scale;
+  out[2] = a[2] + b[2] * scale;
+  return out;
+}
+
 export function subtract(out: Vec3, a: ReadonlyVec3, b: ReadonlyVec3): Vec3 {
   out[0] = a[0] - b[0];
   out[1] = a[1] - b[1];

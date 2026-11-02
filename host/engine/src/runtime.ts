@@ -3,6 +3,7 @@
  */
 
 import {
+  type AnimationTarget,
   type FrameTiming,
   GalfusLoopError,
   type GalfusTransport,
@@ -13,11 +14,14 @@ import {
 import { AnimationCoordinator } from './animation/coordinator';
 import { AudioManager } from './audio/manager';
 import type { SystemContext } from './ecs/system';
+import { InteractiveSystem } from './interaction/system';
+import type { InteractiveTarget } from './interaction/types';
 import { MultiverseCoordinator } from './multiverse/coordinator';
 import type { RealmId } from './multiverse/realm';
 import { PlatformCoordinator } from './platform/index';
 import { Realm2D } from './realm2d/realm';
 import { Realm3D } from './realm3d/realm';
+import { storeCameraLookAt } from './realm3d/resource-ids';
 import { ResourceManager } from './resources/manager';
 import { IdAllocator, type RuntimeEventListener, type RuntimeEventType } from './types';
 
@@ -33,9 +37,42 @@ export class MultiverseRuntime {
   readonly resources = new ResourceManager();
   readonly audio = new AudioManager();
   readonly animation = new AnimationCoordinator();
+  private readonly _interactive = new InteractiveSystem(this.multiverse);
+  readonly svg = {
+    getRect: (realmId: number, svgId: number, elementId: string) => {
+      for (const realm of this.multiverse.getRealms()) {
+        if (realm.realmId === realmId && realm instanceof Realm2D)
+          return realm.getSvgElementRect(svgId, elementId);
+      }
+      return undefined;
+    }
+  };
   private readonly _realmIdAllocator = new IdAllocator<RealmId>(1);
   private readonly _eventListeners = new Map<RuntimeEventType, Set<(event: any) => void>>();
   private _animationUnsubscribe: (() => void) | null = null;
+  private readonly _refreshAnimatedTarget = (target: AnimationTarget): void => {
+    for (const realm of this.multiverse.getRealms()) {
+      if (realm.realmId !== ('realmId' in target ? target.realmId : undefined)) continue;
+      if (realm instanceof Realm2D && 'svgId' in target) {
+        realm.invalidateSvgRects(target.svgId);
+        break;
+      }
+      if (
+        realm instanceof Realm3D &&
+        target.kind === 'camera3DLookAt' &&
+        this._interactive.usesRealm(realm.realmId)
+      ) {
+        const lookAt = realm.getCameraLookAt(target.cameraId);
+        if (lookAt)
+          storeCameraLookAt(
+            realm.world,
+            target.cameraId,
+            lookAt.enabled && lookAt.target ? { target: lookAt.target, up: lookAt.up } : undefined
+          );
+        break;
+      }
+    }
+  };
   private _isSubsystemsBound = false;
 
   private _frameId = 0;
@@ -47,9 +84,13 @@ export class MultiverseRuntime {
 
   constructor(transport: GalfusTransport) {
     this.#transport = transport;
+    this.animation.setNativeTargetObserver(this._refreshAnimatedTarget);
     this.platform.window.onLifecycle((windowId, opened) => {
       if (opened) this.multiverse.windowOpened(windowId);
-      else this.multiverse.windowClosed(windowId);
+      else {
+        this.multiverse.windowClosed(windowId);
+        this._interactive.windowClosed(windowId);
+      }
     });
     if (transport.isDisposed) {
       this._state = 'disposed';
@@ -154,6 +195,11 @@ export class MultiverseRuntime {
     return realm;
   }
 
+  /** Registers a pointer-interactive target in a realm. */
+  interactive(realmId: number, target: InteractiveTarget) {
+    return this._interactive.interactive(realmId, target);
+  }
+
   /**
    * Registers a strongly typed event listener.
    *
@@ -245,6 +291,7 @@ export class MultiverseRuntime {
     try {
       this.stop();
       this.clearListeners();
+      this._interactive.dispose();
       this._elapsedSeconds = 0;
       this._frameId = 0;
 
@@ -296,6 +343,7 @@ export class MultiverseRuntime {
       this.stop();
       this._state = 'disposing';
       this.clearListeners();
+      this._interactive.dispose();
       if (this._animationUnsubscribe) {
         this._animationUnsubscribe();
         this._animationUnsubscribe = null;
@@ -326,6 +374,7 @@ export class MultiverseRuntime {
     if (platformEvents.length > 0) {
       const platformListeners = this._eventListeners.get('platform');
       for (const event of platformEvents) {
+        if (event.kind === 'pointer') this._interactive.handle(event);
         // Auto-synchronize window swapchain size in Multiverse on resize
         if (event.kind === 'window' && event.type === 'resized') {
           this.platform.window.updateSize(event.windowId as any, event.width, event.height);
@@ -378,6 +427,7 @@ export class MultiverseRuntime {
 
     // 8. Resolve multiverse schedule and dispatch to GPU
     this.multiverse.dispatch(timing.frameId, timing.dt);
+    this._interactive.afterDispatch();
 
     // 9. Step post-render stage: postRender (metrics, cleanups) AFTER dispatch
     this.multiverse.stepRealmsPostRender(context);

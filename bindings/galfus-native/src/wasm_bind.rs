@@ -1375,6 +1375,18 @@ pub fn realm_3d_create_portal(realm_id: u32, portal_id: u32, portal_val: JsUnkno
     })
 }
 
+#[wasm_bindgen(js_name = "realm2dGetSvgElementRect")]
+pub fn realm_2d_get_svg_element_rect(
+    realm_id: u32,
+    svg_id: u32,
+    element_id: String,
+) -> Result<JsUnknown> {
+    let env = Env;
+    let value = crate::ffi_realm_2d_svg::svg_element_rect(realm_id, svg_id, &element_id)
+        .map_err(|error| Error::from_reason(Status::GenericFailure, error))?;
+    env.to_js_value(&value)
+}
+
 // Realm 2D
 #[wasm_bindgen(js_name = "realm2dCreate")]
 pub fn realm_2d_create(realm_id: u32) -> Result<()> {

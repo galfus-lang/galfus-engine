@@ -55,6 +55,14 @@ export class ComponentStore {
     return this._byType.get(componentType)?.has(entityId) ?? false;
   }
 
+  /** Iterates existing components without creating an array or copying the index. */
+  *entries<T extends Component = Component>(
+    componentType: string
+  ): IterableIterator<[EntityId, T]> {
+    const entries = this._byType.get(componentType);
+    if (entries) yield* entries as Map<EntityId, T>;
+  }
+
   /**
    * Detaches a component of the specified type from an entity.
    *

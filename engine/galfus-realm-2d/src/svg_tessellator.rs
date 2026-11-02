@@ -18,6 +18,57 @@ use std::sync::Arc;
 /// 9-float vertex format matching Galfus 2D pipeline: Pos(3) + UV(2) + Col(4).
 pub type SvgVertex = [f32; 9];
 
+/// Bounds in the rendered SVG's viewport coordinates, before the entity transform.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SvgElementRect {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub viewport_width: f32,
+    pub viewport_height: f32,
+}
+
+fn parse_svg(
+    xml: &str,
+    font_db: Arc<fontdb::Database>,
+    default_font_family: &str,
+) -> Result<Tree, String> {
+    let opt = usvg::Options {
+        resources_dir: None,
+        fontdb: font_db,
+        font_family: default_font_family.to_string(),
+        ..Default::default()
+    };
+    Tree::from_str(xml, &opt).map_err(|e| format!("SVG parsing failed: {e}"))
+}
+
+/// Resolves the geometric bounds using the same SVG parser and font database as rendering.
+pub fn svg_element_rect(
+    xml: &str,
+    element_id: &str,
+    font_db: Arc<fontdb::Database>,
+    default_font_family: &str,
+) -> Result<Option<SvgElementRect>, String> {
+    let tree = parse_svg(xml, font_db, default_font_family)?;
+    let Some(node) = tree.node_by_id(element_id) else {
+        return Ok(None);
+    };
+    let bounds = node.abs_bounding_box();
+    if bounds.width() <= 0.0 || bounds.height() <= 0.0 {
+        return Ok(None);
+    }
+    Ok(Some(SvgElementRect {
+        x: bounds.x(),
+        y: bounds.y(),
+        width: bounds.width(),
+        height: bounds.height(),
+        viewport_width: tree.size().width(),
+        viewport_height: tree.size().height(),
+    }))
+}
+
 /// Decoded embedded image asset extracted from SVG data URI.
 pub struct SvgEmbeddedImage {
     pub width: u32,
@@ -182,14 +233,7 @@ pub fn tessellate_svg(
     font_db: Arc<fontdb::Database>,
     default_font_family: &str,
 ) -> Result<TessellatedSvgMesh, String> {
-    let opt = usvg::Options {
-        resources_dir: None,
-        fontdb: font_db,
-        font_family: default_font_family.to_string(),
-        ..Default::default()
-    };
-
-    let tree = Tree::from_str(xml, &opt).map_err(|e| format!("SVG parsing failed: {e}"))?;
+    let tree = parse_svg(xml, font_db, default_font_family)?;
     let size = tree.size();
     let (vw, vh) = (size.width(), size.height());
     let half_w = vw / 2.0;

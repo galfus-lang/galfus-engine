@@ -12,6 +12,7 @@ import type {
   Shape2DDesc,
   Sprite2DDesc,
   Svg2DDesc,
+  SvgElementRect,
   TransitionConfig
 } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
@@ -52,12 +53,15 @@ export class Realm2D implements RealmConnector {
   private _preRenderSteppedFrame = -1;
   private _disposed = false;
   private readonly _materials = new Map<number, Material2DDesc>();
+  private readonly _svgRects = new Map<number, Map<string, Readonly<SvgElementRect> | null>>();
 
   constructor(realmId: RealmId | number) {
     this.realmId = realmId as RealmId;
     assertValidLogicalId(this.realmId, 'RealmId');
     this.hierarchy = new HierarchyCoordinator(this.world, '2d');
-    this.syncSystem = new Realm2DSyncSystem(this.realmId, this.solver.cache);
+    this.syncSystem = new Realm2DSyncSystem(this.realmId, this.solver.cache, (id) => {
+      this._svgRects.delete(id);
+    });
     this._registerInternalSystems();
   }
 
@@ -115,6 +119,7 @@ export class Realm2D implements RealmConnector {
     this.world.reset();
     this.solver.cache.clear();
     this._materials.clear();
+    this._svgRects.clear();
     this._preRenderSteppedFrame = -1;
     this._registerInternalSystems();
     if (this._engine) {
@@ -135,6 +140,7 @@ export class Realm2D implements RealmConnector {
     this.world.reset();
     this.solver.cache.clear();
     this._materials.clear();
+    this._svgRects.clear();
   }
 
   /** Adds a collider to an entity with a matching Model component. */
@@ -273,6 +279,28 @@ export class Realm2D implements RealmConnector {
   // ---------------------------------------------------------------------------
   // SVG Dynamic Manipulation
   // ---------------------------------------------------------------------------
+  /** Returns element bounds in the SVG viewport coordinate system. */
+  getSvgElementRect(svgId: number, elementId: string): Readonly<SvgElementRect> | undefined {
+    if (this._disposed || !this._engine) return undefined;
+    if (!this.syncSystem.isSvgSynced(svgId)) this.flush();
+    if (!this.syncSystem.isSvgSynced(svgId)) return undefined;
+    let entries = this._svgRects.get(svgId);
+    if (!entries) {
+      entries = new Map();
+      this._svgRects.set(svgId, entries);
+    }
+    if (!entries.has(elementId)) {
+      const rect = this._engine.realm2dGetSvgElementRect(this.realmId, svgId, elementId).rect;
+      entries.set(elementId, rect ? Object.freeze(rect) : null);
+    }
+    return entries.get(elementId) ?? undefined;
+  }
+
+  /** @internal Invalidates SVG bounds after native animation updates. */
+  invalidateSvgRects(svgId: number): void {
+    this._svgRects.delete(svgId);
+  }
+
   private _resolveSvgId(svg: number | { svgId?: number; entityId?: EntityId }): number {
     if (typeof svg === 'number') {
       return this.world.getComponent<Svg2DComponent>(svg as EntityId, 'Svg2D')?.svgId ?? svg;
@@ -290,6 +318,7 @@ export class Realm2D implements RealmConnector {
 
   setSvgSource(svg: number | { svgId?: number; entityId?: EntityId }, source: string): void {
     const svgId = this._resolveSvgId(svg);
+    this._svgRects.delete(svgId);
     if (this._engine) {
       if (!this.syncSystem.isSvgSynced(svgId)) {
         this.flush();
@@ -305,6 +334,7 @@ export class Realm2D implements RealmConnector {
     value: string
   ): void {
     const svgId = this._resolveSvgId(svg);
+    this._svgRects.delete(svgId);
     if (this._engine) {
       if (!this.syncSystem.isSvgSynced(svgId)) {
         this.flush();
@@ -319,6 +349,7 @@ export class Realm2D implements RealmConnector {
     name: string
   ): void {
     const svgId = this._resolveSvgId(svg);
+    this._svgRects.delete(svgId);
     if (this._engine) {
       if (!this.syncSystem.isSvgSynced(svgId)) {
         this.flush();
@@ -333,6 +364,7 @@ export class Realm2D implements RealmConnector {
     text: string
   ): void {
     const svgId = this._resolveSvgId(svg);
+    this._svgRects.delete(svgId);
     if (this._engine) {
       if (!this.syncSystem.isSvgSynced(svgId)) {
         this.flush();
@@ -354,7 +386,9 @@ export class Realm2D implements RealmConnector {
     if (!this._engine) {
       throw new Error('Cannot load font: Realm2D is not bound to an engine instance.');
     }
-    return this._engine.realm2dLoadFontData(this.realmId, data, data.byteLength);
+    const family = this._engine.realm2dLoadFontData(this.realmId, data, data.byteLength);
+    this._svgRects.clear();
+    return family;
   }
 
   /** Registers a material for upload during the next sync or flush. */

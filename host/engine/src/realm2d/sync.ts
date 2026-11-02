@@ -6,6 +6,7 @@ import type { GalfusEngine, Material2DDesc, Transform2DDesc } from '@galfus/tran
 import type { AnchorMatrixCache } from '../anchors/cache';
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';
+import { mat2d, vec2 } from '../math';
 import { SpatialDirtyFlags } from '../spatial/flags';
 import type {
   Camera2DComponent,
@@ -16,6 +17,8 @@ import type {
   Sprite2DComponent,
   Svg2DComponent
 } from './components';
+
+const SCALE = vec2.create();
 
 export class Realm2DSyncSystem {
   private readonly _syncedMaterials = new Set<number>();
@@ -28,7 +31,8 @@ export class Realm2DSyncSystem {
 
   constructor(
     readonly realmId: number,
-    readonly cache: AnchorMatrixCache
+    readonly cache: AnchorMatrixCache,
+    private readonly onSvgChanged?: (svgId: number) => void
   ) {}
 
   /**
@@ -39,21 +43,14 @@ export class Realm2DSyncSystem {
     const mat = model ? model.worldMatrix : this.cache.getWorld2D(id);
 
     if (mat) {
-      const a = mat[0];
-      const b = mat[1];
-      const c = mat[2];
-      const d = mat[3];
       const tx = mat[4];
       const ty = mat[5];
-
-      const scaleX = Math.hypot(a, b);
-      const scaleY = Math.hypot(c, d) * (a * d - b * c < 0 ? -1 : 1);
-      const rotation = Math.atan2(b, a);
+      mat2d.getScaling(SCALE, mat);
 
       return {
         position: [tx, ty],
-        rotation,
-        scale: [scaleX, scaleY],
+        rotation: mat2d.getRotation(mat),
+        scale: [SCALE[0], SCALE[1]],
         zLayer: model?.zLayer ?? 0,
         drawOrder: model?.drawOrder ?? 0
       };
@@ -205,6 +202,7 @@ export class Realm2DSyncSystem {
 
       if (!isRegistered || svg.isDirty) {
         engine.realm2dCreateSvg(this.realmId, svg.svgId, svg.desc, tf);
+        this.onSvgChanged?.(svg.svgId);
         this._syncedSvgs.add(svg.svgId);
         svg.isDirty = false;
       } else if (isSpatialDirty) {
@@ -214,6 +212,7 @@ export class Realm2DSyncSystem {
     for (const svgId of this._syncedSvgs) {
       if (!currentSvgs.has(svgId)) {
         engine.realm2dDestroySvg(this.realmId, svgId);
+        this.onSvgChanged?.(svgId);
         this._syncedSvgs.delete(svgId);
       }
     }

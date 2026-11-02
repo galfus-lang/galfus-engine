@@ -11,6 +11,42 @@ use crate::ffi_native_structs::GalfusTransform2D;
 use crate::ffi_realm_2d_desc::Transform2DDesc;
 use crate::state::{with_multiverse, with_multiverse_mut};
 
+pub(crate) fn svg_element_rect(
+    realm_id: u32,
+    svg_id: u32,
+    element_id: &str,
+) -> Result<serde_json::Value, String> {
+    with_multiverse(|mv| {
+        let realm = mv
+            .get_realm::<Realm2DContext>(realm_id)
+            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
+        let rect = realm.svg_manager.element_rect(svg_id, element_id)?;
+        Ok(match rect {
+            Some(rect) => serde_json::json!({ "rect": rect }),
+            None => serde_json::json!({}),
+        })
+    })
+}
+
+/// Returns the SVG element bounds as JSON in viewport coordinates.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_2d_get_svg_element_rect(
+    realm_id: u32,
+    svg_id: u32,
+    element_id: *const c_char,
+) -> *mut c_char {
+    let result = unsafe { from_c_str(element_id) }
+        .and_then(|id| svg_element_rect(realm_id, svg_id, id))
+        .and_then(|value| serde_json::to_string(&value).map_err(|e| e.to_string()));
+    match result {
+        Ok(json) => to_c_string(&json),
+        Err(error) => {
+            set_last_error(&error);
+            std::ptr::null_mut()
+        }
+    }
+}
+
 unsafe fn parse_transform_2d(transform_json: *const c_char) -> Result<Transform2D, String> {
     match unsafe { crate::ffi::from_c_str_optional(transform_json) } {
         Ok(Some(s)) => {

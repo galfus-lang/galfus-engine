@@ -149,6 +149,23 @@ impl SvgManager2D {
         self.instances.get_mut(&id)
     }
 
+    /// Resolves an element's geometric bounds in SVG viewport coordinates.
+    pub fn element_rect(
+        &self,
+        svg_id: u32,
+        element_id: &str,
+    ) -> Result<Option<crate::svg_tessellator::SvgElementRect>, String> {
+        let Some(instance) = self.instances.get(&svg_id) else {
+            return Ok(None);
+        };
+        crate::svg_tessellator::svg_element_rect(
+            &instance.svg.source,
+            element_id,
+            self.font_db.clone(),
+            &self.default_font_family,
+        )
+    }
+
     /// Resolves an active GPU geometry buffer by 64-bit packed generational handle.
     pub fn get_geometry_by_u64(&self, raw: u64) -> Option<&SvgGeometry2D> {
         let handle: Handle<SvgGeometry2D> = Handle::from_u64(raw)?;

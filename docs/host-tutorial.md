@@ -535,10 +535,10 @@ You can execute the complete, verified demo locally at any time:
 # Run interactive desktop OS window demo:
 bun demo tutorial
 # or
-bun run demo:tutorial
+bun host:demo tutorial
 
 # Or run headless (CI / test environments):
-bun run demo:tutorial:headless
+bun host:demo tutorial --headless --frames 10
 ```
 
 ### Clean Shutdown

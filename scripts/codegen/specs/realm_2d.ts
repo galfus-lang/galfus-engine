@@ -3,6 +3,24 @@ import type { DescSpec, FunctionSpec } from './types';
 export const realm2dDescriptors: DescSpec[] = [
   {
     kind: 'object',
+    name: 'SvgElementRect',
+    doc: 'Geometric bounds in SVG viewport coordinates.',
+    fields: {
+      x: { type: 'number' },
+      y: { type: 'number' },
+      width: { type: 'number' },
+      height: { type: 'number' },
+      viewportWidth: { type: 'number' },
+      viewportHeight: { type: 'number' }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'SvgElementRectResult',
+    fields: { rect: { type: { ref: 'SvgElementRect' }, optional: true } }
+  },
+  {
+    kind: 'object',
     name: 'Transform2DDesc',
     doc: '2D spatial transform containing position, rotation angle (radians), scale, and z-layer order.',
     fields: {
@@ -440,6 +458,17 @@ export const realm2dFunctions: FunctionSpec[] = [
       { name: 'transform', type: { json: 'Transform2DDesc' }, doc: 'Initial transform.' }
     ],
     returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_get_svg_element_rect',
+    methodName: 'realm2dGetSvgElementRect',
+    doc: 'Reads the geometric bounds of an SVG element.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
+      { name: 'elementId', type: 'string', doc: 'Target SVG element ID.' }
+    ],
+    returnType: { json: 'SvgElementRectResult' }
   },
   {
     cName: 'galfus_realm_2d_set_svg_source',

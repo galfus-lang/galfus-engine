@@ -234,6 +234,18 @@ export function determinant(a: ReadonlyMat2d): number {
   return a[0] * a[3] - a[1] * a[2];
 }
 
+/** Extracts the signed scales used when decomposing an affine transform. */
+export function getScaling(out: Vec2, mat: ReadonlyMat2d): Vec2 {
+  out[0] = Math.hypot(mat[0], mat[1]);
+  out[1] = Math.hypot(mat[2], mat[3]) * (determinant(mat) < 0 ? -1 : 1);
+  return out;
+}
+
+/** Extracts the rotation used when decomposing an affine transform. */
+export function getRotation(mat: ReadonlyMat2d): number {
+  return Math.atan2(mat[1], mat[0]);
+}
+
 export function equals(a: ReadonlyMat2d, b: ReadonlyMat2d, epsilon: number = EPSILON): boolean {
   return (
     equalsApprox(a[0], b[0], epsilon) &&

@@ -11,6 +11,9 @@ import {
 } from './components';
 
 type Point = [number, number];
+const EDGE: Point = [0, 0];
+const POINT_A: Point = [0, 0];
+const POINT_B: Point = [0, 0];
 function vertices(shape: Exclude<ColliderShape2D, { type: 'circle' }>): Point[] {
   if (shape.type === 'polygon') return shape.vertices;
   const [x, y] = shape.halfExtents;
@@ -21,16 +24,19 @@ function vertices(shape: Exclude<ColliderShape2D, { type: 'circle' }>): Point[] 
     [-x, y]
   ];
 }
-function inside(shape: ColliderShape2D, p: Point): boolean {
+/** @internal Tests a point already transformed to collider-local coordinates. */
+export function containsColliderPoint2D(shape: ColliderShape2D, p: Point): boolean {
   if (shape.type === 'circle') return vec2.dot(p, p) <= shape.radius ** 2;
-  const v = vertices(shape);
+  if (shape.type === 'rectangle')
+    return Math.abs(p[0]) <= shape.halfExtents[0] && Math.abs(p[1]) <= shape.halfExtents[1];
+  const v = shape.vertices;
   let result = false;
   for (let i = 0; i < v.length; i++) {
     const a = v[i]!;
     const b = v[(i + 1) % v.length]!;
     if (
-      Math.abs(vec2.cross(vec2.subtract([0, 0], b, a), vec2.subtract([0, 0], p, a))) <= 1e-7 &&
-      vec2.dot(vec2.subtract([0, 0], p, a), vec2.subtract([0, 0], p, b)) <= 1e-7
+      Math.abs(vec2.cross(vec2.subtract(EDGE, b, a), vec2.subtract(POINT_A, p, a))) <= 1e-7 &&
+      vec2.dot(POINT_A, vec2.subtract(POINT_B, p, b)) <= 1e-7
     )
       return true;
     if (
@@ -47,7 +53,7 @@ function intersect(
   d: Point,
   max: number
 ): { distance: number; normal: Point } | undefined {
-  if (inside(shape, o)) return { distance: 0, normal: [0, 0] };
+  if (containsColliderPoint2D(shape, o)) return { distance: 0, normal: [0, 0] };
   if (shape.type === 'circle') {
     const a = vec2.dot(d, d);
     const b = vec2.dot(o, d);
@@ -117,7 +123,7 @@ export function queryPoint2D(world: EcsWorld, point: Point, mask = 0xffffffff): 
   const hits: ColliderHit2D[] = [];
   eachCollider(world, mask, (entityId, colliderId, shape, m, sensor) => {
     const p = vec2.transformMat2d([0, 0], point, m);
-    if (inside(shape, p))
+    if (containsColliderPoint2D(shape, p))
       hits.push({ entityId, colliderId, point: [...point], normal: [0, 0], distance: 0, sensor });
   });
   return hits.sort((a, b) => a.colliderId - b.colliderId);

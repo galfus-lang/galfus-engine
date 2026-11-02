@@ -73,11 +73,11 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
   const isHeadless =
     options.headless ?? (process.argv.includes('--headless') || !process.env.DISPLAY);
   const framesIdx = process.argv.indexOf('--frames');
-  const cliFrames =
-    framesIdx !== -1 && process.argv[framesIdx + 1]
-      ? parseInt(process.argv[framesIdx + 1]!, 10)
-      : undefined;
-  const maxFrames = options.maxFrames ?? cliFrames; // undefined = run continuously until user exits
+  const cliFrames = framesIdx !== -1 ? Number(process.argv[framesIdx + 1]) : undefined;
+  const maxFrames = options.maxFrames ?? cliFrames ?? (isHeadless ? 120 : undefined);
+  if (maxFrames !== undefined && (!Number.isInteger(maxFrames) || maxFrames <= 0)) {
+    throw new Error('--frames must be a positive integer.');
+  }
 
   console.log('\n=============================================================');
   console.log('       Galfus Engine - Host Tutorial Demo (Interactive)      ');
@@ -85,7 +85,7 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
 
   // 1. Choose platform transport and create unified runtime
   console.log('[1/7] Initializing BunTransport and MultiverseRuntime...');
-  const transport = createBunTransport();
+  const transport = createBunTransport({ debug: true, headless: isHeadless });
   const runtime = createRuntime(transport);
 
   await runtime.init({ debug: true, headless: isHeadless });
@@ -346,22 +346,30 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
   let turretAngle = 0;
   let totalFrames = 0;
   let isShuttingDown = false;
+  let resolveFinished!: () => void;
+  let rejectFinished!: (error: unknown) => void;
+  const finished = new Promise<void>((resolve, reject) => {
+    resolveFinished = resolve;
+    rejectFinished = reject;
+  });
 
   const shutdown = (reason: string) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
     console.log(`\n==> Exiting demo (${reason})...`);
     runtime.stop();
-    if (windowId !== null) {
+    queueMicrotask(() => {
       try {
-        runtime.platform.window.close(windowId);
-      } catch {}
-    }
-    try {
-      runtime.dispose();
-    } catch {}
-    console.log('✔ Clean shutdown complete.\n');
-    process.exit(0);
+        if (windowId !== null) runtime.platform.window.close(windowId);
+        runtime.dispose();
+        console.log('✔ Clean shutdown complete.\n');
+        resolveFinished();
+      } catch (error) {
+        rejectFinished(error);
+      } finally {
+        process.off('SIGINT', onSignal);
+      }
+    });
   };
 
   // Listen to Window Close Event
@@ -392,9 +400,8 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
   });
 
   // Handle SIGINT (Ctrl+C)
-  process.on('SIGINT', () => {
-    shutdown('SIGINT received');
-  });
+  const onSignal = () => shutdown('SIGINT received');
+  process.on('SIGINT', onSignal);
 
   // Continuous Frame Loop Update
   const turretModel = realm3D.world.getComponent<Model3DComponent>(turret.entityId, 'Model3D');
@@ -434,22 +441,5 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
   runtime.start({ targetFps: 60 });
 
   // Await until demo completes or is shut down (ESC key, window close, or maxFrames reached)
-  await new Promise<void>((resolve) => {
-    const checkInterval = setInterval(() => {
-      if (isShuttingDown || !runtime.isRunning) {
-        clearInterval(checkInterval);
-        resolve();
-      }
-    }, 16);
-  });
-}
-
-// Direct CLI execution
-if (import.meta.main) {
-  runTutorialDemo()
-    .then(() => process.exit(0))
-    .catch((err) => {
-      console.error('\n✖ Fatal error running tutorial demo:', err);
-      process.exit(1);
-    });
+  await finished;
 }

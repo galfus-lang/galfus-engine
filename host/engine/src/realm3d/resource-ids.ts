@@ -1,6 +1,23 @@
 import type { EntityId } from '../ecs/entity';
+import type { CameraLookAt3DDesc } from '@galfus/transport-types';
 import type { EcsWorld } from '../ecs/world';
 import type { Camera3DComponent, ParticleEmitter3DComponent } from './components';
+
+/** Stores the renderer's camera orientation for host-side spatial queries. */
+export function storeCameraLookAt(
+  world: EcsWorld,
+  cameraId: number,
+  lookAt?: CameraLookAt3DDesc
+): void {
+  for (const [, component] of world.components.entries<Camera3DComponent>('Camera3D')) {
+    if (component.cameraId === cameraId) {
+      component.desc.lookAt = lookAt
+        ? { target: [...lookAt.target], up: lookAt.up ? [...lookAt.up] : undefined }
+        : undefined;
+      break;
+    }
+  }
+}
 
 export function resolveCameraId(
   world: EcsWorld,

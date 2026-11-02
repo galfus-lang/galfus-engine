@@ -52,7 +52,7 @@ import {
   packGeometryData,
   prepareMorphTargets
 } from './geometry';
-import { resolveCameraId, resolveEmitterId } from './resource-ids';
+import { resolveCameraId, resolveEmitterId, storeCameraLookAt } from './resource-ids';
 import { SkinningSolveSystem } from './skinning';
 import { type Realm3DResourceProvider, Realm3DSyncSystem } from './sync';
 
@@ -424,6 +424,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     if (this._engine) {
       if (!this.syncSystem.isCameraSynced(cameraId)) this.flush();
       this._engine.realm3dSetCameraLookAt(this.realmId, cameraId, lookAt);
+      storeCameraLookAt(this.world, cameraId, lookAt);
     }
   }
 
@@ -432,7 +433,9 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   }
 
   clearCameraLookAt(cameraId: number): void {
-    this._engine?.realm3dClearCameraLookAt(this.realmId, cameraId);
+    if (!this._engine) return;
+    this._engine.realm3dClearCameraLookAt(this.realmId, cameraId);
+    storeCameraLookAt(this.world, cameraId);
   }
 
   setEnvironment(environment: EnvironmentRealm3DDesc): void {

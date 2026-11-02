@@ -3,6 +3,25 @@
 use super::*;
 
 #[test]
+fn element_rect_uses_rendered_viewport_and_ancestor_transforms() {
+    let xml = r#"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 100 50"><g transform="translate(10 5)"><rect id="button" x="5" y="3" width="20" height="10"/></g></svg>"#;
+    let db = Arc::new(fontdb::Database::new());
+    let rect = svg_element_rect(xml, "button", db.clone(), "sans-serif")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (rect.x, rect.y, rect.width, rect.height),
+        (30.0, 16.0, 40.0, 20.0)
+    );
+    assert_eq!((rect.viewport_width, rect.viewport_height), (200.0, 100.0));
+    assert!(
+        svg_element_rect(xml, "missing", db, "sans-serif")
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
 fn test_tessellate_svg_rect() {
     let db = fontdb::Database::new();
     let xml = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">

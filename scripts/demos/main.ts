@@ -1,4 +1,3 @@
-import { runTutorialDemo } from '../../host/engine/demo/tutorial.ts';
 import { runDemo2d1 } from './demo_2d1_shadows.ts';
 import { runDemo2d2 } from './demo_2d2_effects_particles.ts';
 import { runDemo2d3 } from './demo_2d3_svg.ts';
@@ -51,10 +50,6 @@ function printHelp(): void {
   );
   console.log('\n  [Feature Tour]');
   console.log('    tour      - Guided Split-Screen Multiverse Feature Tour (3D & 2D Companion)');
-  console.log('\n  [Host Layer Tutorial]');
-  console.log(
-    '    tutorial  - Host Engine Tutorial: Floor, 3D Tank, Hierarchy, 2D HUD (Interactive)\n'
-  );
 }
 
 async function main(): Promise<void> {
@@ -154,11 +149,6 @@ async function main(): Promise<void> {
     case 'tour':
     case 'featuretour':
       await runDemoTour();
-      break;
-
-    case 'tutorial':
-    case 'host':
-      await runTutorialDemo();
       break;
 
     case 'help':

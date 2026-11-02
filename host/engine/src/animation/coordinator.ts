@@ -19,6 +19,7 @@ import { mat4, quat, vec3 } from '../math/index';
 import type { Model2DComponent } from '../realm2d/components';
 import type { Model3DComponent } from '../realm3d/components';
 import { IdAllocator, type PathId, type TransitionId } from '../types';
+import { NativeTargetTracker } from './native-targets';
 
 export type AnimationEventListener = (event: AnimationEvent) => void;
 export type EcsAnimProperty = 'position' | 'rotation' | 'scale' | 'transform3d' | 'transform2d';
@@ -40,6 +41,13 @@ export class AnimationCoordinator {
   private readonly _ecsBindings = new Map<TransitionId, EcsAnimBinding>();
   private readonly _entityPropertyBindings = new Map<string, TransitionId>();
 
+  private readonly _nativeTargets = new NativeTargetTracker();
+
+  /** @internal Observes native updates that affect host presentation data. */
+  setNativeTargetObserver(visit: (target: AnimationTarget) => void): void {
+    this._nativeTargets.setObserver(visit);
+  }
+
   bindEngine(engine: GalfusEngine): void {
     this._engine = engine;
   }
@@ -60,6 +68,7 @@ export class AnimationCoordinator {
       }
     }
     this._transitions.add(id);
+    this._nativeTargets.transition(id, target);
     return id;
   }
 
@@ -67,12 +76,14 @@ export class AnimationCoordinator {
     if (this._engine) {
       this._engine.animationBindTarget(transitionId, target);
     }
+    this._nativeTargets.transition(transitionId, target);
   }
 
   unbindTarget(transitionId: TransitionId): void {
     if (this._engine) {
       this._engine.animationUnbindTarget(transitionId);
     }
+    this._nativeTargets.transition(transitionId);
   }
 
   transitionTo(transitionId: TransitionId, targetValue: AnimValue, config: TransitionConfig): void {
@@ -96,6 +107,7 @@ export class AnimationCoordinator {
       }
     }
     this._transitions.add(id);
+    this._nativeTargets.transition(id, target);
     return id;
   }
 
@@ -168,6 +180,7 @@ export class AnimationCoordinator {
       this._engine.animationDestroyTransition(transitionId);
     }
     this._transitions.delete(transitionId);
+    this._nativeTargets.transition(transitionId);
   }
 
   // ---------------------------------------------------------------------------
@@ -435,6 +448,7 @@ export class AnimationCoordinator {
       }
     }
     this._paths.add(id);
+    this._nativeTargets.path(id, target);
     return id;
   }
 
@@ -442,12 +456,14 @@ export class AnimationCoordinator {
     if (this._engine) {
       this._engine.animationBindPathFollowTarget(pathId, target);
     }
+    this._nativeTargets.path(pathId, target);
   }
 
   unbindPathFollowTarget(pathId: PathId): void {
     if (this._engine) {
       this._engine.animationUnbindPathFollowTarget(pathId);
     }
+    this._nativeTargets.path(pathId);
   }
 
   getPathState(pathId: PathId): PathFollowState | undefined {
@@ -460,6 +476,7 @@ export class AnimationCoordinator {
       this._engine.animationDestroyPathFollow(pathId);
     }
     this._paths.delete(pathId);
+    this._nativeTargets.path(pathId);
   }
 
   // ---------------------------------------------------------------------------
@@ -481,6 +498,7 @@ export class AnimationCoordinator {
     if (dt !== undefined && this._engine.animationStep) {
       this._engine.animationStep(dt);
     }
+    this._nativeTargets.refresh();
 
     // Apply values to ECS targets prior to AnchorSolveSystem
     for (const [transitionId, binding] of this._ecsBindings) {
@@ -541,6 +559,7 @@ export class AnimationCoordinator {
     }
     this._transitions.clear();
     this._paths.clear();
+    this._nativeTargets.clear();
     this._ecsBindings.clear();
     this._entityPropertyBindings.clear();
     this._eventListeners.clear();
