@@ -3,8 +3,12 @@ members = [
     "engine/*",
     "bindings/*",
 ]
+exclude = ["third_party/usvg"]
 default-members = ["bindings/galfus-native"]
 resolver = "3"
+
+[patch.crates-io]
+usvg = { path = "third_party/usvg" }
 
 [workspace.package]
 version = "0.0.0"

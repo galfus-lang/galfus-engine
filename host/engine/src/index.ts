@@ -15,4 +15,5 @@ export * from './realm3d/index';
 export * from './resources/index';
 export * from './runtime';
 export * from './spatial/index';
+export * from './text/index';
 export * from './types';

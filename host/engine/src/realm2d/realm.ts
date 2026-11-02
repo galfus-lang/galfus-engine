@@ -13,6 +13,7 @@ import type {
   Sprite2DDesc,
   Svg2DDesc,
   SvgElementRect,
+  SvgTextLayout,
   TransitionConfig
 } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
@@ -53,14 +54,20 @@ export class Realm2D implements RealmConnector {
   private _preRenderSteppedFrame = -1;
   private _disposed = false;
   private readonly _materials = new Map<number, Material2DDesc>();
-  private readonly _svgRects = new Map<number, Map<string, Readonly<SvgElementRect> | null>>();
+  private readonly _svgCache = new Map<
+    number,
+    {
+      rects: Map<string, Readonly<SvgElementRect> | null>;
+      layouts: Map<string, Readonly<SvgTextLayout> | null>;
+    }
+  >();
 
   constructor(realmId: RealmId | number) {
     this.realmId = realmId as RealmId;
     assertValidLogicalId(this.realmId, 'RealmId');
     this.hierarchy = new HierarchyCoordinator(this.world, '2d');
     this.syncSystem = new Realm2DSyncSystem(this.realmId, this.solver.cache, (id) => {
-      this._svgRects.delete(id);
+      this.invalidateSvgCache(id);
     });
     this._registerInternalSystems();
   }
@@ -119,7 +126,7 @@ export class Realm2D implements RealmConnector {
     this.world.reset();
     this.solver.cache.clear();
     this._materials.clear();
-    this._svgRects.clear();
+    this._svgCache.clear();
     this._preRenderSteppedFrame = -1;
     this._registerInternalSystems();
     if (this._engine) {
@@ -140,7 +147,7 @@ export class Realm2D implements RealmConnector {
     this.world.reset();
     this.solver.cache.clear();
     this._materials.clear();
-    this._svgRects.clear();
+    this._svgCache.clear();
   }
 
   /** Adds a collider to an entity with a matching Model component. */
@@ -284,11 +291,7 @@ export class Realm2D implements RealmConnector {
     if (this._disposed || !this._engine) return undefined;
     if (!this.syncSystem.isSvgSynced(svgId)) this.flush();
     if (!this.syncSystem.isSvgSynced(svgId)) return undefined;
-    let entries = this._svgRects.get(svgId);
-    if (!entries) {
-      entries = new Map();
-      this._svgRects.set(svgId, entries);
-    }
+    const entries = this._svgCacheEntry(svgId).rects;
     if (!entries.has(elementId)) {
       const rect = this._engine.realm2dGetSvgElementRect(this.realmId, svgId, elementId).rect;
       entries.set(elementId, rect ? Object.freeze(rect) : null);
@@ -296,9 +299,40 @@ export class Realm2D implements RealmConnector {
     return entries.get(elementId) ?? undefined;
   }
 
-  /** @internal Invalidates SVG bounds after native animation updates. */
-  invalidateSvgRects(svgId: number): void {
-    this._svgRects.delete(svgId);
+  /** Returns cached raw shaping metrics in SVG viewport coordinates. */
+  getSvgTextLayout(svgId: number, elementId: string): Readonly<SvgTextLayout> | undefined {
+    if (this._disposed || !this._engine) return undefined;
+    if (!this.syncSystem.isSvgSynced(svgId)) this.flush();
+    if (!this.syncSystem.isSvgSynced(svgId)) return undefined;
+    const entries = this._svgCacheEntry(svgId).layouts;
+    if (!entries.has(elementId)) {
+      const layout = this._engine.realm2dGetSvgTextLayout(this.realmId, svgId, elementId).layout;
+      if (layout) {
+        for (const cluster of layout.clusters) {
+          Object.freeze(cluster.transform);
+          Object.freeze(cluster);
+        }
+        Object.freeze(layout.clusters);
+        Object.freeze(layout.chunks);
+        Object.freeze(layout);
+      }
+      entries.set(elementId, layout ?? null);
+    }
+    return entries.get(elementId) ?? undefined;
+  }
+
+  /** @internal Invalidates cached SVG geometry after native animation updates. */
+  invalidateSvgCache(svgId: number): void {
+    this._svgCache.delete(svgId);
+  }
+
+  private _svgCacheEntry(svgId: number) {
+    let entry = this._svgCache.get(svgId);
+    if (!entry) {
+      entry = { rects: new Map(), layouts: new Map() };
+      this._svgCache.set(svgId, entry);
+    }
+    return entry;
   }
 
   private _resolveSvgId(svg: number | { svgId?: number; entityId?: EntityId }): number {
@@ -318,7 +352,7 @@ export class Realm2D implements RealmConnector {
 
   setSvgSource(svg: number | { svgId?: number; entityId?: EntityId }, source: string): void {
     const svgId = this._resolveSvgId(svg);
-    this._svgRects.delete(svgId);
+    this.invalidateSvgCache(svgId);
     if (this._engine) {
       if (!this.syncSystem.isSvgSynced(svgId)) {
         this.flush();
@@ -334,7 +368,7 @@ export class Realm2D implements RealmConnector {
     value: string
   ): void {
     const svgId = this._resolveSvgId(svg);
-    this._svgRects.delete(svgId);
+    this.invalidateSvgCache(svgId);
     if (this._engine) {
       if (!this.syncSystem.isSvgSynced(svgId)) {
         this.flush();
@@ -349,7 +383,7 @@ export class Realm2D implements RealmConnector {
     name: string
   ): void {
     const svgId = this._resolveSvgId(svg);
-    this._svgRects.delete(svgId);
+    this.invalidateSvgCache(svgId);
     if (this._engine) {
       if (!this.syncSystem.isSvgSynced(svgId)) {
         this.flush();
@@ -364,7 +398,7 @@ export class Realm2D implements RealmConnector {
     text: string
   ): void {
     const svgId = this._resolveSvgId(svg);
-    this._svgRects.delete(svgId);
+    this.invalidateSvgCache(svgId);
     if (this._engine) {
       if (!this.syncSystem.isSvgSynced(svgId)) {
         this.flush();
@@ -387,7 +421,7 @@ export class Realm2D implements RealmConnector {
       throw new Error('Cannot load font: Realm2D is not bound to an engine instance.');
     }
     const family = this._engine.realm2dLoadFontData(this.realmId, data, data.byteLength);
-    this._svgRects.clear();
+    this._svgCache.clear();
     return family;
   }
 

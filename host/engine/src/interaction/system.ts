@@ -62,17 +62,42 @@ export class InteractiveSystem {
     return this.realms.has(realmId);
   }
 
-  interactive(realmId: number, input: InteractiveTarget): InteractiveListener {
-    let realm: Realm2D | Realm3D | undefined;
-    for (const candidate of this.multiverse.getRealms())
-      if (
-        candidate.realmId === realmId &&
-        (candidate instanceof Realm2D || candidate instanceof Realm3D)
-      ) {
-        realm = candidate;
-        break;
+  /** Returns the first directly presented invocation order for a registered, visible target. */
+  presentationOrder(listener: InteractiveListener, windowId: number): number | undefined {
+    const record = this.records.get(listener);
+    const view = this.multiverse.presentationGraph.getWindow(windowId);
+    const state = this.realms.get(listener.realmId);
+    if (!record?.snapshot.valid || !view || !state || record.realm.isDisposed) return undefined;
+    if (
+      record.realm.world.getComponent(record.entityId, record.model.type) !== record.model ||
+      record.realm.world.getComponent(record.entityId, record.component.type) !== record.component
+    )
+      return undefined;
+    let order = 0;
+    for (const targetId of view.rootTargetIds) {
+      for (const id of view.getInvocations(targetId)) {
+        const invocation = view.getInvocation(id);
+        if (invocation?.realmId === listener.realmId) {
+          const cameras = record.realm instanceof Realm2D ? state.cameras2D : state.cameras3D;
+          const slot = invocation.cameraSlot;
+          for (const camera of cameras)
+            if (camera.slot === (slot ?? 0) || (slot !== undefined && camera.id === slot))
+              return order;
+        }
+        order++;
       }
-    if (!realm || realm.isDisposed)
+    }
+    return undefined;
+  }
+
+  /** @internal Current hit for an already processed pointer event. */
+  hovered(windowId: number, pointerId: number): InteractiveListener | undefined {
+    return this.pointers.get(windowId)?.get(pointerId)?.hover;
+  }
+
+  interactive(realmId: number, input: InteractiveTarget): InteractiveListener {
+    const realm = this.multiverse.getRealm(realmId);
+    if (!(realm instanceof Realm2D || realm instanceof Realm3D) || realm.isDisposed)
       throw new Error(`Interactive realm ${realmId} is not registered.`);
     let entityId: number | undefined;
     let component: Component | undefined;
@@ -301,7 +326,8 @@ export class InteractiveSystem {
     type: InteractiveEventType,
     pointer: PointerEvent
   ): void {
-    listener?.emit({ type, realmId: listener.realmId, target: listener.target, pointer });
+    if (listener?.hasListeners(type))
+      listener.emit({ type, realmId: listener.realmId, target: listener.target, pointer });
   }
   private updateHover(pointer: PointerState): void {
     const next = this.pick(pointer.event);
@@ -326,7 +352,10 @@ export class InteractiveSystem {
       return;
     }
     this.updateHover(pointer);
-    if (event.type === 'move') this.emit(pointer.hover, 'move', event);
+    if (event.type === 'move') {
+      this.emit(pointer.hover, 'move', event);
+      this.emitPressed(pointer, 'pressmove');
+    }
     if (event.type === 'button') {
       const button = typeof event.button === 'string' ? event.button : event.button.other;
       if (event.state === 'pressed') {
@@ -336,16 +365,30 @@ export class InteractiveSystem {
         const pressed = pointer.pressed.get(button);
         pointer.pressed.delete(button);
         this.emit(pointer.hover, 'up', event);
+        this.emit(pressed, 'pressup', event);
         if (pressed && pressed === pointer.hover) this.emit(pressed, 'click', event);
       }
     }
   }
   private cancel(pointer: PointerState): void {
-    for (const listener of new Set(pointer.pressed.values()))
-      this.emit(listener, 'cancel', pointer.event);
+    this.emitPressed(pointer, 'cancel');
     pointer.pressed.clear();
     this.emit(pointer.hover, 'leave', pointer.event);
     pointer.hover = undefined;
+  }
+  /** Delivers once per listener even when several pointer buttons are pressed. */
+  private emitPressed(pointer: PointerState, type: 'pressmove' | 'cancel'): void {
+    for (const [button, listener] of pointer.pressed) {
+      let first = true;
+      for (const [previousButton, previous] of pointer.pressed) {
+        if (previousButton === button) break;
+        if (previous === listener) {
+          first = false;
+          break;
+        }
+      }
+      if (first) this.emit(listener, type, pointer.event);
+    }
   }
   windowClosed(windowId: number): void {
     const window = this.pointers.get(windowId);

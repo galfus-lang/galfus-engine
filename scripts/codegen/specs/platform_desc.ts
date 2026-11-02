@@ -169,7 +169,7 @@ export const platformDescriptors: DescSpec[] = [
   {
     kind: 'union',
     name: 'KeyboardEvent',
-    doc: 'Keyboard input and modifier state change events.',
+    doc: 'Keyboard, committed text, modifier, and input method events. Use textInput as the single stream of committed text.',
     variants: [
       {
         inline: {
@@ -212,6 +212,14 @@ export const platformDescriptors: DescSpec[] = [
         inline: {
           kind: { type: { literal: 'keyboard' } },
           type: { type: { literal: 'imeCommit' } },
+          windowId: { type: 'number' },
+          text: { type: 'string' }
+        }
+      },
+      {
+        inline: {
+          kind: { type: { literal: 'keyboard' } },
+          type: { type: { literal: 'textInput' } },
           windowId: { type: 'number' },
           text: { type: 'string' }
         }

@@ -1,6 +1,82 @@
 //! SVG tessellation tests.
 
 use super::*;
+use crate::svg_text_layout::svg_text_layout;
+
+#[test]
+fn text_layout_reports_shaped_clusters_and_viewport_transforms() {
+    let mut db = fontdb::Database::new();
+    db.load_font_data(crate::svg_manager::DEFAULT_FONT_BYTES.to_vec());
+    let family = db.faces().next().unwrap().families[0].0.clone();
+    db.set_sans_serif_family(&family);
+    let xml = r#"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 100 50"><g transform="translate(10 5)"><text id="text" x="3" y="20" font-size="10">A é אב</text></g><rect id="rect" width="1" height="1"/></svg>"#;
+    let layout = svg_text_layout(xml, "text", Arc::new(db.clone()), &family)
+        .unwrap()
+        .unwrap();
+    let ordinary = parse_svg(xml, Arc::new(db.clone()), &family).unwrap();
+    let Some(usvg::Node::Text(ordinary_text)) = ordinary.node_by_id("text") else {
+        panic!("text node missing");
+    };
+    assert!(
+        ordinary_text
+            .layouted()
+            .iter()
+            .all(|span| span.clusters.is_empty())
+    );
+    assert_eq!(
+        (layout.viewport_width, layout.viewport_height),
+        (200.0, 100.0)
+    );
+    assert_eq!(layout.chunks, vec!["A é אב"]);
+    assert!(layout.clusters.iter().any(|cluster| cluster.right_to_left));
+    for cluster in &layout.clusters {
+        let chunk = &layout.chunks[cluster.chunk_index];
+        assert!(chunk.get(cluster.byte_start..cluster.byte_end).is_some());
+        assert!(cluster.byte_start < cluster.byte_end);
+        assert!(cluster.ascent > cluster.descent);
+        assert!(cluster.transform.iter().all(|v| v.is_finite()));
+    }
+    let first = &layout.clusters[0];
+    assert_eq!(
+        &layout.chunks[first.chunk_index][first.byte_start..first.byte_end],
+        "A"
+    );
+    assert!((first.transform[4] - 26.0).abs() < 0.01);
+    assert!((first.transform[5] - 50.0).abs() < 0.01);
+    assert!(
+        svg_text_layout(xml, "rect", Arc::new(db), "sans-serif")
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn text_layout_ranges_follow_normalized_chunks_and_remain_disjoint() {
+    let mut db = fontdb::Database::new();
+    db.load_font_data(crate::svg_manager::DEFAULT_FONT_BYTES.to_vec());
+    let family = db.faces().next().unwrap().families[0].0.clone();
+    let xml = r#"<svg xmlns="http://www.w3.org/2000/svg" width="300" height="100"><text id="text" xml:space="preserve" x="0" y="20">office  é<tspan x="0" dy="20"> אב </tspan></text></svg>"#;
+    let layout = svg_text_layout(xml, "text", Arc::new(db), &family)
+        .unwrap()
+        .unwrap();
+    assert!(layout.chunks.len() >= 2);
+    assert!(layout.chunks[0].contains("office  é"));
+    for (index, chunk) in layout.chunks.iter().enumerate() {
+        let mut ranges: Vec<_> = layout
+            .clusters
+            .iter()
+            .filter(|c| c.chunk_index == index)
+            .map(|c| c.byte_start..c.byte_end)
+            .collect();
+        ranges.sort_by_key(|range| range.start);
+        for pair in ranges.windows(2) {
+            assert!(pair[0].end <= pair[1].start);
+        }
+        for range in ranges {
+            assert!(chunk.get(range).is_some());
+        }
+    }
+}
 
 #[test]
 fn element_rect_uses_rendered_viewport_and_ancestor_transforms() {

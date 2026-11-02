@@ -46,6 +46,8 @@ pub enum KeyboardEvent {
     },
     /// Text confirmed by the input method.
     ImeCommit { window_id: u32, text: String },
+    /// Committed text produced by a keyboard, input method, or text service.
+    TextInput { window_id: u32, text: String },
     /// The window's input method is disabled.
     ImeDisabled { window_id: u32 },
 }
@@ -60,6 +62,7 @@ impl KeyboardEvent {
             | Self::ImeEnabled { window_id }
             | Self::ImePreedit { window_id, .. }
             | Self::ImeCommit { window_id, .. }
+            | Self::TextInput { window_id, .. }
             | Self::ImeDisabled { window_id } => window_id,
         }
     }

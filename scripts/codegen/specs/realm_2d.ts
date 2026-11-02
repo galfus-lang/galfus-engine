@@ -1,6 +1,8 @@
 import type { DescSpec, FunctionSpec } from './types';
+import { svgTextDescriptors } from './realm_2d_text';
 
 export const realm2dDescriptors: DescSpec[] = [
+  ...svgTextDescriptors,
   {
     kind: 'object',
     name: 'SvgElementRect',
@@ -469,6 +471,17 @@ export const realm2dFunctions: FunctionSpec[] = [
       { name: 'elementId', type: 'string', doc: 'Target SVG element ID.' }
     ],
     returnType: { json: 'SvgElementRectResult' }
+  },
+  {
+    cName: 'galfus_realm_2d_get_svg_text_layout',
+    methodName: 'realm2dGetSvgTextLayout',
+    doc: 'Reads the shaped text clusters of an SVG text element.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
+      { name: 'elementId', type: 'string', doc: 'Target SVG text element ID.' }
+    ],
+    returnType: { json: 'SvgTextLayoutResult' }
   },
   {
     cName: 'galfus_realm_2d_set_svg_source',

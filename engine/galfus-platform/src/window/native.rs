@@ -55,6 +55,14 @@ impl NativeWindow {
         &self.window
     }
 
+    /// Native windows deliver Tab directly to the application.
+    pub fn set_tab_capture(&mut self, _enabled: bool) {}
+
+    /// Native keyboard focus is controlled by the operating system window.
+    pub fn request_input_focus(&mut self) -> PlatformResult<()> {
+        Ok(())
+    }
+
     /// Enables input method composition for this window.
     pub fn set_ime_allowed(&mut self, allowed: bool) -> PlatformResult<()> {
         self.window.set_ime_allowed(allowed);

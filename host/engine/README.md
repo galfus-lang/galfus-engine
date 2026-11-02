@@ -72,6 +72,24 @@ off();
 
 Selection offsets, when supplied, use UTF-16 code units within the preedit text. The browser does not expose this selection in composition events. The browser input bridge takes DOM focus and releases it on disable or focus loss; enable it from a user interaction when the browser requires a user gesture.
 
+`textInput` is the committed text stream; `input.text` and `imeCommit.text` remain available as raw platform details. Text editors should insert from `textInput` only to avoid processing the same text twice. `TextEditor` stores Unicode text and grapheme-aware selection; `applyTextKeyboardEvent` maps the normalized keyboard stream to the editor.
+
+`runtime.textInput(realmId, { svgId, elementId, hitAreaId, value, tabIndex })` binds an editor to an SVG text element and a focusable SVG hit area. `hitAreaId` defaults to `elementId`; use a separate visible hit area when the text can be empty. The `value` option defaults to an empty string and replaces the element's existing children. The returned input supports `requestFocus`, `blur`, `setValue`, `setSelection`, `selectAll`, `on`, `off`, and `dispose`. It updates the SVG with the IME preview while retaining the committed `value`. Automatic caret and selection rendering, pointer-based text selection, candidate positioning, clipboard integration, and full native/browser IME parity are not yet implemented.
+
+Focusable pointer targets can be registered with `runtime.focusable(realmId, target, { tabIndex })`. Call `requestFocus(windowId)`, `blur(windowId)`, and `dispose()` on the returned target; subscribe to `focus` and `blur` with `on`. `runtime.getFocused(windowId)` reports the focused target. Tab and Shift+Tab navigate registered targets in direct, successfully submitted window presentations. A negative `tabIndex` excludes a target from Tab navigation but permits explicit focus. Browser keyboard delivery still depends on platform focus and must not be interpreted as complete SVG text input support.
+
+`SvgTextDecorations` updates an existing SVG rectangle for a caret and either rectangles or a path for selection spans. It accepts `cursorColor` and `selectionColor`; its caller must provide viewport-space geometry. Automatic cursor placement, pointer selection, and blinking are not provided by this low-level utility.
+
+`runtime.svg.getTextLayout(realmId, svgId, elementId)` returns shaped cluster metrics on demand.
+The result contains normalized text chunks, cluster byte ranges within those UTF-8 chunks,
+advances, ascent and descent, text direction, and affine transforms in SVG viewport coordinates.
+The host caches the result until the SVG or font data changes; missing or non-rendered text
+returns `undefined`. SVG whitespace normalization may change chunk text from the original source,
+and a cluster can contain multiple graphemes, so these metrics alone do not yet define every
+editor caret position. Empty text is not currently returned by the SVG parser.
+
+For explicit text/byte conversions, each runtime defaults to UTF-8. Set `createRuntime(transport, { charset: 'shift_jis' })` or call `runtime.textEncoding.setCharset('windows-1252')`, then use `runtime.textEncoding.encode(text)` and `decode(bytes)`. This setting does not restrict or recode editor strings or change the platform ABI. Unknown charsets throw; invalid bytes and characters not representable in the chosen charset are replaced according to the codec.
+
 ---
 
 ## Quick Start
@@ -124,6 +142,10 @@ edits, font changes, re-creation, and native attribute animations.
 ## Pointer interaction
 
 Run `bun host:demo interaction` to try direct 2D, SVG, and 3D interaction in a window.
+Run `bun host:demo text-input` to try multiple SVG text fields and Tab/Shift+Tab focus.
+To test characters outside the bundled font, pass `--font /path/to/font.ttf` (TTF, OTF, or TTC).
+The demo draws the keyboard caret and selection for single-line text; positions inside a ligature
+are estimated because the current layout API does not expose ligature caret positions.
 For a bounded headless smoke test, use `bun host:demo interaction --headless --frames 10`.
 The host tutorial is available as `bun host:demo tutorial`, with the same headless option.
 Use `bun host:demo help` to list the available demos.
@@ -139,7 +161,10 @@ listener.dispose();
 ```
 
 Use `{ type: 'svg', svgId, elementId }` for an SVG element. The supported event types are
-`hover`, `leave`, `move`, `down`, `up`, `click`, and `cancel`. When an entity has multiple
+`hover`, `leave`, `move`, `down`, `up`, `click`, `cancel`, `pressmove`, and `pressup`.
+`pressmove` and `pressup` go to the target originally pressed even when the pointer is no
+longer over it, as long as the platform continues delivering pointer events; `cancel` ends
+the interaction when the pointer or window is lost. When an entity has multiple
 colliders, specify `colliderId`. Events use the most recently submitted presentation state.
 When the registered entity or collider is removed, the listener is cancelled and disposed
 after the next successful dispatch.

@@ -231,6 +231,10 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
                     (output.text0_offset, output.text0_length) = push_text(text, &value);
                 }
                 KeyboardEvent::ImeDisabled { .. } => output.event_type = 6,
+                KeyboardEvent::TextInput { text: value, .. } => {
+                    output.event_type = 7;
+                    (output.text0_offset, output.text0_length) = push_text(text, &value);
+                }
             }
         }
         PlatformEvent::Gamepad(event) => {
@@ -388,6 +392,16 @@ mod tests {
             &mut Vec::new(),
         );
         assert_eq!(commit.event_type, 5);
+        let mut arena = Vec::new();
+        let input = encode_event(
+            PlatformEvent::Keyboard(KeyboardEvent::TextInput {
+                window_id: 9,
+                text: "漢字".into(),
+            }),
+            &mut arena,
+        );
+        assert_eq!(input.event_type, 7);
+        assert_eq!(std::str::from_utf8(&arena).unwrap(), "漢字");
     }
 
     #[test]

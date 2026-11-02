@@ -166,6 +166,23 @@ impl SvgManager2D {
         )
     }
 
+    /// Reads the raw text shaping layout for the current SVG document.
+    pub fn text_layout(
+        &self,
+        svg_id: u32,
+        element_id: &str,
+    ) -> Result<Option<crate::svg_text_layout::SvgTextLayout>, String> {
+        let Some(instance) = self.instances.get(&svg_id) else {
+            return Ok(None);
+        };
+        crate::svg_text_layout::svg_text_layout(
+            instance.svg.current_xml(),
+            element_id,
+            self.font_db.clone(),
+            &self.default_font_family,
+        )
+    }
+
     /// Resolves an active GPU geometry buffer by 64-bit packed generational handle.
     pub fn get_geometry_by_u64(&self, raw: u64) -> Option<&SvgGeometry2D> {
         let handle: Handle<SvgGeometry2D> = Handle::from_u64(raw)?;

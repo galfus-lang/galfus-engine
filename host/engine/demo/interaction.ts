@@ -2,13 +2,14 @@
 import {
   type Camera2DComponent,
   createRuntime,
-  isKey,
   type Model3DComponent,
   type MultiverseRuntime,
   type TargetId,
   type WindowId
 } from '@galfus/engine';
 import { createBunTransport } from '@galfus/transport-bun';
+import { runDemoLoop } from './loop';
+import { type HostDemoOptions, resolveDemoOptions } from './options';
 
 const PANEL = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="360" viewBox="0 0 300 360">
   <rect x="0" y="0" width="300" height="360" rx="12" fill="#101d2d"/>
@@ -198,19 +199,10 @@ export function createInteractionScene(
   return { realm2d, realm3d, svg, circle, cube, sphere };
 }
 
-export interface InteractionDemoOptions {
-  headless?: boolean;
-  maxFrames?: number;
-}
+export type InteractionDemoOptions = HostDemoOptions;
 
 export async function runInteractionDemo(options: InteractionDemoOptions = {}): Promise<void> {
-  const headless =
-    options.headless ?? (process.argv.includes('--headless') || !process.env.DISPLAY);
-  const framesIndex = process.argv.indexOf('--frames');
-  const frameArgument = framesIndex >= 0 ? Number(process.argv[framesIndex + 1]) : undefined;
-  const maxFrames = options.maxFrames ?? frameArgument ?? (headless ? 120 : undefined);
-  if (maxFrames !== undefined && (!Number.isInteger(maxFrames) || maxFrames <= 0))
-    throw new Error('--frames must be a positive integer.');
+  const { headless, maxFrames } = resolveDemoOptions(options);
 
   const runtime = createRuntime(createBunTransport({ headless }));
   let windowId: WindowId | undefined;
@@ -232,26 +224,7 @@ export async function runInteractionDemo(options: InteractionDemoOptions = {}): 
         : '[interaction] Hover and click the 3D objects, SVG button and 2D circle. Press Esc to exit.'
     );
 
-    await new Promise<void>((resolve) => {
-      let stopping = false;
-      const stop = () => {
-        if (stopping) return;
-        stopping = true;
-        runtime.stop();
-        resolve();
-      };
-      runtime.on('window', (event) => {
-        if (event.type === 'closeRequested' && event.windowId === windowId) stop();
-      });
-      runtime.on('keyboard', (event) => {
-        if (event.type === 'input' && event.state === 'pressed' && isKey(event, 'escape', 'q'))
-          stop();
-      });
-      runtime.on('tick', ({ frameId }) => {
-        if (maxFrames !== undefined && frameId >= maxFrames) stop();
-      });
-      runtime.start();
-    });
+    await runDemoLoop(runtime, { windowId, maxFrames, exitKeys: ['escape', 'q'] });
   } finally {
     runtime.dispose();
   }

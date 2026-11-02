@@ -15,6 +15,7 @@ pub mod shadow;
 pub mod surface_effect;
 pub mod svg_manager;
 pub mod svg_tessellator;
+pub mod svg_text_layout;
 pub mod types;
 
 pub use batch::{BatchBuilder2D, PreparedItem2D};

@@ -84,6 +84,23 @@ export const platformFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_window_request_input_focus',
+    methodName: 'windowRequestInputFocus',
+    doc: 'Requests keyboard focus for a window input surface.',
+    params: [{ name: 'windowId', type: 'u32', doc: 'Window logical ID' }],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_window_set_tab_capture',
+    methodName: 'windowSetTabCapture',
+    doc: 'Configures whether a focused browser window captures Tab key navigation.',
+    params: [
+      { name: 'windowId', type: 'u32', doc: 'Window logical ID' },
+      { name: 'enabled', type: 'u32', doc: 'One to capture, zero to release' }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_window_set_ime_allowed',
     methodName: 'windowSetImeAllowed',
     doc: 'Enables or disables input method composition for a window.',

@@ -22,6 +22,7 @@ import {
 import { presets2D } from '@galfus/engine/realm2d';
 import { presets3D } from '@galfus/engine/realm3d';
 import { createBunTransport } from '@galfus/transport-bun';
+import { type HostDemoOptions, resolveDemoOptions } from './options';
 
 /** Synthesizes an audible, looping 16-bit PCM WAV audio waveform (sci-fi tank engine hum). */
 function createSynthesizedWav(durationSecs = 1.0, freq = 180.0): Uint8Array {
@@ -64,20 +65,10 @@ function createSynthesizedWav(durationSecs = 1.0, freq = 180.0): Uint8Array {
   return new Uint8Array(buffer);
 }
 
-export interface TutorialDemoOptions {
-  headless?: boolean;
-  maxFrames?: number;
-}
+export type TutorialDemoOptions = HostDemoOptions;
 
 export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promise<void> {
-  const isHeadless =
-    options.headless ?? (process.argv.includes('--headless') || !process.env.DISPLAY);
-  const framesIdx = process.argv.indexOf('--frames');
-  const cliFrames = framesIdx !== -1 ? Number(process.argv[framesIdx + 1]) : undefined;
-  const maxFrames = options.maxFrames ?? cliFrames ?? (isHeadless ? 120 : undefined);
-  if (maxFrames !== undefined && (!Number.isInteger(maxFrames) || maxFrames <= 0)) {
-    throw new Error('--frames must be a positive integer.');
-  }
+  const { headless: isHeadless, maxFrames } = resolveDemoOptions(options);
 
   console.log('\n=============================================================');
   console.log('       Galfus Engine - Host Tutorial Demo (Interactive)      ');

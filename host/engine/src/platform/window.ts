@@ -103,7 +103,18 @@ export class WindowManager {
 
   /** Enables or disables input method composition for a window. */
   setImeAllowed(windowId: WindowId, allowed: boolean): void {
-    this._engine?.windowSetImeAllowed(windowId, allowed ? 1 : 0);
+    if (this._openWindows.has(windowId))
+      this._engine?.windowSetImeAllowed(windowId, allowed ? 1 : 0);
+  }
+
+  /** @internal Controls whether the platform captures Tab navigation for this window. */
+  setTabCapture(windowId: WindowId, enabled: boolean): void {
+    this._engine?.windowSetTabCapture?.(windowId, enabled ? 1 : 0);
+  }
+
+  /** @internal Requests keyboard focus for the platform input surface. */
+  requestInputFocus(windowId: WindowId): void {
+    this._engine?.windowRequestInputFocus?.(windowId);
   }
 
   /** Sets the input method candidate area in physical window pixels. */

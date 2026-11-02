@@ -217,6 +217,41 @@ pub unsafe extern "C" fn galfus_window_set_title(window_id: u32, title: *const c
     }
 }
 
+/// Requests keyboard focus for a window input surface.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_window_request_input_focus(window_id: u32) -> i32 {
+    let result = with_context_mut(|ctx| {
+        ctx.get_window_mut(window_id)
+            .map_err(|e| e.to_string())?
+            .request_input_focus()
+            .map_err(|e| e.to_string())
+    });
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
+            set_last_error(&error);
+            -1
+        }
+    }
+}
+
+/// Configures browser Tab key capture.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_window_set_tab_capture(window_id: u32, enabled: u32) -> i32 {
+    let result = with_context_mut(|ctx| {
+        let window = ctx.get_window_mut(window_id).map_err(|e| e.to_string())?;
+        window.set_tab_capture(enabled != 0);
+        Ok(())
+    });
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
+            set_last_error(&error);
+            -1
+        }
+    }
+}
+
 /// Enables or disables input method composition for a window.
 #[unsafe(no_mangle)]
 pub extern "C" fn galfus_window_set_ime_allowed(window_id: u32, allowed: u32) -> i32 {

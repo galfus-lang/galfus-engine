@@ -23,6 +23,8 @@
     "./types": "./src/types.ts"
   },
   "dependencies": {
-    "@galfus/transport-types": "workspace:*"
+    "@galfus/transport-types": "workspace:*",
+    "iconv-lite": "^0.6.3",
+    "unicode-segmenter": "0.17.3"
   }
 }

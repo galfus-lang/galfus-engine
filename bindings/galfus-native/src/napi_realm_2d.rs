@@ -2,6 +2,18 @@
 
 use super::*;
 
+#[napi(js_name = "realm2dGetSvgTextLayout")]
+pub fn realm_2d_get_svg_text_layout(
+    env: Env,
+    realm_id: u32,
+    svg_id: u32,
+    element_id: String,
+) -> Result<JsUnknown> {
+    let value = crate::ffi_realm_2d_svg::svg_text_layout(realm_id, svg_id, &element_id)
+        .map_err(|error| Error::new(Status::GenericFailure, error))?;
+    env.to_js_value(&value)
+}
+
 #[napi(js_name = "realm2dGetSvgElementRect")]
 pub fn realm_2d_get_svg_element_rect(
     env: Env,

@@ -16,6 +16,11 @@ export class InteractiveListener {
     private readonly remove: (listener: InteractiveListener) => void
   ) {}
 
+  /** @internal */
+  get isDisposed(): boolean {
+    return this.disposed;
+  }
+
   on(type: InteractiveEventType, callback: InteractiveCallback): () => void {
     if (this.disposed) throw new Error('Interactive listener is disposed.');
     let callbacks = this.listeners.get(type);
@@ -26,6 +31,11 @@ export class InteractiveListener {
 
   off(type: InteractiveEventType, callback: InteractiveCallback): void {
     this.listeners.get(type)?.delete(callback);
+  }
+
+  /** @internal */
+  hasListeners(type: InteractiveEventType): boolean {
+    return !this.disposed && (this.listeners.get(type)?.size ?? 0) > 0;
   }
 
   /** @internal */

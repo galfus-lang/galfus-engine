@@ -51,6 +51,27 @@ pub fn window_set_title(window_id: u32, title: String) -> Result<()> {
 }
 
 #[napi]
+pub fn window_request_input_focus(window_id: u32) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.get_window_mut(window_id)
+            .map_err(|e| e.to_string())?
+            .request_input_focus()
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn window_set_tab_capture(window_id: u32, enabled: u32) -> Result<()> {
+    with_context_mut(|ctx| {
+        let window = ctx.get_window_mut(window_id).map_err(|e| e.to_string())?;
+        window.set_tab_capture(enabled != 0);
+        Ok(())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
 pub fn window_set_ime_allowed(window_id: u32, allowed: u32) -> Result<()> {
     with_context_mut(|ctx| {
         ctx.get_window_mut(window_id)

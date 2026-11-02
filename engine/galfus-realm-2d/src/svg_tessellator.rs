@@ -35,10 +35,20 @@ fn parse_svg(
     font_db: Arc<fontdb::Database>,
     default_font_family: &str,
 ) -> Result<Tree, String> {
+    parse_svg_with_clusters(xml, font_db, default_font_family, false)
+}
+
+pub(crate) fn parse_svg_with_clusters(
+    xml: &str,
+    font_db: Arc<fontdb::Database>,
+    default_font_family: &str,
+    collect_text_clusters: bool,
+) -> Result<Tree, String> {
     let opt = usvg::Options {
         resources_dir: None,
         fontdb: font_db,
         font_family: default_font_family.to_string(),
+        collect_text_clusters,
         ..Default::default()
     };
     Tree::from_str(xml, &opt).map_err(|e| format!("SVG parsing failed: {e}"))
