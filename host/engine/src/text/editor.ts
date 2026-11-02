@@ -1,3 +1,5 @@
+import { graphemeSegments } from 'unicode-segmenter/grapheme';
+
 /** UTF-16 offsets at grapheme boundaries. Anchor and focus preserve selection direction. */
 export interface TextSelection {
   readonly anchor: number;
@@ -8,6 +10,12 @@ export interface TextComposition {
   readonly text: string;
   /** UTF-16 offsets within the preview, when supplied by the input method. */
   readonly selection?: readonly [number, number];
+}
+
+function charType(grapheme: string): 'space' | 'word' | 'punct' {
+  if (/^\s+$/u.test(grapheme)) return 'space';
+  if (/^[\p{L}\p{M}\p{N}_]+$/u.test(grapheme)) return 'word';
+  return 'punct';
 }
 
 /** Platform-independent text editing state. Text remains Unicode inside the host. */
@@ -72,19 +80,15 @@ export class TextEditor {
     this.replaceSelection(text);
   }
 
-  backspace(): void {
-    if (this.composition_) return;
-    if (this.anchor_ === this.focus_) this.anchor_ = this.previous(this.focus_);
-    this.replaceSelection('');
+  backspace(byWord = false): void {
+    this.delete('backward', byWord);
   }
 
-  deleteForward(): void {
-    if (this.composition_) return;
-    if (this.anchor_ === this.focus_) this.focus_ = this.next(this.focus_);
-    this.replaceSelection('');
+  deleteForward(byWord = false): void {
+    this.delete('forward', byWord);
   }
 
-  move(direction: 'left' | 'right', extend = false): void {
+  move(direction: 'left' | 'right', extend = false, byWord = false): void {
     if (this.composition_) return;
     const [start, end] = this.range();
     const position =
@@ -93,8 +97,12 @@ export class TextEditor {
           ? start
           : end
         : direction === 'left'
-          ? this.previous(this.focus_)
-          : this.next(this.focus_);
+          ? byWord
+            ? this.previousWord(this.focus_)
+            : this.previous(this.focus_)
+          : byWord
+            ? this.nextWord(this.focus_)
+            : this.next(this.focus_);
     this.focus_ = position;
     if (!extend) this.anchor_ = position;
   }
@@ -116,6 +124,18 @@ export class TextEditor {
 
   cancelComposition(): void {
     this.composition_ = undefined;
+  }
+
+  private delete(direction: 'backward' | 'forward', byWord: boolean): void {
+    if (this.composition_) return;
+    if (this.anchor_ === this.focus_) {
+      if (direction === 'backward') {
+        this.anchor_ = byWord ? this.previousWord(this.focus_) : this.previous(this.focus_);
+      } else {
+        this.focus_ = byWord ? this.nextWord(this.focus_) : this.next(this.focus_);
+      }
+    }
+    this.replaceSelection('');
   }
 
   private range(): [number, number] {
@@ -162,5 +182,43 @@ export class TextEditor {
   private next(offset: number): number {
     return this.boundaries.find((boundary) => boundary > offset) ?? this.value_.length;
   }
+
+  private previousWord(offset: number): number {
+    let current = this.snap(offset);
+    if (current === 0) return 0;
+    while (current > 0) {
+      const prev = this.previous(current);
+      if (charType(this.value_.slice(prev, current)) !== 'space') break;
+      current = prev;
+    }
+    if (current === 0) return 0;
+    const prev = this.previous(current);
+    const targetType = charType(this.value_.slice(prev, current));
+    while (current > 0) {
+      const p = this.previous(current);
+      if (charType(this.value_.slice(p, current)) !== targetType) break;
+      current = p;
+    }
+    return current;
+  }
+
+  private nextWord(offset: number): number {
+    let current = this.snap(offset);
+    const length = this.value_.length;
+    if (current >= length) return length;
+    while (current < length) {
+      const next = this.next(current);
+      if (charType(this.value_.slice(current, next)) !== 'space') break;
+      current = next;
+    }
+    if (current >= length) return length;
+    const next = this.next(current);
+    const targetType = charType(this.value_.slice(current, next));
+    while (current < length) {
+      const n = this.next(current);
+      if (charType(this.value_.slice(current, n)) !== targetType) break;
+      current = n;
+    }
+    return current;
+  }
 }
-import { graphemeSegments } from 'unicode-segmenter/grapheme';

@@ -9,13 +9,11 @@ export function applyTextKeyboardEvent(editor: TextEditor, event: KeyboardEvent)
       else editor.cancelComposition();
       return;
     case 'imeCommit':
+    case 'imeDisabled':
       editor.cancelComposition();
       return;
     case 'textInput':
       editor.insert(event.text);
-      return;
-    case 'imeDisabled':
-      editor.cancelComposition();
       return;
     case 'input':
       break;
@@ -24,30 +22,29 @@ export function applyTextKeyboardEvent(editor: TextEditor, event: KeyboardEvent)
   }
   if (event.state !== 'pressed' || editor.composition) return;
   const { shift, ctrl, alt, superKey } = event.modifiers;
-  const shortcut = superKey || (ctrl && !alt);
-  if (shortcut && event.logicalKey.toLowerCase() === 'a') {
+  const isControl = (ctrl || superKey) && !alt;
+  if (isControl && event.logicalKey.toLowerCase() === 'a') {
     editor.selectAll();
     return;
   }
-  if (shortcut) return;
   switch (event.logicalKey) {
     case 'ArrowLeft':
-      editor.move('left', shift);
+      editor.move('left', shift, isControl);
       return;
     case 'ArrowRight':
-      editor.move('right', shift);
+      editor.move('right', shift, isControl);
       return;
     case 'Home':
-      editor.moveToBoundary('start', shift);
+      if (!isControl) editor.moveToBoundary('start', shift);
       return;
     case 'End':
-      editor.moveToBoundary('end', shift);
+      if (!isControl) editor.moveToBoundary('end', shift);
       return;
     case 'Backspace':
-      editor.backspace();
+      editor.backspace(isControl);
       return;
     case 'Delete':
-      editor.deleteForward();
+      editor.deleteForward(isControl);
       return;
   }
 }

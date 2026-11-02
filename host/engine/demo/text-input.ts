@@ -29,7 +29,7 @@ const PANEL = `<svg xmlns="http://www.w3.org/2000/svg" width="760" height="560" 
   <g id="note-field"><path id="note-selection" display="none"/><text id="note-text" x="56" y="355" fill="#ffffff" font-family="sans-serif" font-size="19" xml:space="preserve"> </text><rect id="note-cursor" display="none"/></g>
   <text id="status" x="40" y="420" fill="#dceafa" font-family="sans-serif" font-size="14">No field focused</text>
   <text id="selection" x="40" y="446" fill="#9cb6cf" font-family="sans-serif" font-size="13">Selection: -</text>
-  <text x="40" y="493" fill="#a9bfd3" font-family="sans-serif" font-size="12">Arrow keys, Shift + arrows, Home / End, and Ctrl + A edit selection.</text>
+  <text x="40" y="493" fill="#a9bfd3" font-family="sans-serif" font-size="12">Arrows, Shift/Ctrl + arrows, Ctrl + Backspace/Delete, Home / End, Ctrl + A.</text>
   <text x="40" y="515" fill="#a9bfd3" font-family="sans-serif" font-size="12">The caret and selection follow the keyboard. Escape exits.</text>
   <text x="40" y="537" fill="#a9bfd3" font-family="sans-serif" font-size="12">For additional glyphs, launch with --font and a compatible font file.</text>
 </svg>`;
