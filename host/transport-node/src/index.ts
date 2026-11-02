@@ -129,14 +129,6 @@ export class NodeTransport implements GalfusTransport {
     this._isRunning = false;
     this._loopGeneration++;
   }
-
-  start(callback: FrameCallback, options?: LoopOptions): void {
-    this.startLoop(callback, options);
-  }
-
-  stop(): void {
-    this.stopLoop();
-  }
 }
 
 /** Creates a new GalfusTransport driver instance running via Node-API. */

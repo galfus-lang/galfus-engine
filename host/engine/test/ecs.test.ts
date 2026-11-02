@@ -80,6 +80,26 @@ describe('@galfus/engine-core > ECS', () => {
   });
 
   describe('IntentStore', () => {
+    it('reuses the empty result and clears prior errors without mutating the returned errors', () => {
+      const intents = new IntentStore();
+      const world = new EcsWorld();
+      const empty = intents.flush(world);
+      expect(intents.flush(world)).toBe(empty);
+      intents.queueCustom(() => {
+        throw new Error('failure');
+      });
+      const originalError = console.error;
+      console.error = () => {};
+      let errors: readonly Error[];
+      try {
+        errors = intents.flush(world);
+      } finally {
+        console.error = originalError;
+      }
+      expect(errors).toHaveLength(1);
+      expect(intents.flush(world)).toEqual([]);
+      expect(errors).toHaveLength(1);
+    });
     it('queues mutations and flushes in order', () => {
       const intents = new IntentStore();
       const actions: string[] = [];
@@ -104,6 +124,26 @@ describe('@galfus/engine-core > ECS', () => {
   });
 
   describe('SystemPipeline & EcsWorld', () => {
+    it('applies registration changes on the next execution of the stage', () => {
+      const world = new EcsWorld();
+      const order: string[] = [];
+      const second = () => order.push('second');
+      const third = () => order.push('third');
+      let changed = false;
+      world.addSystem('update', () => {
+        order.push('first');
+        if (!changed) {
+          changed = true;
+          world.systems.remove('update', second);
+          world.addSystem('update', third);
+        }
+      });
+      world.addSystem('update', second);
+      const context: SystemContext = { time: 0, dt: 0, frameId: 1 };
+      world.systems.runStep('update', world, context);
+      world.systems.runStep('update', world, context);
+      expect(order).toEqual(['first', 'second', 'first', 'third']);
+    });
     it('executes systems in exact 4-phase sequence and flushes intents between stages', () => {
       const world = new EcsWorld();
       const order: string[] = [];

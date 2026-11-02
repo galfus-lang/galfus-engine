@@ -1,5 +1,5 @@
 import type { EcsWorld } from '../ecs/world';
-import { mat4, type Mat4, type ReadonlyVec3, vec3 } from '../math';
+import { mat4, type ReadonlyMat4, type ReadonlyVec3, vec3 } from '../math';
 import type { Model3DComponent } from '../realm3d/components';
 import {
   type Collider3DComponent,
@@ -106,22 +106,24 @@ export function raycast3D(
   const d = vec3.normalize([0, 0, 0], direction);
   const hits: ColliderHit3D[] = [];
   const seen = new Set<number>();
-  for (const entityId of world.query('Collider3D')) {
+  const combined = mat4.create();
+  const m = mat4.create();
+  const o: Point = [0, 0, 0];
+  const local: Point = [0, 0, 0];
+  const intersection: LocalRayHit3D = { distance: 0, normal: [0, 0, 0] };
+  for (const [entityId, component] of world.components.entries<Collider3DComponent>('Collider3D')) {
     const model = world.getComponent<Model3DComponent>(entityId, 'Model3D');
-    const component = world.getComponent<Collider3DComponent>(entityId, 'Collider3D');
-    if (!model || !component) continue;
+    if (!model) continue;
     for (const entry of getColliderEntries(component)) {
       if (seen.has(entry.colliderId))
         throw new Error(`Collider ID ${entry.colliderId} is used by more than one entity.`);
       seen.add(entry.colliderId);
       if (!entry.active || (entry.layer & mask) === 0) continue;
-      const combined = mat4.create();
-      mat4.multiply(combined, model.worldMatrix, new Float32Array(entry.matrix) as Mat4);
-      const m = mat4.invert(mat4.create(), combined);
-      if (!m || !Array.from(m).every(Number.isFinite)) continue;
-      const o = vec3.transformMat4([0, 0, 0], origin, m);
-      const local = vec3.transformDirectionMat4([0, 0, 0], d, m);
-      const hit = intersectCollider3D(entry.shape, o, local, maxDistance);
+      mat4.multiply(combined, model.worldMatrix, entry.matrix as unknown as ReadonlyMat4);
+      if (!mat4.invert(m, combined) || !m.every(Number.isFinite)) continue;
+      vec3.transformMat4(o, origin, m);
+      vec3.transformDirectionMat4(local, d, m);
+      const hit = intersectCollider3D(entry.shape, o, local, maxDistance, intersection);
       if (!hit) continue;
       const normal = vec3.transformNormalMat4([0, 0, 0], hit.normal, m);
       vec3.normalize(normal, normal);

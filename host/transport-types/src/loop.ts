@@ -84,12 +84,6 @@ export interface EngineLoopController {
    * Whether the internal frame loop is currently running.
    */
   readonly isRunning: boolean;
-
-  /** Alias for {@link startLoop}. */
-  start?(callback: FrameCallback, options?: LoopOptions): void;
-
-  /** Alias for {@link stopLoop}. */
-  stop?(): void;
 }
 
 /**

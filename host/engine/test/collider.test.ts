@@ -175,6 +175,9 @@ describe('host collider components and spatial queries', () => {
     expect(hits3d.map((h) => h.colliderId)).toEqual([sphere, plane]);
     expect(hits3d[0]?.distance).toBeCloseTo(2);
     expect(hits3d[1]?.distance).toBeCloseTo(5);
+    const originalNormal: [number, number, number] = [...hits3d[0]!.normal];
+    realm3d.raycast([0, 0, 8], [0, 0, -1], 10);
+    expect(hits3d[0]!.normal).toEqual(originalNormal);
     realm3d.reset();
     expect(realm3d.raycast([0, 0, 0], [0, 0, 1], 10)).toEqual([]);
     realm.dispose();

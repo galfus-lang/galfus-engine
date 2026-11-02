@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { GalfusEngine, GalfusTransport, PlatformEvent } from '@galfus/transport-types';
+import type { Collider2DComponent } from '../src/collision';
 import { createRuntime } from '../src/runtime';
 import { advanceFrame } from './controlled-transport';
 
@@ -263,6 +264,56 @@ describe('pointer interaction in direct realms', () => {
       failDispatch(false);
       advanceFrame(runtime, transport);
       expect(received).toEqual(['hover', 'leave']);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it('cancels and releases listeners when their collider is removed', () => {
+    const { runtime, transport, realm, events, windowId, failDispatch } = setup();
+    try {
+      const entityId = realm.createSpatialNode();
+      const colliderId = realm.addCollider(entityId, { type: 'circle', radius: 1 });
+      const listener = runtime.interactive(1, { type: 'collider', entityId, colliderId });
+      const received: string[] = [];
+      listener.on('hover', () => received.push('hover'));
+      listener.on('cancel', () => received.push('cancel'));
+      listener.on('leave', () => received.push('leave'));
+      advanceFrame(runtime, transport);
+      events.push(move(windowId, 50, 50), button(windowId, 50, 50, 'pressed'));
+      advanceFrame(runtime, transport);
+      realm.world.getComponent<Collider2DComponent>(entityId, 'Collider2D')!.remove(colliderId);
+      failDispatch(true);
+      expect(() => advanceFrame(runtime, transport)).toThrow('dispatch failed');
+      expect(received).toEqual(['hover']);
+      failDispatch(false);
+      advanceFrame(runtime, transport);
+      expect(received).toEqual(['hover', 'cancel', 'leave']);
+      expect(() => listener.on('click', () => {})).toThrow('disposed');
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it('retains listeners while their collider is inactive', () => {
+    const { runtime, transport, realm, events, windowId } = setup();
+    try {
+      const entityId = realm.createSpatialNode();
+      const shape = { type: 'circle' as const, radius: 1 };
+      const colliderId = realm.addCollider(entityId, shape);
+      const collider = realm.world.getComponent<Collider2DComponent>(entityId, 'Collider2D')!;
+      const listener = runtime.interactive(1, { type: 'collider', entityId, colliderId });
+      const received: string[] = [];
+      listener.on('hover', () => received.push('hover'));
+      listener.on('leave', () => received.push('leave'));
+      advanceFrame(runtime, transport);
+      events.push(move(windowId, 50, 50));
+      advanceFrame(runtime, transport);
+      collider.set(colliderId, shape, { active: false });
+      advanceFrame(runtime, transport);
+      collider.set(colliderId, shape);
+      advanceFrame(runtime, transport);
+      expect(received).toEqual(['hover', 'leave', 'hover']);
     } finally {
       runtime.dispose();
     }

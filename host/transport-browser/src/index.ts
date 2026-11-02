@@ -157,14 +157,6 @@ export class BrowserTransport implements GalfusTransport {
       this._rafId = null;
     }
   }
-
-  start(callback: FrameCallback, options?: LoopOptions): void {
-    this.startLoop(callback, options);
-  }
-
-  stop(): void {
-    this.stopLoop();
-  }
 }
 
 /**

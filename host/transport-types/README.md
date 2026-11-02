@@ -13,12 +13,12 @@ Canonical TypeScript definitions, transport contracts, timing models, loop inter
 ## Key Modules & Responsibilities
 
 - **`GalfusTransport` Contract**:
-  - Defines the unified transport backend contract (`engine`, `loop`, `capabilities`, `isReady`, `isDisposed`, `dispose()`).
+  - Defines the unified transport backend contract (`engine`, `init()`, `dispose()`, `isInitialized`, and `isDisposed`).
   - Standardizes asynchronous lifecycle initialization across native FFI, Node-API, and Browser WebAssembly.
 
-- **Loop & Timing Infrastructure (`LoopDriver`)**:
+- **Loop & Timing Infrastructure (`EngineLoopController`)**:
   - Deterministic frame timing, delta tracking, and pause/resume mechanics.
-  - Token-based execution generations to prevent concurrent loops across `stop()` and `start()` cycles.
+  - Token-based execution generations prevent concurrent loops across `stopLoop()` and `startLoop()` cycles.
   - Native target FPS regulation with real, unclamped `deltaMs` measurements.
 
 - **Logical ID Reservation Policy**:
@@ -27,4 +27,8 @@ Canonical TypeScript definitions, transport contracts, timing models, loop inter
 
 - **Canonical Engine SDK & Descriptors**:
   - Complete TypeScript interfaces for 2D/3D realms, multiverse composition, materials, lights, cameras, particles, and spatial audio.
-  - Error definitions (`TransportError`, `TransportStateError`, `LoopError`).
+  - Error definitions (`GalfusTransportError`, `GalfusLoopError`, `GalfusPolicyError`).
+
+The redundant `start()` and `stop()` transport aliases have been removed. Use
+`startLoop()` and `stopLoop()` on a transport, or `start()`, `pause()`, and `stop()`
+on the high-level runtime.

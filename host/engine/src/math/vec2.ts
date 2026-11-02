@@ -34,7 +34,7 @@ export function copy(out: Vec2, a: ReadonlyVec2): Vec2 {
   return out;
 }
 
-export function set(out: Vec2, x: number, y: number): Vec2 {
+export function set<T extends WritableVec2>(out: T, x: number, y: number): T {
   out[0] = x;
   out[1] = y;
   return out;

@@ -63,6 +63,12 @@ export class ComponentStore {
     if (entries) yield* entries as Map<EntityId, T>;
   }
 
+  /** Iterates entity IDs without copying the component index. */
+  *entityIds(componentType: string): IterableIterator<EntityId> {
+    const entries = this._byType.get(componentType);
+    if (entries) yield* entries.keys();
+  }
+
   /**
    * Detaches a component of the specified type from an entity.
    *

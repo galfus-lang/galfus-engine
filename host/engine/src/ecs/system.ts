@@ -143,7 +143,7 @@ export class SystemPipeline<TWorld = unknown> {
       kind
     };
 
-    const list = this._systems[desc.step];
+    const list = [...this._systems[desc.step]];
     list.push(entry);
 
     // Stably sort: higher priority first; equal priorities preserve ascending insertionOrder
@@ -154,6 +154,7 @@ export class SystemPipeline<TWorld = unknown> {
       return a.insertionOrder - b.insertionOrder;
     });
 
+    this._systems[desc.step] = list;
     return this;
   }
 
@@ -164,7 +165,7 @@ export class SystemPipeline<TWorld = unknown> {
     const list = this._systems[step];
     const index = list.findIndex((s) => s.fn === system);
     if (index !== -1) {
-      list.splice(index, 1);
+      this._systems[step] = [...list.slice(0, index), ...list.slice(index + 1)];
       return true;
     }
     return false;
@@ -175,7 +176,7 @@ export class SystemPipeline<TWorld = unknown> {
    * Safe against removal during iteration and isolates individual system exceptions.
    */
   runStep(step: SystemStep, world: TWorld, context: SystemContext): void {
-    const list = [...this._systems[step]];
+    const list = this._systems[step];
     for (const entry of list) {
       try {
         entry.fn(world, context);

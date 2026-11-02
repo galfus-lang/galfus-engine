@@ -170,7 +170,7 @@ abstract class ColliderComponent<S extends ColliderShape2D | ColliderShape3D> im
     return Array.from(this[colliderEntries].values(), (entry) => structuredClone(entry));
   }
 }
-/** Internal query path; entries must not be mutated or retained by callers. */
+/** Internal query path; entries are immutable and may be retained by snapshots. */
 export function getColliderEntries<S extends ColliderShape2D | ColliderShape3D>(
   component: ColliderComponent<S>
 ): IterableIterator<ColliderEntry<S>> {

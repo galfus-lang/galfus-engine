@@ -10,7 +10,6 @@ import type { Camera3DComponent, Model3DComponent } from '../realm3d/components'
 import type { Realm3D } from '../realm3d/realm';
 
 interface Shape3D {
-  shape: ColliderShape3D;
   inverse: Mat4;
   entry?: ColliderEntry<ColliderShape3D>;
 }
@@ -45,9 +44,11 @@ export class TargetSnapshot3D {
     normal: [0, 0, 0]
   };
   valid = false;
+  exists = false;
 
   capture(realm: Realm3D, entityId: number, colliderId?: number): void {
     this.valid = false;
+    this.exists = false;
     this.count = 0;
     const model = realm.world.getComponent<Model3DComponent>(entityId, 'Model3D');
     const collider = realm.world.getComponent<Collider3DComponent>(entityId, 'Collider3D');
@@ -58,9 +59,11 @@ export class TargetSnapshot3D {
     mat4.copy(this.previousModel, model.worldMatrix);
     this.hasModel = true;
     for (const entry of getColliderEntries(collider)) {
-      if (!entry.active || (colliderId !== undefined && colliderId !== entry.colliderId)) continue;
+      if (colliderId !== undefined && colliderId !== entry.colliderId) continue;
+      this.exists = true;
+      if (!entry.active) continue;
       let saved = this.shapes[this.count];
-      if (!saved) this.shapes.push((saved = { shape: entry.shape, inverse: mat4.create() }));
+      if (!saved) this.shapes.push((saved = { inverse: mat4.create() }));
       if (!sameModel || saved.entry !== entry) {
         mat4.multiply(this.combined, model.worldMatrix, entry.matrix as unknown as ReadonlyMat4);
         if (!mat4.invert(saved.inverse, this.combined)) {
@@ -69,7 +72,6 @@ export class TargetSnapshot3D {
         }
         saved.entry = entry;
       }
-      saved.shape = entry.shape;
       this.count++;
     }
     this.valid = this.count > 0;
@@ -81,8 +83,9 @@ export class TargetSnapshot3D {
       const item = this.shapes[i]!;
       vec3.transformMat4(this.localOrigin, origin, item.inverse);
       vec3.transformDirectionMat4(this.localDirection, direction, item.inverse);
+      if (!item.entry) continue;
       const hit = intersectCollider3D(
-        item.shape,
+        item.entry.shape,
         this.localOrigin,
         this.localDirection,
         maxDistance,

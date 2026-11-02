@@ -77,7 +77,6 @@ export class MultiverseRuntime {
 
   private _frameId = 0;
   private _elapsedSeconds = 0;
-  private _isRunning = false;
   private _state: RuntimeState;
 
   readonly #transport: GalfusTransport;
@@ -113,7 +112,7 @@ export class MultiverseRuntime {
    * Whether the active frame loop is currently running.
    */
   get isRunning(): boolean {
-    return this._isRunning;
+    return this._state === 'running';
   }
 
   /**
@@ -249,14 +248,12 @@ export class MultiverseRuntime {
 
     const previousState = this._state;
     this._state = 'running';
-    this._isRunning = true;
     try {
       this.#transport.startLoop((timing) => {
         this.tickFrame(timing);
       }, options);
     } catch (error) {
       this._state = previousState;
-      this._isRunning = false;
       throw error;
     }
   }
@@ -267,7 +264,6 @@ export class MultiverseRuntime {
   stop(): void {
     if (this._state !== 'running' && this._state !== 'paused') return;
     if (this._state === 'running') this.#transport.stopLoop();
-    this._isRunning = false;
     this._state = 'ready';
   }
 
@@ -275,7 +271,6 @@ export class MultiverseRuntime {
   pause(): void {
     if (this._state !== 'running') return;
     this.#transport.stopLoop();
-    this._isRunning = false;
     this._state = 'paused';
   }
 

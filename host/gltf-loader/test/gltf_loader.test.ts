@@ -2,7 +2,7 @@
  * Comprehensive test suite for @galfus/gltf-loader and @galfus/model-loader-types.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { createRuntime } from '@galfus/engine';
 import type { GalfusTransport } from '@galfus/transport-types';
 import { zipSync } from 'fflate';
@@ -227,10 +227,16 @@ describe('@galfus/gltf-loader', () => {
     expect(wall1.getEntityByName('Wall_Piece')).toBeDefined();
     expect(wall2.getEntityByName('Wall_Piece')).toBeDefined();
 
-    // Destroy only the walls
+    // An individually disposed instance must no longer be retained by the sub-factory.
+    wall1.dispose();
+    const disposedAgain = spyOn(wall1, 'dispose');
+
+    // Destroy only the remaining wall.
     wallSubFactory.disposeAllInstances();
     expect(wall1.isDisposed).toBe(true);
     expect(wall2.isDisposed).toBe(true);
+    expect(disposedAgain).not.toHaveBeenCalled();
+    disposedAgain.mockRestore();
 
     // Kit factory remains alive until explicitly disposed
     expect(kitFactory.isDisposed).toBe(false);

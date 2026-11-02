@@ -163,6 +163,7 @@ export class InteractiveSystem {
   /** Captures state only after a successful dispatch. */
   afterDispatch(): void {
     if (!this.records.size) return;
+    let removed: TargetRecord[] | undefined;
     for (const state of this.realms.values())
       if (!state.realm.isDisposed) {
         if (state.realm instanceof Realm2D) captureCameras2D(state.realm, state.cameras2D);
@@ -176,6 +177,7 @@ export class InteractiveSystem {
         realm.world.getComponent(entityId, component.type) !== component
       ) {
         snapshot.valid = false;
+        (removed ??= []).push(record);
         continue;
       }
       if (snapshot instanceof TargetSnapshot2D && realm instanceof Realm2D)
@@ -186,9 +188,27 @@ export class InteractiveSystem {
         listener.target.type === 'collider'
       )
         snapshot.capture(realm, entityId, listener.target.colliderId);
+      if (listener.target.type === 'collider' && !snapshot.exists) (removed ??= []).push(record);
+    }
+    if (removed) {
+      for (const record of removed) {
+        for (const pointers of this.pointers.values()) {
+          for (const pointer of pointers.values()) {
+            let pressed = false;
+            for (const [button, listener] of pointer.pressed) {
+              if (listener === record.listener) {
+                pointer.pressed.delete(button);
+                pressed = true;
+              }
+            }
+            if (pressed) this.emit(record.listener, 'cancel', pointer.event);
+          }
+        }
+      }
     }
     for (const pointers of this.pointers.values())
       for (const pointer of pointers.values()) this.updateHover(pointer);
+    if (removed) for (const record of removed) record.listener.dispose();
   }
 
   private pick(event: PointerEvent): InteractiveListener | undefined {

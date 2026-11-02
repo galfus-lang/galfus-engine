@@ -37,6 +37,9 @@ export class SubGltfAssetFactory implements SubModelAssetFactory {
   private readonly _parent: GltfAssetFactory;
   private readonly _targetNodeIndices: number[];
   private readonly _activeInstances = new Set<GltfInstance>();
+  private readonly _forgetInstance = (instance: GltfInstance): void => {
+    this._activeInstances.delete(instance);
+  };
 
   constructor(name: string, parent: GltfAssetFactory, targetNodeIndices: number[]) {
     this.name = name;
@@ -48,7 +51,11 @@ export class SubGltfAssetFactory implements SubModelAssetFactory {
    * Spawns a new independent instance of this specific sub-tree.
    */
   instantiate(options?: ModelInstantiateOptions): ModelInstance {
-    const instance = this._parent._instantiateInternal(options, this._targetNodeIndices);
+    const instance = this._parent._instantiateInternal(
+      options,
+      this._targetNodeIndices,
+      this._forgetInstance
+    );
     this._activeInstances.add(instance);
     return instance;
   }
@@ -57,10 +64,8 @@ export class SubGltfAssetFactory implements SubModelAssetFactory {
    * Destroys all active instances spawned through this sub-factory.
    */
   disposeAllInstances(): void {
-    const list = [...this._activeInstances];
-    for (const inst of list) {
+    for (const inst of this._activeInstances) {
       inst.dispose();
-      this._activeInstances.delete(inst);
     }
   }
 }
@@ -133,7 +138,8 @@ export class GltfAssetFactory implements ModelAssetFactory {
    */
   _instantiateInternal(
     options?: ModelInstantiateOptions,
-    rootNodeIndices?: number[]
+    rootNodeIndices?: number[],
+    onDispose?: (instance: GltfInstance) => void
   ): GltfInstance {
     if (this._isDisposed) {
       throw new Error(`Cannot instantiate from disposed GltfAssetFactory '${this.assetName}'`);
@@ -182,6 +188,7 @@ export class GltfAssetFactory implements ModelAssetFactory {
       animationPlayer,
       onDispose: (inst) => {
         this._activeInstances.delete(inst);
+        onDispose?.(inst);
       }
     });
 
@@ -249,8 +256,7 @@ export class GltfAssetFactory implements ModelAssetFactory {
    * Destroys all currently active instances spawned by this factory.
    */
   disposeAllInstances(): void {
-    const list = [...this._activeInstances];
-    for (const inst of list) {
+    for (const inst of this._activeInstances) {
       inst.dispose();
     }
     this._activeInstances.clear();

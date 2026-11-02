@@ -37,9 +37,27 @@ export function copyAnimationPose(from: AnimationPose, to: AnimationPose): void 
   for (const [id, val] of from.weights) to.weights.set(id, new Float32Array(val));
 }
 
-// Scratch buffers for evaluation without GC overhead
+// Reusable sampling and interpolation buffers; pose entries own their values.
 const SCRATCH_VEC3 = new Float32Array(3);
 const SCRATCH_VEC4 = new Float32Array(4);
+const SCRATCH_BLEND_VEC3 = vec3.create();
+const SCRATCH_BLEND_QUAT = quat.create();
+
+function blendVectors(
+  out: Map<EntityId, [number, number, number]>,
+  poseA: Map<EntityId, [number, number, number]>,
+  poseB: Map<EntityId, [number, number, number]>,
+  t: number
+): void {
+  for (const [id, a] of poseA) {
+    const b = poseB.get(id);
+    if (b) {
+      vec3.lerp(SCRATCH_BLEND_VEC3, a, b, t);
+      out.set(id, [SCRATCH_BLEND_VEC3[0], SCRATCH_BLEND_VEC3[1], SCRATCH_BLEND_VEC3[2]]);
+    } else out.set(id, [a[0], a[1], a[2]]);
+  }
+  for (const [id, b] of poseB) if (!poseA.has(id)) out.set(id, [b[0], b[1], b[2]]);
+}
 
 /**
  * Evaluates an AnimationClip at a specific timestamp and writes the resulting pose into `outPose`.
@@ -106,69 +124,40 @@ export function blendPoses(
 
   clearAnimationPose(out);
 
-  // 1. Blend Translations
-  const transEntities = new Set([...poseA.translations.keys(), ...poseB.translations.keys()]);
-  for (const id of transEntities) {
-    const a = poseA.translations.get(id);
-    const b = poseB.translations.get(id);
-    if (a && b) {
-      const blended = vec3.create();
-      vec3.lerp(blended, a, b, t);
-      out.translations.set(id, [blended[0], blended[1], blended[2]]);
-    } else if (a) {
-      out.translations.set(id, [a[0], a[1], a[2]]);
-    } else if (b) {
-      out.translations.set(id, [b[0], b[1], b[2]]);
-    }
-  }
+  blendVectors(out.translations, poseA.translations, poseB.translations, t);
 
-  // 2. Blend Rotations (Quaternion SLERP)
-  const rotEntities = new Set([...poseA.rotations.keys(), ...poseB.rotations.keys()]);
-  for (const id of rotEntities) {
-    const a = poseA.rotations.get(id);
+  // Blend rotations with quaternion SLERP.
+  for (const [id, a] of poseA.rotations) {
     const b = poseB.rotations.get(id);
-    if (a && b) {
-      const blended = quat.create();
-      quat.slerp(blended, a, b, t);
-      out.rotations.set(id, [blended[0], blended[1], blended[2], blended[3]]);
-    } else if (a) {
-      out.rotations.set(id, [a[0], a[1], a[2], a[3]]);
-    } else if (b) {
-      out.rotations.set(id, [b[0], b[1], b[2], b[3]]);
-    }
+    if (b) {
+      quat.slerp(SCRATCH_BLEND_QUAT, a, b, t);
+      out.rotations.set(id, [
+        SCRATCH_BLEND_QUAT[0],
+        SCRATCH_BLEND_QUAT[1],
+        SCRATCH_BLEND_QUAT[2],
+        SCRATCH_BLEND_QUAT[3]
+      ]);
+    } else out.rotations.set(id, [a[0], a[1], a[2], a[3]]);
   }
+  for (const [id, b] of poseB.rotations)
+    if (!poseA.rotations.has(id)) out.rotations.set(id, [b[0], b[1], b[2], b[3]]);
 
-  // 3. Blend Scales
-  const scaleEntities = new Set([...poseA.scales.keys(), ...poseB.scales.keys()]);
-  for (const id of scaleEntities) {
-    const a = poseA.scales.get(id);
-    const b = poseB.scales.get(id);
-    if (a && b) {
-      const blended = vec3.create();
-      vec3.lerp(blended, a, b, t);
-      out.scales.set(id, [blended[0], blended[1], blended[2]]);
-    } else if (a) {
-      out.scales.set(id, [a[0], a[1], a[2]]);
-    } else if (b) {
-      out.scales.set(id, [b[0], b[1], b[2]]);
-    }
-  }
+  // Blend scales.
+  blendVectors(out.scales, poseA.scales, poseB.scales, t);
 
-  // 4. Blend Weights
-  const weightEntities = new Set([...poseA.weights.keys(), ...poseB.weights.keys()]);
-  for (const id of weightEntities) {
-    const a = poseA.weights.get(id);
+  // Blend weights.
+  for (const [id, a] of poseA.weights) {
     const b = poseB.weights.get(id);
-    if (a && b && a.length === b.length) {
+    if (b && a.length === b.length) {
       const blended = new Float32Array(a.length);
       for (let i = 0; i < a.length; i++) {
         blended[i] = common.lerp(a[i]!, b[i]!, t);
       }
       out.weights.set(id, blended);
-    } else if (a) {
+    } else {
       out.weights.set(id, new Float32Array(a));
-    } else if (b) {
-      out.weights.set(id, new Float32Array(b));
     }
   }
+  for (const [id, b] of poseB.weights)
+    if (!poseA.weights.has(id)) out.weights.set(id, new Float32Array(b));
 }

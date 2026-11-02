@@ -88,6 +88,7 @@ export class IntentStore {
    * @returns Array of errors that occurred during this flush.
    */
   flush(flusher: IntentFlusher, maxFlushDepth = 100): readonly Error[] {
+    if (this._head === null && this._lastErrors.length === 0) return this._lastErrors;
     this._lastErrors = [];
     let depth = 0;
 

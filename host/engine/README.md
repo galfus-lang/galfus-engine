@@ -121,6 +121,8 @@ listener.dispose();
 Use `{ type: 'svg', svgId, elementId }` for an SVG element. The supported event types are
 `hover`, `leave`, `move`, `down`, `up`, `click`, and `cancel`. When an entity has multiple
 colliders, specify `colliderId`. Events use the most recently submitted presentation state.
+When the registered entity or collider is removed, the listener is cancelled and disposed
+after the next successful dispatch.
 Currently this supports realms presented directly to a window. Traversal through textures
 connecting realms is not implemented yet, and native animations of camera or model transforms
 and camera field of view are not yet reflected in interaction snapshots. Occlusion is resolved

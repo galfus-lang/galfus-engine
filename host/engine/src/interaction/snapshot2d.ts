@@ -18,8 +18,6 @@ import type { Realm2D } from '../realm2d/realm';
 import type { InteractiveTarget } from './types';
 
 interface ShapeSnapshot {
-  colliderId: number;
-  shape: ColliderShape2D;
   inverse: Mat2d;
   entry?: ColliderEntry<ColliderShape2D>;
 }
@@ -51,10 +49,12 @@ export class TargetSnapshot2D {
   drawOrder = 0;
   resourceId = 0;
   valid = false;
+  exists = false;
 
   capture(realm: Realm2D, entityId: number, target: InteractiveTarget): void {
     const wasValid = this.valid;
     this.valid = false;
+    this.exists = false;
     this.count = 0;
     const model = realm.world.getComponent<Model2DComponent>(entityId, 'Model2D');
     if (!model) return;
@@ -74,14 +74,12 @@ export class TargetSnapshot2D {
       const component = realm.world.getComponent<Collider2DComponent>(entityId, 'Collider2D');
       if (!component) return;
       for (const entry of getColliderEntries(component)) {
-        if (
-          !entry.active ||
-          (target.colliderId !== undefined && entry.colliderId !== target.colliderId)
-        )
-          continue;
+        if (target.colliderId !== undefined && entry.colliderId !== target.colliderId) continue;
+        this.exists = true;
+        if (!entry.active) continue;
         let saved = this.shapes[this.count];
         if (!saved) {
-          saved = { colliderId: entry.colliderId, shape: entry.shape, inverse: mat2d.create() };
+          saved = { inverse: mat2d.create() };
           this.shapes.push(saved);
         }
         if (!sameModel || saved.entry !== entry) {
@@ -96,8 +94,6 @@ export class TargetSnapshot2D {
           }
           saved.entry = entry;
         }
-        saved.colliderId = entry.colliderId;
-        saved.shape = entry.shape;
         this.count++;
       }
       this.valid = this.count > 0;
@@ -141,7 +137,7 @@ export class TargetSnapshot2D {
       for (let i = 0; i < this.count; i++) {
         const shape = this.shapes[i]!;
         vec2.transformMat2d(this.point, worldPoint, shape.inverse);
-        if (containsColliderPoint2D(shape.shape, this.point)) return true;
+        if (shape.entry && containsColliderPoint2D(shape.entry.shape, this.point)) return true;
       }
       return false;
     }

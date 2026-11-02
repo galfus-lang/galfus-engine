@@ -13,6 +13,31 @@ import { quat } from '../src/math/index';
 import { createModel3D, type Model3DComponent } from '../src/realm3d/components';
 
 describe('@galfus/engine > Animation Clips, Sampling & Blending', () => {
+  it('blends shared and disjoint channels without sharing pose values', () => {
+    const a = createAnimationPose(),
+      b = createAnimationPose(),
+      out = createAnimationPose();
+    a.translations.set(1, [0, 2, 4]);
+    b.translations.set(1, [4, 6, 8]);
+    b.translations.set(2, [9, 8, 7]);
+    a.scales.set(3, [1, 2, 3]);
+    b.scales.set(4, [4, 5, 6]);
+    a.rotations.set(5, [0, 0, 0, 1]);
+    b.rotations.set(6, [0, 0, 1, 0]);
+    a.weights.set(7, new Float32Array([0.25]));
+    b.weights.set(7, new Float32Array([0.5, 0.75]));
+    b.weights.set(8, new Float32Array([0.8]));
+    blendPoses(out, a, b, 0.5);
+    expect(out.translations.get(1)).toEqual([2, 4, 6]);
+    expect([...out.translations.keys()]).toEqual([1, 2]);
+    expect(out.scales.get(3)).toEqual([1, 2, 3]);
+    expect(out.scales.get(4)).toEqual([4, 5, 6]);
+    expect(out.rotations.get(5)).toEqual([0, 0, 0, 1]);
+    expect(out.rotations.get(6)).toEqual([0, 0, 1, 0]);
+    expect(Array.from(out.weights.get(7)!)).toEqual([0.25]);
+    expect(out.weights.get(8)).not.toBe(b.weights.get(8));
+    expect(out.translations.get(2)).not.toBe(b.translations.get(2));
+  });
   it('preserves joint rotation when a looping animation also updates scale', () => {
     const world = new EcsWorld();
     world.addSystem('update', createAnimationPlaybackSystem());

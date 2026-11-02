@@ -118,22 +118,18 @@ export class EcsWorld implements IntentFlusher {
       return this.entities.getActiveEntities();
     }
 
-    let result: Set<EntityId> | null = null;
-    for (const type of componentTypes) {
-      const matching = this.components.getEntitiesWith(type);
-      if (result === null) {
-        result = new Set(matching);
-      } else {
-        for (const id of result) {
-          if (!matching.has(id)) {
-            result.delete(id);
-          }
+    const result: EntityId[] = [];
+    for (const id of this.components.entityIds(componentTypes[0]!)) {
+      let matches = true;
+      for (let i = 1; i < componentTypes.length; i++) {
+        if (!this.components.has(id, componentTypes[i]!)) {
+          matches = false;
+          break;
         }
       }
-      if (result.size === 0) break;
+      if (matches) result.push(id);
     }
-
-    return result ? Array.from(result) : [];
+    return result;
   }
 
   /**

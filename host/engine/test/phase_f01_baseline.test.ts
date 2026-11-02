@@ -64,7 +64,7 @@ describe('Phase F01 — Baseline, Contratos e Métricas ABI', () => {
     expect(snapshot.byCategory.dispatch).toBe(1);
   });
 
-  it('Baseline Measurement: demonstrates that currently static scenes issue ABI calls every frame (HOST-025 / HOST-030 baseline)', () => {
+  it('static scenes do not upload unchanged transforms after their initial sync', () => {
     const tracker = new AbiMetricsTracker();
 
     const mockEngine = tracker.wrapEngine({
