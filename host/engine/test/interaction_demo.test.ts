@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import type { GalfusEngine, GalfusTransport, PlatformEvent } from '@galfus/transport-types';
+import type {
+  AnimationTarget,
+  AnimValue,
+  GalfusEngine,
+  GalfusTransport,
+  PlatformEvent,
+  TransitionConfig
+} from '@galfus/transport-types';
 import { createInteractionScene } from '../demo/interaction';
 import { createRuntime, type Model2DComponent, type Model3DComponent } from '../src';
 import { advanceFrame } from './controlled-transport';
@@ -9,11 +16,69 @@ describe('interaction demo', () => {
     const events: PlatformEvent[] = [];
     const text = new Map<string, string>();
     const attrs = new Map<string, string>();
+    const transitions = new Map<
+      number,
+      {
+        current: AnimValue;
+        start: AnimValue;
+        target: AnimValue;
+        elapsed: number;
+        duration: number;
+        binding?: AnimationTarget;
+      }
+    >();
     const leftViewport = [0, 0, 616, 700];
     const rightViewport = [616, 0, 484, 700];
     let windowClosed = false;
     const engine = new Proxy(
       {
+        animationCreateTransition: (id: number, value: AnimValue, config: TransitionConfig) => {
+          transitions.set(id, {
+            current: value,
+            start: value,
+            target: value,
+            elapsed: 0,
+            duration: config.duration
+          });
+        },
+        animationBindTarget: (id: number, binding: AnimationTarget) => {
+          transitions.get(id)!.binding = binding;
+        },
+        animationTransitionTo: (id: number, value: AnimValue, config: TransitionConfig) => {
+          const transition = transitions.get(id)!;
+          transition.start = transition.current;
+          transition.target = value;
+          transition.elapsed = 0;
+          transition.duration = config.duration;
+        },
+        animationGetValue: (id: number) => transitions.get(id)?.current,
+        animationDestroyTransition: (id: number) => transitions.delete(id),
+        animationStep: (dt: number) => {
+          for (const transition of transitions.values()) {
+            transition.elapsed += dt;
+            const progress = Math.min(transition.elapsed / transition.duration, 1);
+            const start = transition.start.value as number[];
+            const target = transition.target.value as number[];
+            transition.current = {
+              type: transition.start.type,
+              value: start.map((value, index) => value + (target[index]! - value) * progress)
+            } as AnimValue;
+            if (transition.binding?.kind === 'svgAttributeColor') {
+              const color = transition.current.value as number[];
+              attrs.set(
+                `${transition.binding.elementId}:${transition.binding.attribute}`,
+                `#${color
+                  .slice(0, 3)
+                  .map((value) =>
+                    Math.round(value * 255)
+                      .toString(16)
+                      .padStart(2, '0')
+                  )
+                  .join('')}`
+              );
+            }
+          }
+        },
         platformPumpEvents: () => events.splice(0),
         windowClose: () => {
           windowClosed = true;
@@ -100,16 +165,34 @@ describe('interaction demo', () => {
     try {
       advanceFrame(runtime, transport);
       click(858, 240);
+      advanceFrame(runtime, transport, 0.1);
+      expect(attrs.get('svg-button:fill')).not.toBe('#39a5c3');
+      advanceFrame(runtime, transport, 0.11);
       expect(attrs.get('svg-button:fill')).toBe('#39a5c3');
       expect(text.get('status')).toBe('Clicked: SVG button');
       expect(text.get('count')).toBe('Clicks: 1');
       click(714, 416);
       expect(text.get('status')).toBe('Clicked: 2D circle');
+      advanceFrame(runtime, transport, 0.1);
+      const circleScale = () =>
+        scene.realm2d.world.getComponent<Model2DComponent>(scene.circle, 'Model2D')!
+          .localMatrix[0]!;
+      expect(circleScale()).toBeGreaterThan(1);
+      expect(circleScale()).toBeLessThan(1.15);
+      events.push(move(600, 50));
+      advanceFrame(runtime, transport);
+      const scaleBeforeLeave = circleScale();
+      advanceFrame(runtime, transport, 0.05);
+      expect(circleScale()).toBeLessThan(scaleBeforeLeave);
+      events.push(move(714, 416));
+      advanceFrame(runtime, transport);
+      advanceFrame(runtime, transport, 0.21);
       expect(
         scene.realm2d.world.getComponent<Model2DComponent>(scene.circle, 'Model2D')!.localMatrix[0]
       ).toBeCloseTo(1.15);
       click(190, 350);
       expect(text.get('status')).toBe('Clicked: 3D cube');
+      advanceFrame(runtime, transport, 0.21);
       expect(
         scene.realm3d.world.getComponent<Model3DComponent>(scene.cube.entityId, 'Model3D')!
           .localMatrix[0]

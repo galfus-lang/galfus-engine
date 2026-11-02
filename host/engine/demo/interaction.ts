@@ -3,7 +3,6 @@ import {
   type Camera2DComponent,
   createRuntime,
   isKey,
-  type Model2DComponent,
   type Model3DComponent,
   type MultiverseRuntime,
   type TargetId,
@@ -136,18 +135,35 @@ export function createInteractionScene(
     svgId: svg.svgId,
     elementId: 'svg-button'
   });
+  const transition = { duration: 0.2, easing: 'easeOutQuad' as const };
+  const buttonNormal = {
+    type: 'vec4' as const,
+    value: [36 / 255, 99 / 255, 128 / 255, 1] as [number, number, number, number]
+  };
+  const buttonHover = {
+    type: 'vec4' as const,
+    value: [57 / 255, 165 / 255, 195 / 255, 1] as [number, number, number, number]
+  };
+  let buttonTransition: ReturnType<typeof runtime.animation.createTransition> | undefined;
   button.on('hover', () => {
     setCursor(true);
     status('Hover: SVG button');
-    realm2d.setSvgAttribute(svg, 'svg-button', 'fill', '#39a5c3');
+    buttonTransition ??= runtime.animation.createTransition(buttonNormal, transition, {
+      kind: 'svgAttributeColor',
+      realmId: realm2d.realmId,
+      svgId: svg.svgId,
+      elementId: 'svg-button',
+      attribute: 'fill'
+    });
+    runtime.animation.transitionTo(buttonTransition, buttonHover, transition);
   });
   button.on('leave', () => {
     setCursor(false);
-    realm2d.setSvgAttribute(svg, 'svg-button', 'fill', '#246380');
+    if (buttonTransition !== undefined)
+      runtime.animation.transitionTo(buttonTransition, buttonNormal, transition);
   });
   button.on('click', () => clicked('SVG button'));
 
-  const circleModel = realm2d.world.getComponent<Model2DComponent>(circle, 'Model2D')!;
   const circleListener = runtime.interactive(realm2d.realmId, {
     type: 'collider',
     entityId: circle
@@ -155,11 +171,11 @@ export function createInteractionScene(
   circleListener.on('hover', () => {
     setCursor(true);
     status('Hover: 2D circle');
-    circleModel.setScale(1.15, 1.15);
+    realm2d.animateModel(circle, { scale: [1.15, 1.15] }, transition, runtime.animation);
   });
   circleListener.on('leave', () => {
     setCursor(false);
-    circleModel.setScale(1, 1);
+    realm2d.animateModel(circle, { scale: [1, 1] }, transition, runtime.animation);
   });
   circleListener.on('click', () => clicked('2D circle'));
 
@@ -167,16 +183,15 @@ export function createInteractionScene(
     ['3D cube', cube.entityId],
     ['3D sphere', sphere.entityId]
   ] as const) {
-    const model = realm3d.world.getComponent<Model3DComponent>(entityId, 'Model3D')!;
     const listener = runtime.interactive(realm3d.realmId, { type: 'collider', entityId });
     listener.on('hover', () => {
       setCursor(true);
       status(`Hover: ${name}`);
-      model.setScale([1.12, 1.12, 1.12]);
+      realm3d.animateModel(entityId, { scale: [1.12, 1.12, 1.12] }, transition, runtime.animation);
     });
     listener.on('leave', () => {
       setCursor(false);
-      model.setScale([1, 1, 1]);
+      realm3d.animateModel(entityId, { scale: [1, 1, 1] }, transition, runtime.animation);
     });
     listener.on('click', () => clicked(name));
   }
