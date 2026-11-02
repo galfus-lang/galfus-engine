@@ -148,7 +148,7 @@ describe('@galfus/engine > Unified MultiverseRuntime', () => {
     // 6. Listen to onTick
     let tickCount = 0;
     let lastTiming: FrameTiming | null = null;
-    const unsub = runtime.onTick((timing) => {
+    const unsub = runtime.on('tick', (timing) => {
       tickCount++;
       lastTiming = timing;
     });

@@ -15,6 +15,12 @@ import type {
 import { assertValidLogicalId } from '@galfus/transport-types';
 import type { SystemContext } from '../ecs/system';
 import { IdAllocator, type InvocationId, type RealmId, type TargetId } from '../types';
+import {
+  PresentationGraph,
+  type PresentationGraphView,
+  type PresentationSurface
+} from './presentation-graph';
+import { PresentationLinks } from './presentation-links';
 import type { RealmConnector } from './realm';
 
 export { type InvocationId, type TargetId } from '../types';
@@ -37,7 +43,16 @@ export class MultiverseCoordinator {
   private readonly _targets = new Map<TargetId, TargetDesc>();
   private readonly _invocations = new Map<InvocationId, InvocationDesc>();
   private readonly _dirtyInvocations = new Map<InvocationId, InvocationUpdateProps>();
-  private readonly _invocationRealms = new Map<InvocationId, RealmId>();
+  private readonly _presentation = new PresentationGraph();
+  private readonly _presentationLinks = new PresentationLinks();
+  private readonly _boundTargets = new Set<TargetId>();
+  private readonly _boundRealms = new Set<RealmId>();
+  private readonly _boundInvocations = new Set<InvocationId>();
+  private readonly _boundBindings = new Map<RealmId, Map<string, number>>();
+
+  get presentationGraph(): PresentationGraphView {
+    return this._presentation.view;
+  }
 
   get engine(): GalfusEngine | null {
     return this._engine;
@@ -47,16 +62,44 @@ export class MultiverseCoordinator {
    * Binds the coordinator to the active native or WASM GalfusEngine driver.
    */
   bindEngine(engine: GalfusEngine): void {
+    if (this._engine && this._engine !== engine)
+      throw new Error('Multiverse is already bound to another engine.');
     this._engine = engine;
     for (const [targetId, desc] of this._targets) {
+      if (this._boundTargets.has(targetId)) continue;
       if (desc.kind.type === 'window') {
         engine.multiverseAttachWindow?.(desc.kind.windowId);
       }
       engine.multiverseCreateTarget(targetId, desc);
+      this._boundTargets.add(targetId);
     }
-    for (const realm of this._realms.values()) {
+    for (const [id, realm] of this._realms) {
+      if (this._boundRealms.has(id)) continue;
       realm.bindEngine(engine);
+      this._boundRealms.add(id);
     }
+    for (const [id, desc] of this._invocations) {
+      if (this._boundInvocations.has(id)) continue;
+      engine.multiverseCreateInvocation(id, desc);
+      this._boundInvocations.add(id);
+      this._dirtyInvocations.delete(id);
+    }
+    for (const binding of this._presentationLinks.getBindings()) {
+      const realmId = binding.realmId as RealmId;
+      if (this._boundBindings.get(realmId)?.get(binding.slot) === binding.sourceTargetId) continue;
+      engine.multiverseBindTargetTexture(binding);
+      this._recordBoundBinding(binding);
+    }
+  }
+
+  private _recordBoundBinding(binding: TargetTextureBinding): void {
+    const realmId = binding.realmId as RealmId;
+    let slots = this._boundBindings.get(realmId);
+    if (!slots) {
+      slots = new Map();
+      this._boundBindings.set(realmId, slots);
+    }
+    slots.set(binding.slot, binding.sourceTargetId);
   }
 
   /**
@@ -81,13 +124,16 @@ export class MultiverseCoordinator {
       throw new Error(`Multiverse target ${targetId} is already created.`);
     }
 
+    const storedDesc = structuredClone(desc);
     if (this._engine) {
       if (desc.kind.type === 'window') {
         this._engine.multiverseAttachWindow?.(desc.kind.windowId);
       }
-      this._engine.multiverseCreateTarget(targetId, desc);
+      this._engine.multiverseCreateTarget(targetId, storedDesc);
+      this._boundTargets.add(targetId);
     }
-    this._targets.set(targetId, desc);
+    this._targets.set(targetId, storedDesc);
+    this._targetIdAllocator.markUsed(targetId, 'TargetId');
     return targetId;
   }
 
@@ -97,9 +143,17 @@ export class MultiverseCoordinator {
   destroyTarget(targetId: TargetId | number): void {
     const id = targetId as TargetId;
     if (!this._targets.has(id)) return;
-    if (this._engine) {
+    if (this._engine && this._boundTargets.has(id)) {
       this._engine.multiverseDestroyTarget(id);
     }
+    for (const [invId, inv] of this._invocations) {
+      if (inv.targetId === id) this._forgetInvocation(invId);
+    }
+    for (const binding of this._presentationLinks.getBindingsForTarget(id)) {
+      this._presentationLinks.unbind(binding.realmId, binding.slot);
+      this._boundBindings.get(binding.realmId as RealmId)?.delete(binding.slot);
+    }
+    this._boundTargets.delete(id);
     this._targets.delete(id);
   }
 
@@ -113,10 +167,11 @@ export class MultiverseCoordinator {
       throw new Error(`Realm ${realmId} is already registered in Multiverse.`);
     }
 
-    this._realms.set(realmId, realm);
     if (this._engine) {
       realm.bindEngine(this._engine);
+      this._boundRealms.add(realmId);
     }
+    this._realms.set(realmId, realm);
   }
 
   /**
@@ -127,17 +182,23 @@ export class MultiverseCoordinator {
     const realm = this._realms.get(id);
     if (!realm) return;
 
-    // Automatically destroy all invocations associated with this realm
-    for (const [invId, rId] of this._invocationRealms) {
-      if (rId === id) {
-        this.destroyInvocation(invId);
-      }
+    for (const [invId, inv] of this._invocations) {
+      if (inv.realmId === id) this.destroyInvocation(invId);
     }
 
     realm.dispose();
-    if (this._engine && realm.realmKind !== '2d' && realm.realmKind !== '3d') {
+    if (
+      this._engine &&
+      this._boundRealms.has(id) &&
+      realm.realmKind !== '2d' &&
+      realm.realmKind !== '3d'
+    ) {
       this._engine.multiverseUnregisterRealm?.(id);
     }
+    for (const binding of this._presentationLinks.getBindingsForRealm(id))
+      this._presentationLinks.unbind(id, binding.slot);
+    this._boundBindings.delete(id);
+    this._boundRealms.delete(id);
     this._realms.delete(id);
   }
 
@@ -179,18 +240,21 @@ export class MultiverseCoordinator {
     if (this._invocations.has(invocationId)) {
       throw new Error(`Invocation ${invocationId} is already created.`);
     }
+    if (!this._realms.has(desc.realmId as RealmId))
+      throw new Error(`Realm ${desc.realmId} is not registered.`);
+    if (!this._targets.has(desc.targetId as TargetId))
+      throw new Error(`Target ${desc.targetId} is not registered.`);
 
-    const storedDesc: InvocationDesc = {
-      ...desc,
-      viewport: desc.viewport ? { ...desc.viewport } : { width: { vw: 100 }, height: { vh: 100 } },
-      filters: desc.filters ? [...desc.filters] : []
-    };
+    const storedDesc: InvocationDesc = structuredClone(desc);
+    storedDesc.viewport ??= { width: { vw: 100 }, height: { vh: 100 } };
+    storedDesc.filters ??= [];
 
     if (this._engine) {
       this._engine.multiverseCreateInvocation(invocationId, storedDesc);
+      this._boundInvocations.add(invocationId);
     }
     this._invocations.set(invocationId, storedDesc);
-    this._invocationRealms.set(invocationId, desc.realmId as RealmId);
+    this._invocationIdAllocator.markUsed(invocationId, 'InvocationId');
     return invocationId;
   }
 
@@ -198,13 +262,12 @@ export class MultiverseCoordinator {
    * Retrieves the current stored presentation descriptor of an invocation.
    */
   getInvocation(invocationId: InvocationId | number): InvocationDesc | undefined {
-    return this._invocations.get(invocationId as InvocationId);
+    const desc = this._invocations.get(invocationId as InvocationId);
+    return desc ? structuredClone(desc) : undefined;
   }
 
   /**
    * Updates an invocation's presentation descriptor (viewport, filters, clearColor, etc.).
-   * Preserves realmId and targetId as strictly immutable.
-   * Multiple calls within the same frame are coalesced into a single ABI update before dispatch.
    */
   updateInvocation(
     invocationId: InvocationId | number,
@@ -218,13 +281,20 @@ export class MultiverseCoordinator {
     if ('realmId' in patch || 'targetId' in patch) {
       throw new Error('Cannot mutate realmId or targetId of an existing invocation.');
     }
+    if (
+      patch.zIndex !== undefined &&
+      (!Number.isInteger(patch.zIndex) || patch.zIndex < -2147483648 || patch.zIndex > 2147483647)
+    ) {
+      throw new Error('Invocation zIndex must be a signed 32-bit integer.');
+    }
 
-    if (patch.viewport !== undefined) inv.viewport = { ...patch.viewport };
+    if (patch.viewport !== undefined) inv.viewport = structuredClone(patch.viewport);
     if (patch.zIndex !== undefined) inv.zIndex = patch.zIndex;
     if (patch.cameraSlot !== undefined) inv.cameraSlot = patch.cameraSlot ?? undefined;
-    if (patch.filters !== undefined) inv.filters = [...patch.filters];
+    if (patch.filters !== undefined) inv.filters = structuredClone(patch.filters);
     if (patch.enabled !== undefined) inv.enabled = patch.enabled;
-    if (patch.clearColor !== undefined) inv.clearColor = patch.clearColor ?? undefined;
+    if (patch.clearColor !== undefined)
+      inv.clearColor = patch.clearColor ? [...patch.clearColor] : undefined;
     if (patch.antiAliasing !== undefined) inv.antiAliasing = patch.antiAliasing ?? undefined;
 
     const existing = this._dirtyInvocations.get(id) ?? {};
@@ -249,6 +319,9 @@ export class MultiverseCoordinator {
       if (patch.enabled !== undefined && this._engine.multiverseSetInvocationEnabled) {
         this._engine.multiverseSetInvocationEnabled(id, inv.enabled ?? true);
       }
+      if (patch.zIndex !== undefined && this._engine.multiverseSetInvocationZIndex) {
+        this._engine.multiverseSetInvocationZIndex(id, inv.zIndex ?? 0);
+      }
       if (patch.filters !== undefined && this._engine.multiverseSetInvocationFilters) {
         this._engine.multiverseSetInvocationFilters(id, inv.filters ?? []);
       }
@@ -272,77 +345,63 @@ export class MultiverseCoordinator {
    */
   destroyInvocation(invocationId: InvocationId | number): void {
     const id = invocationId as InvocationId;
-    if (!this._invocations.has(id)) return;
-    if (this._engine) {
+    const desc = this._invocations.get(id);
+    if (!desc) return;
+    if (this._engine && this._boundInvocations.has(id)) {
       this._engine.multiverseDestroyInvocation(id);
     }
+    this._forgetInvocation(id);
+  }
+
+  private _forgetInvocation(id: InvocationId): void {
     this._dirtyInvocations.delete(id);
     this._invocations.delete(id);
-    this._invocationRealms.delete(id);
-  }
-
-  /**
-   * Enables or disables an invocation.
-   */
-  setInvocationEnabled(invocationId: InvocationId | number, enabled: boolean): void {
-    this.updateInvocation(invocationId, { enabled });
-  }
-
-  /**
-   * Updates the responsive viewport rectangle of an invocation.
-   */
-  setInvocationViewport(invocationId: InvocationId | number, viewport: ViewportRect): void {
-    this.updateInvocation(invocationId, { viewport });
-  }
-
-  /**
-   * Updates the post-process filter chain for an invocation.
-   */
-  setInvocationFilters(invocationId: InvocationId | number, filters: InvocationFilter[]): void {
-    this.updateInvocation(invocationId, { filters });
-  }
-
-  /**
-   * Updates the clear color of an invocation.
-   */
-  setInvocationClearColor(
-    invocationId: InvocationId | number,
-    r: number,
-    g: number,
-    b: number,
-    a: number,
-    hasClear = true
-  ): void {
-    this.updateInvocation(invocationId, { clearColor: hasClear ? [r, g, b, a] : null });
-  }
-
-  /**
-   * Updates the camera slot bound to an existing invocation.
-   */
-  setInvocationCameraSlot(
-    invocationId: InvocationId | number,
-    cameraSlot: number,
-    hasSlot = true
-  ): void {
-    this.updateInvocation(invocationId, { cameraSlot: hasSlot ? cameraSlot : null });
+    this._boundInvocations.delete(id);
   }
 
   /**
    * Binds an output target texture to a realm input slot (e.g. portal or render-to-texture).
    */
   bindTargetTexture(binding: TargetTextureBinding): void {
+    const target = this._targets.get(binding.sourceTargetId as TargetId);
+    if (!target || target.kind.type !== 'texture')
+      throw new Error('Texture binding requires a registered texture target.');
+    if (!this._realms.has(binding.realmId as RealmId))
+      throw new Error(`Realm ${binding.realmId} is not registered.`);
     if (this._engine) {
       this._engine.multiverseBindTargetTexture(binding);
+      this._recordBoundBinding(binding);
     }
+    this._presentationLinks.bind(binding);
   }
 
   /**
    * Unbinds a target texture from a realm input slot.
    */
   unbindTargetTexture(realmId: RealmId | number, slot: string): void {
-    if (this._engine) {
+    if (this._engine && this._boundBindings.get(realmId as RealmId)?.has(slot)) {
       this._engine.multiverseUnbindTargetTexture(realmId as RealmId, slot);
     }
+    this._boundBindings.get(realmId as RealmId)?.delete(slot);
+    this._presentationLinks.unbind(realmId, slot);
+  }
+
+  /** @internal Called only after a surface-to-texture mapping has been verified. */
+  connectPresentationSurface(surface: PresentationSurface): void {
+    assertValidLogicalId(surface.entityId, 'EntityId');
+    this._presentationLinks.connectSurface(surface);
+  }
+  /** @internal Removes a verified surface mapping. */
+  disconnectPresentationSurface(surface: PresentationSurface): void {
+    this._presentationLinks.disconnectSurface(surface);
+  }
+  /** @internal Called after the platform window has actually closed. */
+  windowClosed(windowId: number): void {
+    this._presentation.windowClosed(windowId);
+  }
+  /** @internal Called when a platform window becomes available. */
+  windowOpened(windowId: number): void {
+    this._presentation.windowOpened(windowId);
   }
 
   /**
@@ -371,8 +430,6 @@ export class MultiverseCoordinator {
     for (const realm of this._realms.values()) {
       if (typeof realm.preRender === 'function') {
         realm.preRender(context);
-      } else if ('step' in realm && typeof (realm as any).step === 'function') {
-        (realm as any).step(context);
       }
     }
   }
@@ -389,34 +446,11 @@ export class MultiverseCoordinator {
   }
 
   /**
-   * Steps all registered realms with the system context.
-   */
-  stepRealms(context: SystemContext): void {
-    for (const realm of this._realms.values()) {
-      if ('step' in realm && typeof (realm as any).step === 'function') {
-        (realm as any).step(context);
-      }
-    }
-  }
-
-  /**
    * Synchronizes all realm states into the native/WASM core.
    */
   syncRealms(context?: SystemContext): void {
     for (const realm of this._realms.values()) {
       (realm as any).sync(context);
-    }
-  }
-
-  /**
-   * Synchronizes and steps all registered realms with system context.
-   */
-  syncAllRealms(context: SystemContext): void {
-    for (const realm of this._realms.values()) {
-      if ('step' in realm && typeof (realm as any).step === 'function') {
-        (realm as any).step(context);
-      }
-      realm.sync(context);
     }
   }
 
@@ -435,9 +469,15 @@ export class MultiverseCoordinator {
    * Dispatches the native multiverse rendering pass for all active invocations.
    */
   dispatch(frameId?: number, dt?: number): void {
-    this.flushUpdates();
-    if (this._engine) {
-      (this._engine as any).multiverseDispatch(frameId, dt);
+    if (!this._engine) return;
+    const schedule = this.resolve();
+    this._presentation.stage(schedule, this._targets, this._presentationLinks.snapshot());
+    try {
+      this._engine.multiverseDispatch(frameId ?? 0, dt ?? 0);
+      this._presentation.commit();
+    } catch (error) {
+      this._presentation.discard();
+      throw error;
     }
   }
 
@@ -465,7 +505,12 @@ export class MultiverseCoordinator {
     this._targets.clear();
     this._invocations.clear();
     this._dirtyInvocations.clear();
-    this._invocationRealms.clear();
+    this._presentation.clear();
+    this._presentationLinks.clear();
+    this._boundTargets.clear();
+    this._boundRealms.clear();
+    this._boundInvocations.clear();
+    this._boundBindings.clear();
   }
 
   /**
@@ -473,6 +518,7 @@ export class MultiverseCoordinator {
    */
   dispose(): void {
     this.reset();
+    this._presentation.dispose();
     this._engine = null;
   }
 }

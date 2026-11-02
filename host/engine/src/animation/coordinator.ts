@@ -472,10 +472,6 @@ export class AnimationCoordinator {
     };
   }
 
-  onEvent(listener: AnimationEventListener): () => void {
-    return this.on('animation', listener);
-  }
-
   clearListeners(): void {
     this._eventListeners.clear();
   }

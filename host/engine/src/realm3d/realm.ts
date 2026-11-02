@@ -149,7 +149,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
 
   reset(): void {
     if (this._disposed) throw new Error('Cannot reset a disposed Realm3D.');
-    this.world.clear();
+    this.world.reset();
     this.solver.cache.clear();
     this._geometries.clear();
     this._materials.clear();
@@ -171,7 +171,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
       this._engine.realm3dDestroy(this.realmId);
     }
     this._engine = null;
-    this.world.clear();
+    this.world.reset();
     this.solver.cache.clear();
     this._geometries.clear();
     this._materials.clear();
@@ -293,10 +293,6 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     const mesh = createMesh3D(meshId, model.modelId, desc);
     this.world.attachComponent(entityId, mesh);
     return mesh;
-  }
-
-  attachMesh(entityId: EntityId, desc: Mesh3DDesc): Mesh3DComponent {
-    return this.createMesh(entityId, desc);
   }
 
   createSkin(

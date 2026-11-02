@@ -126,13 +126,15 @@ export function validatePoint(point: readonly number[], mask: number): void {
   if (point.length !== 2 || point.some((v) => !Number.isFinite(v)) || !validateMask(mask))
     throw new Error('Invalid collider point query.');
 }
+const colliderEntries = Symbol('colliderEntries');
 abstract class ColliderComponent<S extends ColliderShape2D | ColliderShape3D> implements Component {
   abstract readonly type: string;
-  private readonly entries = new Map<number, ColliderEntry<S>>();
+  readonly [colliderEntries] = new Map<number, ColliderEntry<S>>();
   protected constructor(private readonly identity: readonly number[]) {}
   add(colliderId: number, shape: S, options: ColliderOptions = {}): this {
     assertValidLogicalId(colliderId, 'ColliderId');
-    if (this.entries.has(colliderId)) throw new Error(`Collider ${colliderId} already exists.`);
+    if (this[colliderEntries].has(colliderId))
+      throw new Error(`Collider ${colliderId} already exists.`);
     return this.set(colliderId, shape, options);
   }
   set(colliderId: number, shape: S, options: ColliderOptions = {}): this {
@@ -150,7 +152,7 @@ abstract class ColliderComponent<S extends ColliderShape2D | ColliderShape3D> im
     const mask = options.mask ?? 0xffffffff;
     if (!validateMask(layer) || !validateMask(mask))
       throw new Error('Collider layer and mask must be unsigned 32-bit integers.');
-    this.entries.set(colliderId, {
+    this[colliderEntries].set(colliderId, {
       colliderId,
       shape: structuredClone(shape),
       matrix: [...matrix],
@@ -162,11 +164,17 @@ abstract class ColliderComponent<S extends ColliderShape2D | ColliderShape3D> im
     return this;
   }
   remove(colliderId: number): boolean {
-    return this.entries.delete(colliderId);
+    return this[colliderEntries].delete(colliderId);
   }
   getShapes(): readonly ColliderEntry<S>[] {
-    return Array.from(this.entries.values(), (entry) => structuredClone(entry));
+    return Array.from(this[colliderEntries].values(), (entry) => structuredClone(entry));
   }
+}
+/** Internal query path; entries must not be mutated or retained by callers. */
+export function getColliderEntries<S extends ColliderShape2D | ColliderShape3D>(
+  component: ColliderComponent<S>
+): IterableIterator<ColliderEntry<S>> {
+  return component[colliderEntries].values();
 }
 export class Collider2DComponent extends ColliderComponent<ColliderShape2D> {
   readonly type = 'Collider2D';

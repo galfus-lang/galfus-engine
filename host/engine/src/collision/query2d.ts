@@ -5,6 +5,7 @@ import {
   type Collider2DComponent,
   type ColliderHit2D,
   type ColliderShape2D,
+  getColliderEntries,
   validatePoint,
   validateRay
 } from './components';
@@ -98,7 +99,7 @@ function eachCollider(
     const model = world.getComponent<Model2DComponent>(entityId, 'Model2D');
     const component = world.getComponent<Collider2DComponent>(entityId, 'Collider2D');
     if (!model || !component) continue;
-    for (const entry of component.getShapes()) {
+    for (const entry of getColliderEntries(component)) {
       if (seen.has(entry.colliderId))
         throw new Error(`Collider ID ${entry.colliderId} is used by more than one entity.`);
       seen.add(entry.colliderId);

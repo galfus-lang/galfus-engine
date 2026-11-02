@@ -279,7 +279,7 @@ describe('Phases F18 & F19 — Viewports, Dynamic Composition & Transitions', ()
     expect(realmGameplay.isDisposed).toBe(false);
   });
 
-  it('F19: legacy setters forward directly to updateInvocation with coalescing support', () => {
+  it('F19: coalesces viewport and enabled updates independently', () => {
     const { engine, calls } = createTrackingEngine();
     const multiverse = new MultiverseCoordinator();
     multiverse.bindEngine(engine);
@@ -296,13 +296,14 @@ describe('Phases F18 & F19 — Viewports, Dynamic Composition & Transitions', ()
       viewport: { width: { vw: 100 }, height: { vh: 100 } }
     });
 
-    // Calling legacy setters
-    multiverse.setInvocationViewport(invId, {
-      offsetX: { px: 42 },
-      width: { vw: 80 },
-      height: { vh: 80 }
+    multiverse.updateInvocation(invId, {
+      viewport: {
+        offsetX: { px: 42 },
+        width: { vw: 80 },
+        height: { vh: 80 }
+      }
     });
-    multiverse.setInvocationEnabled(invId, false);
+    multiverse.updateInvocation(invId, { enabled: false });
 
     expect(calls.multiverseSetInvocationViewport.length).toBe(0);
     expect(calls.multiverseSetInvocationEnabled.length).toBe(0);

@@ -41,7 +41,7 @@ describe('@galfus/engine > AnimationCoordinator', () => {
 
     // 3. Step and pump events
     let receivedEvents = 0;
-    anim.onEvent(() => {
+    anim.on('animation', () => {
       receivedEvents++;
     });
 

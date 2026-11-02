@@ -158,9 +158,6 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
   }
 
   /**
-   * Compatibility alias for getTarget.
-   */
-  /**
    * Returns all dependent entity IDs anchored to the given target entity in O(1) time.
    */
   getDependents(target: EntityLike): EntityId[] {

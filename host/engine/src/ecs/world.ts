@@ -292,11 +292,4 @@ export class EcsWorld implements IntentFlusher {
     this.intents.clear();
     this.systems.clear();
   }
-
-  /**
-   * Alias for `reset()`.
-   */
-  clear(): void {
-    this.reset();
-  }
 }

@@ -182,6 +182,24 @@ pub extern "C" fn galfus_multiverse_set_invocation_enabled(
     }
 }
 
+/// Updates an invocation's presentation order. Returns 0 on success, -1 on failure.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_multiverse_set_invocation_z_index(
+    invocation_id: u32,
+    z_index: i32,
+) -> i32 {
+    match with_multiverse_mut(|mv| {
+        mv.set_invocation_z_index(invocation_id, z_index)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
 /// Updates the viewport of an existing Invocation. Returns 0 on success, -1 on failure.
 ///
 /// # Safety

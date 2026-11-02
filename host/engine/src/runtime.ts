@@ -3,7 +3,6 @@
  */
 
 import {
-  type FrameCallback,
   type FrameTiming,
   GalfusLoopError,
   type GalfusTransport,
@@ -48,6 +47,10 @@ export class MultiverseRuntime {
 
   constructor(transport: GalfusTransport) {
     this.#transport = transport;
+    this.platform.window.onLifecycle((windowId, opened) => {
+      if (opened) this.multiverse.windowOpened(windowId);
+      else this.multiverse.windowClosed(windowId);
+    });
     if (transport.isDisposed) {
       this._state = 'disposed';
     } else {
@@ -231,16 +234,6 @@ export class MultiverseRuntime {
   }
 
   /**
-   * Registers a frame update callback invoked on every tick.
-   *
-   * @deprecated Prefer `runtime.on('tick', callback)`.
-   * @returns Unsubscribe function to unregister the callback.
-   */
-  onTick(callback: FrameCallback): () => void {
-    return this.on('tick', callback);
-  }
-
-  /**
    * Resets the entire multiverse runtime, realms, invocations, windows, audio, and caches,
    * keeping the transport and engine alive and ready for a fresh scene.
    */
@@ -384,7 +377,6 @@ export class MultiverseRuntime {
     this.multiverse.syncRealms(context);
 
     // 8. Resolve multiverse schedule and dispatch to GPU
-    this.multiverse.resolve();
     this.multiverse.dispatch(timing.frameId, timing.dt);
 
     // 9. Step post-render stage: postRender (metrics, cleanups) AFTER dispatch

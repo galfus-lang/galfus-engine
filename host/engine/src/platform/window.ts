@@ -42,6 +42,15 @@ export class WindowManager {
   private _engine: GalfusEngine | null = null;
   private readonly _idAllocator = new IdAllocator<WindowId>(1);
   private readonly _openWindows = new Set<WindowId>();
+  private readonly _lifecycleListeners = new Set<(windowId: WindowId, opened: boolean) => void>();
+
+  /** Observes actual window creation and closure, independent of close requests. */
+  onLifecycle(listener: (windowId: WindowId, opened: boolean) => void): () => void {
+    this._lifecycleListeners.add(listener);
+    return () => {
+      this._lifecycleListeners.delete(listener);
+    };
+  }
 
   bindEngine(engine: GalfusEngine): void {
     this._engine = engine;
@@ -67,6 +76,7 @@ export class WindowManager {
       this._engine.windowCreate(config);
     }
     this._openWindows.add(windowId);
+    for (const listener of this._lifecycleListeners) listener(windowId, true);
     return windowId;
   }
 
@@ -79,6 +89,7 @@ export class WindowManager {
       this._engine.windowClose(windowId);
     }
     this._openWindows.delete(windowId);
+    for (const listener of this._lifecycleListeners) listener(windowId, false);
   }
 
   /**
@@ -144,11 +155,6 @@ export class WindowManager {
    * Disposes and closes all active windows.
    */
   dispose(): void {
-    if (this._engine) {
-      for (const windowId of this._openWindows) {
-        this._engine.windowClose(windowId);
-      }
-    }
-    this._openWindows.clear();
+    for (const windowId of [...this._openWindows]) this.close(windowId);
   }
 }

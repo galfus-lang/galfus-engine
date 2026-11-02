@@ -33,6 +33,8 @@ The official TypeScript high-level engine runtime for **Galfus Engine**. Provide
 
 2D materials are realm-owned resources. `Realm2D.createMaterial` returns a logical ID and queues the material for the next sync or `flush()`, even if the realm is not yet bound to an engine. `destroyMaterial(id)` queues its removal without destroying entities that reference it. `reset()` and `dispose()` release the realm's materials.
 
+The Multiverse maintains a host-side `presentationGraph` rooted at targets of open windows. It is populated from the renderer's resolved schedule and published after a successful dispatch. `getWindow(windowId)` is unavailable before the first successful dispatch or after the window closes; otherwise it exposes an immutable snapshot of reachable targets, invocations, resolved viewports, render order and texture-binding candidates. The last snapshot remains available while paused and when a dispatch fails. Unchanged schedules and links reuse the existing snapshot. A texture binding alone is a candidate, not a traversable surface; future interaction code must validate and maintain surface mappings. Cycle edges sampled from the previous frame are exposed as `softCutEdges`.
+
 2D objects are drawn back to front by `zLayer`, then `drawOrder`, then logical resource ID. Set distinct layers or draw orders when overlap must remain independent of resource creation order. Changing `Model2DComponent.zLayer` or `drawOrder` is synchronized on the next frame.
 
 ## Colliders
@@ -101,3 +103,9 @@ runtime.start();
 | Direct Core transform writes in animation | Animation drives ECS `Model3DComponent`/`Model2DComponent`                                         |
 | Viewport mutations via separate setters   | Unified `coordinator.updateInvocation(id, { viewport })`                                           |
 | Fallbacks to ID `1` on missing component  | Explicit typed error thrown describing the missing component                                       |
+
+The host APIs `runtime.onTick`, `animation.onEvent`, `world.clear`, `realm3d.attachMesh`,
+the separate Multiverse invocation setters, `stepRealms`, and `syncAllRealms` have been removed.
+Use `runtime.on('tick', ...)`, `animation.on('animation', ...)`, `world.reset`,
+`realm3d.createMesh`, `multiverse.updateInvocation`, and the separate pre-render, sync, and
+post-render stages respectively.

@@ -421,6 +421,15 @@ pub fn multiverse_set_invocation_enabled(invocation_id: u32, enabled: bool) -> R
     .map_err(|e| Error::from_reason(Status::GenericFailure, e))
 }
 
+#[wasm_bindgen(js_name = "multiverseSetInvocationZIndex")]
+pub fn multiverse_set_invocation_z_index(invocation_id: u32, z_index: i32) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        mv.set_invocation_z_index(invocation_id, z_index)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::from_reason(Status::GenericFailure, e))
+}
+
 #[wasm_bindgen(js_name = "multiverseSetInvocationViewport")]
 pub fn multiverse_set_invocation_viewport(
     invocation_id: u32,

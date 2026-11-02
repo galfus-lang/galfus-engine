@@ -5,6 +5,7 @@ import {
   type Collider3DComponent,
   type ColliderHit3D,
   type ColliderShape3D,
+  getColliderEntries,
   validateRay
 } from './components';
 
@@ -86,7 +87,7 @@ export function raycast3D(
     const model = world.getComponent<Model3DComponent>(entityId, 'Model3D');
     const component = world.getComponent<Collider3DComponent>(entityId, 'Collider3D');
     if (!model || !component) continue;
-    for (const entry of component.getShapes()) {
+    for (const entry of getColliderEntries(component)) {
       if (seen.has(entry.colliderId))
         throw new Error(`Collider ID ${entry.colliderId} is used by more than one entity.`);
       seen.add(entry.colliderId);

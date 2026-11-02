@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { createAnchor } from '../src/anchors';
 import { Collider2DComponent, Collider3DComponent } from '../src/collision';
 import { EcsWorld } from '../src/ecs/world';
@@ -8,6 +8,30 @@ import { createModel2D, type Model2DComponent } from '../src/realm2d/components'
 import { Realm3D } from '../src/realm3d/realm';
 
 describe('host collider components and spatial queries', () => {
+  it('queries colliders without cloning their shapes and protects public snapshots', () => {
+    const realm2d = new Realm2D(1);
+    const entity2d = realm2d.createSpatialNode();
+    const shape = { type: 'rectangle' as const, halfExtents: [1, 1] as [number, number] };
+    realm2d.addCollider(entity2d, shape);
+    const component = realm2d.world.getComponent<Collider2DComponent>(entity2d, 'Collider2D')!;
+    shape.halfExtents[0] = 100;
+    const snapshot = component.getShapes();
+    if (snapshot[0]!.shape.type === 'rectangle') snapshot[0]!.shape.halfExtents[0] = 100;
+    const realm3d = new Realm3D(2);
+    const entity3d = realm3d.createSpatialNode();
+    realm3d.addCollider(entity3d, { type: 'sphere', radius: 1 });
+    const clone = spyOn(globalThis, 'structuredClone');
+    try {
+      expect(realm2d.queryPoint([2, 0])).toHaveLength(0);
+      expect(realm2d.raycast([-3, 0], [1, 0], 10)).toHaveLength(1);
+      expect(realm3d.raycast([-3, 0, 0], [1, 0, 0], 10)).toHaveLength(1);
+      expect(clone).not.toHaveBeenCalled();
+    } finally {
+      clone.mockRestore();
+      realm2d.dispose();
+      realm3d.dispose();
+    }
+  });
   it('transforms hit normals through rotated non-uniform collider transforms', () => {
     const realm = new Realm2D(1);
     const entity = realm.createSpatialNode({ rotation: Math.PI / 2, scale: [2, 1] });

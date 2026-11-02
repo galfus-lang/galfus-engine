@@ -54,7 +54,7 @@ describe('@galfus/engine > Multiverse', () => {
       viewport: { width: { px: 800 }, height: { px: 600 } }
     });
 
-    coordinator.syncAllRealms({ time: 0, dt: 0.016, frameId: 1, engine: mockEngine });
+    coordinator.syncRealms({ time: 0, dt: 0.016, frameId: 1, engine: mockEngine });
     const schedule = coordinator.resolve();
     expect(schedule).toBeDefined();
 

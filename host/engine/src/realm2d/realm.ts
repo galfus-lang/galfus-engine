@@ -112,7 +112,7 @@ export class Realm2D implements RealmConnector {
 
   reset(): void {
     if (this._disposed) throw new Error('Cannot reset a disposed Realm2D.');
-    this.world.clear();
+    this.world.reset();
     this.solver.cache.clear();
     this._materials.clear();
     this._preRenderSteppedFrame = -1;
@@ -132,7 +132,7 @@ export class Realm2D implements RealmConnector {
       this._engine.realm2dDestroy(this.realmId);
     }
     this._engine = null;
-    this.world.clear();
+    this.world.reset();
     this.solver.cache.clear();
     this._materials.clear();
   }
