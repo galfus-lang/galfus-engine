@@ -51,6 +51,34 @@ pub fn window_set_title(window_id: u32, title: String) -> Result<()> {
 }
 
 #[napi]
+pub fn window_set_ime_allowed(window_id: u32, allowed: u32) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.get_window_mut(window_id)
+            .map_err(|e| e.to_string())?
+            .set_ime_allowed(allowed != 0)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn window_set_ime_cursor_area(
+    window_id: u32,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.get_window_mut(window_id)
+            .map_err(|e| e.to_string())?
+            .set_ime_cursor_area(x, y, width, height)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
 pub fn window_set_cursor_grab(window_id: u32, mode: u32) -> Result<()> {
     let grab_mode = match mode {
         1 => CursorGrabMode::Confined,

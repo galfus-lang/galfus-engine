@@ -84,6 +84,29 @@ export const platformFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_window_set_ime_allowed',
+    methodName: 'windowSetImeAllowed',
+    doc: 'Enables or disables input method composition for a window.',
+    params: [
+      { name: 'windowId', type: 'u32', doc: 'Window logical ID' },
+      { name: 'allowed', type: 'u32', doc: 'One to enable, zero to disable' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_window_set_ime_cursor_area',
+    methodName: 'windowSetImeCursorArea',
+    doc: 'Sets the input method candidate area in physical window pixels.',
+    params: [
+      { name: 'windowId', type: 'u32', doc: 'Window logical ID' },
+      { name: 'x', type: 'i32', doc: 'Horizontal position' },
+      { name: 'y', type: 'i32', doc: 'Vertical position' },
+      { name: 'width', type: 'u32', doc: 'Cursor width' },
+      { name: 'height', type: 'u32', doc: 'Cursor height' }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_window_set_cursor_grab',
     methodName: 'windowSetCursorGrab',
     doc: 'Updates the cursor grab mode (0: None, 1: Confined, 2: Locked).',

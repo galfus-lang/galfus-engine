@@ -43,6 +43,8 @@ pub struct BrowserWindow {
     canvas: Option<web_sys::HtmlCanvasElement>,
     #[cfg(all(target_arch = "wasm32", feature = "browser"))]
     resize_observer: Option<BrowserResizeObserver>,
+    #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+    ime: Option<super::browser_ime::BrowserIme>,
 }
 
 impl BrowserWindow {
@@ -72,6 +74,8 @@ impl BrowserWindow {
             canvas: None,
             #[cfg(all(target_arch = "wasm32", feature = "browser"))]
             resize_observer: None,
+            #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+            ime: None,
         };
 
         #[cfg(all(target_arch = "wasm32", feature = "browser"))]
@@ -93,6 +97,50 @@ impl BrowserWindow {
     /// Returns the DOM element ID for this canvas.
     pub fn canvas_id(&self) -> &str {
         &self.canvas_id
+    }
+
+    /// Enables or disables the browser input method bridge.
+    pub fn set_ime_allowed(&mut self, allowed: bool) -> PlatformResult<()> {
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        {
+            if allowed {
+                if self.ime.is_none() {
+                    self.ime = Some(super::browser_ime::BrowserIme::new(self.id)?);
+                }
+                self.ime.as_mut().unwrap().enable()?;
+            } else if let Some(ime) = &mut self.ime {
+                ime.disable()?;
+            }
+        }
+        #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
+        let _ = allowed;
+        Ok(())
+    }
+
+    /// Sets the candidate area in physical canvas pixels.
+    pub fn set_ime_cursor_area(
+        &mut self,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    ) -> PlatformResult<()> {
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        if let (Some(ime), Some(canvas)) = (&mut self.ime, &self.canvas) {
+            ime.set_cursor_area(canvas, x, y, width, height)?;
+        }
+        #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
+        let _ = (x, y, width, height);
+        Ok(())
+    }
+
+    /// Drains input method events queued by the browser.
+    pub fn drain_ime_events(&self) -> Vec<crate::keyboard::KeyboardEvent> {
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        if let Some(ime) = &self.ime {
+            return ime.drain();
+        }
+        Vec::new()
     }
 
     /// Returns the document/tab title.

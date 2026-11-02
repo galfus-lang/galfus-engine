@@ -35,6 +35,19 @@ pub enum KeyboardEvent {
         /// New modifier state.
         modifiers: ModifiersState,
     },
+    /// The window's input method is enabled.
+    ImeEnabled { window_id: u32 },
+    /// Temporary composition text and optional selection in UTF-16 code units.
+    ImePreedit {
+        window_id: u32,
+        text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        selection: Option<[u32; 2]>,
+    },
+    /// Text confirmed by the input method.
+    ImeCommit { window_id: u32, text: String },
+    /// The window's input method is disabled.
+    ImeDisabled { window_id: u32 },
 }
 
 impl KeyboardEvent {
@@ -42,7 +55,12 @@ impl KeyboardEvent {
     #[inline]
     pub const fn window_id(&self) -> u32 {
         match *self {
-            Self::Input { window_id, .. } | Self::ModifiersChanged { window_id, .. } => window_id,
+            Self::Input { window_id, .. }
+            | Self::ModifiersChanged { window_id, .. }
+            | Self::ImeEnabled { window_id }
+            | Self::ImePreedit { window_id, .. }
+            | Self::ImeCommit { window_id, .. }
+            | Self::ImeDisabled { window_id } => window_id,
         }
     }
 
@@ -51,6 +69,7 @@ impl KeyboardEvent {
     pub const fn modifiers(&self) -> ModifiersState {
         match *self {
             Self::Input { modifiers, .. } | Self::ModifiersChanged { modifiers, .. } => modifiers,
+            _ => ModifiersState::EMPTY,
         }
     }
 
@@ -59,7 +78,7 @@ impl KeyboardEvent {
     pub const fn state(&self) -> Option<KeyState> {
         match *self {
             Self::Input { state, .. } => Some(state),
-            Self::ModifiersChanged { .. } => None,
+            _ => None,
         }
     }
 
@@ -68,7 +87,7 @@ impl KeyboardEvent {
     pub const fn is_pressed(&self) -> bool {
         match *self {
             Self::Input { state, .. } => state.is_pressed(),
-            Self::ModifiersChanged { .. } => false,
+            _ => false,
         }
     }
 
@@ -77,7 +96,7 @@ impl KeyboardEvent {
     pub const fn physical_key(&self) -> Option<KeyCode> {
         match *self {
             Self::Input { physical_key, .. } => Some(physical_key),
-            Self::ModifiersChanged { .. } => None,
+            _ => None,
         }
     }
 }

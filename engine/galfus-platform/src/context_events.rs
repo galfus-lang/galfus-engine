@@ -12,6 +12,54 @@ pub(super) struct EventCollector<'a> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+fn map_ime(window_id: u32, ime: winit::event::Ime) -> KeyboardEvent {
+    use winit::event::Ime;
+    match ime {
+        Ime::Enabled => KeyboardEvent::ImeEnabled { window_id },
+        Ime::Disabled => KeyboardEvent::ImeDisabled { window_id },
+        Ime::Commit(text) => KeyboardEvent::ImeCommit { window_id, text },
+        Ime::Preedit(text, selection) => {
+            let selection = selection.and_then(|(start, end)| {
+                Some([
+                    u32::try_from(text.get(..start)?.encode_utf16().count()).ok()?,
+                    u32::try_from(text.get(..end)?.encode_utf16().count()).ok()?,
+                ])
+            });
+            KeyboardEvent::ImePreedit {
+                window_id,
+                text,
+                selection,
+            }
+        }
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod ime_tests {
+    use super::*;
+    #[test]
+    fn maps_preedit_byte_selection_to_utf16() {
+        let text = "あ😀x".to_string();
+        assert_eq!(
+            map_ime(7, winit::event::Ime::Preedit(text.clone(), Some((3, 7)))),
+            KeyboardEvent::ImePreedit {
+                window_id: 7,
+                text: text.clone(),
+                selection: Some([1, 3])
+            }
+        );
+        assert_eq!(
+            map_ime(7, winit::event::Ime::Preedit(text.clone(), Some((1, 7)))),
+            KeyboardEvent::ImePreedit {
+                window_id: 7,
+                text,
+                selection: None
+            }
+        );
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl<'a> ApplicationHandler for EventCollector<'a> {
     fn resumed(&mut self, _event_loop: &ActiveEventLoop) {}
 
@@ -198,6 +246,10 @@ impl<'a> ApplicationHandler for EventCollector<'a> {
                             modifiers: active_mods,
                             repeat,
                         }));
+                }
+                WinitWindowEvent::Ime(ime) => {
+                    self.events
+                        .push(PlatformEvent::Keyboard(map_ime(logical_id, ime)));
                 }
                 _ => {}
             }

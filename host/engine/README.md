@@ -54,6 +54,26 @@ component?.remove(colliderId);
 
 ---
 
+## Input methods
+
+Enable IME only while a text target is focused, and provide its caret area in physical window pixels so the platform can position its candidate UI:
+
+```typescript
+runtime.platform.window.setImeAllowed(windowId, true);
+runtime.platform.window.setImeCursorArea(windowId, x, y, width, height);
+const off = runtime.on('keyboard', (event) => {
+  if (event.type === 'imePreedit') console.log('Preview:', event.text, event.selection);
+  if (event.type === 'imeCommit') console.log('Confirmed:', event.text);
+});
+// On blur or disposal:
+runtime.platform.window.setImeAllowed(windowId, false);
+off();
+```
+
+Selection offsets, when supplied, use UTF-16 code units within the preedit text. The browser does not expose this selection in composition events. The browser input bridge takes DOM focus and releases it on disable or focus loss; enable it from a user interaction when the browser requires a user gesture.
+
+---
+
 ## Quick Start
 
 ```typescript

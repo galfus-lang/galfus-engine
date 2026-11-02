@@ -11,6 +11,47 @@ import type {
 import { MultiverseRuntime } from '../src/runtime';
 
 describe('@galfus/engine > Unified Event System (.on and off)', () => {
+  it('forwards ordered IME events to keyboard listeners', () => {
+    const pending: PlatformEvent[] = [
+      { kind: 'keyboard', type: 'imeEnabled', windowId: 1 },
+      { kind: 'keyboard', type: 'imePreedit', windowId: 1, text: 'あ😀', selection: [1, 3] },
+      { kind: 'keyboard', type: 'imeCommit', windowId: 1, text: '漢字' },
+      { kind: 'keyboard', type: 'imeDisabled', windowId: 1 }
+    ];
+    const engine = {
+      platformPumpEvents: () => pending.splice(0),
+      multiverseResolve: () => {},
+      multiverseDispatch: () => {}
+    } as unknown as GalfusEngine;
+    const transport = {
+      engine,
+      isInitialized: true,
+      isDisposed: false,
+      isRunning: false,
+      startLoop: () => {},
+      stopLoop: () => {},
+      dispose: () => {}
+    } as unknown as GalfusTransport;
+    const runtime = new MultiverseRuntime(transport);
+    runtime.platform.bindEngine(engine);
+    const events: PlatformEvent[] = [];
+    runtime.on('keyboard', (event) => events.push(event));
+    advanceFrame(runtime, transport);
+    expect(events.map((event) => event.type)).toEqual([
+      'imeEnabled',
+      'imePreedit',
+      'imeCommit',
+      'imeDisabled'
+    ]);
+    expect(events[1]).toEqual({
+      kind: 'keyboard',
+      type: 'imePreedit',
+      windowId: 1,
+      text: 'あ😀',
+      selection: [1, 3]
+    });
+    runtime.dispose();
+  });
   it('dispatches tick events and supports functional unsubscription', () => {
     const mockTransport: GalfusTransport = {
       engine: { multiverseDispatch: () => {} } as unknown as GalfusEngine,

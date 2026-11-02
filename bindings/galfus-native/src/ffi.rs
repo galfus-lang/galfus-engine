@@ -217,6 +217,48 @@ pub unsafe extern "C" fn galfus_window_set_title(window_id: u32, title: *const c
     }
 }
 
+/// Enables or disables input method composition for a window.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_window_set_ime_allowed(window_id: u32, allowed: u32) -> i32 {
+    let result = with_context_mut(|ctx| {
+        ctx.get_window_mut(window_id)
+            .map_err(|e| e.to_string())?
+            .set_ime_allowed(allowed != 0)
+            .map_err(|e| e.to_string())
+    });
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
+            set_last_error(&error);
+            -1
+        }
+    }
+}
+
+/// Sets the IME candidate area in physical window pixels.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_window_set_ime_cursor_area(
+    window_id: u32,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> i32 {
+    let result = with_context_mut(|ctx| {
+        ctx.get_window_mut(window_id)
+            .map_err(|e| e.to_string())?
+            .set_ime_cursor_area(x, y, width, height)
+            .map_err(|e| e.to_string())
+    });
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
+            set_last_error(&error);
+            -1
+        }
+    }
+}
+
 /// Updates cursor grab mode. Mode: 0 = None, 1 = Confined, 2 = Locked.
 #[unsafe(no_mangle)]
 pub extern "C" fn galfus_window_set_cursor_grab(window_id: u32, mode: u32) -> i32 {

@@ -212,6 +212,25 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
                     }
                 }
                 KeyboardEvent::ModifiersChanged { .. } => output.event_type = 2,
+                KeyboardEvent::ImeEnabled { .. } => output.event_type = 3,
+                KeyboardEvent::ImePreedit {
+                    text: value,
+                    selection,
+                    ..
+                } => {
+                    output.event_type = 4;
+                    (output.text0_offset, output.text0_length) = push_text(text, &value);
+                    if let Some([start, end]) = selection {
+                        output.flags |= FLAG_TRUE;
+                        output.subject_id = start;
+                        output.id = u64::from(end);
+                    }
+                }
+                KeyboardEvent::ImeCommit { text: value, .. } => {
+                    output.event_type = 5;
+                    (output.text0_offset, output.text0_length) = push_text(text, &value);
+                }
+                KeyboardEvent::ImeDisabled { .. } => output.event_type = 6,
             }
         }
         PlatformEvent::Gamepad(event) => {
@@ -342,6 +361,33 @@ mod tests {
         .unwrap();
         assert_eq!(logical_key, "w");
         release_event_batch(batch.batch_id).unwrap();
+    }
+
+    #[test]
+    fn ime_event_encoding_preserves_text_and_utf16_selection() {
+        let mut text = Vec::new();
+        let event = encode_event(
+            PlatformEvent::Keyboard(KeyboardEvent::ImePreedit {
+                window_id: 9,
+                text: "あ😀".into(),
+                selection: Some([1, 3]),
+            }),
+            &mut text,
+        );
+        assert_eq!((event.kind, event.event_type, event.window_id), (3, 4, 9));
+        assert_eq!(
+            (event.subject_id, event.id, event.flags & FLAG_TRUE),
+            (1, 3, FLAG_TRUE)
+        );
+        assert_eq!(std::str::from_utf8(&text).unwrap(), "あ😀");
+        let commit = encode_event(
+            PlatformEvent::Keyboard(KeyboardEvent::ImeCommit {
+                window_id: 9,
+                text: "漢字".into(),
+            }),
+            &mut Vec::new(),
+        );
+        assert_eq!(commit.event_type, 5);
     }
 
     #[test]

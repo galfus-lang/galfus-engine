@@ -55,6 +55,27 @@ impl NativeWindow {
         &self.window
     }
 
+    /// Enables input method composition for this window.
+    pub fn set_ime_allowed(&mut self, allowed: bool) -> PlatformResult<()> {
+        self.window.set_ime_allowed(allowed);
+        Ok(())
+    }
+
+    /// Sets the IME candidate area in physical window pixels.
+    pub fn set_ime_cursor_area(
+        &mut self,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    ) -> PlatformResult<()> {
+        self.window.set_ime_cursor_area(
+            PhysicalPosition::new(x, y),
+            PhysicalSize::new(width, height),
+        );
+        Ok(())
+    }
+
     /// Returns the current title of the window.
     pub fn title(&self) -> &str {
         &self.current_title

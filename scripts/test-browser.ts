@@ -145,6 +145,41 @@ async function main(): Promise<void> {
           throw new Error('platformPumpEvents() did not report the canvas resize');
         }
 
+        galfus.windowSetImeAllowed(windowId, 1);
+        galfus.windowSetImeCursorArea(windowId, 40, 50, 2, 20);
+        const input = document.activeElement;
+        if (!(input instanceof HTMLTextAreaElement)) throw new Error('IME input was not focused');
+        input.dispatchEvent(new CompositionEvent('compositionupdate', { data: 'かな' }));
+        input.dispatchEvent(new CompositionEvent('compositionend', { data: '漢字' }));
+        const imeEvents = galfus.platformPumpEvents().filter((event) => event.kind === 'keyboard');
+        if (imeEvents.map((event) => event.type).join(',') !== 'imeEnabled,imePreedit,imePreedit,imeCommit' || imeEvents[1].text !== 'かな' || imeEvents[3].text !== '漢字') {
+          throw new Error('IME composition events were not delivered in order');
+        }
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA' }));
+        const key = galfus.platformPumpEvents().find((event) => event.type === 'input');
+        if (!key || key.text !== 'a' || key.physicalKey !== 'keyA') {
+          throw new Error('Keyboard input was not delivered while IME was enabled');
+        }
+        galfus.windowSetImeAllowed(windowId, 0);
+        if (!galfus.platformPumpEvents().some((event) => event.type === 'imeDisabled')) {
+          throw new Error('IME disable event was not delivered');
+        }
+        galfus.windowSetImeAllowed(windowId, 1);
+        galfus.platformPumpEvents();
+        input.blur();
+        if (!galfus.platformPumpEvents().some((event) => event.type === 'imeDisabled')) {
+          throw new Error('IME focus loss was not reported');
+        }
+        input.dispatchEvent(new CompositionEvent('compositionend', { data: 'late' }));
+        if (galfus.platformPumpEvents().some((event) => event.type === 'imeCommit')) {
+          throw new Error('IME events were delivered after focus loss');
+        }
+        galfus.windowSetImeAllowed(windowId, 1);
+        if (document.activeElement !== input) throw new Error('IME input did not regain focus');
+        galfus.windowClose(windowId);
+        windowId = undefined;
+        if (input.isConnected) throw new Error('IME input was not removed when the window closed');
+
         document.body.dataset.status = 'passed';
       } catch (error) {
         document.body.dataset.status = 'failed';

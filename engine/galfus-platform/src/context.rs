@@ -447,12 +447,22 @@ impl PlatformContext {
     #[cfg(target_arch = "wasm32")]
     pub fn pump_events(&mut self) -> PlatformResult<Vec<PlatformEvent>> {
         self.reap_finished_audio_voices();
-        Ok(self
-            .windows
-            .values()
-            .flat_map(|window| window.drain_resize_events())
-            .map(PlatformEvent::Window)
-            .collect())
+        let mut events = Vec::new();
+        for window in self.windows.values() {
+            events.extend(
+                window
+                    .drain_resize_events()
+                    .into_iter()
+                    .map(PlatformEvent::Window),
+            );
+            events.extend(
+                window
+                    .drain_ime_events()
+                    .into_iter()
+                    .map(PlatformEvent::Keyboard),
+            );
+        }
+        Ok(events)
     }
 }
 

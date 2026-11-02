@@ -1,4 +1,6 @@
 pub mod browser;
+#[cfg(all(target_arch = "wasm32", feature = "browser"))]
+mod browser_ime;
 pub mod event;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;

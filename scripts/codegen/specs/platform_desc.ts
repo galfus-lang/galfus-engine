@@ -191,6 +191,30 @@ export const platformDescriptors: DescSpec[] = [
           windowId: { type: 'number' },
           modifiers: { type: { ref: 'ModifiersState' } }
         }
+      },
+      ...(['imeEnabled', 'imeDisabled'] as const).map((type) => ({
+        inline: {
+          kind: { type: { literal: 'keyboard' as const } },
+          type: { type: { literal: type } },
+          windowId: { type: 'number' as const }
+        }
+      })),
+      {
+        inline: {
+          kind: { type: { literal: 'keyboard' } },
+          type: { type: { literal: 'imePreedit' } },
+          windowId: { type: 'number' },
+          text: { type: 'string' },
+          selection: { type: { tuple: ['number', 'number'] }, optional: true }
+        }
+      },
+      {
+        inline: {
+          kind: { type: { literal: 'keyboard' } },
+          type: { type: { literal: 'imeCommit' } },
+          windowId: { type: 'number' },
+          text: { type: 'string' }
+        }
       }
     ]
   },

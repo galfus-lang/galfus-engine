@@ -101,6 +101,16 @@ export class WindowManager {
     }
   }
 
+  /** Enables or disables input method composition for a window. */
+  setImeAllowed(windowId: WindowId, allowed: boolean): void {
+    this._engine?.windowSetImeAllowed(windowId, allowed ? 1 : 0);
+  }
+
+  /** Sets the input method candidate area in physical window pixels. */
+  setImeCursorArea(windowId: WindowId, x: number, y: number, width: number, height: number): void {
+    this._engine?.windowSetImeCursorArea(windowId, x, y, width, height);
+  }
+
   /**
    * Retrieves the physical inner surface dimensions [width, height].
    */
