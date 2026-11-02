@@ -5,6 +5,7 @@ function printHelp(): void {
   console.log('Available host demos:');
   console.log('  interaction  Pointer interactions with 2D, SVG, and 3D targets');
   console.log('  text-input   SVG text input, focus, and keyboard navigation');
+  console.log('  trans-realm  Multi-realm event traversal, depth limits, and focus isolation');
   console.log('  tutorial     Host runtime tutorial with a 3D scene and 2D HUD');
 }
 
@@ -25,6 +26,11 @@ async function main(): Promise<void> {
     case 'text-input': {
       const { runTextInputDemo } = await import('./text-input');
       await runTextInputDemo();
+      break;
+    }
+    case 'trans-realm': {
+      const { runTransRealmDemo } = await import('./trans-realm');
+      await runTransRealmDemo();
       break;
     }
     case 'tutorial': {

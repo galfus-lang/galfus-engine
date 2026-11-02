@@ -1,6 +1,7 @@
 import type { PointerButton, PointerEvent } from '@galfus/transport-types';
 import type { Component } from '../ecs/component';
 import type { MultiverseCoordinator } from '../multiverse/coordinator';
+import type { PresentationConnection, WindowPresentation } from '../multiverse/presentation-graph';
 import { Realm2D } from '../realm2d/realm';
 import { Realm3D } from '../realm3d/realm';
 import type { Model2DComponent, Svg2DComponent } from '../realm2d/components';
@@ -38,6 +39,7 @@ interface PointerState {
   event: PointerEvent;
   hover?: InteractiveListener;
   pressed: Map<PointerButton | number, InteractiveListener>;
+  positions: Map<InteractiveListener, [number, number]>;
 }
 interface RealmState {
   realm: Realm2D | Realm3D;
@@ -74,7 +76,10 @@ export class InteractiveSystem {
     )
       return undefined;
     let order = 0;
-    for (const targetId of view.rootTargetIds) {
+    const visited = new Set<number>();
+    const traverse = (targetId: number, depth: number): number | undefined => {
+      if (depth > 3 || visited.has(targetId)) return undefined;
+      visited.add(targetId);
       for (const id of view.getInvocations(targetId)) {
         const invocation = view.getInvocation(id);
         if (invocation?.realmId === listener.realmId) {
@@ -85,7 +90,25 @@ export class InteractiveSystem {
               return order;
         }
         order++;
+        if (depth < 3) {
+          for (const conn of view.connections) {
+            if (conn.realmId === invocation?.realmId && !visited.has(conn.sourceTargetId)) {
+              const isCut = view.softCutEdges.some(
+                ([src, dst]) => src === conn.sourceTargetId && dst === targetId
+              );
+              if (!isCut) {
+                const found = traverse(conn.sourceTargetId, depth + 1);
+                if (found !== undefined) return found;
+              }
+            }
+          }
+        }
       }
+      return undefined;
+    };
+    for (const targetId of view.rootTargetIds) {
+      const found = traverse(targetId, 1);
+      if (found !== undefined) return found;
     }
     return undefined;
   }
@@ -177,6 +200,7 @@ export class InteractiveSystem {
     realmState?.records.delete(record);
     for (const pointers of this.pointers.values())
       for (const pointer of pointers.values()) {
+        pointer.positions.delete(listener);
         if (pointer.hover === listener) pointer.hover = undefined;
         for (const [button, pressed] of pointer.pressed)
           if (pressed === listener) pointer.pressed.delete(button);
@@ -236,106 +260,195 @@ export class InteractiveSystem {
     if (removed) for (const record of removed) record.listener.dispose();
   }
 
-  private pick(event: PointerEvent): InteractiveListener | undefined {
+  private pick(
+    event: PointerEvent
+  ): { listener: InteractiveListener; localPos?: [number, number] } | undefined {
     const view = this.multiverse.presentationGraph.getWindow(event.windowId);
     if (!view) return;
+    const visited = new Set<number>();
+    const localPos: [number, number] = [0, 0];
     for (let r = view.rootTargetIds.length - 1; r >= 0; r--) {
-      const ids = view.getInvocations(view.rootTargetIds[r]!);
-      for (let i = ids.length - 1; i >= 0; i--) {
-        const invocation = view.getInvocation(ids[i]!)!;
-        const realm = this.realms.get(invocation.realmId);
-        if (!realm || realm.realm.isDisposed) continue;
-        const slot = invocation.cameraSlot;
-        const cameras = realm.realm instanceof Realm2D ? realm.cameras2D : realm.cameras3D;
-        let camera: CameraSnapshot2D | CameraSnapshot3D | undefined;
-        for (const item of cameras)
-          if (item.slot === (slot ?? 0) || (slot !== undefined && item.id === slot)) {
-            camera = item;
-            break;
-          }
-        if (!camera) continue;
-        let best: TargetRecord | undefined;
-        let closest = Infinity;
-        let maxDistance: number | undefined;
-        if (realm.realm instanceof Realm2D) {
-          if (
-            !pointerToWorld2D(
-              this.worldPoint,
-              event.position[0],
-              event.position[1],
-              invocation.resolvedViewport,
-              camera as CameraSnapshot2D
-            )
-          )
-            continue;
-        } else {
-          maxDistance = pointerToRay3D(
-            this.rayOrigin,
-            this.rayDirection,
-            event.position[0],
-            event.position[1],
-            invocation.resolvedViewport,
-            camera as CameraSnapshot3D
-          );
-          if (maxDistance === undefined) continue;
-        }
-        for (const record of realm.records) {
-          if (
-            record.realm !== realm.realm ||
-            record.realm.world.getComponent(record.entityId, record.model.type) !== record.model ||
-            record.realm.world.getComponent(record.entityId, record.component.type) !==
-              record.component
-          )
-            continue;
-          if (record.snapshot instanceof TargetSnapshot3D && maxDistance !== undefined) {
-            const distance = record.snapshot.distance(
-              this.rayOrigin,
-              this.rayDirection,
-              maxDistance
-            );
-            if (distance !== undefined && distance < closest) {
-              closest = distance;
-              best = record;
-            }
-          } else if (
-            record.snapshot instanceof TargetSnapshot2D &&
-            record.snapshot.contains(this.worldPoint, record.listener.target)
-          ) {
-            const a = record.snapshot,
-              b = best?.snapshot as TargetSnapshot2D | undefined;
-            const camera2d = camera as CameraSnapshot2D;
-            const depth = 10 - a.zLayer;
-            if (depth < camera2d.near || depth > camera2d.far) continue;
-            if (
-              !b ||
-              a.zLayer > b.zLayer ||
-              (a.zLayer === b.zLayer &&
-                (a.drawOrder > b.drawOrder ||
-                  (a.drawOrder === b.drawOrder && a.resourceId > b.resourceId)))
-            )
-              best = record;
-          }
-        }
-        if (best) return best.listener;
+      const rootId = view.rootTargetIds[r]!;
+      visited.add(rootId);
+      const hit = this.pickInTarget(view, rootId, event.position, 1, visited, localPos);
+      visited.delete(rootId);
+      if (hit) {
+        return {
+          listener: hit.listener,
+          localPos: hit.transformed ? [localPos[0], localPos[1]] : undefined
+        };
       }
     }
+    return undefined;
+  }
+
+  private pickInTarget(
+    view: WindowPresentation,
+    targetId: number,
+    position: [number, number],
+    depth: number,
+    visitedTargets: Set<number>,
+    outLocalPos: [number, number]
+  ): { listener: InteractiveListener; transformed: boolean } | undefined {
+    const ids = view.getInvocations(targetId);
+    for (let i = ids.length - 1; i >= 0; i--) {
+      const invocation = view.getInvocation(ids[i]!)!;
+      const realm = this.realms.get(invocation.realmId);
+      if (!realm || realm.realm.isDisposed) continue;
+      const slot = invocation.cameraSlot;
+      const cameras = realm.realm instanceof Realm2D ? realm.cameras2D : realm.cameras3D;
+      let camera: CameraSnapshot2D | CameraSnapshot3D | undefined;
+      for (const item of cameras)
+        if (item.slot === (slot ?? 0) || (slot !== undefined && item.id === slot)) {
+          camera = item;
+          break;
+        }
+      if (!camera) continue;
+      let best: TargetRecord | undefined;
+      let closest = Infinity;
+      let maxDistance: number | undefined;
+      const bestUv: [number, number] = [0.5, 0.5];
+      const currentUv: [number, number] = [0.5, 0.5];
+
+      if (realm.realm instanceof Realm2D) {
+        if (
+          !pointerToWorld2D(
+            this.worldPoint,
+            position[0],
+            position[1],
+            invocation.resolvedViewport,
+            camera as CameraSnapshot2D
+          )
+        )
+          continue;
+      } else {
+        maxDistance = pointerToRay3D(
+          this.rayOrigin,
+          this.rayDirection,
+          position[0],
+          position[1],
+          invocation.resolvedViewport,
+          camera as CameraSnapshot3D
+        );
+        if (maxDistance === undefined) continue;
+      }
+
+      for (const record of realm.records) {
+        if (
+          record.realm !== realm.realm ||
+          record.realm.world.getComponent(record.entityId, record.model.type) !== record.model ||
+          record.realm.world.getComponent(record.entityId, record.component.type) !==
+            record.component
+        )
+          continue;
+
+        if (record.snapshot instanceof TargetSnapshot3D && maxDistance !== undefined) {
+          const distance = record.snapshot.distance(
+            this.rayOrigin,
+            this.rayDirection,
+            maxDistance,
+            currentUv
+          );
+          if (distance !== undefined && distance < closest) {
+            closest = distance;
+            best = record;
+            bestUv[0] = currentUv[0];
+            bestUv[1] = currentUv[1];
+          }
+        } else if (
+          record.snapshot instanceof TargetSnapshot2D &&
+          record.snapshot.contains(this.worldPoint, record.listener.target, currentUv)
+        ) {
+          const a = record.snapshot,
+            b = best?.snapshot as TargetSnapshot2D | undefined;
+          const camera2d = camera as CameraSnapshot2D;
+          const d = 10 - a.zLayer;
+          if (d < camera2d.near || d > camera2d.far) continue;
+          if (
+            !b ||
+            a.zLayer > b.zLayer ||
+            (a.zLayer === b.zLayer &&
+              (a.drawOrder > b.drawOrder ||
+                (a.drawOrder === b.drawOrder && a.resourceId > b.resourceId)))
+          ) {
+            best = record;
+            bestUv[0] = currentUv[0];
+            bestUv[1] = currentUv[1];
+          }
+        }
+      }
+
+      if (best) {
+        if (depth < 3) {
+          let connection: PresentationConnection | undefined;
+          for (const conn of view.connections) {
+            if (conn.realmId === best.realm.realmId && conn.entityId === best.entityId) {
+              connection = conn;
+              break;
+            }
+          }
+          if (connection && !visitedTargets.has(connection.sourceTargetId)) {
+            const isCut = view.softCutEdges.some(
+              ([src, dst]) => src === connection!.sourceTargetId && dst === targetId
+            );
+            if (!isCut) {
+              const targetDesc = this.multiverse.getTarget(connection.sourceTargetId);
+              const tw = targetDesc?.kind.type === 'texture' ? targetDesc.kind.width : 1;
+              const th = targetDesc?.kind.type === 'texture' ? targetDesc.kind.height : 1;
+              const nextPos: [number, number] = [bestUv[0] * tw, bestUv[1] * th];
+              visitedTargets.add(connection.sourceTargetId);
+              const innerPos: [number, number] = [0, 0];
+              const inner = this.pickInTarget(
+                view,
+                connection.sourceTargetId,
+                nextPos,
+                depth + 1,
+                visitedTargets,
+                innerPos
+              );
+              visitedTargets.delete(connection.sourceTargetId);
+              if (inner) {
+                outLocalPos[0] = innerPos[0];
+                outLocalPos[1] = innerPos[1];
+                return { listener: inner.listener, transformed: true };
+              }
+            }
+          }
+        }
+        outLocalPos[0] = position[0];
+        outLocalPos[1] = position[1];
+        return { listener: best.listener, transformed: depth > 1 };
+      }
+    }
+    return undefined;
   }
 
   private emit(
     listener: InteractiveListener | undefined,
     type: InteractiveEventType,
-    pointer: PointerEvent
+    pointer: PointerEvent,
+    localPos?: [number, number]
   ): void {
-    if (listener?.hasListeners(type))
-      listener.emit({ type, realmId: listener.realmId, target: listener.target, pointer });
+    if (listener?.hasListeners(type)) {
+      const p =
+        localPos && (localPos[0] !== pointer.position[0] || localPos[1] !== pointer.position[1])
+          ? { ...pointer, position: [localPos[0], localPos[1]] as [number, number] }
+          : pointer;
+      listener.emit({ type, realmId: listener.realmId, target: listener.target, pointer: p });
+    }
   }
+
   private updateHover(pointer: PointerState): void {
-    const next = this.pick(pointer.event);
+    const hit = this.pick(pointer.event);
+    const next = hit?.listener;
+    if (hit?.localPos) pointer.positions.set(hit.listener, hit.localPos);
+    else if (next) pointer.positions.delete(next);
     if (next === pointer.hover) return;
     const previous = pointer.hover;
     pointer.hover = next;
-    this.emit(previous, 'leave', pointer.event);
-    if (pointer.hover === next) this.emit(next, 'hover', pointer.event);
+    if (previous) this.emit(previous, 'leave', pointer.event, pointer.positions.get(previous));
+    if (next && pointer.hover === next)
+      this.emit(next, 'hover', pointer.event, pointer.positions.get(next));
   }
 
   handle(event: PointerEvent): void {
@@ -343,7 +456,8 @@ export class InteractiveSystem {
     let window = this.pointers.get(event.windowId);
     if (!window) this.pointers.set(event.windowId, (window = new Map()));
     let pointer = window.get(event.pointerId);
-    if (!pointer) window.set(event.pointerId, (pointer = { event, pressed: new Map() }));
+    if (!pointer)
+      window.set(event.pointerId, (pointer = { event, pressed: new Map(), positions: new Map() }));
     pointer.event = event;
     if (event.type === 'leave' || event.type === 'cancel') {
       this.cancel(pointer);
@@ -353,29 +467,33 @@ export class InteractiveSystem {
     }
     this.updateHover(pointer);
     if (event.type === 'move') {
-      this.emit(pointer.hover, 'move', event);
+      this.emit(pointer.hover, 'move', event, pointer.positions.get(pointer.hover!));
       this.emitPressed(pointer, 'pressmove');
     }
     if (event.type === 'button') {
       const button = typeof event.button === 'string' ? event.button : event.button.other;
       if (event.state === 'pressed') {
         if (pointer.hover) pointer.pressed.set(button, pointer.hover);
-        this.emit(pointer.hover, 'down', event);
+        this.emit(pointer.hover, 'down', event, pointer.positions.get(pointer.hover!));
       } else {
         const pressed = pointer.pressed.get(button);
         pointer.pressed.delete(button);
-        this.emit(pointer.hover, 'up', event);
-        this.emit(pressed, 'pressup', event);
-        if (pressed && pressed === pointer.hover) this.emit(pressed, 'click', event);
+        this.emit(pointer.hover, 'up', event, pointer.positions.get(pointer.hover!));
+        this.emit(pressed, 'pressup', event, pointer.positions.get(pressed!));
+        if (pressed && pressed === pointer.hover)
+          this.emit(pressed, 'click', event, pointer.positions.get(pressed));
       }
     }
   }
+
   private cancel(pointer: PointerState): void {
     this.emitPressed(pointer, 'cancel');
     pointer.pressed.clear();
-    this.emit(pointer.hover, 'leave', pointer.event);
+    pointer.positions.clear();
+    this.emit(pointer.hover, 'leave', pointer.event, pointer.positions.get(pointer.hover!));
     pointer.hover = undefined;
   }
+
   /** Delivers once per listener even when several pointer buttons are pressed. */
   private emitPressed(pointer: PointerState, type: 'pressmove' | 'cancel'): void {
     for (const [button, listener] of pointer.pressed) {
@@ -387,15 +505,17 @@ export class InteractiveSystem {
           break;
         }
       }
-      if (first) this.emit(listener, type, pointer.event);
+      if (first) this.emit(listener, type, pointer.event, pointer.positions.get(listener));
     }
   }
+
   windowClosed(windowId: number): void {
     const window = this.pointers.get(windowId);
     if (!window) return;
     this.pointers.delete(windowId);
     for (const pointer of window.values()) this.cancel(pointer);
   }
+
   dispose(): void {
     for (const id of this.pointers.keys()) this.windowClosed(id);
     for (const listener of this.records.keys()) listener.dispose();

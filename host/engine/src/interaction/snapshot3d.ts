@@ -77,8 +77,14 @@ export class TargetSnapshot3D {
     this.valid = this.count > 0;
   }
 
-  distance(origin: Vec3, direction: Vec3, maxDistance: number): number | undefined {
+  distance(
+    origin: Vec3,
+    direction: Vec3,
+    maxDistance: number,
+    outUv?: [number, number]
+  ): number | undefined {
     let closest = Infinity;
+    let closestHitUv: [number, number] | undefined;
     for (let i = 0; i < this.count; i++) {
       const item = this.shapes[i]!;
       vec3.transformMat4(this.localOrigin, origin, item.inverse);
@@ -91,9 +97,19 @@ export class TargetSnapshot3D {
         maxDistance,
         this.hit
       );
-      if (hit && hit.distance < closest) closest = hit.distance;
+      if (hit && hit.distance < closest) {
+        closest = hit.distance;
+        closestHitUv = hit.uv ? [hit.uv[0], hit.uv[1]] : undefined;
+      }
     }
-    return closest < Infinity ? closest : undefined;
+    if (closest < Infinity) {
+      if (outUv && closestHitUv) {
+        outUv[0] = closestHitUv[0];
+        outUv[1] = closestHitUv[1];
+      }
+      return closest;
+    }
+    return undefined;
   }
 }
 

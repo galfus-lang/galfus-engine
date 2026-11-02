@@ -131,13 +131,25 @@ export class TargetSnapshot2D {
     this.valid = this.svgWidth > 0 && this.svgHeight > 0;
   }
 
-  contains(worldPoint: [number, number], target: InteractiveTarget): boolean {
+  contains(
+    worldPoint: [number, number],
+    target: InteractiveTarget,
+    outUv?: [number, number]
+  ): boolean {
     if (!this.valid) return false;
     if (target.type === 'collider') {
       for (let i = 0; i < this.count; i++) {
         const shape = this.shapes[i]!;
         vec2.transformMat2d(this.point, worldPoint, shape.inverse);
-        if (shape.entry && containsColliderPoint2D(shape.entry.shape, this.point)) return true;
+        if (shape.entry && containsColliderPoint2D(shape.entry.shape, this.point)) {
+          if (outUv && shape.entry.shape.type === 'rectangle') {
+            const hx = shape.entry.shape.halfExtents[0];
+            const hy = shape.entry.shape.halfExtents[1];
+            outUv[0] = Math.max(0, Math.min(1, (this.point[0] + hx) / (2 * hx)));
+            outUv[1] = Math.max(0, Math.min(1, (hy - this.point[1]) / (2 * hy)));
+          }
+          return true;
+        }
       }
       return false;
     }
@@ -145,7 +157,13 @@ export class TargetSnapshot2D {
     vec2.transformMat2d(this.point, worldPoint, this.svgInverse);
     const x = (this.point[0] / this.svgWidth + 0.5) * rect.viewportWidth;
     const y = (0.5 - this.point[1] / this.svgHeight) * rect.viewportHeight;
-    return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
+    const inside =
+      x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
+    if (inside && outUv) {
+      outUv[0] = Math.max(0, Math.min(1, (x - rect.x) / (rect.width || 1)));
+      outUv[1] = Math.max(0, Math.min(1, (y - rect.y) / (rect.height || 1)));
+    }
+    return inside;
   }
 }
 

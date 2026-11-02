@@ -13,6 +13,7 @@ type Point = [number, number, number];
 export interface LocalRayHit3D {
   distance: number;
   normal: Point;
+  uv?: [number, number];
 }
 /** @internal Tests a ray already transformed to collider-local coordinates. */
 export function intersectCollider3D(
@@ -54,6 +55,9 @@ export function intersectCollider3D(
       Math.abs(normal[1]) > shape.halfExtents[1]
     )
       return undefined;
+    const u = (normal[0] + shape.halfExtents[0]) / (2 * shape.halfExtents[0]);
+    const v = (shape.halfExtents[1] - normal[1]) / (2 * shape.halfExtents[1]);
+    out.uv = [Math.max(0, Math.min(1, u)), Math.max(0, Math.min(1, v))];
     normal[0] = 0;
     normal[1] = 0;
     normal[2] = d[2] < 0 ? 1 : -1;

@@ -158,6 +158,13 @@ export class MultiverseCoordinator {
   }
 
   /**
+   * Retrieves a registered target description by ID.
+   */
+  getTarget(targetId: TargetId | number): Readonly<TargetDesc> | undefined {
+    return this._targets.get(targetId as TargetId);
+  }
+
+  /**
    * Registers a specialized realm connector (e.g. Realm2D or Realm3D).
    */
   registerRealm(realm: RealmConnector): void {

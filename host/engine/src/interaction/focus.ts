@@ -177,6 +177,8 @@ export class FocusManager {
   }
 
   advance(windowId: number, reverse = false): boolean {
+    const currentFocused = this.focused.get(windowId);
+    let activeRealmId = currentFocused?.realmId;
     const candidates: Array<{ target: Focusable; order: number; sequence: number }> = [];
     let sequence = 0;
     for (const target of this.targets) {
@@ -193,14 +195,17 @@ export class FocusManager {
         bi = b.target.tabIndex || Infinity;
       return ai - bi || a.order - b.order || a.sequence - b.sequence;
     });
-    const current = candidates.findIndex(({ target }) => target === this.focused.get(windowId));
+    if (activeRealmId === undefined) activeRealmId = candidates[0]!.target.realmId;
+    const realmCandidates = candidates.filter(({ target }) => target.realmId === activeRealmId);
+    if (!realmCandidates.length) return false;
+    const current = realmCandidates.findIndex(({ target }) => target === currentFocused);
     const index =
       current < 0
         ? reverse
-          ? candidates.length - 1
+          ? realmCandidates.length - 1
           : 0
-        : (current + (reverse ? -1 : 1) + candidates.length) % candidates.length;
-    return this.requestFocus(candidates[index]!.target, windowId);
+        : (current + (reverse ? -1 : 1) + realmCandidates.length) % realmCandidates.length;
+    return this.requestFocus(realmCandidates[index]!.target, windowId);
   }
 
   handleKeyboard(event: KeyboardEvent): void {

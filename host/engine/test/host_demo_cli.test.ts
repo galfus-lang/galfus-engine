@@ -15,11 +15,18 @@ describe('host demo command', () => {
     const help = await runCli('help');
     expect(help.code).toBe(0);
     expect(help.stdout).toContain('interaction');
+    expect(help.stdout).toContain('trans-realm');
     expect(help.stdout).toContain('tutorial');
     const unknown = await runCli('does-not-exist');
     expect(unknown.code).toBe(1);
     expect(unknown.stderr).toContain('Unknown host demo');
   });
+
+  it('forwards headless and frame options to the trans-realm demo', async () => {
+    const result = await runCli('trans-realm', '--headless', '--frames', '1');
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('Running headless smoke test');
+  }, 15000);
 
   it('forwards headless and frame options to the interaction demo', async () => {
     const result = await runCli('interaction', '--headless', '--frames', '1');
