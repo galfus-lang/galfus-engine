@@ -453,7 +453,7 @@ fn test_texture_auto_decode_image() {
     let mut manager = TextureManager::new();
 
     // 1. Encoded PNG bytes (512x512)
-    let png_bytes = include_bytes!("../../../.old/assets/alpha_test_texture.png");
+    let png_bytes = include_bytes!("fixtures/alpha_test_texture.png");
     let desc = GpuTextureDesc {
         label: Some("Auto PNG Texture".into()),
         width: 0,
@@ -474,7 +474,7 @@ fn test_texture_auto_decode_image() {
     assert_eq!(tex.height(), 512);
 
     // 2. Encoded JPEG bytes (256x256)
-    let jpeg_bytes = include_bytes!("../../../.old/assets/normal_test_texture.png");
+    let jpeg_bytes = include_bytes!("fixtures/normal_test_texture.png");
     let jpeg_desc = GpuTextureDesc {
         label: Some("Auto JPEG Texture".into()),
         width: 0,

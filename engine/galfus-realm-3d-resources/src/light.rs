@@ -129,7 +129,7 @@ impl Light3D {
                     Vec3::Y
                 };
                 let view = Mat4::look_to_rh(pos, dir, up);
-                // Reverse-Z shadow projection matching .old (size: 50.0, far: 100.0, near: -100.0)
+                // Reverse-Z shadow projection (size: 50.0, far: 100.0, near: -100.0)
                 let size = 50.0;
                 let near = -100.0;
                 let far = 100.0;

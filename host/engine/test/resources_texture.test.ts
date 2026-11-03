@@ -4,8 +4,12 @@ import type { GalfusEngine, GpuTextureDesc, TextureUpdateDesc } from '@galfus/tr
 import { ResourceManager } from '../src/resources/index';
 
 describe('@galfus/engine > ResourceManager & Texture Auto-loading', () => {
-  const alphaPngBytes = fs.readFileSync('.old/assets/alpha_test_texture.png');
-  const normalJpegBytes = fs.readFileSync('.old/assets/normal_test_texture.png');
+  const alphaPngBytes = fs.readFileSync(
+    'engine/galfus-gpu-manager/tests/fixtures/alpha_test_texture.png'
+  );
+  const normalJpegBytes = fs.readFileSync(
+    'engine/galfus-gpu-manager/tests/fixtures/normal_test_texture.png'
+  );
 
   it('ResourceManager.loadTexture: sends raw encoded image bytes directly to core engine', () => {
     const recordedCalls: Array<{ id: number; desc: GpuTextureDesc; dataLength: number }> = [];
