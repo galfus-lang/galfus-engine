@@ -64,6 +64,18 @@ async function main() {
     throw new Error('Failed to format generated WASM bindings.');
   }
 
+  // Ensure generated TypeScript SDKs have clean and sorted imports
+  // so that `bun run format:check` succeeds immediately after codegen.
+  const cleanImportsResult = Bun.spawnSync({
+    cmd: ['bun', 'scripts/clean-imports.ts'],
+    cwd: rootDir,
+    stdout: 'inherit',
+    stderr: 'inherit'
+  });
+  if (cleanImportsResult.exitCode !== 0) {
+    throw new Error('Failed to clean imports on generated SDKs.');
+  }
+
   console.log('\n🎉 All SDK glue-code files generated successfully via Codegen Strategies!');
 }
 
