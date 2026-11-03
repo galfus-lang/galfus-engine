@@ -42,6 +42,7 @@ export interface ColliderEntry<S> {
   readonly colliderId: number;
   readonly shape: S;
   readonly matrix: readonly number[];
+  readonly boundingRadius?: number;
   readonly active: boolean;
   readonly sensor: boolean;
   readonly layer: number;
@@ -91,6 +92,19 @@ function validateShape(shape: ColliderShape2D | ColliderShape3D): void {
   ) {
     throw new Error('Collider half extents must be positive and finite.');
   }
+}
+function computeBoundingRadius(shape: ColliderShape2D | ColliderShape3D): number {
+  if (shape.type === 'circle' || shape.type === 'sphere') return shape.radius;
+  if (shape.type === 'rectangle' || shape.type === 'plane')
+    return Math.hypot(shape.halfExtents[0], shape.halfExtents[1]);
+  if (shape.type === 'box')
+    return Math.hypot(shape.halfExtents[0], shape.halfExtents[1], shape.halfExtents[2]);
+  if (shape.type === 'polygon') {
+    let max = 0;
+    for (const [x, y] of shape.vertices) max = Math.max(max, Math.hypot(x, y));
+    return max;
+  }
+  return 0;
 }
 function validateMask(value: number): boolean {
   return Number.isInteger(value) && value >= 0 && value <= 0xffffffff;
@@ -156,6 +170,7 @@ abstract class ColliderComponent<S extends ColliderShape2D | ColliderShape3D> im
       colliderId,
       shape: structuredClone(shape),
       matrix: [...matrix],
+      boundingRadius: computeBoundingRadius(shape),
       active: options.active ?? true,
       sensor: options.sensor ?? false,
       layer,

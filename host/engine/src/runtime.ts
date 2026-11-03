@@ -28,6 +28,7 @@ import { TextEncoding } from './text/encoding';
 import { TextInput, type TextInputOptions } from './text/input';
 import type { Focusable } from './interaction/focus';
 import {
+  type FixedTickTiming,
   IdAllocator,
   type RuntimeEventListener,
   type RuntimeEventType,
@@ -43,6 +44,10 @@ export type RuntimeState =
 export interface RuntimeOptions {
   /** Default character encoding for explicit text/byte conversions. */
   charset?: string;
+  /** Fixed physics and simulation timestep in seconds. Defaults to 1 / 60. */
+  fixedDt?: number;
+  /** Maximum fixed timestep sub-steps permitted in a single frame. Defaults to 8. */
+  maxFixedSubSteps?: number;
 }
 
 export class MultiverseRuntime {
@@ -97,12 +102,17 @@ export class MultiverseRuntime {
   private _frameId = 0;
   private _elapsedSeconds = 0;
   private _state: RuntimeState;
+  readonly fixedDt: number;
+  readonly maxFixedSubSteps: number;
+  private _fixedAccumulator = 0;
 
   readonly #transport: GalfusTransport;
 
   constructor(transport: GalfusTransport, options: RuntimeOptions = {}) {
     this.#transport = transport;
     this.textEncoding = new TextEncoding(options.charset);
+    this.fixedDt = options.fixedDt !== undefined && options.fixedDt > 0 ? options.fixedDt : 1 / 60;
+    this.maxFixedSubSteps = options.maxFixedSubSteps ?? 8;
     this.animation.setNativeTargetObserver(this._refreshAnimatedTarget);
     this.platform.window.onLifecycle((windowId, opened) => {
       if (opened) this.multiverse.windowOpened(windowId);
@@ -372,6 +382,7 @@ export class MultiverseRuntime {
       this._interactive.dispose();
       this._elapsedSeconds = 0;
       this._frameId = 0;
+      this._fixedAccumulator = 0;
 
       // 1. Multiverse: Invocations, Realms, and Targets
       this.multiverse.reset();
@@ -498,10 +509,33 @@ export class MultiverseRuntime {
       }
     }
 
-    // 4. Step animations (this also pumps animation events and triggers registered listeners)
+    // 4. Step fixed tick listeners ('fixedTick') with deterministic accumulator
+    const fixedTickListeners = this._eventListeners.get('fixedTick');
+    this._fixedAccumulator += timing.dt;
+    let subStep = 0;
+    while (this._fixedAccumulator >= this.fixedDt && subStep < this.maxFixedSubSteps) {
+      if (fixedTickListeners && fixedTickListeners.size > 0) {
+        const payload: FixedTickTiming = {
+          fixedDt: this.fixedDt,
+          time: this._elapsedSeconds - this._fixedAccumulator + this.fixedDt,
+          subStep,
+          frameId: timing.frameId
+        };
+        for (const listener of fixedTickListeners) {
+          listener(payload);
+        }
+      }
+      this._fixedAccumulator -= this.fixedDt;
+      subStep++;
+    }
+    if (this._fixedAccumulator >= this.fixedDt) {
+      this._fixedAccumulator = this._fixedAccumulator % this.fixedDt;
+    }
+
+    // 5. Step animations (this also pumps animation events and triggers registered listeners)
     this.animation.step(timing.dt);
 
-    // 5. Prepare ECS context
+    // 6. Prepare ECS context
     const context: SystemContext = {
       time: this._elapsedSeconds,
       dt: timing.dt,
@@ -509,20 +543,37 @@ export class MultiverseRuntime {
       engine: this.#transport.engine
     };
 
-    // 6. Step pre-render stages: input -> update -> preRender (anchors, hierarchies)
+    // 7. Step pre-render stages: input -> update -> preRender (anchors, hierarchies)
     this.multiverse.stepRealmsPreRender(context);
 
-    // 7. Synchronize dirty entity state to native core
+    // 8. Synchronize dirty entity state to native core
     this.multiverse.syncRealms(context);
 
-    // 8. Resolve multiverse schedule and dispatch to GPU
+    // 9. Resolve multiverse schedule and dispatch to GPU
     this.multiverse.dispatch(timing.frameId, timing.dt);
     this._interactive.afterDispatch();
     this._focus.afterDispatch();
     for (const [focusable, input] of this._textInputs) if (focusable.isDisposed) input.dispose();
 
-    // 9. Step post-render stage: postRender (metrics, cleanups) AFTER dispatch
+    // 10. Step post-render stage: postRender (metrics, cleanups) AFTER dispatch
     this.multiverse.stepRealmsPostRender(context);
+  }
+
+  /**
+   * Manually steps the fixed simulation timestep (useful for deterministic tests).
+   */
+  stepFixed(dt = this.fixedDt): void {
+    const fixedTickListeners = this._eventListeners.get('fixedTick');
+    if (!fixedTickListeners || fixedTickListeners.size === 0) return;
+    const payload: FixedTickTiming = {
+      fixedDt: dt,
+      time: this._elapsedSeconds,
+      subStep: 0,
+      frameId: this._frameId
+    };
+    for (const listener of fixedTickListeners) {
+      listener(payload);
+    }
   }
 }
 

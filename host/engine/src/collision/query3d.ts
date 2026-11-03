@@ -114,6 +114,8 @@ export function raycast3D(
   const m = mat4.create();
   const o: Point = [0, 0, 0];
   const local: Point = [0, 0, 0];
+  const localCenter: Point = [0, 0, 0];
+  const worldCenter: Point = [0, 0, 0];
   const intersection: LocalRayHit3D = { distance: 0, normal: [0, 0, 0] };
   for (const [entityId, component] of world.components.entries<Collider3DComponent>('Collider3D')) {
     const model = world.getComponent<Model3DComponent>(entityId, 'Model3D');
@@ -123,6 +125,29 @@ export function raycast3D(
         throw new Error(`Collider ID ${entry.colliderId} is used by more than one entity.`);
       seen.add(entry.colliderId);
       if (!entry.active || (entry.layer & mask) === 0) continue;
+
+      const rLocal = entry.boundingRadius;
+      if (rLocal !== undefined && rLocal > 0) {
+        localCenter[0] = entry.matrix[12]!;
+        localCenter[1] = entry.matrix[13]!;
+        localCenter[2] = entry.matrix[14]!;
+        vec3.transformMat4(worldCenter, localCenter, model.worldMatrix);
+
+        const wm = model.worldMatrix;
+        const sx = wm[0]! * wm[0]! + wm[1]! * wm[1]! + wm[2]! * wm[2]!;
+        const sy = wm[4]! * wm[4]! + wm[5]! * wm[5]! + wm[6]! * wm[6]!;
+        const sz = wm[8]! * wm[8]! + wm[9]! * wm[9]! + wm[10]! * wm[10]!;
+        const rWorld = rLocal * Math.sqrt(Math.max(sx, sy, sz));
+
+        const vx = worldCenter[0] - origin[0]!;
+        const vy = worldCenter[1] - origin[1]!;
+        const vz = worldCenter[2] - origin[2]!;
+        const proj = vx * d[0]! + vy * d[1]! + vz * d[2]!;
+        if (proj < -rWorld || proj > maxDistance + rWorld) continue;
+        const perpSq = vx * vx + vy * vy + vz * vz - proj * proj;
+        if (perpSq > rWorld * rWorld) continue;
+      }
+
       mat4.multiply(combined, model.worldMatrix, entry.matrix as unknown as ReadonlyMat4);
       if (!mat4.invert(m, combined) || !m.every(Number.isFinite)) continue;
       vec3.transformMat4(o, origin, m);

@@ -466,10 +466,19 @@ export class MultiverseCoordinator {
    */
   resolve(): any {
     this.flushUpdates();
+    this._purgeDeadPresentationSurfaces();
     if (this._engine && typeof (this._engine as any).multiverseResolve === 'function') {
       return (this._engine as any).multiverseResolve();
     }
     return this.getSchedule() ?? { invocations: [] };
+  }
+
+  private _purgeDeadPresentationSurfaces(): void {
+    this._presentationLinks.purgeDeadSurfaces((realmId, entityId) => {
+      const realm = this._realms.get(realmId as RealmId);
+      if (!realm || (realm as any).isDisposed) return false;
+      return (realm as any).world?.isAlive(entityId) ?? true;
+    });
   }
 
   /**

@@ -446,7 +446,17 @@ export class InteractiveSystem {
     if (next === pointer.hover) return;
     const previous = pointer.hover;
     pointer.hover = next;
-    if (previous) this.emit(previous, 'leave', pointer.event, pointer.positions.get(previous));
+    if (previous) {
+      this.emit(previous, 'leave', pointer.event, pointer.positions.get(previous));
+      let isPressed = false;
+      for (const pressed of pointer.pressed.values()) {
+        if (pressed === previous) {
+          isPressed = true;
+          break;
+        }
+      }
+      if (!isPressed) pointer.positions.delete(previous);
+    }
     if (next && pointer.hover === next)
       this.emit(next, 'hover', pointer.event, pointer.positions.get(next));
   }
@@ -482,6 +492,16 @@ export class InteractiveSystem {
         this.emit(pressed, 'pressup', event, pointer.positions.get(pressed!));
         if (pressed && pressed === pointer.hover)
           this.emit(pressed, 'click', event, pointer.positions.get(pressed));
+        if (pressed && pressed !== pointer.hover) {
+          let isStillPressed = false;
+          for (const remaining of pointer.pressed.values()) {
+            if (remaining === pressed) {
+              isStillPressed = true;
+              break;
+            }
+          }
+          if (!isStillPressed) pointer.positions.delete(pressed);
+        }
       }
     }
   }

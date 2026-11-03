@@ -26,6 +26,10 @@ export interface Realm3DResourceProvider {
   getMaterials(): Iterable<MaterialResourceEntry>;
 }
 
+const scratchTrans = vec3.create();
+const scratchRot = quat.create();
+const scratchScale = vec3.create();
+
 export class Realm3DSyncSystem {
   private readonly _syncedGeometries = new Set<number>();
   private readonly _syncedMaterials = new Set<number>();
@@ -35,6 +39,7 @@ export class Realm3DSyncSystem {
   private readonly _syncedEmitters = new Set<number>();
   private readonly _syncedPortals = new Set<number>();
   private readonly _syncedInstancedModels = new Set<number>();
+  private readonly _transformCache = new Map<EntityId, Transform3D>();
 
   constructor(
     readonly realmId: number,
@@ -45,26 +50,46 @@ export class Realm3DSyncSystem {
    * Extracts a Transform3D from the resolved model world matrix or cache.
    */
   getResolvedTransform(world: EcsWorld, id: EntityId): Transform3D {
+    let tf = this._transformCache.get(id);
+    if (!tf) {
+      tf = {
+        position: [0, 0, 0],
+        rotation: [0, 0, 0, 1],
+        scale: [1, 1, 1]
+      };
+      this._transformCache.set(id, tf);
+    }
+
     const model = world.getComponent<Model3DComponent>(id, 'Model3D');
     const mat = model ? model.worldMatrix : this.cache.getWorld3D(id);
 
     if (mat) {
-      const trans = vec3.create();
-      const rot = quat.create();
-      const sc = vec3.create();
+      mat4.getTranslation(scratchTrans, mat);
+      mat4.getRotation(scratchRot, mat);
+      mat4.getScaling(scratchScale, mat);
 
-      mat4.getTranslation(trans, mat);
-      mat4.getRotation(rot, mat);
-      mat4.getScaling(sc, mat);
+      const p = tf.position;
+      p[0] = scratchTrans[0]!;
+      p[1] = scratchTrans[1]!;
+      p[2] = scratchTrans[2]!;
 
-      return {
-        position: [trans[0], trans[1], trans[2]],
-        rotation: [rot[0], rot[1], rot[2], rot[3]],
-        scale: [sc[0], sc[1], sc[2]]
-      };
+      const r = tf.rotation!;
+      r[0] = scratchRot[0]!;
+      r[1] = scratchRot[1]!;
+      r[2] = scratchRot[2]!;
+      r[3] = scratchRot[3]!;
+
+      const s = tf.scale!;
+      s[0] = scratchScale[0]!;
+      s[1] = scratchScale[1]!;
+      s[2] = scratchScale[2]!;
+    } else {
+      tf.position[0] = 0;
+      tf.position[1] = 0;
+      tf.position[2] = 0;
     }
 
-    return { position: [0, 0, 0] };
+    return tf;
   }
 
   private _uploadPrimitive(
@@ -244,6 +269,7 @@ export class Realm3DSyncSystem {
       if (!currentModels.has(modelId)) {
         engine.realm3dDestroyModel(this.realmId, modelId);
         this._syncedModels.delete(modelId);
+        this._transformCache.delete(modelId);
       }
     }
 
@@ -411,5 +437,6 @@ export class Realm3DSyncSystem {
     this._syncedEmitters.clear();
     this._syncedPortals.clear();
     this._syncedInstancedModels.clear();
+    this._transformCache.clear();
   }
 }

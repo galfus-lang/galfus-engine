@@ -95,6 +95,23 @@ export class PresentationLinks {
     if (!slots!.size) this.surfaces.delete(surface.realmId);
     this.changed();
   }
+  /** Removes surface registrations for entities that are no longer alive. */
+  purgeDeadSurfaces(isAlive: (realmId: number, entityId: number) => boolean): void {
+    let purged = false;
+    for (const [realmId, slots] of this.surfaces) {
+      for (const [slot, entities] of slots) {
+        for (const entityId of [...entities]) {
+          if (!isAlive(realmId, entityId)) {
+            entities.delete(entityId);
+            purged = true;
+          }
+        }
+        if (!entities.size) slots.delete(slot);
+      }
+      if (!slots.size) this.surfaces.delete(realmId);
+    }
+    if (purged) this.changed();
+  }
   snapshot(): PresentationLinksSnapshot {
     if (this.cached) return this.cached;
     const surfaces: PresentationSurface[] = [];

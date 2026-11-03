@@ -63,8 +63,16 @@ import type {
   WindowEvent
 } from '@galfus/transport-types';
 
+export interface FixedTickTiming {
+  readonly fixedDt: number;
+  readonly time: number;
+  readonly subStep: number;
+  readonly frameId: number;
+}
+
 export interface RuntimeEventMap {
   tick: FrameTiming;
+  fixedTick: FixedTickTiming;
   window: WindowEvent;
   pointer: PointerEvent;
   keyboard: KeyboardEvent;
