@@ -58,9 +58,8 @@ async function runViewer(): Promise<void> {
   console.log('=============================================================\n');
 
   console.log(`[1/5] Initializing Galfus Bun Runtime...`);
-  const transport = createBunTransport();
+  const transport = createBunTransport({ debug: false, headless: opts.isHeadless });
   const runtime = createRuntime(transport);
-  await runtime.init({ debug: false, headless: opts.isHeadless });
 
   // Use a dedicated Target ID outside the low range (1..50) reserved for asset textures
   const VIEWER_TARGET_ID = 100;

@@ -99,24 +99,21 @@ import { createBunTransport } from '@galfus/transport-bun';
 import { createRuntime } from '@galfus/engine';
 
 // 1. Initialize transport and runtime
-const transport = await createBunTransport({ targetFps: 60, headless: false });
+const transport = createBunTransport({ targetFps: 60, headless: false });
 const runtime = createRuntime(transport);
+const windowId = runtime.platform.window.create({ title: 'Galfus Engine', size: [1280, 720] });
 
 // 2. Create 3D Realm and resources
 const realm3d = runtime.createRealm3D(1);
-const geoId = realm3d.createGeometry({ kind: 'cube', size: 1.0 });
-const matId = realm3d.createMaterial({ baseColor: [0.8, 0.2, 0.3, 1.0] });
+const { geometryId } = realm3d.createGeometry({ kind: 'cube', size: 1.0 });
+const { materialId } = realm3d.createMaterial({ baseColor: [0.8, 0.2, 0.3, 1.0] });
 
 // 3. Create Model entity and attach Mesh
-const entity = realm3d.createModel({
-  geometryId: geoId,
-  materialId: matId,
-  transform: { position: [0, 1, 0] }
-});
+const entity = realm3d.createModel({ geometryId, materialId }, { position: [0, 1, 0] });
 
 // 4. Set up Multiverse Target and Invocation
 const targetId = runtime.multiverse.createTarget({
-  kind: { type: 'window', windowId: 1 }
+  kind: { type: 'window', windowId }
 });
 
 const invocationId = runtime.multiverse.createInvocation({
@@ -168,10 +165,12 @@ the interaction when the pointer or window is lost. When an entity has multiple
 colliders, specify `colliderId`. Events use the most recently submitted presentation state.
 When the registered entity or collider is removed, the listener is cancelled and disposed
 after the next successful dispatch.
-Currently this supports realms presented directly to a window. Traversal through textures
-connecting realms is not implemented yet, and native animations of camera or model transforms
-and camera field of view are not yet reflected in interaction snapshots. Occlusion is resolved
-among registered interactive targets; geometry and colliders without listeners do not block them.
+Pointer and focus interaction supports direct window presentations as well as trans-realm
+traversal across texture targets connected via `multiverse.bindTargetTexture` and
+`multiverse.connectPresentationSurface` (try `bun host:demo trans-realm`). Native animations
+of camera or model transforms and camera field of view are not yet reflected in interaction
+snapshots. Occlusion is resolved among registered interactive targets; geometry and colliders
+without listeners do not block them.
 
 ## Migration Guide
 

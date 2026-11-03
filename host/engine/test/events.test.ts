@@ -183,11 +183,7 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
     };
 
     const runtime = new MultiverseRuntime(mockTransport);
-    runtime.platform.bindEngine(mockEngine);
-    runtime.animation.bindEngine(mockEngine);
-
-    // Wire up coordinator forwarding (done in runtime.init, or simulated here)
-    runtime.animation.on('animation', (ev) => {
+    runtime.on('animation', (ev) => {
       animationEvents.push(ev);
     });
 

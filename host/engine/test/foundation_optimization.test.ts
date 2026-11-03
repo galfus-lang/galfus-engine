@@ -125,24 +125,35 @@ describe('Foundation Optimizations & Physics Pre-requisites', () => {
         advanceFrame(runtime, transport, 0.015);
         expect(fixedSteps.length).toBe(3);
         expect(fixedSteps[2]!.subStep).toBe(0);
+        expect(runtime.fixedAlpha).toBeCloseTo(0.25, 5);
       } finally {
         runtime.dispose();
       }
     });
 
-    it('allows manual fixed stepping via stepFixed()', () => {
+    it('executes fixedTick before tick in the same frame and avoids IEEE-754 drift at 1/60', () => {
       const transport = createBunTransport({ headless: true });
-      const runtime = createRuntime(transport, { fixedDt: 0.01 });
+      const runtime = createRuntime(transport, { fixedDt: 1 / 60 });
       try {
-        let called = 0;
-        runtime.on('fixedTick', (timing) => {
-          called++;
-          expect(timing.fixedDt).toBe(0.01);
+        const trace: string[] = [];
+        runtime.on('fixedTick', ({ subStep }) => {
+          trace.push(`fixed:${subStep}`);
+        });
+        runtime.on('tick', ({ frameId }) => {
+          trace.push(`tick:${frameId}`);
         });
 
-        runtime.stepFixed();
-        runtime.stepFixed();
-        expect(called).toBe(2);
+        for (let i = 0; i < 10; i++) {
+          advanceFrame(runtime, transport, 1 / 60);
+        }
+
+        // Every frame must fire fixed:0 strictly before tick:N without missing steps due to float precision
+        expect(trace.length).toBe(20);
+        for (let i = 0; i < 10; i++) {
+          expect(trace[i * 2]).toBe('fixed:0');
+          expect(trace[i * 2 + 1]).toBe(`tick:${i + 1}`);
+        }
+        expect(runtime.fixedAlpha).toBeCloseTo(0, 6);
       } finally {
         runtime.dispose();
       }

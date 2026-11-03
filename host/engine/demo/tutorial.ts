@@ -78,8 +78,6 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
   console.log('[1/7] Initializing BunTransport and MultiverseRuntime...');
   const transport = createBunTransport({ debug: true, headless: isHeadless });
   const runtime = createRuntime(transport);
-
-  await runtime.init({ debug: true, headless: isHeadless });
   console.log(`      ✓ Runtime ready (headless: ${isHeadless})`);
 
   let targetId: TargetId;
