@@ -1,5 +1,5 @@
-import type { CodegenContext, CodegenStrategy } from './strategy.ts';
 import { type DataType, isBuffer, isJson, isJsonArray, isNativeStruct } from '../spec.ts';
+import type { CodegenContext, CodegenStrategy } from './strategy.ts';
 
 function toSnakeCase(str: string): string {
   return str.replace(/([A-Z])/g, '_$1').toLowerCase();
@@ -175,9 +175,13 @@ export class PythonStrategy implements CodegenStrategy {
       '                elif event.event_type == 2: value.update(button=_event_enum(text0), state="pressed" if flags & 1 else "released", pressure=values[2])',
       '                elif event.event_type == 6: value["delta"] = {"pixels" if flags & 64 else "lines": [values[2], values[3]]}',
       '            elif event.kind == 3:',
-      '                value = {"kind": "keyboard", "type": "input" if event.event_type == 1 else "modifiersChanged", "windowId": event.window_id, "modifiers": modifiers}',
-      '                if event.event_type == 1: value.update(physicalKey=_event_enum(text0), logicalKey={"named": _event_enum(text1)} if flags & 128 else text1, state="pressed" if flags & 1 else "released", repeat=bool(flags & 32))',
-      '                if flags & 256: value["text"] = text2',
+      '                names = ["input", "modifiersChanged", "imeEnabled", "imePreedit", "imeCommit", "imeDisabled", "textInput"]',
+      '                value = {"kind": "keyboard", "type": names[event.event_type - 1], "windowId": event.window_id}',
+      '                if event.event_type <= 2: value["modifiers"] = modifiers',
+      '                if event.event_type == 1: value.update(physicalKey=_event_enum(text0), logicalKey=text1, state="pressed" if flags & 1 else "released", repeat=bool(flags & 32))',
+      '                if event.event_type == 1 and flags & 256: value["text"] = text2',
+      '                if event.event_type in (4, 5, 7): value["text"] = text0',
+      '                if event.event_type == 4 and flags & 1: value["selection"] = [event.subject_id, event.id]',
       '            else:',
       '                names = ["connected", "disconnected", "button", "axis"]',
       '                value = {"kind": "gamepad", "type": names[event.event_type - 1], "gamepadId": event.subject_id}',

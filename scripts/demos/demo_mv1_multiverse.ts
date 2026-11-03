@@ -1,5 +1,4 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
-import type { InvocationFilter } from '../../sdk/typescript/galfus.ts';
 import { extractKey } from './utils.ts';
 
 const TARGET_WINDOW = 1;

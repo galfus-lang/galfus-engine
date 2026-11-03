@@ -350,6 +350,20 @@ pub fn sync_realm_resources<'a>(
             crate::pipeline::SurfacePipelineState::from_surface_type(mat.surface_type),
             mat.side,
         );
+        if mat.surface_type == galfus_realm_3d_resources::material::SurfaceType3D::Transparent {
+            pipeline.ensure_pipeline(
+                device,
+                mat.shader_effect.as_deref(),
+                crate::pipeline::SurfacePipelineState::OpaqueTransparent,
+                mat.side,
+            );
+            pipeline.ensure_pipeline(
+                device,
+                mat.shader_effect.as_deref(),
+                crate::pipeline::SurfacePipelineState::AlphaBlendAfterOpaque,
+                mat.side,
+            );
+        }
     }
 
     // 3. Sync Models

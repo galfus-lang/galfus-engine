@@ -50,12 +50,16 @@ pub struct PlatformContext {
     main_thread_id: ThreadId,
     capabilities: PlatformCapabilities,
     windows: HashMap<u32, Window>,
+    #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+    browser_events: std::rc::Rc<std::cell::RefCell<Vec<PlatformEvent>>>,
     #[cfg(not(target_arch = "wasm32"))]
     winit_to_logical: HashMap<WinitWindowId, u32>,
     #[cfg(not(target_arch = "wasm32"))]
     pointer_positions: HashMap<(u32, u64), Vec2>,
     #[cfg(not(target_arch = "wasm32"))]
     modifiers: HashMap<u32, ModifiersState>,
+    #[cfg(not(target_arch = "wasm32"))]
+    composing: std::collections::HashSet<u32>,
     #[cfg(not(target_arch = "wasm32"))]
     event_loop: Option<EventLoop<()>>,
     #[cfg(not(target_arch = "wasm32"))]
@@ -91,12 +95,16 @@ impl PlatformContext {
             main_thread_id,
             capabilities: PlatformCapabilities::current(),
             windows: HashMap::new(),
+            #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+            browser_events: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
             #[cfg(not(target_arch = "wasm32"))]
             winit_to_logical: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             pointer_positions: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             modifiers: HashMap::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            composing: std::collections::HashSet::new(),
             #[cfg(not(target_arch = "wasm32"))]
             event_loop,
             #[cfg(not(target_arch = "wasm32"))]
@@ -118,12 +126,16 @@ impl PlatformContext {
             main_thread_id: current().id(),
             capabilities: caps,
             windows: HashMap::new(),
+            #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+            browser_events: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
             #[cfg(not(target_arch = "wasm32"))]
             winit_to_logical: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             pointer_positions: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             modifiers: HashMap::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            composing: std::collections::HashSet::new(),
             #[cfg(not(target_arch = "wasm32"))]
             event_loop: None,
             #[cfg(not(target_arch = "wasm32"))]
@@ -203,6 +215,10 @@ impl PlatformContext {
 
         #[cfg(target_arch = "wasm32")]
         {
+            #[cfg(feature = "browser")]
+            let browser_win =
+                BrowserWindow::new_with_events(&config, std::rc::Rc::clone(&self.browser_events))?;
+            #[cfg(not(feature = "browser"))]
             let browser_win = BrowserWindow::new(&config)?;
             self.windows.insert(id, browser_win);
         }
@@ -234,6 +250,7 @@ impl PlatformContext {
             self.winit_to_logical.remove(&win.raw_window().id());
             self.pointer_positions.retain(|(w, _), _| *w != id);
             self.modifiers.remove(&id);
+            self.composing.remove(&id);
             Ok(())
         } else {
             Err(PlatformError::WindowNotFound(id))
@@ -241,6 +258,15 @@ impl PlatformContext {
 
         #[cfg(target_arch = "wasm32")]
         if self.windows.remove(&id).is_some() {
+            #[cfg(feature = "browser")]
+            self.browser_events
+                .borrow_mut()
+                .retain(|event| match event {
+                    PlatformEvent::Window(event) => event.window_id() != id,
+                    PlatformEvent::Pointer(event) => event.window_id() != id,
+                    PlatformEvent::Keyboard(event) => event.window_id() != id,
+                    PlatformEvent::Gamepad(_) => true,
+                });
             Ok(())
         } else {
             Err(PlatformError::WindowNotFound(id))
@@ -382,6 +408,7 @@ impl PlatformContext {
             winit_to_logical: &self.winit_to_logical,
             pointer_positions: &mut self.pointer_positions,
             modifiers: &mut self.modifiers,
+            composing: &mut self.composing,
             events: Vec::new(),
         };
 
@@ -447,12 +474,10 @@ impl PlatformContext {
     #[cfg(target_arch = "wasm32")]
     pub fn pump_events(&mut self) -> PlatformResult<Vec<PlatformEvent>> {
         self.reap_finished_audio_voices();
-        Ok(self
-            .windows
-            .values()
-            .flat_map(|window| window.drain_resize_events())
-            .map(PlatformEvent::Window)
-            .collect())
+        #[cfg(feature = "browser")]
+        return Ok(std::mem::take(&mut self.browser_events.borrow_mut()));
+        #[cfg(not(feature = "browser"))]
+        Ok(Vec::new())
     }
 }
 

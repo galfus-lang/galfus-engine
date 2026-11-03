@@ -1,6 +1,6 @@
 import { GalfusBun } from '../../sdk/bun/galfus.ts';
 import type { AntiAliasingMode } from '../../sdk/typescript/galfus.ts';
-import { extractKey, eulerToQuat, quatFromLookAt } from './utils.ts';
+import { eulerToQuat, extractKey, quatFromLookAt } from './utils.ts';
 
 const TARGET_WINDOW = 1;
 const REALM_3D = 10;

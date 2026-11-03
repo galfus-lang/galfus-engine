@@ -431,6 +431,13 @@ impl Realm for Realm3DContext {
                 &pipeline.dummy_refraction_bg,
             );
 
+            crate::collector::render_transparent_opaque(
+                &mut pass,
+                pipeline,
+                collector.transparent.iter(),
+                &pipeline.dummy_refraction_bg,
+            );
+
             // Draw background particles before capturing opaque texture so they distort through refractive surfaces
             if behind_alpha > 0 || behind_additive > 0 {
                 pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
@@ -513,7 +520,7 @@ impl Realm for Realm3DContext {
                 render_draw_items(&mut pass, pipeline, collector.refractive.iter(), refr_bg);
             }
             if has_trans {
-                render_draw_items(
+                crate::collector::render_transparent_partial(
                     &mut pass,
                     pipeline,
                     collector.transparent.iter(),

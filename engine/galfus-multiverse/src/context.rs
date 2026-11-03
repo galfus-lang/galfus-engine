@@ -384,6 +384,23 @@ impl MultiverseContext {
         Ok(())
     }
 
+    /// Updates the presentation order of an invocation.
+    pub fn set_invocation_z_index(
+        &mut self,
+        invocation_id: u32,
+        z_index: i32,
+    ) -> MultiverseResult<()> {
+        let inv = self
+            .invocations
+            .get_mut(&invocation_id)
+            .ok_or(MultiverseError::InvocationNotFound(invocation_id))?;
+        if inv.z_index != z_index {
+            inv.z_index = z_index;
+            self.dirty = true;
+        }
+        Ok(())
+    }
+
     /// Updates the post-processing filter chain for an existing invocation.
     pub fn set_invocation_filters(
         &mut self,

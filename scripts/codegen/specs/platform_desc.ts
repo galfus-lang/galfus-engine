@@ -157,8 +157,8 @@ export const platformDescriptors: DescSpec[] = [
   {
     kind: 'union',
     name: 'LogicalKey',
-    doc: 'Logical key representation: string or named key object.',
-    variants: ['string', { inline: { named: { type: 'string' } } }]
+    doc: 'Logical key representation: normalized key string.',
+    variants: ['string']
   },
   {
     kind: 'enum',
@@ -169,7 +169,7 @@ export const platformDescriptors: DescSpec[] = [
   {
     kind: 'union',
     name: 'KeyboardEvent',
-    doc: 'Keyboard input and modifier state change events.',
+    doc: 'Keyboard, committed text, modifier, and input method events. Use textInput as the single stream of committed text.',
     variants: [
       {
         inline: {
@@ -190,6 +190,38 @@ export const platformDescriptors: DescSpec[] = [
           type: { type: { literal: 'modifiersChanged' } },
           windowId: { type: 'number' },
           modifiers: { type: { ref: 'ModifiersState' } }
+        }
+      },
+      ...(['imeEnabled', 'imeDisabled'] as const).map((type) => ({
+        inline: {
+          kind: { type: { literal: 'keyboard' as const } },
+          type: { type: { literal: type } },
+          windowId: { type: 'number' as const }
+        }
+      })),
+      {
+        inline: {
+          kind: { type: { literal: 'keyboard' } },
+          type: { type: { literal: 'imePreedit' } },
+          windowId: { type: 'number' },
+          text: { type: 'string' },
+          selection: { type: { tuple: ['number', 'number'] }, optional: true }
+        }
+      },
+      {
+        inline: {
+          kind: { type: { literal: 'keyboard' } },
+          type: { type: { literal: 'imeCommit' } },
+          windowId: { type: 'number' },
+          text: { type: 'string' }
+        }
+      },
+      {
+        inline: {
+          kind: { type: { literal: 'keyboard' } },
+          type: { type: { literal: 'textInput' } },
+          windowId: { type: 'number' },
+          text: { type: 'string' }
         }
       }
     ]

@@ -1,5 +1,5 @@
-import { GalfusBun } from '../sdk/bun/galfus.ts';
 import { resolve } from 'path';
+import { GalfusBun } from '../sdk/bun/galfus.ts';
 
 console.log('=== Testing Galfus Animation System via Bun FFI SDK ===\n');
 

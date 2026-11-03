@@ -1,6 +1,7 @@
 //! FFI unit tests.
 
 use super::*;
+use crate::ffi_audio::*;
 use crate::ffi_transforms_getters::galfus_platform_get_window_size;
 
 #[test]
@@ -64,6 +65,10 @@ fn test_c_api_lifecycle_and_json_exchange() {
     assert_eq!(unsafe { galfus_window_set_title(999, title.as_ptr()) }, -1);
     assert_eq!(galfus_window_set_cursor_grab(999, 1), -1);
     assert_eq!(galfus_window_set_cursor_icon(999, 1), -1);
+    assert_eq!(
+        unsafe { galfus_window_set_icon(999, std::ptr::null(), 0) },
+        -1
+    );
 
     let mut w: u32 = 0;
     let mut h: u32 = 0;

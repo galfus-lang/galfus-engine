@@ -1,5 +1,5 @@
-import type { CodegenContext, CodegenStrategy } from './strategy.ts';
 import { type DataType, isBuffer, isNativeStruct } from '../spec.ts';
+import type { CodegenContext, CodegenStrategy } from './strategy.ts';
 
 function toSnakeCase(str: string): string {
   return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);

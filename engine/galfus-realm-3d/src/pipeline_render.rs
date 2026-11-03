@@ -2,7 +2,7 @@
 
 use galfus_realm_3d_resources::geometry::Vertex3D;
 
-use super::{RenderPipelineOptions3D, cull_mode, to_wgpu_topology};
+use super::{RenderPipelineOptions3D, SurfacePipelineState, cull_mode, to_wgpu_topology};
 
 pub(super) fn create_1x1_texture(
     device: &wgpu::Device,
@@ -130,7 +130,11 @@ pub(super) fn create_3d_render_pipeline(
         },
         fragment: Some(wgpu::FragmentState {
             module: shader,
-            entry_point: Some("fs_main"),
+            entry_point: Some(match options.surface_state {
+                SurfacePipelineState::OpaqueTransparent => "fs_opaque_transparent",
+                SurfacePipelineState::AlphaBlendAfterOpaque => "fs_transparent",
+                _ => "fs_main",
+            }),
             targets: &[Some(wgpu::ColorTargetState {
                 format: target_format,
                 blend: options.surface_state.blend_state(),

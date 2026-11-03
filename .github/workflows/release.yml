@@ -13,6 +13,7 @@ on:
 permissions:
   actions: write
   contents: write
+  id-token: write
 
 concurrency:
   group: engine-release-${{ github.ref }}
@@ -212,7 +213,11 @@ jobs:
         run: cargo build --locked --release --package galfus-browser --target wasm32-unknown-unknown
 
       - name: Install wasm-bindgen CLI
-        run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+        shell: bash
+        run: |
+          WASM_BINDGEN_VER=$(bun -e "const lock = await Bun.file('Cargo.lock').text(); const match = lock.match(/name = \"wasm-bindgen\"\\s+version = \"([^\"]+)\"/); console.log(match ? match[1] : '0.2.130');")
+          echo "Installing wasm-bindgen-cli matching compiled schema version: $WASM_BINDGEN_VER"
+          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VER"
 
       - name: Package browser release
         shell: bash
@@ -242,11 +247,128 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  publish-packages:
+    name: Build & Publish Packages
+    needs:
+      - build-native
+      - build-browser
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Setup Node for NPM Trusted Publishing
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      - name: Upgrade npm to latest for Trusted Publishing (OIDC)
+        run: npm install -g npm@latest
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Apply release version
+        id: version
+        run: bun run version
+
+      - name: Generate SDKs and sync host packages
+        run: bun run codegen
+
+      - name: Download native and browser artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: galfus-*
+          merge-multiple: true
+
+      - name: Assemble transport distributions
+        shell: bash
+        run: |
+          mkdir -p host/transport-bun/dist host/transport-node/dist host/transport-browser/dist
+
+          for pkg in artifacts/*.tar.gz; do
+            if [[ "$pkg" == *"browser-wasm"* ]]; then
+              tar -xzf "$pkg"
+              dir=$(basename "$pkg" .tar.gz)
+              mkdir -p host/transport-browser/dist
+              cp "$dir/browser/"* host/transport-browser/dist/ 2>/dev/null || true
+              rm -rf "$dir"
+            else
+              if [[ "$pkg" == *"-linux-x64-gnu.tar.gz" ]]; then
+                platform="linux-x64"
+              elif [[ "$pkg" == *"-linux-arm64-gnu.tar.gz" ]]; then
+                platform="linux-arm64"
+              elif [[ "$pkg" == *"-darwin-x64.tar.gz" ]]; then
+                platform="macos-x64"
+              elif [[ "$pkg" == *"-darwin-arm64.tar.gz" ]]; then
+                platform="macos-arm64"
+              elif [[ "$pkg" == *"-windows-x64.tar.gz" ]]; then
+                platform="windows-x64"
+              elif [[ "$pkg" == *"-windows-arm64.tar.gz" ]]; then
+                platform="windows-arm64"
+              else
+                echo "Skipping non-matching package: $pkg"
+                continue
+              fi
+
+              tar -xzf "$pkg"
+              dir=$(basename "$pkg" .tar.gz)
+
+              # 1. Transport Node: exclusively Node-API binaries (*.node)
+              mkdir -p "host/transport-node/dist/${platform}"
+              if [ -f "$dir/lib/galfus.node" ]; then
+                cp "$dir/lib/galfus.node" "host/transport-node/dist/${platform}/galfus.node"
+              fi
+
+              # 2. Transport Bun: exclusively dynamic libraries (*.so, *.dylib, *.dll)
+              mkdir -p "host/transport-bun/dist/${platform}"
+              case "$platform" in
+                linux-*)
+                  if [ -f "$dir/lib/libgalfus_native.so" ]; then
+                    cp "$dir/lib/libgalfus_native.so" "host/transport-bun/dist/${platform}/libgalfus_native.so"
+                  fi
+                  ;;
+                macos-*)
+                  if [ -f "$dir/lib/libgalfus_native.dylib" ]; then
+                    cp "$dir/lib/libgalfus_native.dylib" "host/transport-bun/dist/${platform}/libgalfus_native.dylib"
+                  fi
+                  ;;
+                windows-*)
+                  if [ -f "$dir/lib/galfus_native.dll" ]; then
+                    cp "$dir/lib/galfus_native.dll" "host/transport-bun/dist/${platform}/galfus.dll"
+                    cp "$dir/lib/galfus_native.dll" "host/transport-bun/dist/${platform}/galfus_native.dll"
+                  fi
+                  ;;
+              esac
+
+              rm -rf "$dir"
+            fi
+          done
+
+      - name: Publish all packages to NPM (Trusted Publishing / OIDC)
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          echo "Publishing packages with tag: $tag (Trusted Publishing / Provenance enabled)"
+          for pkg in host/transport-types host/model-loader-types host/transport-bun host/transport-node host/transport-browser host/engine host/gltf-loader; do
+            echo "==> Publishing $pkg..."
+            (cd "$pkg" && npm publish --provenance --access public --tag "$tag")
+          done
+
   release:
     name: Publish GitHub Release
     needs:
       - build-native
       - build-browser
+      - publish-packages
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

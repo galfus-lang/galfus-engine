@@ -1,4 +1,4 @@
-//! Screen-space silhouette dilation outline rendering (matching .old post-process algorithm).
+//! Screen-space silhouette dilation outline rendering.
 
 use bytemuck::{Pod, Zeroable};
 use galfus_realm_3d_resources::environment::OutlineConfig3D;

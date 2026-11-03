@@ -442,7 +442,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Alpha test for Masked surface type
-    if ((material.flags.x & 2u) != 0u && tex_color.a < material.params.x) {
+    if ((material.flags.x & 3u) == 2u && tex_color.a < material.params.x) {
         discard;
     }
 

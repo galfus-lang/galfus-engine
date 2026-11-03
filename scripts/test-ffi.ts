@@ -1,5 +1,5 @@
-import { GalfusBun, ViewportRect } from '../sdk/bun/galfus.ts';
 import { resolve } from 'path';
+import { GalfusBun, ViewportRect } from '../sdk/bun/galfus.ts';
 
 const libPath = resolve(import.meta.dir, '../build/cargo-target/debug/libgalfus_native.so');
 
@@ -37,6 +37,12 @@ try {
   throw new Error('windowSetCursorIcon should throw for non-existent window');
 } catch (err: unknown) {
   console.log(`✔ Expected windowSetCursorIcon error caught: ${(err as Error).message}`);
+}
+try {
+  galfus.windowSetIcon(999, new Uint8Array([0, 0, 1, 0, 1, 0]), 6);
+  throw new Error('windowSetIcon should throw for non-existent window');
+} catch (err: unknown) {
+  console.log(`✔ Expected windowSetIcon error caught: ${(err as Error).message}`);
 }
 try {
   galfus.windowGetSize(999);

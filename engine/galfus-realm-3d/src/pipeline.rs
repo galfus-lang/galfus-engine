@@ -9,7 +9,9 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum SurfacePipelineState {
     Opaque,
+    OpaqueTransparent,
     AlphaBlend,
+    AlphaBlendAfterOpaque,
     Additive,
 }
 
@@ -26,13 +28,15 @@ impl SurfacePipelineState {
     }
 
     const fn depth_write_enabled(self) -> bool {
-        matches!(self, Self::Opaque)
+        matches!(self, Self::Opaque | Self::OpaqueTransparent)
     }
 
     fn blend_state(self) -> Option<wgpu::BlendState> {
         match self {
-            Self::Opaque => None,
-            Self::AlphaBlend => Some(wgpu::BlendState::ALPHA_BLENDING),
+            Self::Opaque | Self::OpaqueTransparent => None,
+            Self::AlphaBlend | Self::AlphaBlendAfterOpaque => {
+                Some(wgpu::BlendState::ALPHA_BLENDING)
+            }
             Self::Additive => Some(wgpu::BlendState {
                 color: wgpu::BlendComponent {
                     src_factor: wgpu::BlendFactor::One,
@@ -405,7 +409,9 @@ impl Pipeline3D {
         for topology in PrimitiveTopology3D::ALL {
             for surface_state in [
                 SurfacePipelineState::Opaque,
+                SurfacePipelineState::OpaqueTransparent,
                 SurfacePipelineState::AlphaBlend,
+                SurfacePipelineState::AlphaBlendAfterOpaque,
                 SurfacePipelineState::Additive,
             ] {
                 for side in MaterialSide3D::ALL {

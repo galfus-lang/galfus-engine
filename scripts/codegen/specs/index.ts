@@ -1,18 +1,18 @@
+import { animationDescriptors, animationFunctions } from './animation';
+import { multiverseDescriptors, multiverseFunctions } from './multiverse';
+import { platformDescriptors, platformFunctions } from './platform';
+import { realm2dDescriptors, realm2dFunctions } from './realm_2d';
+import { realm3dDescriptors, realm3dFunctions } from './realm_3d';
+import { resourceDescriptors, resourceFunctions } from './resources';
 import type { DescSpec, FunctionSpec } from './types';
-import { platformFunctions, platformDescriptors } from './platform';
-import { multiverseFunctions, multiverseDescriptors } from './multiverse';
-import { resourceFunctions, resourceDescriptors } from './resources';
-import { realm3dFunctions, realm3dDescriptors } from './realm_3d';
-import { realm2dFunctions, realm2dDescriptors } from './realm_2d';
-import { animationFunctions, animationDescriptors } from './animation';
 
+export { animationDescriptors, animationFunctions } from './animation';
+export { multiverseDescriptors, multiverseFunctions } from './multiverse';
+export { platformDescriptors, platformFunctions } from './platform';
+export { realm2dDescriptors, realm2dFunctions } from './realm_2d';
+export { realm3dDescriptors, realm3dFunctions } from './realm_3d';
+export { resourceDescriptors, resourceFunctions } from './resources';
 export * from './types';
-export { platformFunctions, platformDescriptors } from './platform';
-export { multiverseFunctions, multiverseDescriptors } from './multiverse';
-export { resourceFunctions, resourceDescriptors } from './resources';
-export { realm3dFunctions, realm3dDescriptors } from './realm_3d';
-export { realm2dFunctions, realm2dDescriptors } from './realm_2d';
-export { animationFunctions, animationDescriptors } from './animation';
 
 /**
  * Complete list of all native functions exposed by the Galfus Engine ABI.

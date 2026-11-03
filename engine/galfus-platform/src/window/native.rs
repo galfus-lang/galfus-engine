@@ -12,7 +12,7 @@ use winit::raw_window_handle::{
 #[cfg(not(target_arch = "wasm32"))]
 use winit::window::{
     CursorGrabMode as WinitCursorGrabMode, CursorIcon as WinitCursorIcon,
-    Fullscreen as WinitFullscreen, UserAttentionType as WinitUserAttentionType,
+    Fullscreen as WinitFullscreen, Icon as WinitIcon, UserAttentionType as WinitUserAttentionType,
     Window as WinitWindow,
 };
 
@@ -53,6 +53,35 @@ impl NativeWindow {
     /// Returns a reference to the underlying `winit` window.
     pub fn raw_window(&self) -> &Arc<WinitWindow> {
         &self.window
+    }
+
+    /// Native windows deliver Tab directly to the application.
+    pub fn set_tab_capture(&mut self, _enabled: bool) {}
+
+    /// Native keyboard focus is controlled by the operating system window.
+    pub fn request_input_focus(&mut self) -> PlatformResult<()> {
+        Ok(())
+    }
+
+    /// Enables input method composition for this window.
+    pub fn set_ime_allowed(&mut self, allowed: bool) -> PlatformResult<()> {
+        self.window.set_ime_allowed(allowed);
+        Ok(())
+    }
+
+    /// Sets the IME candidate area in physical window pixels.
+    pub fn set_ime_cursor_area(
+        &mut self,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    ) -> PlatformResult<()> {
+        self.window.set_ime_cursor_area(
+            PhysicalPosition::new(x, y),
+            PhysicalSize::new(width, height),
+        );
+        Ok(())
     }
 
     /// Returns the current title of the window.
@@ -238,6 +267,22 @@ impl NativeWindow {
             CursorIcon::Progress => WinitCursorIcon::Progress,
         };
         self.window.set_cursor(winit_icon);
+    }
+
+    /// Sets the visual application icon of this window.
+    /// Automatically decodes encoded image formats (ICO, PNG, WebP, JPEG).
+    pub fn set_icon(&self, data: &[u8]) -> PlatformResult<()> {
+        let img = image::load_from_memory(data).map_err(|e| {
+            PlatformError::InvalidArgument(format!("Failed to decode window icon: {e}"))
+        })?;
+        let width = img.width();
+        let height = img.height();
+        let rgba = img.to_rgba8().into_raw();
+        let icon = WinitIcon::from_rgba(rgba, width, height).map_err(|e| {
+            PlatformError::InvalidArgument(format!("Failed to create window icon from RGBA: {e}"))
+        })?;
+        self.window.set_window_icon(Some(icon));
+        Ok(())
     }
 
     /// Requests that a redraw event be scheduled for this window.

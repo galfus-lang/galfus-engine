@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SurfaceType2D {
-    /// Solid geometry writing to depth without alpha blending.
+    /// Solid geometry rendered without alpha blending.
     Opaque,
     /// Standard semi-transparent surface with alpha blending.
     #[default]

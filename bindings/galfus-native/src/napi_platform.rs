@@ -51,6 +51,55 @@ pub fn window_set_title(window_id: u32, title: String) -> Result<()> {
 }
 
 #[napi]
+pub fn window_request_input_focus(window_id: u32) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.get_window_mut(window_id)
+            .map_err(|e| e.to_string())?
+            .request_input_focus()
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn window_set_tab_capture(window_id: u32, enabled: u32) -> Result<()> {
+    with_context_mut(|ctx| {
+        let window = ctx.get_window_mut(window_id).map_err(|e| e.to_string())?;
+        window.set_tab_capture(enabled != 0);
+        Ok(())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn window_set_ime_allowed(window_id: u32, allowed: u32) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.get_window_mut(window_id)
+            .map_err(|e| e.to_string())?
+            .set_ime_allowed(allowed != 0)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn window_set_ime_cursor_area(
+    window_id: u32,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.get_window_mut(window_id)
+            .map_err(|e| e.to_string())?
+            .set_ime_cursor_area(x, y, width, height)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
 pub fn window_set_cursor_grab(window_id: u32, mode: u32) -> Result<()> {
     let grab_mode = match mode {
         1 => CursorGrabMode::Confined,
@@ -82,6 +131,15 @@ pub fn window_set_cursor_icon(window_id: u32, icon: u32) -> Result<()> {
         let win = ctx.get_window_mut(window_id).map_err(|e| e.to_string())?;
         win.set_cursor_icon(cursor_icon);
         Ok(())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn window_set_icon(window_id: u32, data: Uint8Array, _data_len: Option<i64>) -> Result<()> {
+    with_context_mut(|ctx| {
+        let win = ctx.get_window_mut(window_id).map_err(|e| e.to_string())?;
+        win.set_icon(data.as_ref()).map_err(|e| e.to_string())
     })
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }

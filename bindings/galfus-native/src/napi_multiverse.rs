@@ -131,6 +131,15 @@ pub fn multiverse_set_invocation_enabled(invocation_id: u32, enabled: bool) -> R
 }
 
 #[napi]
+pub fn multiverse_set_invocation_z_index(invocation_id: u32, z_index: i32) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        mv.set_invocation_z_index(invocation_id, z_index)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
 pub fn multiverse_set_invocation_viewport(
     env: Env,
     invocation_id: u32,

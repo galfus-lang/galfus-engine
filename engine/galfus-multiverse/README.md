@@ -19,9 +19,12 @@ Graphics execution graph orchestration, dependency validation, topological sched
 - **Flexible Invocations**:
   - Connects any registered Realm to a Target, binding specific camera slots, viewport rects, z-indices, clear colors, and filter chains.
   - Allows the same Realm to be invoked multiple times in a single frame with different cameras (e.g. split-screen multiplayer, side-by-side stereoscopy, or picture-in-picture minimaps).
-- **Responsive `ViewportRect` Engine**:
+- **Responsive `ViewportRect` Engine & Dynamic Composition**:
   - Dynamic positioning with anchors (`AnchorX::Left | Center | Right`, `AnchorY::Top | Center | Bottom`).
   - Fluid sizing using viewport width/height percentages (`vw`, `vh`) and fixed pixels (`px`), with `full()` and `anchored(...)` constructors.
+  - Distinguishes between logical coordinate placement and clipped visible regions (`resolve_logical` and `resolve_clipped`), allowing smooth slide-in/slide-out animations without premature screen clamping.
+  - Invocations whose visible rect is completely offscreen or zero-sized are pruned from execution without allocating useless 1px scratch textures.
+  - Dynamic viewport mutation via `set_invocation_viewport` preserves existing realm and target bindings.
 - **Post-Processing Screen Effects**:
   - Built-in filters: `Sepia`, `Grayscale`, `Blur`, `Invert`.
   - Custom WGSL Screen Shaders: Compiles and injects custom `fn screen_effect(in: ScreenInput) -> vec4<f32>` snippets with access to up to 8 auxiliary texture slots.

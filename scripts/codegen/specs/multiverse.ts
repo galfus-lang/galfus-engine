@@ -173,7 +173,8 @@ export const multiverseDescriptors: DescSpec[] = [
     name: 'MultiverseSchedule',
     doc: 'Complete execution graph schedule resolved for a frame.',
     fields: {
-      targetBlocks: { type: { array: { ref: 'TargetExecutionBlock' } } }
+      targetBlocks: { type: { array: { ref: 'TargetExecutionBlock' } } },
+      softCutEdges: { type: { array: { tuple: ['number', 'number'] } }, optional: true }
     }
   }
 ];
@@ -333,6 +334,16 @@ export const multiverseFunctions: FunctionSpec[] = [
         type: 'bool',
         doc: 'Whether the invocation is active'
       }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_multiverse_set_invocation_z_index',
+    methodName: 'multiverseSetInvocationZIndex',
+    doc: 'Updates the presentation order of an Invocation.',
+    params: [
+      { name: 'invocationId', type: 'u32', doc: 'Invocation ID' },
+      { name: 'zIndex', type: 'i32', doc: 'Presentation order' }
     ],
     returnType: 'i32'
   },

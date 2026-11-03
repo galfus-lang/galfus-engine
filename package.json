@@ -1,7 +1,30 @@
 {
   "name": "galfus-monorepo",
   "version": "0.0.0",
+  "description": "Galfus Engine monorepo",
+  "author": "Renato Rodrigues (morbden) <renato@vulppi.dev>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/galfus-lang/galfus-engine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/galfus-lang/galfus-engine/issues"
+  },
+  "homepage": "https://github.com/galfus-lang/galfus-engine#readme",
+  "keywords": [
+    "galfus",
+    "game-engine",
+    "rust",
+    "typescript",
+    "webgpu",
+    "ecs",
+    "multiverse"
+  ],
   "type": "module",
+  "workspaces": [
+    "host/*"
+  ],
   "scripts": {
     "prepare": "bun scripts/prepare.ts",
     "format": "bun scripts/format.ts",
@@ -16,7 +39,11 @@
     "test:napi": "bun run build:napi && bun scripts/test-napi.ts",
     "test:browser": "bun scripts/test-browser.ts",
     "test:tour:browser": "bun scripts/test-browser-tour.ts",
+    "test:host": "bun test host",
     "demo": "cargo build -p galfus-native && bun scripts/demos/main.ts",
+    "host:sync": "bun scripts/host-sync.ts",
+    "host:demo": "bun host/engine/demo/main.ts",
+    "gltf": "bun scripts/gltf-viewer.ts",
     "tour": "bun examples/feature-tour/runners/bun/index.ts",
     "tour:bun": "bun examples/feature-tour/runners/bun/index.ts",
     "tour:node": "bun examples/feature-tour/runners/node/index.ts",
@@ -27,9 +54,19 @@
     "tour:browser": "bun examples/feature-tour/runners/browser/index.ts"
   },
   "devDependencies": {
+    "@galfus/engine": "workspace:*",
+    "@galfus/gltf-loader": "workspace:*",
+    "@galfus/model-loader-types": "workspace:*",
+    "@galfus/transport-browser": "workspace:*",
+    "@galfus/transport-bun": "workspace:*",
+    "@galfus/transport-node": "workspace:*",
+    "@galfus/transport-types": "workspace:*",
     "@johnnymorganz/stylua-bin": "^2.6.0",
     "@playwright/test": "^1.64.1",
-    "@types/bun": "^1.4.3",
-    "prettier": "^3.9.10"
+    "@types/bun": "^1.4.4",
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2"
   }
 }

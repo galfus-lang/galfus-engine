@@ -162,9 +162,50 @@ pub enum NamedKey {
     Other,
 }
 
+impl NamedKey {
+    /// Returns the standard canonical string representation of this named key.
+    #[inline]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Enter => "Enter",
+            Self::Tab => "Tab",
+            Self::Space => "Space",
+            Self::Backspace => "Backspace",
+            Self::Escape => "Escape",
+            Self::Delete => "Delete",
+            Self::Insert => "Insert",
+            Self::Home => "Home",
+            Self::End => "End",
+            Self::PageUp => "PageUp",
+            Self::PageDown => "PageDown",
+            Self::ArrowUp => "ArrowUp",
+            Self::ArrowDown => "ArrowDown",
+            Self::ArrowLeft => "ArrowLeft",
+            Self::ArrowRight => "ArrowRight",
+            Self::Shift => "Shift",
+            Self::Control => "Control",
+            Self::Alt => "Alt",
+            Self::Super => "Super",
+            Self::CapsLock => "CapsLock",
+            Self::F1 => "F1",
+            Self::F2 => "F2",
+            Self::F3 => "F3",
+            Self::F4 => "F4",
+            Self::F5 => "F5",
+            Self::F6 => "F6",
+            Self::F7 => "F7",
+            Self::F8 => "F8",
+            Self::F9 => "F9",
+            Self::F10 => "F10",
+            Self::F11 => "F11",
+            Self::F12 => "F12",
+            Self::Other => "Other",
+        }
+    }
+}
+
 /// Interpreted logical key value after layout resolution and active modifiers.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LogicalKey {
     /// Printable text character or sequence (e.g. "a", "A", "1", "ñ").
     Character(String),
@@ -177,13 +218,74 @@ pub enum LogicalKey {
 }
 
 impl LogicalKey {
-    /// Returns the character string if this logical key is a character.
+    /// Returns the normalized string representation of this logical key.
     #[inline]
-    pub fn as_str(&self) -> Option<&str> {
+    pub fn as_str(&self) -> &str {
         match self {
-            Self::Character(s) => Some(s.as_str()),
-            _ => None,
+            Self::Character(s) => s.as_str(),
+            Self::Named(named) => named.as_str(),
+            Self::Unidentified => "Unidentified",
         }
+    }
+}
+
+impl std::fmt::Display for LogicalKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl serde::Serialize for LogicalKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for LogicalKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.as_str() {
+            "Enter" => Self::Named(NamedKey::Enter),
+            "Tab" => Self::Named(NamedKey::Tab),
+            "Space" => Self::Named(NamedKey::Space),
+            "Backspace" => Self::Named(NamedKey::Backspace),
+            "Escape" => Self::Named(NamedKey::Escape),
+            "Delete" => Self::Named(NamedKey::Delete),
+            "Insert" => Self::Named(NamedKey::Insert),
+            "Home" => Self::Named(NamedKey::Home),
+            "End" => Self::Named(NamedKey::End),
+            "PageUp" => Self::Named(NamedKey::PageUp),
+            "PageDown" => Self::Named(NamedKey::PageDown),
+            "ArrowUp" => Self::Named(NamedKey::ArrowUp),
+            "ArrowDown" => Self::Named(NamedKey::ArrowDown),
+            "ArrowLeft" => Self::Named(NamedKey::ArrowLeft),
+            "ArrowRight" => Self::Named(NamedKey::ArrowRight),
+            "Shift" => Self::Named(NamedKey::Shift),
+            "Control" => Self::Named(NamedKey::Control),
+            "Alt" => Self::Named(NamedKey::Alt),
+            "Super" => Self::Named(NamedKey::Super),
+            "CapsLock" => Self::Named(NamedKey::CapsLock),
+            "F1" => Self::Named(NamedKey::F1),
+            "F2" => Self::Named(NamedKey::F2),
+            "F3" => Self::Named(NamedKey::F3),
+            "F4" => Self::Named(NamedKey::F4),
+            "F5" => Self::Named(NamedKey::F5),
+            "F6" => Self::Named(NamedKey::F6),
+            "F7" => Self::Named(NamedKey::F7),
+            "F8" => Self::Named(NamedKey::F8),
+            "F9" => Self::Named(NamedKey::F9),
+            "F10" => Self::Named(NamedKey::F10),
+            "F11" => Self::Named(NamedKey::F11),
+            "F12" => Self::Named(NamedKey::F12),
+            "Unidentified" => Self::Unidentified,
+            other => Self::Character(other.to_string()),
+        })
     }
 }
 

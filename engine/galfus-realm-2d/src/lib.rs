@@ -15,6 +15,7 @@ pub mod shadow;
 pub mod surface_effect;
 pub mod svg_manager;
 pub mod svg_tessellator;
+pub mod svg_text_layout;
 pub mod types;
 
 pub use batch::{BatchBuilder2D, PreparedItem2D};
@@ -24,3 +25,6 @@ pub use shader::compile_2d_shader;
 pub use shadow::ShadowManager2D;
 pub use surface_effect::compose_surface_shader_2d;
 pub use types::*;
+
+#[cfg(test)]
+mod transparency_tests;

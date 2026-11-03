@@ -8,7 +8,85 @@ pub(super) struct EventCollector<'a> {
     pub(super) winit_to_logical: &'a HashMap<WinitWindowId, u32>,
     pub(super) pointer_positions: &'a mut HashMap<(u32, u64), Vec2>,
     pub(super) modifiers: &'a mut HashMap<u32, ModifiersState>,
+    pub(super) composing: &'a mut std::collections::HashSet<u32>,
     pub(super) events: Vec<PlatformEvent>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn map_ime(window_id: u32, ime: winit::event::Ime) -> KeyboardEvent {
+    use winit::event::Ime;
+    match ime {
+        Ime::Enabled => KeyboardEvent::ImeEnabled { window_id },
+        Ime::Disabled => KeyboardEvent::ImeDisabled { window_id },
+        Ime::Commit(text) => KeyboardEvent::ImeCommit { window_id, text },
+        Ime::Preedit(text, selection) => {
+            let selection = selection.and_then(|(start, end)| {
+                Some([
+                    u32::try_from(text.get(..start)?.encode_utf16().count()).ok()?,
+                    u32::try_from(text.get(..end)?.encode_utf16().count()).ok()?,
+                ])
+            });
+            KeyboardEvent::ImePreedit {
+                window_id,
+                text,
+                selection,
+            }
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn committed_key_text(
+    text: Option<&str>,
+    pressed: bool,
+    modifiers: ModifiersState,
+    composing: bool,
+) -> Option<&str> {
+    if !pressed || composing || modifiers.super_key || (modifiers.ctrl && !modifiers.alt) {
+        return None;
+    }
+    text.filter(|value| !value.is_empty() && !value.chars().any(char::is_control))
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod ime_tests {
+    use super::*;
+    #[test]
+    fn maps_preedit_byte_selection_to_utf16() {
+        let text = "あ😀x".to_string();
+        assert_eq!(
+            map_ime(7, winit::event::Ime::Preedit(text.clone(), Some((3, 7)))),
+            KeyboardEvent::ImePreedit {
+                window_id: 7,
+                text: text.clone(),
+                selection: Some([1, 3])
+            }
+        );
+        assert_eq!(
+            map_ime(7, winit::event::Ime::Preedit(text.clone(), Some((1, 7)))),
+            KeyboardEvent::ImePreedit {
+                window_id: 7,
+                text,
+                selection: None
+            }
+        );
+    }
+
+    #[test]
+    fn only_commits_text_from_non_composing_pressed_keys() {
+        let mods = ModifiersState::EMPTY;
+        assert_eq!(committed_key_text(Some("é"), true, mods, false), Some("é"));
+        assert_eq!(committed_key_text(Some("a"), false, mods, false), None);
+        assert_eq!(committed_key_text(Some("a"), true, mods, true), None);
+        assert_eq!(committed_key_text(Some("\n"), true, mods, false), None);
+        let ctrl = ModifiersState { ctrl: true, ..mods };
+        assert_eq!(committed_key_text(Some("a"), true, ctrl, false), None);
+        let alt_gr = ModifiersState { alt: true, ..ctrl };
+        assert_eq!(
+            committed_key_text(Some("€"), true, alt_gr, false),
+            Some("€")
+        );
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -46,6 +124,9 @@ impl<'a> ApplicationHandler for EventCollector<'a> {
                         }));
                 }
                 WinitWindowEvent::Focused(focused) => {
+                    if !focused {
+                        self.composing.remove(&logical_id);
+                    }
                     self.events
                         .push(PlatformEvent::Window(WindowEvent::FocusChanged {
                             window_id: logical_id,
@@ -188,6 +269,14 @@ impl<'a> ApplicationHandler for EventCollector<'a> {
                     let text = key_ev.text.map(|s| s.to_string());
                     let repeat = key_ev.repeat;
 
+                    let committed = committed_key_text(
+                        text.as_deref(),
+                        state.is_pressed(),
+                        active_mods,
+                        self.composing.contains(&logical_id),
+                    )
+                    .map(str::to_owned);
+
                     self.events
                         .push(PlatformEvent::Keyboard(KeyboardEvent::Input {
                             window_id: logical_id,
@@ -198,6 +287,42 @@ impl<'a> ApplicationHandler for EventCollector<'a> {
                             modifiers: active_mods,
                             repeat,
                         }));
+                    if let Some(text) = committed {
+                        self.events
+                            .push(PlatformEvent::Keyboard(KeyboardEvent::TextInput {
+                                window_id: logical_id,
+                                text,
+                            }));
+                    }
+                }
+                WinitWindowEvent::Ime(ime) => {
+                    let event = map_ime(logical_id, ime);
+                    match &event {
+                        KeyboardEvent::ImePreedit { text, .. } => {
+                            if text.is_empty() {
+                                self.composing.remove(&logical_id);
+                            } else {
+                                self.composing.insert(logical_id);
+                            }
+                        }
+                        KeyboardEvent::ImeDisabled { .. } | KeyboardEvent::ImeCommit { .. } => {
+                            self.composing.remove(&logical_id);
+                        }
+                        _ => {}
+                    }
+                    let committed = if let KeyboardEvent::ImeCommit { text, .. } = &event {
+                        Some(text.clone())
+                    } else {
+                        None
+                    };
+                    self.events.push(PlatformEvent::Keyboard(event));
+                    if let Some(text) = committed {
+                        self.events
+                            .push(PlatformEvent::Keyboard(KeyboardEvent::TextInput {
+                                window_id: logical_id,
+                                text,
+                            }));
+                    }
                 }
                 _ => {}
             }

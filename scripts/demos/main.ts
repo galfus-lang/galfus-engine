@@ -1,8 +1,8 @@
-import { runDemoMv1 } from './demo_mv1_multiverse.ts';
-import { runDemoMv2 } from './demo_mv2_split_texture_reuse.ts';
-import { runDemoMv3 } from './demo_mv3_cycle_multiverse.ts';
-import { runDemoMv4 } from './demo_mv4_anti_aliasing.ts';
+import { runDemo2d1 } from './demo_2d1_shadows.ts';
+import { runDemo2d2 } from './demo_2d2_effects_particles.ts';
+import { runDemo2d3 } from './demo_2d3_svg.ts';
 import { runDemo3d1 } from './demo_3d1_orbit.ts';
+import { runDemo3d10 } from './demo_3d10_morph_targets.ts';
 import { runDemo3d2 } from './demo_3d2_bones.ts';
 import { runDemo3d3 } from './demo_3d3_ssao_shadows.ts';
 import { runDemo3d4 } from './demo_3d4_features.ts';
@@ -11,11 +11,11 @@ import { runDemo3d6 } from './demo_3d6_refraction.ts';
 import { runDemo3d7 } from './demo_3d7_portal_mirror.ts';
 import { runDemo3d8 } from './demo_3d8_instancing.ts';
 import { runDemo3d9 } from './demo_3d9_sides_normals.ts';
-import { runDemo3d10 } from './demo_3d10_morph_targets.ts';
-import { runDemo2d1 } from './demo_2d1_shadows.ts';
-import { runDemo2d2 } from './demo_2d2_effects_particles.ts';
-import { runDemo2d3 } from './demo_2d3_svg.ts';
 import { runDemoAnim1 } from './demo_anim1_transitions.ts';
+import { runDemoMv1 } from './demo_mv1_multiverse.ts';
+import { runDemoMv2 } from './demo_mv2_split_texture_reuse.ts';
+import { runDemoMv3 } from './demo_mv3_cycle_multiverse.ts';
+import { runDemoMv4 } from './demo_mv4_anti_aliasing.ts';
 import { runDemoTour } from './demo_tour_feature_path.ts';
 
 function printHelp(): void {
@@ -49,7 +49,7 @@ function printHelp(): void {
     '    2d3   - Reactive Vector SVG (Cyberpunk HUD, Dynamic Attributes, <use> States & Text)'
   );
   console.log('\n  [Feature Tour]');
-  console.log('    tour  - Guided Split-Screen Multiverse Feature Tour (3D & 2D Companion)\n');
+  console.log('    tour      - Guided Split-Screen Multiverse Feature Tour (3D & 2D Companion)');
 }
 
 async function main(): Promise<void> {

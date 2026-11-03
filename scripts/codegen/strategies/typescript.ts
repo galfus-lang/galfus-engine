@@ -1,4 +1,3 @@
-import type { CodegenContext, CodegenStrategy } from './strategy.ts';
 import {
   type DataType,
   type DescSpec,
@@ -8,6 +7,7 @@ import {
   isJsonArray,
   isNativeStruct
 } from '../spec.ts';
+import type { CodegenContext, CodegenStrategy } from './strategy.ts';
 
 function renderTsType(type: FieldType): string {
   if (typeof type === 'string') {

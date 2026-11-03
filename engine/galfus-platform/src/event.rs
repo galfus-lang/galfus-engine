@@ -95,10 +95,30 @@ mod tests {
 
         let json_key = serde_json::to_string(&key_ev).expect("key serialization failed");
         assert!(json_key.contains("\"physicalKey\":\"keyW\""));
+        assert!(json_key.contains("\"logicalKey\":\"w\""));
         assert!(json_key.contains("\"shift\":true"));
 
         let deserialized_key: PlatformEvent =
             serde_json::from_str(&json_key).expect("key deserialization failed");
         assert_eq!(key_ev, deserialized_key);
+
+        let named_key_ev = PlatformEvent::Keyboard(KeyboardEvent::Input {
+            window_id: 2,
+            physical_key: KeyCode::Escape,
+            logical_key: LogicalKey::Named(crate::keyboard::NamedKey::Escape),
+            text: None,
+            state: KeyState::Pressed,
+            modifiers: ModifiersState::EMPTY,
+            repeat: false,
+        });
+
+        let json_named =
+            serde_json::to_string(&named_key_ev).expect("named key serialization failed");
+        assert!(json_named.contains("\"physicalKey\":\"escape\""));
+        assert!(json_named.contains("\"logicalKey\":\"Escape\""));
+
+        let deserialized_named: PlatformEvent =
+            serde_json::from_str(&json_named).expect("named key deserialization failed");
+        assert_eq!(named_key_ev, deserialized_named);
     }
 }

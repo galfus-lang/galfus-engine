@@ -36,6 +36,10 @@ pub enum PlatformError {
     #[error("Audio playback error: {0}")]
     AudioPlaybackFailed(String),
 
+    /// Invalid argument provided to platform operation.
+    #[error("Invalid argument: {0}")]
+    InvalidArgument(String),
+
     /// An underlying core error occurred (e.g. reserved logical ID).
     #[error(transparent)]
     Core(#[from] CoreError),

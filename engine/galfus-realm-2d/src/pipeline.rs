@@ -184,7 +184,7 @@ impl PipelineManager2D {
             let blend = match key.surface_type {
                 0 => None,                                   // Opaque
                 1 => Some(wgpu::BlendState::ALPHA_BLENDING), // Transparent
-                2 => Some(wgpu::BlendState::ALPHA_BLENDING), // Masked
+                2 => None,                                   // Masked
                 3 => Some(wgpu::BlendState {
                     // Additive
                     color: wgpu::BlendComponent {

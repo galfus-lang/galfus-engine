@@ -13,3 +13,4 @@ serde.workspace = true
 bytemuck.workspace = true
 wgpu.workspace = true
 pollster.workspace = true
+image.workspace = true

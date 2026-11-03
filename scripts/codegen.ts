@@ -1,15 +1,16 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { resolve } from 'path';
 import { API_DESCRIPTORS, API_FUNCTIONS } from './codegen/spec.ts';
-import type { CodegenStrategy } from './codegen/strategies/strategy.ts';
-import { CHeaderStrategy } from './codegen/strategies/c_header.ts';
-import { PythonStrategy } from './codegen/strategies/python.ts';
-import { LuaStrategy } from './codegen/strategies/lua.ts';
-import { TypeScriptStrategy } from './codegen/strategies/typescript.ts';
-import { BunFfiStrategy } from './codegen/strategies/bun_ffi.ts';
-import { NodeApiStrategy } from './codegen/strategies/node_api.ts';
-import { CSharpStrategy } from './codegen/strategies/csharp.ts';
 import { BrowserWasmStrategy } from './codegen/strategies/browser_wasm.ts';
+import { BunFfiStrategy } from './codegen/strategies/bun_ffi.ts';
+import { CHeaderStrategy } from './codegen/strategies/c_header.ts';
+import { CSharpStrategy } from './codegen/strategies/csharp.ts';
+import { LuaStrategy } from './codegen/strategies/lua.ts';
+import { NodeApiStrategy } from './codegen/strategies/node_api.ts';
+import { PythonStrategy } from './codegen/strategies/python.ts';
+import type { CodegenStrategy } from './codegen/strategies/strategy.ts';
+import { syncHostSdk } from './codegen/sync_host.ts';
+import { TypeScriptStrategy } from './codegen/strategies/typescript.ts';
 
 const rootDir = resolve(import.meta.dir, '..');
 const browserAudioTemplate = resolve(import.meta.dir, 'codegen/templates/browser_audio.ts');
@@ -52,6 +53,8 @@ async function main() {
   );
   console.log(`✔ [browser_wasm] Generated Browser Web Audio adapter -> sdk/browser/audio.ts`);
 
+  await syncHostSdk(rootDir);
+
   // The WASM binding generator transforms Rust source and must leave its output
   // formatted so `bun validate` succeeds immediately after `bun codegen`.
   const formatResult = Bun.spawnSync({
@@ -62,6 +65,18 @@ async function main() {
   });
   if (formatResult.exitCode !== 0) {
     throw new Error('Failed to format generated WASM bindings.');
+  }
+
+  // Ensure generated TypeScript SDKs have clean and sorted imports
+  // so that `bun run format:check` succeeds immediately after codegen.
+  const cleanImportsResult = Bun.spawnSync({
+    cmd: ['bun', 'scripts/clean-imports.ts'],
+    cwd: rootDir,
+    stdout: 'inherit',
+    stderr: 'inherit'
+  });
+  if (cleanImportsResult.exitCode !== 0) {
+    throw new Error('Failed to clean imports on generated SDKs.');
   }
 
   console.log('\n🎉 All SDK glue-code files generated successfully via Codegen Strategies!');

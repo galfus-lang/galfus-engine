@@ -77,6 +77,18 @@ impl Realm2DContext {
         self.pipeline_manager = Some(pipeline_manager);
         self.gpu_res = Some(gpu_res);
     }
+
+    /// Returns the number of active sprites currently registered in this realm.
+    #[inline]
+    pub fn sprite_count(&self) -> usize {
+        self.sprites.len()
+    }
+
+    /// Returns the number of active shapes currently registered in this realm.
+    #[inline]
+    pub fn shape_count(&self) -> usize {
+        self.shapes.len()
+    }
 }
 
 impl Realm for Realm2DContext {
@@ -176,7 +188,7 @@ impl Realm for Realm2DContext {
 
         // Build item batches
         self.batch_builder.clear();
-        for (&_, (sprite, transform)) in &self.sprites {
+        for (&id, (sprite, transform)) in &self.sprites {
             let [min_z, max_z] = sprite.height_range.unwrap_or([-10000.0, 10000.0]);
             let instance = Item2DInstanceRaw {
                 model_matrix: sprite.compute_model_matrix(transform),
@@ -192,10 +204,14 @@ impl Realm for Realm2DContext {
 
             let draw_order = sprite.draw_order.unwrap_or(transform.draw_order);
             self.batch_builder.push(PreparedItem2D {
+                order: (id, 0),
                 key: BatchKey2D {
                     z_layer: transform.z_layer,
                     draw_order,
-                    surface_type: 1,
+                    surface_type: self
+                        .materials
+                        .get(&sprite.material_id.unwrap_or(0))
+                        .map_or(1, Material2D::surface_type_id),
                     material_id: sprite.material_id.unwrap_or(0),
                     geometry_id: 0,
                 },
@@ -204,7 +220,7 @@ impl Realm for Realm2DContext {
             });
         }
 
-        for (&_, (shape, transform)) in &self.shapes {
+        for (&id, (shape, transform)) in &self.shapes {
             let [min_z, max_z] = shape.height_range.unwrap_or([-10000.0, 10000.0]);
             let instance = Item2DInstanceRaw {
                 model_matrix: shape.compute_model_matrix(transform),
@@ -220,10 +236,14 @@ impl Realm for Realm2DContext {
 
             let draw_order = shape.draw_order.unwrap_or(transform.draw_order);
             self.batch_builder.push(PreparedItem2D {
+                order: (id, 1),
                 key: BatchKey2D {
                     z_layer: transform.z_layer,
                     draw_order,
-                    surface_type: 1,
+                    surface_type: self
+                        .materials
+                        .get(&shape.material_id.unwrap_or(0))
+                        .map_or(1, Material2D::surface_type_id),
                     material_id: shape.material_id.unwrap_or(0),
                     geometry_id: 0,
                 },
@@ -232,7 +252,7 @@ impl Realm for Realm2DContext {
             });
         }
 
-        for (&_, (cfg, transform, state)) in &self.emitters {
+        for (&id, (cfg, transform, state)) in &self.emitters {
             let material_id = cfg.material_id.unwrap_or(0);
             let surface_type = self
                 .materials
@@ -265,6 +285,7 @@ impl Realm for Realm2DContext {
                 };
 
                 self.batch_builder.push(PreparedItem2D {
+                    order: (id, 2),
                     key: BatchKey2D {
                         z_layer: transform.z_layer,
                         draw_order: transform.draw_order,
@@ -278,7 +299,8 @@ impl Realm for Realm2DContext {
             }
         }
 
-        self.svg_manager.push_batches(&mut self.batch_builder);
+        self.svg_manager
+            .push_batches(&mut self.batch_builder, &self.materials);
 
         self.batch_builder.build();
         self.dirty = false;

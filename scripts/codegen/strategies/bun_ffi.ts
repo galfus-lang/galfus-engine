@@ -1,5 +1,5 @@
-import type { CodegenContext, CodegenStrategy } from './strategy.ts';
 import { type DataType, isBuffer, isJson, isJsonArray, isNativeStruct } from '../spec.ts';
+import type { CodegenContext, CodegenStrategy } from './strategy.ts';
 
 function mapFFIType(type: DataType): string {
   if (typeof type === 'object') {
@@ -360,9 +360,12 @@ export class BunFfiStrategy implements CodegenStrategy {
       '          events.push(event); continue;',
       '        }',
       '        if (kind === 3) {',
-      '          const event: any = { kind: "keyboard", type: type === 1 ? "input" : "modifiersChanged", windowId, modifiers };',
-      '          if (type === 1) Object.assign(event, { physicalKey: this.enumText(text0), logicalKey: (flags & 128) !== 0 ? { named: this.enumText(text1) } : text1, state: (flags & 1) !== 0 ? "pressed" : "released", repeat: (flags & 32) !== 0 });',
-      '          if ((flags & 256) !== 0) event.text = text2;',
+      '          const types = ["input", "modifiersChanged", "imeEnabled", "imePreedit", "imeCommit", "imeDisabled", "textInput"];',
+      '          const event: any = { kind: "keyboard", type: types[type - 1], windowId };',
+      '          if (type <= 2) event.modifiers = modifiers;',
+      '          if (type === 1) { Object.assign(event, { physicalKey: this.enumText(text0), logicalKey: text1, state: (flags & 1) !== 0 ? "pressed" : "released", repeat: (flags & 32) !== 0 }); if ((flags & 256) !== 0) event.text = text2; }',
+      '          if (type === 4 || type === 5 || type === 7) event.text = text0;',
+      '          if (type === 4 && (flags & 1) !== 0) event.selection = [subjectId, id];',
       '          events.push(event); continue;',
       '        }',
       '        if (kind === 4) {',

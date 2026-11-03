@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 
 type Exception = { path: string; reason: string };
 type Config = { maxLines: number; exceptions: Exception[] };
@@ -23,7 +24,7 @@ async function trackedFiles(): Promise<string[]> {
   return paths
     .split('\n')
     .filter(Boolean)
-    .filter((path) => SOURCE_EXTENSIONS.has(path.split('.').pop() ?? ''));
+    .filter((path) => SOURCE_EXTENSIONS.has(path.split('.').pop() ?? '') && existsSync(path));
 }
 
 async function main(): Promise<void> {

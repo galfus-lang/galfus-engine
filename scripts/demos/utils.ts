@@ -1,13 +1,8 @@
-export function extractKey(input: { physicalKey: string; logicalKey: any }): string {
-  if (typeof input.logicalKey === 'object' && input.logicalKey !== null) {
-    if ('character' in input.logicalKey && typeof input.logicalKey.character === 'string') {
-      return input.logicalKey.character.toLowerCase();
-    }
-    if ('named' in input.logicalKey && typeof input.logicalKey.named === 'string') {
-      return input.logicalKey.named.toLowerCase();
-    }
+export function extractKey(input: { physicalKey?: string; logicalKey?: any }): string {
+  if (typeof input.logicalKey === 'string' && input.logicalKey.length > 0) {
+    return input.logicalKey.toLowerCase();
   }
-  const phys = input.physicalKey.toLowerCase();
+  const phys = String(input.physicalKey ?? '').toLowerCase();
   if (phys.startsWith('key') && phys.length === 4) return phys.slice(3);
   if (phys.startsWith('digit') && phys.length === 6) return phys.slice(5);
   return phys;

@@ -149,6 +149,40 @@ impl SvgManager2D {
         self.instances.get_mut(&id)
     }
 
+    /// Resolves an element's geometric bounds in SVG viewport coordinates.
+    pub fn element_rect(
+        &self,
+        svg_id: u32,
+        element_id: &str,
+    ) -> Result<Option<crate::svg_tessellator::SvgElementRect>, String> {
+        let Some(instance) = self.instances.get(&svg_id) else {
+            return Ok(None);
+        };
+        crate::svg_tessellator::svg_element_rect(
+            &instance.svg.source,
+            element_id,
+            self.font_db.clone(),
+            &self.default_font_family,
+        )
+    }
+
+    /// Reads the raw text shaping layout for the current SVG document.
+    pub fn text_layout(
+        &self,
+        svg_id: u32,
+        element_id: &str,
+    ) -> Result<Option<crate::svg_text_layout::SvgTextLayout>, String> {
+        let Some(instance) = self.instances.get(&svg_id) else {
+            return Ok(None);
+        };
+        crate::svg_text_layout::svg_text_layout(
+            instance.svg.current_xml(),
+            element_id,
+            self.font_db.clone(),
+            &self.default_font_family,
+        )
+    }
+
     /// Resolves an active GPU geometry buffer by 64-bit packed generational handle.
     pub fn get_geometry_by_u64(&self, raw: u64) -> Option<&SvgGeometry2D> {
         let handle: Handle<SvgGeometry2D> = Handle::from_u64(raw)?;
@@ -255,8 +289,12 @@ impl SvgManager2D {
     }
 
     /// Pushes active SVG geometry into the 2D batch builder.
-    pub fn push_batches(&self, batch_builder: &mut BatchBuilder2D) {
-        for instance in self.instances.values() {
+    pub fn push_batches(
+        &self,
+        batch_builder: &mut BatchBuilder2D,
+        materials: &HashMap<u32, crate::types::Material2D>,
+    ) {
+        for (&id, instance) in &self.instances {
             let Some(handle) = instance.geometry_handle else {
                 continue;
             };
@@ -292,10 +330,13 @@ impl SvgManager2D {
                 .unwrap_or(instance.transform.draw_order);
 
             batch_builder.push(PreparedItem2D {
+                order: (id, 3),
                 key: BatchKey2D {
                     z_layer: instance.transform.z_layer,
                     draw_order,
-                    surface_type: 1, // Transparent
+                    surface_type: materials
+                        .get(&mat_id)
+                        .map_or(1, crate::types::Material2D::surface_type_id),
                     material_id: mat_id,
                     geometry_id: handle.to_u64(),
                 },

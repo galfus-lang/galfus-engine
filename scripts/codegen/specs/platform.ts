@@ -1,4 +1,5 @@
 import type { FunctionSpec } from './types';
+
 export { platformDescriptors } from './platform_desc';
 
 export const platformFunctions: FunctionSpec[] = [
@@ -83,6 +84,46 @@ export const platformFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_window_request_input_focus',
+    methodName: 'windowRequestInputFocus',
+    doc: 'Requests keyboard focus for a window input surface.',
+    params: [{ name: 'windowId', type: 'u32', doc: 'Window logical ID' }],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_window_set_tab_capture',
+    methodName: 'windowSetTabCapture',
+    doc: 'Configures whether a focused browser window captures Tab key navigation.',
+    params: [
+      { name: 'windowId', type: 'u32', doc: 'Window logical ID' },
+      { name: 'enabled', type: 'u32', doc: 'One to capture, zero to release' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_window_set_ime_allowed',
+    methodName: 'windowSetImeAllowed',
+    doc: 'Enables or disables input method composition for a window.',
+    params: [
+      { name: 'windowId', type: 'u32', doc: 'Window logical ID' },
+      { name: 'allowed', type: 'u32', doc: 'One to enable, zero to disable' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_window_set_ime_cursor_area',
+    methodName: 'windowSetImeCursorArea',
+    doc: 'Sets the input method candidate area in physical window pixels.',
+    params: [
+      { name: 'windowId', type: 'u32', doc: 'Window logical ID' },
+      { name: 'x', type: 'i32', doc: 'Horizontal position' },
+      { name: 'y', type: 'i32', doc: 'Vertical position' },
+      { name: 'width', type: 'u32', doc: 'Cursor width' },
+      { name: 'height', type: 'u32', doc: 'Cursor height' }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_window_set_cursor_grab',
     methodName: 'windowSetCursorGrab',
     doc: 'Updates the cursor grab mode (0: None, 1: Confined, 2: Locked).',
@@ -114,6 +155,29 @@ export const platformFunctions: FunctionSpec[] = [
         name: 'icon',
         type: 'u32',
         doc: 'Cursor icon index'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_window_set_icon',
+    methodName: 'windowSetIcon',
+    doc: 'Sets the visual application icon of a window using raw encoded image bytes (ICO, PNG, WebP, JPEG).',
+    params: [
+      {
+        name: 'windowId',
+        type: 'u32',
+        doc: 'Host logical ID of the window'
+      },
+      {
+        name: 'data',
+        type: 'ptr',
+        doc: 'Pointer to raw icon image bytes'
+      },
+      {
+        name: 'dataLen',
+        type: 'u64',
+        doc: 'Length of icon image data in bytes'
       }
     ],
     returnType: 'i32'
