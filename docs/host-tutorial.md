@@ -42,14 +42,14 @@ import { createRuntime } from '@galfus/engine';
 const transport = createBunTransport({ debug: true, targetFps: 60 });
 const runtime = createRuntime(transport, { fixedDt: 1 / 60 });
 
-// 2. Register variable-timestep frame updates (returns an off unsubscription callback)
-const offTick = runtime.on('tick', ({ dt, fps, frameId }) => {
-  // Per-frame visual / camera / interpolation updates
+// 2. Register deterministic fixed-timestep updates (runs before variable tick)
+const offFixed = runtime.on('fixedTick', ({ fixedDt, time, subStep }) => {
+  // Deterministic physics / simulation steps
 });
 
-// 3. Register deterministic fixed-timestep updates (physics / simulation)
-const offFixed = runtime.on('fixedTick', ({ fixedDt, time, subStep }) => {
-  // Deterministic simulation steps
+// 3. Register variable-timestep frame updates (runs after fixedTick; can use runtime.fixedAlpha)
+const offTick = runtime.on('tick', ({ dt, fps, frameId }) => {
+  // Per-frame visual / camera / interpolation updates
 });
 
 // 4. Start the precision frame loop (use runtime.pause(), runtime.stop(), or runtime.reset() to control lifecycle)

@@ -103,6 +103,7 @@ export class MultiverseRuntime {
   readonly fixedDt: number;
   readonly maxFixedSubSteps: number;
   private _fixedAccumulator = 0;
+  private _fixedSteps = 0;
 
   readonly #transport: GalfusTransport;
 
@@ -149,6 +150,14 @@ export class MultiverseRuntime {
    */
   get elapsedSeconds(): number {
     return this._elapsedSeconds;
+  }
+
+  /**
+   * Normalized interpolation factor [0, 1) of the remaining fixed-timestep accumulator,
+   * useful during `tick` for visually interpolating between fixed simulation steps.
+   */
+  get fixedAlpha(): number {
+    return Math.min(1, Math.max(0, this._fixedAccumulator / this.fixedDt));
   }
 
   /**
@@ -366,6 +375,7 @@ export class MultiverseRuntime {
       this._elapsedSeconds = 0;
       this._frameId = 0;
       this._fixedAccumulator = 0;
+      this._fixedSteps = 0;
 
       // 1. Multiverse: Invocations, Realms, and Targets
       this.multiverse.reset();
@@ -484,23 +494,17 @@ export class MultiverseRuntime {
       }
     }
 
-    // 3. Dispatch frame tick listeners ('tick')
-    const tickListeners = this._eventListeners.get('tick');
-    if (tickListeners && tickListeners.size > 0) {
-      for (const listener of tickListeners) {
-        listener(timing);
-      }
-    }
-
-    // 4. Step fixed tick listeners ('fixedTick') with deterministic accumulator
+    // 3. Step fixed tick listeners ('fixedTick') with deterministic accumulator & float tolerance
     const fixedTickListeners = this._eventListeners.get('fixedTick');
     this._fixedAccumulator += timing.dt;
     let subStep = 0;
-    while (this._fixedAccumulator >= this.fixedDt && subStep < this.maxFixedSubSteps) {
+    const epsilon = 1e-9;
+    while (this._fixedAccumulator + epsilon >= this.fixedDt && subStep < this.maxFixedSubSteps) {
+      this._fixedSteps++;
       if (fixedTickListeners && fixedTickListeners.size > 0) {
         const payload: FixedTickTiming = {
           fixedDt: this.fixedDt,
-          time: this._elapsedSeconds - this._fixedAccumulator + this.fixedDt,
+          time: this._fixedSteps * this.fixedDt,
           subStep,
           frameId: timing.frameId
         };
@@ -508,11 +512,19 @@ export class MultiverseRuntime {
           listener(payload);
         }
       }
-      this._fixedAccumulator -= this.fixedDt;
+      this._fixedAccumulator = Math.max(0, this._fixedAccumulator - this.fixedDt);
       subStep++;
     }
-    if (this._fixedAccumulator >= this.fixedDt) {
-      this._fixedAccumulator = this._fixedAccumulator % this.fixedDt;
+    if (this._fixedAccumulator + epsilon >= this.fixedDt) {
+      this._fixedAccumulator = Math.max(0, this._fixedAccumulator % this.fixedDt);
+    }
+
+    // 4. Dispatch variable frame tick listeners ('tick') after fixed simulation steps
+    const tickListeners = this._eventListeners.get('tick');
+    if (tickListeners && tickListeners.size > 0) {
+      for (const listener of tickListeners) {
+        listener(timing);
+      }
     }
 
     // 5. Step animations (this also pumps animation events and triggers registered listeners)
