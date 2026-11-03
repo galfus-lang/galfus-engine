@@ -7,9 +7,7 @@ import {
   type FrameTiming,
   GalfusLoopError,
   type GalfusTransport,
-  GalfusTransportError,
-  type LoopOptions,
-  type TransportInitOptions
+  type LoopOptions
 } from '@galfus/transport-types';
 import { AnimationCoordinator } from './animation/coordinator';
 import { AudioManager } from './audio/manager';
@@ -165,21 +163,6 @@ export class MultiverseRuntime {
    */
   get isDisposed(): boolean {
     return this._state === 'disposed';
-  }
-
-  /**
-   * Initializes the transport backend (if not ready) and binds engine to all subsystems.
-   * Calling init repeatedly is an idempotent no-op.
-   */
-  async init(options?: TransportInitOptions): Promise<void> {
-    if (this._state === 'disposed' || this._state === 'failed') {
-      throw new GalfusTransportError(`Cannot initialize runtime in state '${this._state}'.`);
-    }
-    if (!this.#transport.isInitialized) {
-      await this.#transport.init(options);
-    }
-    this.bindSubsystems();
-    this._state = 'ready';
   }
 
   private bindSubsystems(): void {
@@ -557,23 +540,6 @@ export class MultiverseRuntime {
 
     // 10. Step post-render stage: postRender (metrics, cleanups) AFTER dispatch
     this.multiverse.stepRealmsPostRender(context);
-  }
-
-  /**
-   * Manually steps the fixed simulation timestep (useful for deterministic tests).
-   */
-  stepFixed(dt = this.fixedDt): void {
-    const fixedTickListeners = this._eventListeners.get('fixedTick');
-    if (!fixedTickListeners || fixedTickListeners.size === 0) return;
-    const payload: FixedTickTiming = {
-      fixedDt: dt,
-      time: this._elapsedSeconds,
-      subStep: 0,
-      frameId: this._frameId
-    };
-    for (const listener of fixedTickListeners) {
-      listener(payload);
-    }
   }
 }
 

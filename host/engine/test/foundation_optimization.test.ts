@@ -129,23 +129,5 @@ describe('Foundation Optimizations & Physics Pre-requisites', () => {
         runtime.dispose();
       }
     });
-
-    it('allows manual fixed stepping via stepFixed()', () => {
-      const transport = createBunTransport({ headless: true });
-      const runtime = createRuntime(transport, { fixedDt: 0.01 });
-      try {
-        let called = 0;
-        runtime.on('fixedTick', (timing) => {
-          called++;
-          expect(timing.fixedDt).toBe(0.01);
-        });
-
-        runtime.stepFixed();
-        runtime.stepFixed();
-        expect(called).toBe(2);
-      } finally {
-        runtime.dispose();
-      }
-    });
   });
 });

@@ -22,10 +22,10 @@ graph TD
 
 ### Core Concepts:
 
-- **`MultiverseRuntime`**: The primary engine entry point. Connects to the platform transport, manages the precision frame loop (120 FPS or rAF), and steps all subsystems.
+- **`MultiverseRuntime`**: The primary engine entry point. Connects to an initialized platform transport, manages the precision frame loop (120 FPS or `requestAnimationFrame`), and steps all subsystems (`tick`, `fixedTick`, animations, pre-render, sync, dispatch, post-render).
 - **`MultiverseCoordinator`**: Schedules rendering of multiple independent `Realms` into `Targets` (Windows or Offscreen Textures) through responsive `Invocations`.
-- **`Realm2D` & `Realm3D`**: Isolated ECS worlds with built-in anchor hierarchies and automatic native core synchronization.
-- **Anchor Hierarchy**: Replaces rigid scene graphs with flexible **Anchors**. Child entities attach to targets via pluggable strategies (`static`, IK, physics chains) while sharing a **persistent, zero-allocation matrix buffer**.
+- **`Realm2D` & `Realm3D`**: Isolated ECS worlds with built-in anchor hierarchies, geometric colliders, and automatic incremental native synchronization.
+- **Anchor Hierarchy (`origin` / `target`)**: Replaces rigid parent/child scene graphs with flexible **Anchors**. Dependent entities (`origin`) attach to reference entities (`target`) via pluggable strategies (`'static'`, `'translation'`, or custom callbacks) while sharing a **persistent, zero-allocation matrix buffer**.
 
 ---
 
@@ -38,26 +38,22 @@ import { createBunTransport } from '@galfus/transport-bun';
 // import { createBrowserTransport } from '@galfus/transport-browser';
 import { createRuntime } from '@galfus/engine';
 
-// 1. Choose platform transport and create unified runtime
-const transport = createBunTransport();
-const runtime = createRuntime(transport);
+// 1. Initialize platform transport (ready-by-default) and create unified runtime
+const transport = createBunTransport({ debug: true, targetFps: 60 });
+const runtime = createRuntime(transport, { fixedDt: 1 / 60 });
 
-// 2. Initialize platform windowing and GPU subsystem
-await runtime.init({ debug: true });
-
-// 3. Register user frame updates (returns an off unsubscription callback)
+// 2. Register variable-timestep frame updates (returns an off unsubscription callback)
 const offTick = runtime.on('tick', ({ dt, fps, frameId }) => {
-  // Game logic updates here
+  // Per-frame visual / camera / interpolation updates
 });
 
-// 4. Start the precision frame loop
-runtime.start({ targetFps: 60 });
+// 3. Register deterministic fixed-timestep updates (physics / simulation)
+const offFixed = runtime.on('fixedTick', ({ fixedDt, time, subStep }) => {
+  // Deterministic simulation steps
+});
 
-// Or drive frames explicitly with an asynchronous loop yielding to the event loop:
-// while (running) {
-//   runtime.tick(0.016);
-//   await Bun.sleep(16);
-// }
+// 4. Start the precision frame loop (use runtime.pause(), runtime.stop(), or runtime.reset() to control lifecycle)
+runtime.start({ targetFps: 60 });
 ```
 
 ---
@@ -160,10 +156,9 @@ Pass `canvasId` matching your HTML element to `runtime.platform.window.create()`
 import { createBrowserTransport } from '@galfus/transport-browser';
 import { createRuntime } from '@galfus/engine';
 
-// 1. Initialize browser transport and unified runtime
-const transport = createBrowserTransport();
+// 1. Initialize browser transport (async WASM/WebGPU boot) and unified runtime
+const transport = await createBrowserTransport();
 const runtime = createRuntime(transport);
-await runtime.init();
 
 // 2. Bind directly to the canvas element using `canvasId`
 //    Galfus automatically tracks element dimensions, device pixel ratio, and swapchain sizing
@@ -358,8 +353,9 @@ realm3D.hierarchy.attach(indicator, parentTank, (targetWorld, local, outWorld) =
 
 // 5. Query and detach:
 const isAttached = realm3D.hierarchy.isAttached(turret); // true
-const children = realm3D.hierarchy.getChildren(parentTank); // [turret.entityId, indicator.entityId]
-realm3D.hierarchy.detach(barrel); // Unlinks barrel from turret
+const targetId = realm3D.hierarchy.getTarget(turret); // parentTank.entityId
+const dependents = realm3D.hierarchy.getDependents(parentTank); // [turret.entityId, indicator.entityId]
+realm3D.hierarchy.detach(barrel); // Unlinks barrel from turret while preserving world transform
 ```
 
 ### Particles, Portals & Debug Gizmos
@@ -443,16 +439,14 @@ const textureId = runtime.resources.createTexture(rawPixelBytes, {
   format: 'rgba8Unorm'
 });
 
-// 2. Create custom 3D Geometry directly from semantic vertex & index arrays:
-const { geometryId, entityId } = realm3D.createGeometry(
-  {
-    positions: new Float32Array([-1, 0, 0, 1, 0, 0, 0, 1, 0]),
-    normals: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]),
-    uvs: new Float32Array([0, 0, 1, 0, 0.5, 1]),
-    indices: new Uint16Array([0, 1, 2])
-  },
-  materialId // Optionally binds to a Model3DComponent on the created entity
-);
+// 2. Create custom 3D Geometry resource from semantic vertex & index arrays, then instantiate a Model:
+const { geometryId } = realm3D.createGeometry({
+  positions: new Float32Array([-1, 0, 0, 1, 0, 0, 0, 1, 0]),
+  normals: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]),
+  uvs: new Float32Array([0, 0, 1, 0, 0.5, 1]),
+  indices: new Uint16Array([0, 1, 2])
+});
+const entityId = realm3D.createModel({ geometryId, materialId }, { position: [0, 1, 0] });
 ```
 
 ### High-Frequency 3D Spatial Audio (`runtime.audio`)
@@ -488,10 +482,10 @@ runtime.on('tick', ({ dt, frameId }) => {
 All transitions and path followers can be **directly bound to entity properties** across 2D and 3D realms:
 
 ```ts
-// 1. Animate a 3D Model transform directly via Realm helper:
+// 1. Animate a 3D Model transform directly via ECS Realm helper:
 realm3D.animateModel(
   parentTank.entityId,
-  { type: 'vec3', value: [10, 5, 0] },
+  { position: [10, 5, 0], scale: [1.2, 1.2, 1.2] },
   { duration: 1.5, easing: 'easeOutCubic' },
   runtime.animation
 );
@@ -499,7 +493,7 @@ realm3D.animateModel(
 // 2. Animate a 2D SVG opacity directly via Realm helper:
 realm2D.animateSvgOpacity(hudSvg.entityId, 0.0, 1.0, 1.5, runtime.animation);
 
-// 3. Create transition explicitly bound to an AnimationTarget:
+// 3. Create transition explicitly bound to a native AnimationTarget:
 const transId = runtime.animation.createTransition(
   { type: 'vec3', value: [0, 0, 0] },
   { duration: 2.0 },
@@ -527,15 +521,79 @@ const offAnim = runtime.on('animation', (event) => {
 
 ---
 
-## 8. Executable Demo & Clean Shutdown
+## 8. Colliders, Pointer Interaction, Trans-Realm & SVG Text Input
 
-You can execute the complete, verified demo locally at any time:
+### Geometric Colliders & Raycasts
+
+Attach 2D (`circle`, `rectangle`, `polygon`) or 3D (`sphere`, `box`, `plane`) colliders to entities with a `Model2D` or `Model3D` component:
+
+```ts
+// Attach a 3D box collider to the tank
+const colliderId = realm3D.addCollider(parentTank.entityId, {
+  type: 'box',
+  halfExtents: [1.0, 1.0, 1.0]
+});
+
+// Perform a 3D raycast query (sorted by distance)
+const hits = realm3D.raycast([0, 1, 10], [0, 0, -1], 25);
+
+// 2D point and ray queries
+const hitEntities2D = realm2D.queryPoint([0, 0]);
+```
+
+### Pointer Interaction & Trans-Realm Traversal
+
+Register interactive pointer listeners on 2D/3D colliders or SVG elements. When a realm renders to an offscreen texture target bound to a 3D quad or 2D sprite in another realm via `bindTargetTexture` and `connectPresentationSurface`, pointer and focus events traverse seamlessly across realms:
+
+```ts
+// Interactive 3D collider
+const tankListener = runtime.interactive(realm3D.realmId, {
+  type: 'collider',
+  entityId: parentTank.entityId
+});
+tankListener.on('hover', () => runtime.platform.window.setCursorIcon(windowId, 'pointer'));
+tankListener.on('leave', () => runtime.platform.window.setCursorIcon(windowId, 'default'));
+tankListener.on('click', (event) => console.log('Clicked tank at:', event.pointer.position));
+
+// Interactive SVG element inside Realm2D
+const svgButton = runtime.interactive(realm2D.realmId, {
+  type: 'svg',
+  svgId: hudSvg.svgId,
+  elementId: 'score'
+});
+svgButton.on('click', () => console.log('Score clicked!'));
+```
+
+### Focus, SVG Text Input & Layout Queries
+
+Bind keyboard/IME text editing and `Tab` / `Shift+Tab` focus navigation directly to SVG elements:
+
+```ts
+const nameInput = runtime.textInput(realm2D.realmId, {
+  svgId: hudSvg.svgId,
+  elementId: 'score',
+  value: 'Player 1',
+  tabIndex: 0
+});
+nameInput.on('change', (val) => console.log('Updated text:', val));
+
+// Query SVG element bounds and shaped text cluster metrics in SVG viewport coordinates
+const rect = runtime.svg.getRect(realm2D.realmId, hudSvg.svgId, 'score');
+const layout = runtime.svg.getTextLayout(realm2D.realmId, hudSvg.svgId, 'score');
+```
+
+---
+
+## 9. Executable Demos & Clean Shutdown
+
+You can execute the verified host demos locally at any time:
 
 ```bash
-# Run interactive desktop OS window demo:
-bun demo tutorial
-# or
+# Run interactive desktop OS window demos:
 bun host:demo tutorial
+bun host:demo interaction
+bun host:demo text-input
+bun host:demo trans-realm
 
 # Or run headless (CI / test environments):
 bun host:demo tutorial --headless --frames 10

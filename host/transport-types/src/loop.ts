@@ -64,7 +64,7 @@ export interface EngineLoopController {
    * @example
    * ```ts
    * transport.startLoop((timing) => {
-   *   world.tick(timing.timeMs, timing.deltaMs);
+   *   // Handle frame timing (timing.dt, timing.frameId, timing.fps)
    * });
    * ```
    */

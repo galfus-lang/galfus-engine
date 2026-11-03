@@ -1,12 +1,7 @@
 import { advanceFrame } from './controlled-transport';
 import { describe, expect, it } from 'bun:test';
 import { createBunTransport } from '@galfus/transport-bun';
-import {
-  type GalfusEngine,
-  GalfusLoopError,
-  type GalfusTransport,
-  GalfusTransportError
-} from '@galfus/transport-types';
+import { type GalfusEngine, GalfusLoopError, type GalfusTransport } from '@galfus/transport-types';
 import { EcsWorld } from '../src/ecs/world';
 import { createRuntime } from '../src/runtime';
 
@@ -22,7 +17,7 @@ describe('Phase F03 — Runtime Pronto e Scheduler Preparatório', () => {
       expect(runtime.state).toBe('disposed');
     });
 
-    it('runtime.init() called multiple times is idempotent and never duplicates event listeners', async () => {
+    it('createRuntime binds subsystems once and never duplicates event listeners', () => {
       let pumpCount = 0;
       const mockEngine = {
         platformPumpEvents: () => [],
@@ -55,11 +50,6 @@ describe('Phase F03 — Runtime Pronto e Scheduler Preparatório', () => {
       };
 
       const runtime = createRuntime(mockTransport);
-
-      // Call init multiple times
-      await runtime.init();
-      await runtime.init();
-      await runtime.init();
 
       expect(runtime.state).toBe('ready');
 
@@ -169,7 +159,6 @@ describe('Phase F03 — Runtime Pronto e Scheduler Preparatório', () => {
       runtime.dispose();
 
       expect(() => runtime.start()).toThrow(GalfusLoopError);
-      expect(() => runtime.init()).toThrow(GalfusTransportError);
     });
   });
 

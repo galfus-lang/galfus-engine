@@ -14,7 +14,7 @@ import { createAnchor, createRuntime } from '../src/index';
 function createMockTransport() {
   const calls: string[] = [];
   let loopCallback: FrameCallback | null = null;
-  let isInitialized = false;
+  let isInitialized = true;
 
   const mockEngine = {
     multiverseCreateTarget: (id: number) => calls.push(`createTarget:${id}`),
@@ -102,15 +102,11 @@ function createMockTransport() {
 }
 
 describe('@galfus/engine > Unified MultiverseRuntime', () => {
-  it('manages full lifecycle: transport init, realms, anchors, frame stepping, and disposal', async () => {
+  it('manages full lifecycle: realms, anchors, frame stepping, and disposal', () => {
     const { transport, calls } = createMockTransport();
     const runtime = createRuntime(transport);
 
-    // 1. Initialize
-    await runtime.init();
-    expect(calls).toContain('transport:init');
-
-    // 2. Create Target and Realms
+    // 1. Create Target and Realms
     runtime.multiverse.createTarget(1, { kind: { type: 'window', windowId: 1 } });
     expect(calls).toContain('createTarget:1');
 
