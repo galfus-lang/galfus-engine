@@ -268,7 +268,10 @@ jobs:
       - name: Setup Node for NPM Trusted Publishing
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26
+
+      - name: Upgrade npm to latest for Trusted Publishing (OIDC)
+        run: npm install -g npm@latest
 
       - name: Install Bun dependencies
         run: bun install --frozen-lockfile --ignore-scripts
