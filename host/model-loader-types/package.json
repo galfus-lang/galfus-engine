@@ -1,9 +1,35 @@
 {
   "name": "@galfus/model-loader-types",
   "version": "0.0.0",
+  "description": "Shared 3D model and geometry loader interfaces for Galfus Engine",
+  "author": "Renato Rodrigues (morbden) <renato@vulppi.dev>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/galfus-lang/galfus-engine.git",
+    "directory": "host/model-loader-types"
+  },
+  "bugs": {
+    "url": "https://github.com/galfus-lang/galfus-engine/issues"
+  },
+  "homepage": "https://github.com/galfus-lang/galfus-engine#readme",
+  "keywords": [
+    "galfus",
+    "game-engine",
+    "model-loader",
+    "3d",
+    "types",
+    "geometry",
+    "materials",
+    "assets"
+  ],
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
   "exports": {
     ".": "./src/index.ts"
   }

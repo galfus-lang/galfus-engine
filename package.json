@@ -1,6 +1,26 @@
 {
   "name": "galfus-monorepo",
   "version": "0.0.0",
+  "description": "Galfus Engine monorepo",
+  "author": "Renato Rodrigues (morbden) <renato@vulppi.dev>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/galfus-lang/galfus-engine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/galfus-lang/galfus-engine/issues"
+  },
+  "homepage": "https://github.com/galfus-lang/galfus-engine#readme",
+  "keywords": [
+    "galfus",
+    "game-engine",
+    "rust",
+    "typescript",
+    "webgpu",
+    "ecs",
+    "multiverse"
+  ],
   "type": "module",
   "workspaces": [
     "host/*"

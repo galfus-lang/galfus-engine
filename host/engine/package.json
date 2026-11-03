@@ -1,9 +1,40 @@
 {
   "name": "@galfus/engine",
   "version": "0.0.0",
+  "description": "Lightweight, high-performance TypeScript ECS and multiverse game engine built for Galfus",
+  "author": "Renato Rodrigues (morbden) <renato@vulppi.dev>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/galfus-lang/galfus-engine.git",
+    "directory": "host/engine"
+  },
+  "bugs": {
+    "url": "https://github.com/galfus-lang/galfus-engine/issues"
+  },
+  "homepage": "https://github.com/galfus-lang/galfus-engine#readme",
+  "keywords": [
+    "galfus",
+    "game-engine",
+    "ecs",
+    "2d",
+    "3d",
+    "multiverse",
+    "webgpu",
+    "scene-graph",
+    "audio",
+    "animation",
+    "spatial",
+    "raycast",
+    "input"
+  ],
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./math": "./src/math/index.ts",

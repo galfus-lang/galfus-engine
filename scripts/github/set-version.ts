@@ -1,4 +1,4 @@
-import { appendFile, readFile, writeFile } from 'fs/promises';
+import { appendFile, readdir, readFile, writeFile } from 'fs/promises';
 import { resolve } from 'path';
 
 const CHANNELS = new Set(['stable', 'alpha', 'beta', 'next', 'latest']);
@@ -58,6 +58,48 @@ async function updatePackageVersion(root: string, version: string): Promise<void
   await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
+async function updateHostPackageVersions(root: string, version: string): Promise<void> {
+  const hostDir = resolve(root, 'host');
+  const entries = await readdir(hostDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const pkgJsonPath = resolve(hostDir, entry.name, 'package.json');
+    try {
+      const content = await readFile(pkgJsonPath, 'utf8');
+      const manifest = JSON.parse(content) as Record<string, any>;
+      manifest.version = version;
+      if (manifest.dependencies) {
+        for (const [dep, ver] of Object.entries(manifest.dependencies)) {
+          if (dep.startsWith('@galfus/') && ver === 'workspace:*') {
+            manifest.dependencies[dep] = `^${version}`;
+          }
+        }
+      }
+      if (manifest.devDependencies) {
+        for (const [dep, ver] of Object.entries(manifest.devDependencies)) {
+          if (dep.startsWith('@galfus/') && ver === 'workspace:*') {
+            manifest.devDependencies[dep] = `^${version}`;
+          }
+        }
+      }
+      await writeFile(pkgJsonPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    } catch {
+      // ignore non-package directories
+    }
+  }
+
+  const rootPkgPath = resolve(root, 'package.json');
+  const rootManifest = JSON.parse(await readFile(rootPkgPath, 'utf8')) as Record<string, any>;
+  if (rootManifest.devDependencies) {
+    for (const [dep, ver] of Object.entries(rootManifest.devDependencies)) {
+      if (dep.startsWith('@galfus/') && ver === 'workspace:*') {
+        rootManifest.devDependencies[dep] = `^${version}`;
+      }
+    }
+    await writeFile(rootPkgPath, `${JSON.stringify(rootManifest, null, 2)}\n`);
+  }
+}
+
 async function exportVersion(version: ReleaseVersion): Promise<void> {
   const output = process.env.GITHUB_OUTPUT;
   if (!output) {
@@ -83,6 +125,7 @@ async function main(): Promise<void> {
 
   await updateCargoVersion(root, version.packageVersion);
   await updatePackageVersion(root, version.packageVersion);
+  await updateHostPackageVersions(root, version.packageVersion);
   await exportVersion(version);
 }
 
