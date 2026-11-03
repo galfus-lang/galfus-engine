@@ -582,6 +582,32 @@ const rect = runtime.svg.getRect(realm2D.realmId, hudSvg.svgId, 'score');
 const layout = runtime.svg.getTextLayout(realm2D.realmId, hudSvg.svgId, 'score');
 ```
 
+### Anchor Presets (`rope`, `chain`, `spring`) & Physics Coupling (`@galfus/physics-2d` / `@galfus/physics-3d`)
+
+`presetsAnchor` provides built-in strategies (`static`, `translation`, `rope`, `chain`, `spring`) that work both kinematically in `@galfus/engine` and physically as Rapier WASM joints when `@galfus/physics-2d` or `@galfus/physics-3d` is attached:
+
+```ts
+import { presetsAnchor } from '@galfus/engine';
+import { attachPhysics3D } from '@galfus/physics-3d';
+
+// 1. Attach 3D Rapier physics world to runtime ('fixedTick') and realm3D
+const physics3D = await attachPhysics3D(runtime, realm3D, {
+  gravity: [0, -9.81, 0],
+  interpolate: true
+});
+
+// 2. Anchor weight to ceiling with rope strategy (or use hierarchy.attachChain([...]))
+realm3D.hierarchy.attach(weight, ceiling, presetsAnchor.rope({ maxLength: 4.0 }));
+
+// 3. Adding RigidBodies automatically promotes the Anchor to a physical Rapier RopeJoint
+//    and sets anchor.managedByPhysics = true so AnchorSolveSystem skips kinematic solving:
+physics3D.addRigidBody(ceiling, { type: 'fixed' });
+physics3D.addRigidBody(weight, { type: 'dynamic', mass: 2.0, restitution: 0.3 });
+
+// 4. Visual children without RigidBody still follow the physics-driven parent via AnchorSolveSystem:
+realm3D.hierarchy.attach(sparkEffect, weight, presetsAnchor.static([0, -0.5, 0]));
+```
+
 ---
 
 ## 9. Executable Demos & Clean Shutdown

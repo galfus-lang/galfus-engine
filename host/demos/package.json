@@ -1,0 +1,33 @@
+{
+  "name": "@galfus/demos",
+  "version": "0.0.0",
+  "description": "Galfus Engine Interactive Demos Catalog (Multiverse, 3D, 2D, Host, Physics & Anchors)",
+  "author": "Renato Rodrigues (morbden) <renato@vulppi.dev>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/galfus-lang/galfus-engine.git",
+    "directory": "host/demos"
+  },
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "demo": "bun src/main.ts"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.8.1",
+    "@galfus/engine": "workspace:*",
+    "@galfus/physics-2d": "workspace:*",
+    "@galfus/physics-3d": "workspace:*",
+    "@galfus/physics-types": "workspace:*",
+    "@galfus/transport-bun": "workspace:*",
+    "@galfus/transport-types": "workspace:*",
+    "commander": "^15.0.0",
+    "fuse.js": "^7.5.0",
+    "unicode-segmenter": "0.17.3"
+  }
+}

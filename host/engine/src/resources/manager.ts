@@ -14,8 +14,12 @@ export interface LoadTextureOptions {
 
 export class ResourceManager {
   private _engine: GalfusEngine | null = null;
-  private readonly _idAllocator = new IdAllocator<TextureId>(1);
+  private readonly _idAllocator: IdAllocator<TextureId>;
   private readonly _textures = new Set<TextureId>();
+
+  constructor(initialId = 1) {
+    this._idAllocator = new IdAllocator<TextureId>(initialId);
+  }
 
   bindEngine(engine: GalfusEngine): void {
     this._engine = engine;

@@ -46,6 +46,8 @@ pub struct Realm3DContext {
     pub(crate) particle_renderer: Option<crate::particle::ParticleRenderer3D>,
     pub(crate) particle_alpha_instances: Vec<Particle3DInstance>,
     pub(crate) particle_additive_instances: Vec<Particle3DInstance>,
+    pub(crate) particle_alpha_batches: Vec<crate::particle::ParticleBatch3D>,
+    pub(crate) particle_additive_batches: Vec<crate::particle::ParticleBatch3D>,
     pub(crate) refraction_pipeline: Option<crate::refraction::RefractionPipeline3D>,
     pub(crate) portal_pipelines: BTreeMap<u32, crate::portal::PortalPipeline3D>,
     pub(crate) scene_buffers: Option<SceneGpuBuffers>,
@@ -83,6 +85,8 @@ impl Realm3DContext {
             particle_renderer: None,
             particle_alpha_instances: Vec::new(),
             particle_additive_instances: Vec::new(),
+            particle_alpha_batches: Vec::new(),
+            particle_additive_batches: Vec::new(),
             refraction_pipeline: None,
             portal_pipelines: BTreeMap::new(),
             scene_buffers: None,
@@ -108,6 +112,8 @@ impl Realm3DContext {
         self.emitters.clear();
         self.particle_alpha_instances.clear();
         self.particle_additive_instances.clear();
+        self.particle_alpha_batches.clear();
+        self.particle_additive_batches.clear();
         self.portals.clear();
         self.model_bones.clear();
         self.bones.clear();

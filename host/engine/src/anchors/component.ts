@@ -29,6 +29,42 @@ export interface Transform3DProps {
 }
 
 /**
+ * Parameters for built-in kinematic and physical anchor strategies ('rope', 'chain', 'spring').
+ */
+export interface AnchorStrategyParams {
+  /** Maximum distance before pulling origin (used by 'rope'). */
+  maxLength?: number;
+  /** Fixed link distance between origin and target (used by 'chain'). */
+  length?: number;
+  /** Whether to orient origin towards target (used by 'chain', defaults to true). */
+  alignRotation?: boolean;
+  /** Spring stiffness coefficient (used by 'spring', defaults to 120). */
+  stiffness?: number;
+  /** Damping coefficient (used by 'spring' and 'rope'). */
+  damping?: number;
+  /** Rest distance for spring (defaults to 0). */
+  restLength?: number;
+  /** Optional world/target offset vector ([x, y] or [x, y, z]). */
+  offset?: readonly number[];
+  /** Optional local anchor attachment point on origin entity ([x, y] or [x, y, z]). */
+  localAnchorOrigin?: readonly number[];
+  /** Optional local anchor attachment point on target entity ([x, y] or [x, y, z]). */
+  localAnchorTarget?: readonly number[];
+  /** Whether connected physics bodies should collide with each other (defaults to false). */
+  collideConnected?: boolean;
+  /** Internal initial relative vector from target to origin at attach time. */
+  initialDelta?: readonly number[];
+}
+
+/**
+ * Structured preset descriptor accepted by `hierarchy.attach(origin, target, preset)`.
+ */
+export interface AnchorPresetDescriptor {
+  readonly strategy: 'static' | 'translation' | 'rope' | 'chain' | 'spring';
+  readonly params?: AnchorStrategyParams;
+}
+
+/**
  * Anchor component linking an origin entity to a target entity with an arbitrary strategy or functional constraint.
  */
 export interface AnchorComponent extends Component {
@@ -37,6 +73,8 @@ export interface AnchorComponent extends Component {
   targetEntityId: EntityId;
   /** Anchor solving strategy name (defaults to 'static'). */
   strategy: string;
+  /** Optional strategy configuration parameters (for 'rope', 'chain', 'spring', etc.). */
+  params?: AnchorStrategyParams;
   /** Optional distance constraint parameter. */
   distance?: number;
   /** Optional 2D offset matrix if anchoring in 2D space. */
@@ -49,17 +87,24 @@ export interface AnchorComponent extends Component {
   callback3d?: AnchorConstraintCallback3D;
   /** Whether this anchor is currently active. */
   active: boolean;
+  /**
+   * When true, a physics package (@galfus/physics-2d or @galfus/physics-3d) manages this
+   * anchor as a physical Joint during `fixedTick`, and `AnchorSolveSystem` skips matrix multiplication.
+   */
+  managedByPhysics?: boolean;
 }
 
 export interface AnchorProps {
   targetEntityId: EntityId;
   strategy?: string;
+  params?: AnchorStrategyParams;
   distance?: number;
   offset2d?: Mat2d;
   offset3d?: Mat4;
   callback2d?: AnchorConstraintCallback2D;
   callback3d?: AnchorConstraintCallback3D;
   active?: boolean;
+  managedByPhysics?: boolean;
 }
 
 export function createAnchor(props: AnchorProps): AnchorComponent {
@@ -67,12 +112,14 @@ export function createAnchor(props: AnchorProps): AnchorComponent {
     type: 'Anchor',
     targetEntityId: props.targetEntityId,
     strategy: props.strategy ?? 'static',
-    distance: props.distance,
+    params: props.params,
+    distance: props.distance ?? props.params?.maxLength ?? props.params?.length,
     offset2d: props.offset2d,
     offset3d: props.offset3d,
     callback2d: props.callback2d,
     callback3d: props.callback3d,
-    active: props.active ?? true
+    active: props.active ?? true,
+    managedByPhysics: props.managedByPhysics ?? false
   };
 }
 

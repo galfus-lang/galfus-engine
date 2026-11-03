@@ -209,49 +209,45 @@ impl Realm for Realm3DContext {
             );
         }
 
-        crate::particle::collect_emitter_instances(
-            &self.emitters,
-            &self.materials,
-            &mut self.particle_alpha_instances,
-            &mut self.particle_additive_instances,
-        );
-
-        let alpha_count = self.particle_alpha_instances.len() as u32;
-        let additive_count = self.particle_additive_instances.len() as u32;
-
         let has_refr = !collector.refractive.is_empty();
-        let (behind_alpha, behind_additive) = if has_refr && (alpha_count > 0 || additive_count > 0)
-        {
+        let refraction_threshold = if has_refr {
             let min_refr = collector
                 .refractive
                 .iter()
                 .map(|i| i.depth)
                 .fold(f32::INFINITY, f32::min);
             let threshold = (min_refr.sqrt() - 0.6).max(0.0).powi(2);
-            let cam_pos = camera_transform.position;
-            (
-                crate::particle::partition_by_depth(
-                    &mut self.particle_alpha_instances,
-                    cam_pos,
-                    threshold,
-                ),
-                crate::particle::partition_by_depth(
-                    &mut self.particle_additive_instances,
-                    cam_pos,
-                    threshold,
-                ),
-            )
+            Some((camera_transform.position, threshold))
         } else {
-            (0, 0)
+            None
         };
+
+        crate::particle::collect_emitter_instances(
+            &self.emitters,
+            &self.materials,
+            refraction_threshold,
+            &mut self.particle_alpha_instances,
+            &mut self.particle_additive_instances,
+            &mut self.particle_alpha_batches,
+            &mut self.particle_additive_batches,
+        );
+
+        let alpha_count = self.particle_alpha_instances.len() as u32;
+        let additive_count = self.particle_additive_instances.len() as u32;
+        let has_behind_particles = self
+            .particle_alpha_batches
+            .iter()
+            .chain(self.particle_additive_batches.iter())
+            .any(|b| !b.behind_range.is_empty());
+        let has_front_particles = self
+            .particle_alpha_batches
+            .iter()
+            .chain(self.particle_additive_batches.iter())
+            .any(|b| !b.front_range.is_empty());
 
         if alpha_count > 0 || additive_count > 0 {
             let particle_renderer = self.particle_renderer.get_or_insert_with(|| {
-                crate::particle::ParticleRenderer3D::new(
-                    device,
-                    ctx.target_format,
-                    &pipeline.scene_layout,
-                )
+                crate::particle::ParticleRenderer3D::new(device, ctx.target_format, pipeline)
             });
             particle_renderer.upload(
                 device,
@@ -369,7 +365,13 @@ impl Realm for Realm3DContext {
                         .particle_renderer
                         .as_ref()
                         .filter(|_| alpha_count > 0 || additive_count > 0)
-                        .map(|p| (p, alpha_count, additive_count));
+                        .map(|p| {
+                            (
+                                p,
+                                self.particle_alpha_batches.as_slice(),
+                                self.particle_additive_batches.as_slice(),
+                            )
+                        });
                     portal_pipe.render_portal_pass(
                         crate::portal::PortalPassDesc {
                             encoder: &mut encoder,
@@ -377,6 +379,7 @@ impl Realm for Realm3DContext {
                             virtual_scene_bg: v_bg,
                             sky_pipe: self.skybox_pipeline.as_ref(),
                             sky_mode: self.environment.skybox.mode,
+                            materials: &self.materials,
                             particles: particle_draw,
                         },
                         opaque_draws,
@@ -439,10 +442,16 @@ impl Realm for Realm3DContext {
             );
 
             // Draw background particles before capturing opaque texture so they distort through refractive surfaces
-            if behind_alpha > 0 || behind_additive > 0 {
+            if has_behind_particles {
                 pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
                 if let Some(particle_renderer) = &self.particle_renderer {
-                    particle_renderer.render(&mut pass, 0..behind_alpha, 0..behind_additive);
+                    particle_renderer.render(
+                        &mut pass,
+                        &self.materials,
+                        &self.particle_alpha_batches,
+                        &self.particle_additive_batches,
+                        crate::particle::ParticlePassSlice::BehindRefractive,
+                    );
                 }
             }
         }
@@ -464,7 +473,6 @@ impl Realm for Realm3DContext {
         // 3. Translucent, Refractive, Mirror, and Foreground Particle pass
         let has_trans = !collector.transparent.is_empty();
         let has_additive = !collector.additive.is_empty();
-        let has_front_particles = alpha_count > behind_alpha || additive_count > behind_additive;
         if has_refr || has_mirrors || has_trans || has_additive || has_front_particles {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Realm3D Refractive & Transparent Pass"),
@@ -540,8 +548,10 @@ impl Realm for Realm3DContext {
                 pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
                 particle_renderer.render(
                     &mut pass,
-                    behind_alpha..alpha_count,
-                    behind_additive..additive_count,
+                    &self.materials,
+                    &self.particle_alpha_batches,
+                    &self.particle_additive_batches,
+                    crate::particle::ParticlePassSlice::FrontRefractive,
                 );
             }
         }
@@ -572,23 +582,16 @@ impl Realm for Realm3DContext {
     }
 
     fn referenced_texture_ids(&self) -> Vec<u32> {
-        let mut ids = Vec::new();
-        for (mat, _, _) in self.materials.values() {
-            for slot in mat.resolved_texture_slots() {
-                if let Some(id) = slot
-                    && id != 0
-                {
-                    ids.push(id);
-                }
-            }
-        }
-        ids
+        self.materials
+            .values()
+            .flat_map(|(mat, _, _)| mat.resolved_texture_slots().into_iter().flatten())
+            .filter(|&id| id != 0)
+            .collect()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }

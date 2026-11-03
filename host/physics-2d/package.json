@@ -1,0 +1,41 @@
+{
+  "name": "@galfus/physics-2d",
+  "version": "0.0.0",
+  "description": "2D rigid-body physics and anchor joint coupling for Galfus Engine powered by Rapier2D WASM",
+  "author": "Renato Rodrigues (morbden) <renato@vulppi.dev>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/galfus-lang/galfus-engine.git",
+    "directory": "host/physics-2d"
+  },
+  "bugs": {
+    "url": "https://github.com/galfus-lang/galfus-engine/issues"
+  },
+  "homepage": "https://github.com/galfus-lang/galfus-engine#readme",
+  "keywords": [
+    "galfus",
+    "game-engine",
+    "physics",
+    "2d",
+    "rapier",
+    "wasm",
+    "rigidbody",
+    "joints"
+  ],
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@dimforge/rapier2d-compat": "^0.21.0",
+    "@galfus/engine": "workspace:*",
+    "@galfus/physics-types": "workspace:*"
+  }
+}

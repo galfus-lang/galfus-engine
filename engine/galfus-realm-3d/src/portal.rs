@@ -35,7 +35,12 @@ pub struct PortalPassDesc<'a> {
     pub virtual_scene_bg: &'a wgpu::BindGroup,
     pub sky_pipe: Option<&'a crate::skybox::SkyboxPipeline3D>,
     pub sky_mode: galfus_realm_3d_resources::environment::SkyboxMode3D,
-    pub particles: Option<(&'a crate::particle::ParticleRenderer3D, u32, u32)>,
+    pub materials: &'a BTreeMap<u32, (Material3D, Option<wgpu::Buffer>, Option<wgpu::BindGroup>)>,
+    pub particles: Option<(
+        &'a crate::particle::ParticleRenderer3D,
+        &'a [crate::particle::ParticleBatch3D],
+        &'a [crate::particle::ParticleBatch3D],
+    )>,
 }
 
 impl PortalPipeline3D {
@@ -271,9 +276,15 @@ impl PortalPipeline3D {
             &desc.pipeline.dummy_refraction_bg,
         );
 
-        if let Some((particle_renderer, alpha_count, additive_count)) = desc.particles {
+        if let Some((particle_renderer, alpha_batches, additive_batches)) = desc.particles {
             pass.set_bind_group(0, desc.virtual_scene_bg, &[]);
-            particle_renderer.render(&mut pass, 0..alpha_count, 0..additive_count);
+            particle_renderer.render(
+                &mut pass,
+                desc.materials,
+                alpha_batches,
+                additive_batches,
+                crate::particle::ParticlePassSlice::All,
+            );
         }
     }
 

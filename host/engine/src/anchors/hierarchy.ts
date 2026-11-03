@@ -10,13 +10,40 @@ import { mat2d, mat4 } from '../math/index';
 import type { Model2DComponent } from '../realm2d/components';
 import type { Model3DComponent } from '../realm3d/components';
 import { SpatialDirtyFlags } from '../spatial/flags';
-import { type AnchorComponent, createAnchor } from './component';
+import {
+  type AnchorComponent,
+  type AnchorPresetDescriptor,
+  type AnchorStrategyParams,
+  createAnchor
+} from './component';
+import { presetsAnchor } from './presets';
 import type { AnchorConstraintCallback2D, AnchorConstraintCallback3D } from './strategy';
 
 export type EntityLike = EntityId | { entityId: EntityId };
 
-export type AnchorConstraint3D = string | AnchorConstraintCallback3D;
-export type AnchorConstraint2D = string | AnchorConstraintCallback2D;
+export interface AnchorAttachOptions {
+  readonly strategy: string | AnchorPresetDescriptor;
+  readonly params?: AnchorStrategyParams;
+  readonly offset?: readonly number[];
+}
+
+export type AnchorConstraint3D =
+  string | AnchorPresetDescriptor | AnchorAttachOptions | AnchorConstraintCallback3D;
+export type AnchorConstraint2D =
+  string | AnchorPresetDescriptor | AnchorAttachOptions | AnchorConstraintCallback2D;
+
+export interface AttachChainOptions {
+  /** Link distance between consecutive entities (defaults to 1.0). */
+  length?: number;
+  /** Strategy used for each link ('chain' | 'rope' | 'spring' or a preset descriptor, defaults to 'chain'). */
+  strategy?: 'chain' | 'rope' | 'spring' | AnchorPresetDescriptor;
+  /** Whether to orient each link towards its predecessor (used by 'chain', defaults to true). */
+  alignRotation?: boolean;
+  /** Stiffness when strategy is 'spring' (defaults to 120). */
+  stiffness?: number;
+  /** Damping when strategy is 'spring' or 'rope' (defaults to 14). */
+  damping?: number;
+}
 
 export function resolveEntityId(entity: EntityLike): EntityId {
   return typeof entity === 'number' ? entity : entity.entityId;
@@ -74,6 +101,7 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
     }
 
     let strategy = 'static';
+    let params: AnchorStrategyParams | undefined;
     let callback2d: AnchorConstraintCallback2D | undefined;
     let callback3d: AnchorConstraintCallback3D | undefined;
 
@@ -85,6 +113,49 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
       } else {
         callback2d = constraint as AnchorConstraintCallback2D;
       }
+    } else if (constraint && typeof constraint === 'object') {
+      if (typeof constraint.strategy === 'object' && constraint.strategy !== null) {
+        const inner = constraint.strategy;
+        strategy = inner.strategy;
+        params = {
+          ...inner.params,
+          ...constraint.params,
+          ...(constraint.offset ? { offset: constraint.offset } : {})
+        };
+      } else {
+        strategy = constraint.strategy;
+        params = constraint.params
+          ? {
+              ...constraint.params,
+              ...('offset' in constraint && constraint.offset ? { offset: constraint.offset } : {})
+            }
+          : 'offset' in constraint && constraint.offset
+            ? { offset: constraint.offset }
+            : undefined;
+      }
+    }
+
+    if (
+      (strategy === 'rope' || strategy === 'chain' || strategy === 'spring') &&
+      !params?.initialDelta
+    ) {
+      let initialDelta: number[] | undefined;
+      if (this._dimension === '3d') {
+        const om = this._world.getComponent<Model3DComponent>(originId, 'Model3D')?.localMatrix;
+        const tm = this._world.getComponent<Model3DComponent>(targetId, 'Model3D')?.localMatrix;
+        if (om && tm) {
+          initialDelta = [om[12] - tm[12], om[13] - tm[13], om[14] - tm[14]];
+        }
+      } else {
+        const om = this._world.getComponent<Model2DComponent>(originId, 'Model2D')?.localMatrix;
+        const tm = this._world.getComponent<Model2DComponent>(targetId, 'Model2D')?.localMatrix;
+        if (om && tm) {
+          initialDelta = [om[4] - tm[4], om[5] - tm[5]];
+        }
+      }
+      if (initialDelta) {
+        params = { ...params, initialDelta };
+      }
     }
 
     this._world.attachComponent(
@@ -92,6 +163,7 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
       createAnchor({
         targetEntityId: targetId,
         strategy,
+        params,
         callback2d,
         callback3d
       })
@@ -138,6 +210,46 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
     }
 
     this._world.detachComponent(originId, 'Anchor');
+  }
+
+  /**
+   * Connects a sequence of entities `[root, link1, link2, ...]` into an anchored chain.
+   */
+  attachChain(entities: readonly EntityLike[], options: AttachChainOptions = {}): void {
+    if (entities.length < 2) return;
+    let preset: AnchorPresetDescriptor;
+    if (options.strategy && typeof options.strategy === 'object') {
+      preset = {
+        strategy: options.strategy.strategy,
+        params: {
+          ...options.strategy.params,
+          ...(options.length !== undefined
+            ? {
+                length: options.length,
+                maxLength: options.length,
+                restLength: options.length
+              }
+            : {})
+        }
+      };
+    } else {
+      const len = options.length ?? 1.0;
+      const mode = options.strategy ?? 'chain';
+      preset =
+        mode === 'rope'
+          ? presetsAnchor.rope({ maxLength: len, damping: options.damping })
+          : mode === 'spring'
+            ? presetsAnchor.spring({
+                restLength: len,
+                stiffness: options.stiffness,
+                damping: options.damping
+              })
+            : presetsAnchor.chain({ length: len, alignRotation: options.alignRotation });
+    }
+
+    for (let i = 1; i < entities.length; i++) {
+      this.attach(entities[i]!, entities[i - 1]!, preset as any);
+    }
   }
 
   /**
