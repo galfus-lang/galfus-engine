@@ -15,7 +15,33 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
-function resolveReleaseVersion(): ReleaseVersion {
+async function getPublishedVersions(): Promise<Set<string>> {
+  const packages = ['engine', 'transport-types'];
+  const versions = new Set<string>();
+
+  await Promise.all(
+    packages.map(async (pkg) => {
+      try {
+        const res = await fetch(`https://registry.npmjs.org/@galfus/${pkg}`, {
+          signal: AbortSignal.timeout(5000)
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { versions?: Record<string, unknown> };
+        if (data.versions) {
+          for (const v of Object.keys(data.versions)) {
+            versions.add(v);
+          }
+        }
+      } catch {
+        // Fall back gracefully if offline or network fails
+      }
+    })
+  );
+
+  return versions;
+}
+
+async function resolveReleaseVersion(): Promise<ReleaseVersion> {
   const ref = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
   if (!ref) {
     fail('GITHUB_HEAD_REF or GITHUB_REF_NAME is required');
@@ -31,10 +57,27 @@ function resolveReleaseVersion(): ReleaseVersion {
     fail(`Invalid release branch "${ref}"; expected stable|alpha|beta|next|latest/vX.Y.Z.`);
   }
 
+  const basePackageVersion = channel === 'stable' ? version : `${version}-${channel}`;
+  let finalPackageVersion = basePackageVersion;
+
+  const published = await getPublishedVersions();
+  if (published.has(basePackageVersion)) {
+    let iteration = 1;
+    let candidate = `${basePackageVersion}.${iteration}`;
+    while (published.has(candidate)) {
+      iteration++;
+      candidate = `${basePackageVersion}.${iteration}`;
+    }
+    finalPackageVersion = candidate;
+    console.log(
+      `[set-version] Version "${basePackageVersion}" already exists on npm registry. Auto-incremented to "${finalPackageVersion}".`
+    );
+  }
+
   return {
     channel,
     version,
-    packageVersion: channel === 'stable' ? version : `${version}-${channel}`
+    packageVersion: finalPackageVersion
   };
 }
 
@@ -120,7 +163,7 @@ async function exportVersion(version: ReleaseVersion): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const version = resolveReleaseVersion();
+  const version = await resolveReleaseVersion();
   const root = resolve(import.meta.dir, '../..');
 
   await updateCargoVersion(root, version.packageVersion);
