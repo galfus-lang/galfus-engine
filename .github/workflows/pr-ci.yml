@@ -18,6 +18,7 @@ on:
     paths:
       - 'engine/**'
       - 'bindings/**'
+      - 'host/**'
       - 'scripts/**'
       - 'examples/**'
       - 'Cargo.toml'
@@ -37,6 +38,7 @@ on:
     paths:
       - 'engine/**'
       - 'bindings/**'
+      - 'host/**'
       - 'scripts/**'
       - 'examples/**'
       - 'Cargo.toml'

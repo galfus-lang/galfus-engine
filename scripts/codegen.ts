@@ -9,6 +9,7 @@ import { LuaStrategy } from './codegen/strategies/lua.ts';
 import { NodeApiStrategy } from './codegen/strategies/node_api.ts';
 import { PythonStrategy } from './codegen/strategies/python.ts';
 import type { CodegenStrategy } from './codegen/strategies/strategy.ts';
+import { syncHostSdk } from './codegen/sync_host.ts';
 import { TypeScriptStrategy } from './codegen/strategies/typescript.ts';
 
 const rootDir = resolve(import.meta.dir, '..');
@@ -51,6 +52,8 @@ async function main() {
     'utf-8'
   );
   console.log(`✔ [browser_wasm] Generated Browser Web Audio adapter -> sdk/browser/audio.ts`);
+
+  await syncHostSdk(rootDir);
 
   // The WASM binding generator transforms Rust source and must leave its output
   // formatted so `bun validate` succeeds immediately after `bun codegen`.

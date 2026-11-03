@@ -1,5 +1,5 @@
 import { existsSync } from 'fs';
-import { copyFile, mkdir, readFile, writeFile } from 'fs/promises';
+import { copyFile, mkdir } from 'fs/promises';
 import { homedir } from 'os';
 import { resolve } from 'path';
 import {
@@ -60,86 +60,8 @@ async function ensureDir(dirPath: string): Promise<void> {
 }
 
 async function syncTypeScriptSdk(): Promise<void> {
-  logStep('codegen', 'Running multi-language codegen strategy engine...');
+  logStep('codegen', 'Running multi-language codegen strategy engine and syncing host packages...');
   runCommand(['bun', 'run', 'codegen']);
-
-  logStep('types', 'Syncing canonical descriptors to host/transport-types/src/sdk/galfus.ts...');
-  const typesSdkDir = resolve(rootDir, 'host/transport-types/src/sdk');
-  await ensureDir(typesSdkDir);
-  const tsSdkSource = await readFile(resolve(rootDir, 'sdk/typescript/galfus.ts'), 'utf-8');
-  await writeFile(resolve(typesSdkDir, 'galfus.ts'), tsSdkSource, 'utf-8');
-
-  // 1. Sync Bun FFI SDK
-  logStep('bun', 'Adapting Bun FFI driver for host/transport-bun/src/sdk/galfus.ts...');
-  const bunSdkDir = resolve(rootDir, 'host/transport-bun/src/sdk');
-  await ensureDir(bunSdkDir);
-  let bunCode = await readFile(resolve(rootDir, 'sdk/bun/galfus.ts'), 'utf-8');
-  bunCode = bunCode.replaceAll('../typescript/galfus.ts', '@galfus/transport-types');
-
-  // Inject deterministic binary loader
-  const bunLocateCustom = `
-import { getArtifactFileName, resolveNativePlatform } from '@galfus/transport-types';
-
-function locateLibrary(): string {
-  const platform = resolveNativePlatform();
-  const filename = getArtifactFileName('ffi', platform);
-  const baseDir = typeof import.meta.dir === 'string' ? import.meta.dir : process.cwd();
-  const localDistPath = resolve(baseDir, '../../dist', platform, filename);
-  if (existsSync(localDistPath)) {
-    return localDistPath;
-  }
-  throw new Error(
-    \`[GalfusBun] Native binary not found for platform "\${platform}" at: \${localDistPath}. Please run "bun run host:sync" to build it.\`
-  );
-}
-`;
-  bunCode = bunCode.replace(
-    /function locateLibrary\(\): string \{[\s\S]*?\n\}/,
-    bunLocateCustom.trim()
-  );
-  await writeFile(resolve(bunSdkDir, 'galfus.ts'), bunCode, 'utf-8');
-
-  // 2. Sync Node-API SDK
-  logStep('node', 'Adapting Node-API driver for host/transport-node/src/sdk/galfus.ts...');
-  const nodeSdkDir = resolve(rootDir, 'host/transport-node/src/sdk');
-  await ensureDir(nodeSdkDir);
-  let nodeCode = await readFile(resolve(rootDir, 'sdk/node/galfus.ts'), 'utf-8');
-  nodeCode = nodeCode.replaceAll('../typescript/galfus.ts', '@galfus/transport-types');
-
-  const nodeLocateCustom = `
-import { getArtifactFileName, resolveNativePlatform } from '@galfus/transport-types';
-
-function locateAddon(): string {
-  const platform = resolveNativePlatform();
-  const filename = getArtifactFileName('napi', platform);
-  const baseDir = typeof import.meta.dir === 'string' ? import.meta.dir : dirname(fileURLToPath(import.meta.url));
-  const localDistPath = resolve(baseDir, '../../dist', platform, filename);
-  if (existsSync(localDistPath)) {
-    return localDistPath;
-  }
-  throw new Error(
-    \`[GalfusNode] Node-API addon not found for platform "\${platform}" at: \${localDistPath}. Please run "bun run host:sync" to build it.\`
-  );
-}
-`;
-  nodeCode = nodeCode.replace(
-    /function locateAddon\(\): string \{[\s\S]*?\n\}/,
-    nodeLocateCustom.trim()
-  );
-  await writeFile(resolve(nodeSdkDir, 'galfus.ts'), nodeCode, 'utf-8');
-
-  // 3. Sync Browser WASM SDK
-  logStep('browser', 'Adapting Browser WASM driver for host/transport-browser/src/sdk/...');
-  const browserSdkDir = resolve(rootDir, 'host/transport-browser/src/sdk');
-  await ensureDir(browserSdkDir);
-  let browserCode = await readFile(resolve(rootDir, 'sdk/browser/galfus.ts'), 'utf-8');
-  browserCode = browserCode.replaceAll('../typescript/galfus.ts', '@galfus/transport-types');
-  browserCode = browserCode.replaceAll('./audio.ts', './audio');
-  await writeFile(resolve(browserSdkDir, 'galfus.ts'), browserCode, 'utf-8');
-
-  let audioCode = await readFile(resolve(rootDir, 'sdk/browser/audio.ts'), 'utf-8');
-  audioCode = audioCode.replaceAll('../typescript/galfus.ts', '@galfus/transport-types');
-  await writeFile(resolve(browserSdkDir, 'audio.ts'), audioCode, 'utf-8');
 }
 
 async function buildNativeBinaries(platform: NativePlatform, mode: SyncMode): Promise<void> {

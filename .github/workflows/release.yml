@@ -280,6 +280,9 @@ jobs:
         id: version
         run: bun run version
 
+      - name: Generate SDKs and sync host packages
+        run: bun run codegen
+
       - name: Download native and browser artifacts
         uses: actions/download-artifact@v4
         with:
