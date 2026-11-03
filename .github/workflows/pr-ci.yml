@@ -121,7 +121,11 @@ jobs:
         run: cargo test --workspace
 
       - name: Install wasm-bindgen CLI
-        run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+        shell: bash
+        run: |
+          WASM_BINDGEN_VER=$(bun -e "const lock = await Bun.file('Cargo.lock').text(); const match = lock.match(/name = \"wasm-bindgen\"\\s+version = \"([^\"]+)\"/); console.log(match ? match[1] : '0.2.130');")
+          echo "Installing wasm-bindgen-cli matching compiled schema version: $WASM_BINDGEN_VER"
+          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VER"
 
       - name: Restore Playwright Chromium cache
         id: playwright-chromium
