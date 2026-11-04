@@ -64,6 +64,121 @@ export function intersectCollider3D(
     out.distance = distance;
     return out;
   }
+  if (shape.type === 'cylinder') {
+    const r = shape.radius;
+    const hh = shape.halfHeight;
+    if (o[0] * o[0] + o[2] * o[2] <= r * r && Math.abs(o[1]) <= hh) {
+      out.distance = 0;
+      return out;
+    }
+    let bestT = max + 1;
+    let hitKind = 0;
+    const a = d[0] * d[0] + d[2] * d[2];
+    const b = o[0] * d[0] + o[2] * d[2];
+    const c = o[0] * o[0] + o[2] * o[2] - r * r;
+    if (a > 1e-10) {
+      const disc = b * b - a * c;
+      if (disc >= 0) {
+        const sqrtDisc = Math.sqrt(disc);
+        const t0 = (-b - sqrtDisc) / a;
+        if (t0 >= 0 && t0 <= max) {
+          const y = o[1] + t0 * d[1];
+          if (Math.abs(y) <= hh && t0 < bestT) {
+            bestT = t0;
+            hitKind = 1;
+          }
+        }
+      }
+    }
+    if (Math.abs(d[1]) > 1e-10) {
+      const tTop = (hh - o[1]) / d[1];
+      if (tTop >= 0 && tTop <= max && tTop < bestT) {
+        const x = o[0] + tTop * d[0];
+        const z = o[2] + tTop * d[2];
+        if (x * x + z * z <= r * r) {
+          bestT = tTop;
+          hitKind = 2;
+        }
+      }
+      const tBot = (-hh - o[1]) / d[1];
+      if (tBot >= 0 && tBot <= max && tBot < bestT) {
+        const x = o[0] + tBot * d[0];
+        const z = o[2] + tBot * d[2];
+        if (x * x + z * z <= r * r) {
+          bestT = tBot;
+          hitKind = 3;
+        }
+      }
+    }
+    if (hitKind === 0) return undefined;
+    out.distance = bestT;
+    if (hitKind === 1) {
+      normal[0] = (o[0] + bestT * d[0]) / r;
+      normal[1] = 0;
+      normal[2] = (o[2] + bestT * d[2]) / r;
+    } else if (hitKind === 2) {
+      normal[0] = 0;
+      normal[1] = 1;
+      normal[2] = 0;
+    } else {
+      normal[0] = 0;
+      normal[1] = -1;
+      normal[2] = 0;
+    }
+    return out;
+  }
+  if (shape.type === 'capsule') {
+    const r = shape.radius;
+    const hh = shape.halfHeight;
+    const clampedY = Math.max(-hh, Math.min(hh, o[1]));
+    const dy = o[1] - clampedY;
+    if (o[0] * o[0] + dy * dy + o[2] * o[2] <= r * r) {
+      out.distance = 0;
+      return out;
+    }
+    let bestT = max + 1;
+    let hitCenterY = 0;
+    const a = d[0] * d[0] + d[2] * d[2];
+    const b = o[0] * d[0] + o[2] * d[2];
+    const c = o[0] * o[0] + o[2] * o[2] - r * r;
+    if (a > 1e-10) {
+      const disc = b * b - a * c;
+      if (disc >= 0) {
+        const t0 = (-b - Math.sqrt(disc)) / a;
+        if (t0 >= 0 && t0 <= max) {
+          const y = o[1] + t0 * d[1];
+          if (Math.abs(y) <= hh && t0 < bestT) {
+            bestT = t0;
+            hitCenterY = y;
+          }
+        }
+      }
+    }
+    for (const cy of [hh, -hh]) {
+      const so: Point = [o[0], o[1] - cy, o[2]];
+      const sa = vec3.dot(d, d);
+      const sb = vec3.dot(so, d);
+      const sc = vec3.dot(so, so) - r * r;
+      const sdisc = sb * sb - sa * sc;
+      if (sa > 0 && sdisc >= 0) {
+        const st = (-sb - Math.sqrt(sdisc)) / sa;
+        if (st >= 0 && st <= max && st < bestT) {
+          const py = o[1] + st * d[1];
+          if ((cy > 0 && py >= hh) || (cy < 0 && py <= -hh)) {
+            bestT = st;
+            hitCenterY = cy;
+          }
+        }
+      }
+    }
+    if (bestT > max) return undefined;
+    out.distance = bestT;
+    normal[0] = o[0] + bestT * d[0];
+    normal[1] = o[1] + bestT * d[1] - hitCenterY;
+    normal[2] = o[2] + bestT * d[2];
+    vec3.normalize(normal, normal);
+    return out;
+  }
   const h = shape.halfExtents;
   if (Math.abs(o[0]) <= h[0] && Math.abs(o[1]) <= h[1] && Math.abs(o[2]) <= h[2]) {
     out.distance = 0;

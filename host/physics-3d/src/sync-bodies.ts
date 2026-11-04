@@ -80,6 +80,8 @@ function computeColliderSignature3D(
     sig += `${entry.colliderId}:${entry.active ? 1 : 0}:${entry.sensor ? 1 : 0}:${entry.layer}:${entry.mask}:${entry.shape.type}:`;
     if (entry.shape.type === 'sphere') {
       sig += `${entry.shape.radius}:`;
+    } else if (entry.shape.type === 'cylinder' || entry.shape.type === 'capsule') {
+      sig += `${entry.shape.radius},${entry.shape.halfHeight}:`;
     } else {
       sig += `${entry.shape.halfExtents.join(',')}:`;
     }
@@ -430,6 +432,18 @@ export class BodySync3D {
       } else if (entry.shape.type === 'sphere') {
         const maxScale = Math.max(sx, sy, sz);
         colDesc = RAPIER.ColliderDesc.ball(entry.shape.radius * maxScale);
+      } else if (entry.shape.type === 'cylinder') {
+        const radScale = Math.max(sx, sz);
+        colDesc = RAPIER.ColliderDesc.cylinder(
+          entry.shape.halfHeight * sy,
+          entry.shape.radius * radScale
+        );
+      } else if (entry.shape.type === 'capsule') {
+        const radScale = Math.max(sx, sz);
+        colDesc = RAPIER.ColliderDesc.capsule(
+          entry.shape.halfHeight * sy,
+          entry.shape.radius * radScale
+        );
       } else {
         const [hx, hy] = entry.shape.halfExtents;
         colDesc = RAPIER.ColliderDesc.cuboid(hx * sx, hy * sy, 0.01);

@@ -79,33 +79,42 @@ export async function runDemoPhys3d1(options: HostDemoOptions = {}): Promise<voi
       metallic: 0.75,
       roughness: 0.18
     }).materialId;
+    const cylMat = realm3d.createMaterial({
+      baseColor: [0.95, 0.35, 0.75, 1.0],
+      metallic: 0.4,
+      roughness: 0.25
+    }).materialId;
 
-    const ground = realm3d.createCube(16, floorMat, {
+    const ground = realm3d.createCube(1, floorMat, {
       position: [0, -0.5, 0],
-      scale: [1, 0.0625, 1]
+      scale: [16, 1, 16]
     }).entityId;
-    realm3d.addCollider(ground, { type: 'box', halfExtents: [8, 0.5, 8] });
+    realm3d.addCollider(ground, { type: 'box', halfExtents: [0.5, 0.5, 0.5] });
     physics.addRigidBody(ground, { type: 'fixed', friction: 0.7, restitution: 0.3 });
 
-    const wallSpecs: Array<{ pos: [number, number, number]; half: [number, number, number] }> = [
-      { pos: [0, 1.0, -6.5], half: [6.5, 1.0, 0.3] },
-      { pos: [0, 1.0, 6.5], half: [6.5, 1.0, 0.3] },
-      { pos: [-6.5, 1.0, 0], half: [0.3, 1.0, 6.5] },
-      { pos: [6.5, 1.0, 0], half: [0.3, 1.0, 6.5] }
+    const wallSpecs: Array<{ pos: [number, number, number]; size: [number, number, number] }> = [
+      { pos: [0, 1.0, -8.15], size: [16.6, 2.0, 0.3] },
+      { pos: [0, 1.0, 8.15], size: [16.6, 2.0, 0.3] },
+      { pos: [-8.15, 1.0, 0], size: [0.3, 2.0, 16.0] },
+      { pos: [8.15, 1.0, 0], size: [0.3, 2.0, 16.0] }
     ];
     for (const w of wallSpecs) {
       const wall = realm3d.createCube(1, wallMat, {
         position: w.pos,
-        scale: [w.half[0] * 2, w.half[1] * 2, w.half[2] * 2]
+        scale: w.size
       }).entityId;
-      realm3d.addCollider(wall, { type: 'box', halfExtents: w.half });
+      realm3d.addCollider(wall, { type: 'box', halfExtents: [0.5, 0.5, 0.5] });
       physics.addRigidBody(wall, { type: 'fixed', friction: 0.5, restitution: 0.5 });
     }
 
     const sensorZone = realm3d.createCylinder(2.2, 1.6, 24, sensorMat, {
       position: [0, 0.8, 0]
     }).entityId;
-    realm3d.addCollider(sensorZone, { type: 'sphere', radius: 2.2 }, { sensor: true });
+    realm3d.addCollider(
+      sensorZone,
+      { type: 'cylinder', radius: 2.2, halfHeight: 0.8 },
+      { sensor: true }
+    );
     physics.addRigidBody(sensorZone, { type: 'fixed' });
 
     const sensorLight = realm3d.createLight(
@@ -138,9 +147,9 @@ export async function runDemoPhys3d1(options: HostDemoOptions = {}): Promise<voi
     });
 
     const dynamicBodies: Array<{ entityId: EntityId; initialPos: [number, number, number] }> = [];
-    for (let i = 0; i < 14; i++) {
-      const isSphere = i % 2 === 0;
-      const angle = (i / 14) * Math.PI * 2;
+    for (let i = 0; i < 15; i++) {
+      const shapeKind = i % 3;
+      const angle = (i / 15) * Math.PI * 2;
       const radius = 1.2 + (i % 3) * 1.1;
       const initialPos: [number, number, number] = [
         Math.cos(angle) * radius,
@@ -148,7 +157,7 @@ export async function runDemoPhys3d1(options: HostDemoOptions = {}): Promise<voi
         Math.sin(angle) * radius
       ];
 
-      if (isSphere) {
+      if (shapeKind === 0) {
         const entityId = realm3d.createSphere(0.55, 20, 28, sphereMat, {
           position: initialPos
         }).entityId;
@@ -160,7 +169,7 @@ export async function runDemoPhys3d1(options: HostDemoOptions = {}): Promise<voi
           friction: 0.35
         });
         dynamicBodies.push({ entityId, initialPos });
-      } else {
+      } else if (shapeKind === 1) {
         const entityId = realm3d.createCube(0.95, cubeMat, { position: initialPos }).entityId;
         realm3d.addCollider(entityId, { type: 'box', halfExtents: [0.475, 0.475, 0.475] });
         physics.addRigidBody(entityId, {
@@ -168,6 +177,18 @@ export async function runDemoPhys3d1(options: HostDemoOptions = {}): Promise<voi
           mass: 1.5,
           restitution: 0.35,
           friction: 0.55
+        });
+        dynamicBodies.push({ entityId, initialPos });
+      } else {
+        const entityId = realm3d.createCylinder(0.45, 1.0, 20, cylMat, {
+          position: initialPos
+        }).entityId;
+        realm3d.addCollider(entityId, { type: 'cylinder', radius: 0.45, halfHeight: 0.5 });
+        physics.addRigidBody(entityId, {
+          type: 'dynamic',
+          mass: 1.3,
+          restitution: 0.4,
+          friction: 0.45
         });
         dynamicBodies.push({ entityId, initialPos });
       }
