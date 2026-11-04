@@ -20,6 +20,13 @@ function computeJointSignature3D(anchor: AnchorComponent): string {
     p?.restLength ?? '',
     p?.stiffness ?? '',
     p?.damping ?? '',
+    p?.axis?.join(',') ?? '',
+    p?.minAngle ?? '',
+    p?.maxAngle ?? '',
+    p?.limits?.join(',') ?? '',
+    p?.targetAngle ?? '',
+    p?.angularStiffness ?? '',
+    p?.angularDamping ?? '',
     p?.collideConnected ? 1 : 0,
     p?.localAnchorOrigin?.join(',') ?? '',
     p?.localAnchorTarget?.join(',') ?? ''
@@ -118,6 +125,47 @@ export class JointSync3D {
         true
       );
       joint.setContactsEnabled(anchor.params?.collideConnected ?? false);
+      const min = anchor.params?.limits ? anchor.params.limits[0] : anchor.params?.minAngle;
+      const max = anchor.params?.limits ? anchor.params.limits[1] : anchor.params?.maxAngle;
+      if (
+        min !== undefined &&
+        max !== undefined &&
+        typeof (joint as unknown as { setLimits: (min: number, max: number) => void }).setLimits ===
+          'function'
+      ) {
+        (joint as unknown as { setLimits: (min: number, max: number) => void }).setLimits(min, max);
+      }
+
+      const k =
+        anchor.params?.angularStiffness ??
+        (anchor.strategy === 'angularSpring' ||
+        anchor.strategy === 'torsionSpring' ||
+        anchor.params?.targetAngle !== undefined
+          ? anchor.params?.stiffness
+          : undefined);
+      const d =
+        anchor.params?.angularDamping ??
+        (anchor.strategy === 'angularSpring' ||
+        anchor.strategy === 'torsionSpring' ||
+        anchor.params?.targetAngle !== undefined
+          ? anchor.params?.damping
+          : undefined);
+      if (
+        k !== undefined &&
+        d !== undefined &&
+        typeof (
+          joint as unknown as {
+            configureMotorPosition: (targetPos: number, stiffness: number, damping: number) => void;
+          }
+        ).configureMotorPosition === 'function'
+      ) {
+        const targetAngle = anchor.params?.targetAngle ?? 0;
+        (
+          joint as unknown as {
+            configureMotorPosition: (targetPos: number, stiffness: number, damping: number) => void;
+          }
+        ).configureMotorPosition(targetAngle, k, d);
+      }
       anchor.managedByPhysics = true;
 
       this.joints.set(originId, {
@@ -184,6 +232,22 @@ export class JointSync3D {
           }
         }
         return RAPIER.JointData.spherical(anchor1, anchor2);
+      }
+      case 'hinge':
+      case 'revolute':
+      case 'angularSpring':
+      case 'torsionSpring': {
+        const axisRaw = p?.axis;
+        const axis = {
+          x: axisRaw?.[0] ?? 0,
+          y: axisRaw?.[1] ?? 1,
+          z: axisRaw?.[2] ?? 0
+        };
+        const axisLen = Math.hypot(axis.x, axis.y, axis.z) || 1;
+        axis.x /= axisLen;
+        axis.y /= axisLen;
+        axis.z /= axisLen;
+        return RAPIER.JointData.revolute(anchor1, anchor2, axis);
       }
       case 'spring': {
         const restLength = Math.max(0, p?.restLength ?? anchor.distance ?? 1);

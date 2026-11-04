@@ -52,6 +52,20 @@ export interface AnchorStrategyParams {
   localAnchorTarget?: readonly number[];
   /** Whether connected physics bodies should collide with each other (defaults to false). */
   collideConnected?: boolean;
+  /** Local rotation axis on 3D hinge joints ([x, y, z], defaults to [0, 1, 0]). */
+  axis?: readonly number[];
+  /** Minimum rotation angle in radians for hinge/revolute joints. */
+  minAngle?: number;
+  /** Maximum rotation angle in radians for hinge/revolute joints. */
+  maxAngle?: number;
+  /** Angular limit pair [minAngle, maxAngle] in radians for hinge joints. */
+  limits?: readonly [number, number];
+  /** Target equilibrium rotation angle in radians for angular/torsional springs (defaults to 0). */
+  targetAngle?: number;
+  /** Rotational/torsional stiffness coefficient for angular springs. */
+  angularStiffness?: number;
+  /** Rotational/torsional damping coefficient for angular springs. */
+  angularDamping?: number;
   /** Internal initial relative vector from target to origin at attach time. */
   initialDelta?: readonly number[];
 }
@@ -60,7 +74,16 @@ export interface AnchorStrategyParams {
  * Structured preset descriptor accepted by `hierarchy.attach(origin, target, preset)`.
  */
 export interface AnchorPresetDescriptor {
-  readonly strategy: 'static' | 'translation' | 'rope' | 'chain' | 'spring';
+  readonly strategy:
+    | 'static'
+    | 'translation'
+    | 'rope'
+    | 'chain'
+    | 'spring'
+    | 'hinge'
+    | 'revolute'
+    | 'angularSpring'
+    | 'torsionSpring';
   readonly params?: AnchorStrategyParams;
 }
 

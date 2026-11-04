@@ -163,4 +163,83 @@ describe('@galfus/physics-3d (Rapier 3D Integration & Anchor Joint Handoff)', ()
     physics.dispose();
     runtime.dispose();
   });
+
+  it('supports 3D hinge joints with angular limits around a custom axis', async () => {
+    await initPhysics3D();
+    const realm = new Realm3D(1);
+    const physics = new RapierPhysicsWorld3D(realm, { gravity: [0, -9.81, 0] });
+
+    const doorFrame = realm.createSpatialNode({ position: [0, 0, 0] });
+    const door = realm.createSpatialNode({ position: [1, 0, 0] });
+
+    realm.hierarchy.attach(door, doorFrame, {
+      strategy: 'hinge',
+      params: {
+        axis: [0, 1, 0],
+        limits: [0, 1.57],
+        localAnchorTarget: [0, 0, 0],
+        localAnchorOrigin: [-1, 0, 0]
+      }
+    });
+
+    physics.addRigidBody(doorFrame, { type: 'fixed' });
+    physics.addRigidBody(door, { type: 'dynamic', mass: 1 });
+
+    physics.applyTorqueImpulse(door, [0, 5, 0]);
+
+    for (let i = 1; i <= 60; i++) {
+      physics.step(1 / 60);
+      realm.preRender({ time: i / 60, dt: 1 / 60, frameId: i });
+    }
+
+    const anchor = realm.world.getComponent<AnchorComponent>(door, 'Anchor')!;
+    expect(anchor.managedByPhysics).toBe(true);
+
+    const doorModel = realm.world.getComponent<Model3DComponent>(door, 'Model3D')!;
+    expect(doorModel.worldMatrix[12]).toBeGreaterThan(-0.1);
+
+    physics.dispose();
+  });
+
+  it('supports 3D angularSpring with torsional motor restoring targetAngle', async () => {
+    await initPhysics3D();
+    const realm = new Realm3D(1);
+    const physics = new RapierPhysicsWorld3D(realm, { gravity: [0, 0, 0] });
+
+    const post = realm.createSpatialNode({ position: [0, 0, 0] });
+    const arm = realm.createSpatialNode({ position: [2, 0, 0] });
+
+    realm.hierarchy.attach(
+      arm,
+      post,
+      presetsAnchor.angularSpring({
+        axis: [0, 1, 0],
+        targetAngle: 0,
+        stiffness: 150,
+        damping: 25,
+        localAnchorTarget: [0, 0, 0],
+        localAnchorOrigin: [-2, 0, 0]
+      })
+    );
+
+    physics.addRigidBody(post, { type: 'fixed' });
+    physics.addRigidBody(arm, { type: 'dynamic', mass: 1 });
+
+    physics.step(1 / 60);
+    physics.applyTorqueImpulse(arm, [0, 20, 0]);
+
+    for (let i = 1; i <= 150; i++) {
+      physics.step(1 / 60);
+      realm.preRender({ time: i / 60, dt: 1 / 60, frameId: i });
+    }
+
+    const anchor = realm.world.getComponent<AnchorComponent>(arm, 'Anchor')!;
+    expect(anchor.managedByPhysics).toBe(true);
+
+    const armModel = realm.world.getComponent<Model3DComponent>(arm, 'Model3D')!;
+    expect(armModel.worldMatrix[12]).toBeGreaterThan(1.9);
+    expect(Math.abs(armModel.worldMatrix[14])).toBeLessThan(0.1);
+
+    physics.dispose();
+  });
 });

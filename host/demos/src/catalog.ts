@@ -11,8 +11,10 @@ import { runDemoMv4 } from './multiverse/mv4-anti-aliasing';
 import { runDemoAnchor1 } from './physics/anchor1-kinematic';
 import { runDemoPhys2d1 } from './physics/phys2d1-arena';
 import { runDemoPhys2d2 } from './physics/phys2d2-chains';
+import { runDemoPhys2d3 } from './physics/phys2d3-hinge';
 import { runDemoPhys3d1 } from './physics/phys3d1-sandbox';
 import { runDemoPhys3d2 } from './physics/phys3d2-joints';
+import { runDemoPhys3d3 } from './physics/phys3d3-hinge';
 import { runDemoAnim1 } from './realm2d/anim1-transitions';
 import { runDemo2d1 } from './realm2d/d2d1-shadows';
 import { runDemo2d2 } from './realm2d/d2d2-effects-particles';
@@ -125,6 +127,16 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     run: runDemoPhys3d2
   },
   {
+    id: 'phys3d3',
+    aliases: ['hinge-3d', 'doors-3d', 'saloon-3d'],
+    title: '3D Hinge Joints, Rotation Limits & Swinging Doors',
+    category: 'Physics & Anchors',
+    tags: ['physics', '3d', 'joints', 'hinge', 'limits', 'doors', 'managedByPhysics'],
+    description:
+      '3D double saloon doors and trapdoor hatch using Rapier hinge impulse joints with angular limits around custom axes.',
+    run: runDemoPhys3d3
+  },
+  {
     id: 'phys2d1',
     aliases: ['physics-2d', 'arena-2d'],
     title: '2D RigidBodies, Collisions & Dynamic Shadows',
@@ -143,6 +155,16 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     description:
       '2D physical pendulum chain, rope tether, and spring oscillator with live velocity telemetry in a reactive SVG HUD.',
     run: runDemoPhys2d2
+  },
+  {
+    id: 'phys2d3',
+    aliases: ['hinge-2d', 'gates-2d', 'flipper-2d'],
+    title: '2D Hinge Joints, Angular Limits & Swinging Gates',
+    category: 'Physics & Anchors',
+    tags: ['physics', '2d', 'joints', 'hinge', 'limits', 'gates', 'shadows'],
+    description:
+      '2D swinging saloon gates with angular limits funneling falling balls with live angular velocity telemetry.',
+    run: runDemoPhys2d3
   },
 
   // 3. Multiverse (4 demos)

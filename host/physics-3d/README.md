@@ -147,18 +147,41 @@ physics.on('sensorExit', ({ sensorEntity, otherEntity }) => {
 
 ## Anchor Joint Handoff
 
-Entities connected via Galfus `AnchorComponent` (`rope`, `chain`, or `spring`) can be handed over to Rapier as physical impulse joints by setting `managedByPhysics: true`.
+Entities connected via Galfus `AnchorComponent` (`rope`, `chain`, `spring`, `hinge`, or `angularSpring`) are automatically handed over to Rapier as physical impulse joints when rigid bodies are present on both entities (or when `managedByPhysics` is active).
 
 ```typescript
-// Create anchor constraint: pendulum ball attached to ceiling anchor
-realm3d.hierarchy.attach(ballEntity, ceilingAnchorEntity, {
-  strategy: 'chain',
-  restLength: 4.0,
-  managedByPhysics: true // Rapier replaces kinematic constraint with physical ImpulseJoint
-});
+import { presetsAnchor } from '@galfus/engine';
+
+// 1. Pendulum / Spherical Joint
+realm3d.hierarchy.attach(ballEntity, ceilingAnchorEntity, 'chain');
+
+// 2. Hinge Door with custom rotation axis and angle limits (e.g., 0° to 90°)
+realm3d.hierarchy.attach(
+  doorEntity,
+  doorFrameEntity,
+  presetsAnchor.hinge({
+    axis: [0, 1, 0], // Y-axis rotation
+    limits: [0, Math.PI / 2], // Angle limits [minAngle, maxAngle] in radians
+    localAnchorOrigin: [-0.8, 0, 0],
+    localAnchorTarget: [0, 0, 0]
+  })
+);
+
+// 3. Angular Spring / Torsional Spring (returns to targetAngle around axis)
+realm3d.hierarchy.attach(
+  saloonDoorEntity,
+  doorPostEntity,
+  presetsAnchor.angularSpring({
+    axis: [0, 1, 0], // Y-axis rotation
+    targetAngle: 0,
+    stiffness: 120,
+    damping: 15,
+    limits: [-Math.PI / 2, Math.PI / 2] // Optional angular limit clamp
+  })
+);
 ```
 
-When `managedByPhysics` is `true`, Galfus skips kinematic snapping during tick, allowing Rapier to solve joint impulses while continuously updating visual child entity transforms.
+When active, Galfus hands off the constraint to Rapier's impulse solver while continuously updating visual child entity transforms.
 
 ---
 

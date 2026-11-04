@@ -118,4 +118,46 @@ describe('Anchor Presets & Physics Handoff (Rope, Chain, Spring, managedByPhysic
     expect(sparkModel.worldMatrix[12]).toBeCloseTo(1, 4);
     expect(sparkModel.worldMatrix[13]).toBeCloseTo(2, 4);
   });
+
+  it('supports kinematic hinge preset with angular clamp', () => {
+    const realm = new Realm2D(1);
+    const post = realm.createSpatialNode({ position: [10, 5] });
+    const arm = realm.createSpatialNode({ position: [0, 0] });
+
+    // Hinge with limits [0, 1.0] rad
+    realm.hierarchy.attach(arm, post, {
+      strategy: presetsAnchor.hinge({ limits: [0, 1.0] })
+    });
+
+    realm.preRender({ time: 0.016, dt: 0.016, frameId: 1 });
+    const armModel = realm.world.getComponent<Model2DComponent>(arm, 'Model2D')!;
+    // Arm positioned at post pivot [10, 5]
+    expect(armModel.worldMatrix[4]).toBeCloseTo(10, 4);
+    expect(armModel.worldMatrix[5]).toBeCloseTo(5, 4);
+  });
+
+  it('supports kinematic angularSpring preset pulling towards targetAngle', () => {
+    const realm = new Realm2D(1);
+    const pivot = realm.createSpatialNode({ position: [0, 0] });
+    const arm = realm.createSpatialNode({ position: [2, 0], rotation: 0.8 });
+
+    realm.hierarchy.attach(
+      arm,
+      pivot,
+      presetsAnchor.angularSpring({
+        targetAngle: 0,
+        stiffness: 120,
+        damping: 15
+      })
+    );
+
+    // Step several frames
+    for (let i = 1; i <= 25; i++) {
+      realm.preRender({ time: i * 0.016, dt: 0.016, frameId: i });
+    }
+
+    const settledModel = realm.world.getComponent<Model2DComponent>(arm, 'Model2D')!;
+    const settledRot = Math.atan2(settledModel.worldMatrix[1]!, settledModel.worldMatrix[0]!);
+    expect(Math.abs(settledRot)).toBeLessThan(0.05);
+  });
 });

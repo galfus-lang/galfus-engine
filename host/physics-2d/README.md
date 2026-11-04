@@ -118,18 +118,39 @@ physics.on('sensorExit', ({ sensorEntity, otherEntity }) => {
 
 ## Anchor Joint Handoff
 
-Entities attached using Galfus `AnchorComponent` (`rope`, `chain`, or `spring`) can be handed over to Rapier as physical impulse joints by setting `managedByPhysics: true`.
+Entities attached using Galfus `AnchorComponent` (`rope`, `chain`, `spring`, `hinge`, or `angularSpring`) are automatically handed over to Rapier as physical impulse joints when rigid bodies are present on both entities (or when `managedByPhysics` is active).
 
 ```typescript
-// Create anchor constraint: child hangs from parent
-realm2d.hierarchy.attach(childEntity, parentEntity, {
-  strategy: 'chain',
-  restLength: 3.0,
-  managedByPhysics: true // Rapier replaces kinematic constraint with physical ImpulseJoint
-});
+import { presetsAnchor } from '@galfus/engine';
+
+// 1. Chain / Pendulum
+realm2d.hierarchy.attach(childEntity, parentEntity, 'chain');
+
+// 2. Hinge with angular rotation limits (e.g., -45° to +45°)
+realm2d.hierarchy.attach(
+  armEntity,
+  postEntity,
+  presetsAnchor.hinge({
+    limits: [-Math.PI / 4, Math.PI / 4], // Angle limits in radians
+    localAnchorOrigin: [-1.0, 0],
+    localAnchorTarget: [0, 0]
+  })
+);
+
+// 3. Angular Spring / Torsional Spring (returns to targetAngle with stiffness & damping)
+realm2d.hierarchy.attach(
+  doorEntity,
+  postEntity,
+  presetsAnchor.angularSpring({
+    targetAngle: 0,
+    stiffness: 120,
+    damping: 15,
+    limits: [-Math.PI / 2, Math.PI / 2] // Optional angular limit clamp
+  })
+);
 ```
 
-When `managedByPhysics` is `true`, Galfus skips kinematic snapping during tick, allowing Rapier to solve joint impulses while continuously updating visual child entity transforms.
+When active, Galfus hands off the constraint to Rapier's impulse solver while continuously updating visual child entity transforms.
 
 ---
 

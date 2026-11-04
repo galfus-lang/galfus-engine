@@ -127,4 +127,81 @@ describe('@galfus/physics-2d (Rapier 2D Integration & Anchor Joint Handoff)', ()
     physics.dispose();
     runtime.dispose();
   });
+
+  it('supports 2D hinge joints with angular limits', async () => {
+    await initPhysics2D();
+    const realm = new Realm2D(1);
+    const physics = new RapierPhysicsWorld2D(realm, { gravity: [0, -9.81] });
+
+    const post = realm.createSpatialNode({ position: [0, 0] });
+    const arm = realm.createSpatialNode({ position: [2, 0] });
+
+    realm.hierarchy.attach(arm, post, {
+      strategy: 'hinge',
+      params: {
+        limits: [-0.5, 0.5],
+        localAnchorTarget: [0, 0],
+        localAnchorOrigin: [-2, 0]
+      }
+    });
+
+    physics.addRigidBody(post, { type: 'fixed' });
+    physics.addRigidBody(arm, { type: 'dynamic', mass: 1 });
+
+    for (let i = 1; i <= 60; i++) {
+      physics.step(1 / 60);
+      realm.preRender({ time: i / 60, dt: 1 / 60, frameId: i });
+    }
+
+    const anchor = realm.world.getComponent<AnchorComponent>(arm, 'Anchor')!;
+    expect(anchor.managedByPhysics).toBe(true);
+
+    const mArm = realm.world.getComponent<Model2DComponent>(arm, 'Model2D')!;
+    const rot = Math.atan2(mArm.worldMatrix[1]!, mArm.worldMatrix[0]!);
+    expect(rot).toBeGreaterThanOrEqual(-0.55);
+    expect(rot).toBeLessThanOrEqual(0.55);
+
+    physics.dispose();
+  });
+
+  it('supports 2D angularSpring with torsional motor restoring targetAngle', async () => {
+    await initPhysics2D();
+    const realm = new Realm2D(1);
+    const physics = new RapierPhysicsWorld2D(realm, { gravity: [0, 0] });
+
+    const post = realm.createSpatialNode({ position: [0, 0] });
+    const arm = realm.createSpatialNode({ position: [2, 0] });
+
+    realm.hierarchy.attach(
+      arm,
+      post,
+      presetsAnchor.angularSpring({
+        targetAngle: 0,
+        stiffness: 150,
+        damping: 25,
+        localAnchorTarget: [0, 0],
+        localAnchorOrigin: [-2, 0]
+      })
+    );
+
+    physics.addRigidBody(post, { type: 'fixed' });
+    physics.addRigidBody(arm, { type: 'dynamic', mass: 1 });
+
+    physics.step(1 / 60);
+    physics.applyTorqueImpulse(arm, 20.0);
+
+    for (let i = 1; i <= 150; i++) {
+      physics.step(1 / 60);
+      realm.preRender({ time: i / 60, dt: 1 / 60, frameId: i });
+    }
+
+    const anchor = realm.world.getComponent<AnchorComponent>(arm, 'Anchor')!;
+    expect(anchor.managedByPhysics).toBe(true);
+
+    const mArm = realm.world.getComponent<Model2DComponent>(arm, 'Model2D')!;
+    const rot = Math.atan2(mArm.worldMatrix[1]!, mArm.worldMatrix[0]!);
+    expect(Math.abs(rot)).toBeLessThan(0.05);
+
+    physics.dispose();
+  });
 });

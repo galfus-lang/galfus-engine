@@ -6,8 +6,12 @@ import type { EntityId } from '../ecs/entity';
 import { mat2d, type Mat2d, mat4, type Mat4 } from '../math/index';
 import type { AnchorStrategyParams } from './component';
 import {
+  AngularSpringAnchorStrategy2D,
+  AngularSpringAnchorStrategy3D,
   ChainAnchorStrategy2D,
   ChainAnchorStrategy3D,
+  HingeAnchorStrategy2D,
+  HingeAnchorStrategy3D,
   RopeAnchorStrategy2D,
   RopeAnchorStrategy3D,
   SpringAnchorStrategy2D,
@@ -143,11 +147,19 @@ export class AnchorStrategyRegistry {
     this.register2D(RopeAnchorStrategy2D);
     this.register2D(ChainAnchorStrategy2D);
     this.register2D(SpringAnchorStrategy2D);
+    this.register2D(HingeAnchorStrategy2D);
+    this.register2D({ ...HingeAnchorStrategy2D, name: 'revolute' });
+    this.register2D(AngularSpringAnchorStrategy2D);
+    this.register2D({ ...AngularSpringAnchorStrategy2D, name: 'torsionSpring' });
     this.register3D(StaticAnchorStrategy3D);
     this.register3D(TranslationAnchorStrategy3D);
     this.register3D(RopeAnchorStrategy3D);
     this.register3D(ChainAnchorStrategy3D);
     this.register3D(SpringAnchorStrategy3D);
+    this.register3D(HingeAnchorStrategy3D);
+    this.register3D({ ...HingeAnchorStrategy3D, name: 'revolute' });
+    this.register3D(AngularSpringAnchorStrategy3D);
+    this.register3D({ ...AngularSpringAnchorStrategy3D, name: 'torsionSpring' });
   }
 
   register2D(strategy: AnchorStrategy2D): void {

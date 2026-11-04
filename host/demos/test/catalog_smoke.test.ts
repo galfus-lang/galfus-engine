@@ -8,12 +8,12 @@ import {
 } from '../src/catalog';
 
 describe('@galfus/demos catalog & headless smoke suite', () => {
-  it('registers all 28 demos across 5 categories with unique IDs', () => {
-    expect(DEMO_CATALOG.length).toBe(28);
+  it('registers all 30 demos across 5 categories with unique IDs', () => {
+    expect(DEMO_CATALOG.length).toBe(30);
     expect(DEMO_CATEGORIES.length).toBe(5);
 
     const ids = new Set(DEMO_CATALOG.map((d) => d.id));
-    expect(ids.size).toBe(28);
+    expect(ids.size).toBe(30);
 
     for (const cat of DEMO_CATEGORIES) {
       const entries = filterDemosByCategory(cat);
@@ -25,6 +25,8 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
     expect(findDemo('3d5')?.id).toBe('3d5');
     expect(findDemo('textured-particles-3d')?.id).toBe('3d5');
     expect(findDemo('phys3d2')?.id).toBe('phys3d2');
+    expect(findDemo('hinge-3d')?.id).toBe('phys3d3');
+    expect(findDemo('hinge-2d')?.id).toBe('phys2d3');
     expect(findDemo('tutorial')?.id).toBe('tutorial');
 
     const particleMatches = fuzzySearchDemos('particles');
@@ -36,7 +38,17 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
   });
 
   it('runs textured 3D/2D particle, Anchor, and Physics demos headlessly', async () => {
-    const smokeIds = ['3d5', '2d2', 'anchor1', 'phys3d1', 'phys3d2', 'phys2d1', 'phys2d2'];
+    const smokeIds = [
+      '3d5',
+      '2d2',
+      'anchor1',
+      'phys3d1',
+      'phys3d2',
+      'phys3d3',
+      'phys2d1',
+      'phys2d2',
+      'phys2d3'
+    ];
 
     for (const id of smokeIds) {
       const demo = findDemo(id);

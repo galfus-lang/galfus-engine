@@ -50,6 +50,56 @@ export interface SpringAnchorOptions {
   localAnchorTarget?: readonly number[];
 }
 
+export interface HingeAnchorOptions {
+  /** Local rotation axis on 3D hinge joints ([x, y, z], defaults to [0, 1, 0]). */
+  axis?: readonly number[];
+  /** Minimum rotation angle in radians for hinge joints. */
+  minAngle?: number;
+  /** Maximum rotation angle in radians for hinge joints. */
+  maxAngle?: number;
+  /** Angular limit pair [minAngle, maxAngle] in radians for hinge joints. */
+  limits?: readonly [number, number];
+  /** Target equilibrium rotation angle in radians for angular spring motor. */
+  targetAngle?: number;
+  /** Rotational/torsional stiffness coefficient for angular spring motor. */
+  stiffness?: number;
+  /** Rotational/torsional damping coefficient for angular spring motor. */
+  damping?: number;
+  /** Optional world/target offset vector ([x, y] or [x, y, z]). */
+  offset?: readonly number[];
+  /** Optional local attachment point on origin entity ([x, y] or [x, y, z]). */
+  localAnchorOrigin?: readonly number[];
+  /** Optional local attachment point on target entity ([x, y] or [x, y, z]). */
+  localAnchorTarget?: readonly number[];
+  /** Whether connected bodies should collide with each other (defaults to false). */
+  collideConnected?: boolean;
+}
+
+export interface AngularSpringAnchorOptions {
+  /** Target equilibrium rotation angle in radians (defaults to 0). */
+  targetAngle?: number;
+  /** Rotational/torsional stiffness coefficient (defaults to 60). */
+  stiffness?: number;
+  /** Rotational/torsional damping coefficient (defaults to 6). */
+  damping?: number;
+  /** Local rotation axis on 3D angular spring joints ([x, y, z], defaults to [0, 1, 0]). */
+  axis?: readonly number[];
+  /** Minimum rotation angle in radians (optional limit clamp). */
+  minAngle?: number;
+  /** Maximum rotation angle in radians (optional limit clamp). */
+  maxAngle?: number;
+  /** Angular limit pair [minAngle, maxAngle] in radians. */
+  limits?: readonly [number, number];
+  /** Optional world/target offset vector ([x, y] or [x, y, z]). */
+  offset?: readonly number[];
+  /** Optional local attachment point on origin entity ([x, y] or [x, y, z]). */
+  localAnchorOrigin?: readonly number[];
+  /** Optional local attachment point on target entity ([x, y] or [x, y, z]). */
+  localAnchorTarget?: readonly number[];
+  /** Whether connected bodies should collide with each other (defaults to false). */
+  collideConnected?: boolean;
+}
+
 /**
  * Ergonomic factory functions for configuring 2D and 3D Anchor relationships.
  * Works both kinematically (via `AnchorSolveSystem`) and physically (via `@galfus/physics-2d` / `3d`).
@@ -95,6 +145,42 @@ export const presetsAnchor = {
         offset: options.offset,
         localAnchorOrigin: options.localAnchorOrigin,
         localAnchorTarget: options.localAnchorTarget
+      }
+    };
+  },
+  hinge(options: HingeAnchorOptions = {}): AnchorPresetDescriptor {
+    return {
+      strategy: 'hinge',
+      params: {
+        axis: options.axis,
+        minAngle: options.minAngle,
+        maxAngle: options.maxAngle,
+        limits: options.limits,
+        targetAngle: options.targetAngle,
+        stiffness: options.stiffness,
+        damping: options.damping,
+        offset: options.offset,
+        localAnchorOrigin: options.localAnchorOrigin,
+        localAnchorTarget: options.localAnchorTarget,
+        collideConnected: options.collideConnected
+      }
+    };
+  },
+  angularSpring(options: AngularSpringAnchorOptions = {}): AnchorPresetDescriptor {
+    return {
+      strategy: 'angularSpring',
+      params: {
+        targetAngle: options.targetAngle ?? 0,
+        stiffness: options.stiffness ?? 60,
+        damping: options.damping ?? 6,
+        axis: options.axis,
+        minAngle: options.minAngle,
+        maxAngle: options.maxAngle,
+        limits: options.limits,
+        offset: options.offset,
+        localAnchorOrigin: options.localAnchorOrigin,
+        localAnchorTarget: options.localAnchorTarget,
+        collideConnected: options.collideConnected
       }
     };
   }
@@ -172,7 +258,7 @@ function getOrInit3D(
   return st;
 }
 
-function resolveAnchorTarget2D(
+export function resolveAnchorTarget2D(
   targetWorld: Float32Array,
   offset: Float32Array | undefined,
   params: AnchorStrategyParams | undefined
@@ -182,7 +268,7 @@ function resolveAnchorTarget2D(
   return [targetWorld[4]! + ox, targetWorld[5]! + oy];
 }
 
-function resolveAnchorTarget3D(
+export function resolveAnchorTarget3D(
   targetWorld: Float32Array,
   offset: Float32Array | undefined,
   params: AnchorStrategyParams | undefined
@@ -414,3 +500,10 @@ export const SpringAnchorStrategy3D: AnchorStrategy3D = {
     outWorld[14] = st.z;
   }
 };
+
+export {
+  AngularSpringAnchorStrategy2D,
+  AngularSpringAnchorStrategy3D,
+  HingeAnchorStrategy2D,
+  HingeAnchorStrategy3D
+} from './strategies-rotational';
