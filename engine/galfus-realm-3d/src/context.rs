@@ -144,11 +144,6 @@ impl Realm3DContext {
 
     /// Drops offscreen pipelines whose model no longer owns an active mirror/portal surface.
     pub(crate) fn prune_portal_pipelines(&mut self) {
-        let has_active_portal = |model_id| {
-            self.portals
-                .values()
-                .any(|portal| portal.model_id == model_id && portal.active)
-        };
         let is_retained_surface = |model_id: u32, material_id: u32, active: bool| {
             if !active {
                 return false;
@@ -158,8 +153,9 @@ impl Realm3DContext {
                 .get(&material_id)
                 .map(|entry| entry.0.surface_type)
             {
-                Some(SurfaceType3D::Mirror) => true,
-                Some(SurfaceType3D::Portal) => has_active_portal(model_id),
+                Some(st @ (SurfaceType3D::Mirror | SurfaceType3D::Portal)) => {
+                    crate::portal::is_mirror_or_portal_active(&self.portals, model_id, st)
+                }
                 _ => false,
             }
         };

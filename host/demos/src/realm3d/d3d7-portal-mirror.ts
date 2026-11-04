@@ -81,12 +81,14 @@ export async function runDemo3d7(options: HostDemoOptions = {}): Promise<void> {
       emissiveColor: [0.05, 0.35, 0.4, 1.0]
     }).materialId;
     const mirrorTintMat = realm3d.createMaterial({
-      surfaceType: 'transparent',
-      baseColor: [0.7, 0.88, 1.0, 0.14],
+      surfaceType: 'mirror',
+      baseColor: [0.85, 0.92, 1.0, 1.0],
       metallic: 0.9,
-      roughness: 0.05
+      roughness: 0.05,
+      reflectance: 0.9
     }).materialId;
     const portalSurfaceMat = realm3d.createMaterial({
+      surfaceType: 'portal',
       baseColor: [1.0, 1.0, 1.0, 1.0],
       metallic: 0.0,
       roughness: 1.0
@@ -231,9 +233,11 @@ export async function runDemo3d7(options: HostDemoOptions = {}): Promise<void> {
         if (isKey(ev, '1')) {
           mirrorActive = !mirrorActive;
           realm3d.setPortalActive(mirrorPortalId, mirrorActive);
+          console.log(`[3d7] Mirror toggled: ${mirrorActive ? 'ON' : 'OFF'}`);
         } else if (isKey(ev, '2')) {
           portalActive = !portalActive;
           realm3d.setPortalActive(telePortalId, portalActive);
+          console.log(`[3d7] Portal toggled: ${portalActive ? 'ON' : 'OFF'}`);
         }
       }
     });
@@ -286,6 +290,9 @@ export async function runDemo3d7(options: HostDemoOptions = {}): Promise<void> {
         );
     });
 
+    console.log(
+      '[3d7] Ready. 1: toggle Mirror | 2: toggle Portal | Drag/Scroll: orbit/zoom | Esc: exit.'
+    );
     await runDemoLoop(runtime, { windowId, maxFrames, exitKeys: ['escape', 'q'] });
   } finally {
     runtime.dispose();

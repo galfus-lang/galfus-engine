@@ -265,10 +265,11 @@ impl Realm for Realm3DContext {
                     .portals
                     .values()
                     .find(|portal| portal.model_id == mirror_item.model_id);
-                if mirror_item.surface_type
-                    == galfus_realm_3d_resources::material::SurfaceType3D::Portal
-                    && !portal_config.is_some_and(|portal| portal.active)
-                {
+                if !crate::portal::is_mirror_or_portal_active(
+                    &self.portals,
+                    mirror_item.model_id,
+                    mirror_item.surface_type,
+                ) {
                     continue;
                 }
                 let mirror_portal = portal_config.filter(|portal| portal.active);
@@ -502,13 +503,11 @@ impl Realm for Realm3DContext {
 
             if has_mirrors {
                 for item in &collector.mirrors {
-                    if item.surface_type
-                        == galfus_realm_3d_resources::material::SurfaceType3D::Portal
-                        && !self
-                            .portals
-                            .values()
-                            .any(|portal| portal.model_id == item.model_id && portal.active)
-                    {
+                    if !crate::portal::is_mirror_or_portal_active(
+                        &self.portals,
+                        item.model_id,
+                        item.surface_type,
+                    ) {
                         continue;
                     }
                     let portal_bg = self

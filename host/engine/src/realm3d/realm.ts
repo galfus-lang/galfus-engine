@@ -44,6 +44,7 @@ import {
   type Mesh3DComponent,
   type Mesh3DDesc,
   type Model3DComponent,
+  type Portal3DComponent,
   type Primitive3DKind
 } from './components';
 import {
@@ -506,6 +507,13 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   }
 
   setPortalActive(portalId: number, active: boolean): void {
+    for (const entityId of this.world.query('Portal3D')) {
+      const comp = this.world.getComponent<Portal3DComponent>(entityId, 'Portal3D');
+      if (comp && comp.portalId === portalId) {
+        comp.desc.active = active;
+        break;
+      }
+    }
     this._engine?.realm3dSetPortalActive(this.realmId, portalId, active);
   }
 

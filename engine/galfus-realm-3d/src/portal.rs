@@ -406,3 +406,22 @@ impl PortalPipeline3D {
         collector
     }
 }
+
+/// Determines if a mirror or optical portal surface should be drawn based on optional Portal3D descriptor.
+#[inline]
+pub fn is_mirror_or_portal_active(
+    portals: &BTreeMap<u32, galfus_realm_3d_resources::portal::Portal3D>,
+    model_id: u32,
+    surface_type: galfus_realm_3d_resources::material::SurfaceType3D,
+) -> bool {
+    let portal_config = portals.values().find(|portal| portal.model_id == model_id);
+    match surface_type {
+        galfus_realm_3d_resources::material::SurfaceType3D::Portal => {
+            portal_config.is_some_and(|portal| portal.active)
+        }
+        galfus_realm_3d_resources::material::SurfaceType3D::Mirror => {
+            portal_config.is_none_or(|portal| portal.active)
+        }
+        _ => true,
+    }
+}
