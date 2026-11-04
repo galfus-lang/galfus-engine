@@ -1,7 +1,7 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { createBunTransport } from '@galfus/transport-bun';
 import { createNodeTransport } from '@galfus/transport-node';
-import { textInputGeometry } from '../demo/text-input-geometry';
+import { textInputGeometry } from '../../demos/src/host/text-input-geometry';
 import { SvgTextDecorations } from '../src/text/svg-decorations';
 import { createRuntime } from '../src/runtime';
 
