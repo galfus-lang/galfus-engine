@@ -1,4 +1,4 @@
-import { cancel, intro, isCancel, log, outro, select, text } from '@clack/prompts';
+import { cancel, intro, isCancel, log, outro, select, spinner, text } from '@clack/prompts';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -10,7 +10,8 @@ import {
   createTsConfig,
   type ProjectConfig,
   type ProjectTemplate,
-  type ProjectTransport
+  type ProjectTransport,
+  resolveProjectVersions
 } from './templates';
 
 export interface InitOptions {
@@ -132,8 +133,20 @@ export async function runInitCommand(
     transport: transport!
   };
 
+  let resolvedVersions: Record<string, string> | undefined;
+  if (isInteractive) {
+    const s = spinner();
+    s.start('Fetching latest template dependencies...');
+    resolvedVersions = await resolveProjectVersions(config);
+    s.stop('Dependencies resolved');
+  }
+
   await mkdir(resolve(projectDir, 'src'), { recursive: true });
-  await writeFile(resolve(projectDir, 'package.json'), createPackageJson(config), 'utf-8');
+  await writeFile(
+    resolve(projectDir, 'package.json'),
+    await createPackageJson(config, resolvedVersions),
+    'utf-8'
+  );
   await writeFile(resolve(projectDir, 'tsconfig.json'), createTsConfig(), 'utf-8');
   await writeFile(resolve(projectDir, '.gitignore'), createGitIgnore(), 'utf-8');
   await writeFile(resolve(projectDir, 'README.md'), createReadme(config), 'utf-8');

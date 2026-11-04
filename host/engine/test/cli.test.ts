@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createPackageJson } from '../src/cli/templates';
 
 const engineRoot = resolve(import.meta.dir, '..');
 const cliBin = resolve(engineRoot, 'bin/galfus-engine.js');
@@ -42,6 +43,35 @@ describe('@galfus/engine CLI (galfus-engine init & build)', () => {
     expect(existsSync(resolve(projectRoot, 'src/main.ts'))).toBe(true);
     expect(existsSync(resolve(projectRoot, 'README.md'))).toBe(true);
     expect(existsSync(resolve(projectRoot, '.gitignore'))).toBe(true);
+
+    const pkg = JSON.parse(readFileSync(resolve(projectRoot, 'package.json'), 'utf-8'));
+    expect(pkg.dependencies['@galfus/engine']).not.toBe('^0.0.0');
+    expect(pkg.dependencies['@galfus/transport-bun']).not.toBe('^0.0.0');
+  });
+
+  it('generates package.json with custom or dynamically resolved versions', async () => {
+    const pkgJson = await createPackageJson(
+      {
+        name: 'custom-physics',
+        template: 'physics',
+        transport: 'node'
+      },
+      {
+        '@galfus/engine': '^1.0.0',
+        '@galfus/transport-node': '^1.0.0',
+        '@galfus/physics-3d': '^1.0.0',
+        '@galfus/physics-types': '^1.0.0',
+        '@types/bun': '^1.0.0',
+        typescript: '^5.0.0'
+      }
+    );
+
+    const parsed = JSON.parse(pkgJson);
+    expect(parsed.dependencies['@galfus/engine']).toBe('^1.0.0');
+    expect(parsed.dependencies['@galfus/transport-node']).toBe('^1.0.0');
+    expect(parsed.dependencies['@galfus/physics-3d']).toBe('^1.0.0');
+    expect(parsed.dependencies['@galfus/physics-types']).toBe('^1.0.0');
+    expect(parsed.devDependencies['typescript']).toBe('^5.0.0');
   });
 
   it('compiles standalone game executable and pairs native library side-by-side with build command', () => {

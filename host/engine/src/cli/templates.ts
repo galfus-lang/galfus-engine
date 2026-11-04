@@ -7,17 +7,84 @@ export interface ProjectConfig {
   transport: ProjectTransport;
 }
 
-export function createPackageJson(config: ProjectConfig): string {
-  const transportDep =
-    config.transport === 'bun'
-      ? { '@galfus/transport-bun': 'workspace:*' }
-      : { '@galfus/transport-node': 'workspace:*' };
+export async function fetchLatestPackageVersion(
+  packageName: string,
+  fallback = 'latest'
+): Promise<string> {
+  try {
+    const registryBase = (
+      process.env.NPM_CONFIG_REGISTRY ||
+      process.env.npm_config_registry ||
+      'https://registry.npmjs.org'
+    ).replace(/\/+$/, '');
+
+    const res = await fetch(`${registryBase}/${packageName}/latest`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(3000)
+    });
+
+    if (res.ok) {
+      const data = (await res.json()) as { version?: string };
+      if (data && typeof data.version === 'string' && data.version.trim()) {
+        return `^${data.version.trim()}`;
+      }
+    }
+  } catch {
+    // Offline or request failure; gracefully use fallback
+  }
+
+  return fallback;
+}
+
+export async function resolveProjectVersions(
+  config: ProjectConfig,
+  customVersions?: Record<string, string>
+): Promise<Record<string, string>> {
+  const pkgs = [
+    '@galfus/engine',
+    config.transport === 'bun' ? '@galfus/transport-bun' : '@galfus/transport-node',
+    ...(config.template === 'physics' ? ['@galfus/physics-3d', '@galfus/physics-types'] : []),
+    '@types/bun',
+    'typescript'
+  ];
+
+  const results: Record<string, string> = { ...customVersions };
+  const toFetch = pkgs.filter((pkg) => !results[pkg]);
+
+  if (toFetch.length > 0) {
+    const fetched = await Promise.all(
+      toFetch.map(async (pkg) => ({
+        pkg,
+        version: await fetchLatestPackageVersion(pkg)
+      }))
+    );
+
+    for (const item of fetched) {
+      results[item.pkg] = item.version;
+    }
+  }
+
+  return results;
+}
+
+export async function createPackageJson(
+  config: ProjectConfig,
+  resolvedVersions?: Record<string, string>
+): Promise<string> {
+  const versions = resolvedVersions ?? (await resolveProjectVersions(config));
+
+  const transportName =
+    config.transport === 'bun' ? '@galfus/transport-bun' : '@galfus/transport-node';
+
+  const transportDep = {
+    [transportName]: versions[transportName] ?? 'latest'
+  };
 
   const physicsDeps =
     config.template === 'physics'
       ? {
-          '@galfus/physics-3d': 'workspace:*',
-          '@galfus/physics-types': 'workspace:*'
+          '@galfus/physics-3d': versions['@galfus/physics-3d'] ?? 'latest',
+          '@galfus/physics-types': versions['@galfus/physics-types'] ?? 'latest'
         }
       : {};
 
@@ -32,13 +99,13 @@ export function createPackageJson(config: ProjectConfig): string {
       build: 'galfus-engine build'
     },
     dependencies: {
-      '@galfus/engine': 'workspace:*',
+      '@galfus/engine': versions['@galfus/engine'] ?? 'latest',
       ...transportDep,
       ...physicsDeps
     },
     devDependencies: {
-      '@types/bun': '^1.4.4',
-      typescript: '^5.8.0'
+      '@types/bun': versions['@types/bun'] ?? 'latest',
+      typescript: versions['typescript'] ?? 'latest'
     }
   };
 
