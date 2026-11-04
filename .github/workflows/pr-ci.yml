@@ -107,6 +107,9 @@ jobs:
       - name: Generate SDKs
         run: bun run codegen
 
+      - name: Build engine CLI
+        run: bun run build:cli
+
       - name: Prepare formatting tools
         run: bun prepare
 

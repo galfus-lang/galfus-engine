@@ -18,13 +18,31 @@ export async function syncHostSdk(rootDir: string): Promise<void> {
   await mkdir(bunSdkDir, { recursive: true });
   let bunCode = await readFile(resolve(rootDir, 'sdk/bun/galfus.ts'), 'utf-8');
   bunCode = bunCode.replaceAll('../typescript/galfus.ts', '@galfus/transport-types');
+  bunCode = bunCode.replace(
+    /import\s*\{[^}]*\}\s*from\s*['"]path['"];/,
+    "import { dirname, resolve } from 'path';\nimport { getArtifactFileName, resolveNativePlatform } from '@galfus/transport-types';"
+  );
 
   const bunLocateCustom = `
-import { getArtifactFileName, resolveNativePlatform } from '@galfus/transport-types';
-
 function locateLibrary(): string {
   const platform = resolveNativePlatform();
   const filename = getArtifactFileName('ffi', platform);
+
+  // 1. Check adjacent to standalone compiled executable
+  if (typeof process.execPath === 'string') {
+    const execAdjacent = resolve(dirname(process.execPath), filename);
+    if (existsSync(execAdjacent)) {
+      return execAdjacent;
+    }
+  }
+
+  // 2. Check current working directory
+  const cwdAdjacent = resolve(process.cwd(), filename);
+  if (existsSync(cwdAdjacent)) {
+    return cwdAdjacent;
+  }
+
+  // 3. Fallback to package dist directory (monorepo / local dev)
   const baseDir = typeof import.meta.dir === 'string' ? import.meta.dir : process.cwd();
   const localDistPath = resolve(baseDir, '../../dist', platform, filename);
   if (existsSync(localDistPath)) {
@@ -46,13 +64,31 @@ function locateLibrary(): string {
   await mkdir(nodeSdkDir, { recursive: true });
   let nodeCode = await readFile(resolve(rootDir, 'sdk/node/galfus.ts'), 'utf-8');
   nodeCode = nodeCode.replaceAll('../typescript/galfus.ts', '@galfus/transport-types');
+  nodeCode = nodeCode.replace(
+    /import\s*\{[^}]*\}\s*from\s*['"]path['"];/,
+    "import { dirname, resolve } from 'path';\nimport { getArtifactFileName, resolveNativePlatform } from '@galfus/transport-types';"
+  );
 
   const nodeLocateCustom = `
-import { getArtifactFileName, resolveNativePlatform } from '@galfus/transport-types';
-
 function locateAddon(): string {
   const platform = resolveNativePlatform();
   const filename = getArtifactFileName('napi', platform);
+
+  // 1. Check adjacent to standalone compiled executable
+  if (typeof process.execPath === 'string') {
+    const execAdjacent = resolve(dirname(process.execPath), filename);
+    if (existsSync(execAdjacent)) {
+      return execAdjacent;
+    }
+  }
+
+  // 2. Check current working directory
+  const cwdAdjacent = resolve(process.cwd(), filename);
+  if (existsSync(cwdAdjacent)) {
+    return cwdAdjacent;
+  }
+
+  // 3. Fallback to package dist directory (monorepo / local dev)
   const baseDir = typeof import.meta.dir === 'string' ? import.meta.dir : dirname(fileURLToPath(import.meta.url));
   const localDistPath = resolve(baseDir, '../../dist', platform, filename);
   if (existsSync(localDistPath)) {

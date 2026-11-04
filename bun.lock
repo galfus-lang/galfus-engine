@@ -44,8 +44,13 @@
     "host/engine": {
       "name": "@galfus/engine",
       "version": "0.0.0",
+      "bin": {
+        "galfus-engine": "./bin/galfus-engine.js",
+      },
       "dependencies": {
+        "@clack/prompts": "^1.8.1",
         "@galfus/transport-types": "workspace:*",
+        "commander": "^15.0.0",
         "iconv-lite": "^0.7.3",
         "unicode-segmenter": "0.17.3",
       },

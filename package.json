@@ -33,6 +33,7 @@
     "validate": "bun run format:check && bun check",
     "version": "bun scripts/github/set-version.ts",
     "codegen": "bun scripts/codegen.ts",
+    "build:cli": "bun --filter @galfus/engine build:cli",
     "build:napi": "cargo build -p galfus-native --features napi && cp build/cargo-target/debug/libgalfus_native.so build/cargo-target/debug/galfus.node && cargo build -p galfus-native",
     "test:ffi": "bun scripts/test-ffi.ts",
     "test:binds": "bun scripts/test-binds.ts",

@@ -354,11 +354,14 @@ jobs:
             fi
           done
 
+      - name: Build engine CLI
+        run: bun run build:cli
+
       - name: Publish all packages to NPM (Trusted Publishing / OIDC)
         run: |
           tag="${{ steps.version.outputs.tag }}"
           echo "Publishing packages with tag: $tag (Trusted Publishing / Provenance enabled)"
-          for pkg in host/transport-types host/model-loader-types host/transport-bun host/transport-node host/transport-browser host/engine host/gltf-loader; do
+          for pkg in host/transport-types host/model-loader-types host/physics-types host/transport-bun host/transport-node host/transport-browser host/engine host/gltf-loader host/physics-2d host/physics-3d host/demos; do
             echo "==> Publishing $pkg..."
             (cd "$pkg" && npm publish --provenance --access public --tag "$tag")
           done
