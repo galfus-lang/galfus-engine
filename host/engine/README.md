@@ -4,6 +4,134 @@ The official TypeScript high-level engine runtime for **Galfus Engine**. Provide
 
 ---
 
+## Getting Started
+
+### 1. Installation
+
+Install `@galfus/engine` alongside your preferred platform transport:
+
+```bash
+# For Bun runtime (native FFI)
+bun add @galfus/engine @galfus/transport-bun
+
+# For Node.js runtime (Node-API)
+npm install @galfus/engine @galfus/transport-node
+
+# For Web Browser (WASM / WebGPU)
+npm install @galfus/engine @galfus/transport-browser
+```
+
+> [!IMPORTANT]
+> Because Galfus packages are distributed directly in TypeScript (ESM), browser projects require a modern bundler/compiler such as [Vite](https://vitejs.dev), esbuild, or Webpack to compile TypeScript and serve WASM assets.
+
+### 2. 3D Realm Quick Start
+
+This example creates a window, initializes a 3D realm with a shaded cube, sets up camera and lighting, and displays the scene via a Multiverse Invocation:
+
+```typescript
+import { createBunTransport } from '@galfus/transport-bun';
+import { createRuntime } from '@galfus/engine';
+
+// 1. Initialize transport and runtime
+const transport = createBunTransport({ targetFps: 60, headless: false });
+const runtime = createRuntime(transport);
+const windowId = runtime.platform.window.create({ title: 'Galfus 3D Engine', size: [1280, 720] });
+
+// 2. Create 3D Realm and resources
+const realm3d = runtime.createRealm3D(1);
+const { geometryId } = realm3d.createGeometry({ kind: 'cube', size: 1.0 });
+const { materialId } = realm3d.createMaterial({
+  baseColor: [0.9, 0.4, 0.15, 1.0],
+  metallic: 0.2,
+  roughness: 0.4
+});
+
+// 3. Create Model entity
+const cubeEntity = realm3d.createModel({ geometryId, materialId }, { position: [0, 0, 0] });
+
+// 4. Set up Camera and Light
+const camera = realm3d.createCamera(
+  { fovY: Math.PI / 4, near: 0.1, far: 1000 },
+  { position: [0, 3, 6] }
+);
+realm3d.setCameraLookAt(camera, { target: [0, 0, 0], up: [0, 1, 0] });
+
+realm3d.createLight(
+  { kind: 'directional', color: [1, 1, 1], intensity: 2.5 },
+  { position: [5, 10, 5], rotation: [0, 0, 0, 1] }
+);
+
+// 5. Compose onto Window via Multiverse Target and Invocation
+const targetId = runtime.multiverse.createTarget({
+  kind: { type: 'window', windowId }
+});
+
+runtime.multiverse.createInvocation({
+  realmId: realm3d.realmId,
+  targetId,
+  viewport: { width: { vw: 100 }, height: { vh: 100 } }
+});
+
+// 6. Update entity transforms and run loop
+runtime.on('tick', ({ dt }) => {
+  const comp = realm3d.world.getComponent(cubeEntity, 'Model3D');
+  if (comp) {
+    comp.transform.rotation[1] += dt * 0.8;
+  }
+});
+
+runtime.start();
+```
+
+### 3. 2D Realm Quick Start
+
+```typescript
+import { createBunTransport } from '@galfus/transport-bun';
+import { createRuntime } from '@galfus/engine';
+
+const transport = createBunTransport({ targetFps: 60, headless: false });
+const runtime = createRuntime(transport);
+const windowId = runtime.platform.window.create({ title: 'Galfus 2D Scene', size: [800, 600] });
+
+const realm2d = runtime.createRealm2D(1);
+const matFloor = realm2d.createMaterial({
+  surfaceType: 'opaque',
+  baseColor: [0.15, 0.18, 0.25, 1.0]
+});
+const matPlayer = realm2d.createMaterial({
+  surfaceType: 'opaque',
+  baseColor: [0.2, 0.8, 0.95, 1.0]
+});
+
+// Create 2D Background Sprite and Player Circle
+realm2d.createSprite(
+  { dimensions: [20, 15], materialId: matFloor },
+  { position: [0, 0], zLayer: -1 }
+);
+const player = realm2d.createShape(
+  { kind: 'circle', radius: 0.8, segments: 32, materialId: matPlayer },
+  { position: [0, 0], zLayer: 0 }
+);
+
+const targetId = runtime.multiverse.createTarget({ kind: { type: 'window', windowId } });
+runtime.multiverse.createInvocation({
+  realmId: realm2d.realmId,
+  targetId,
+  viewport: { width: { vw: 100 }, height: { vh: 100 } }
+});
+
+runtime.start();
+```
+
+### 4. Frame Lifecycle & Loops
+
+The engine provides two loop hooks:
+
+- `runtime.on('tick', ({ dt, time }) => ...)`: Invoked before rendering. Use for input handling, animation updates, visual interpolation, and camera controls.
+- `runtime.on('fixedTick', ({ fixedDt, fixedStepIndex }) => ...)`: Invoked at deterministic fixed intervals (default 60 Hz). Use for gameplay logic and physics simulation.
+
+---
+
 ## Architecture Overview
 
 1. **ECS as Single Source of Truth**:
@@ -89,42 +217,6 @@ and a cluster can contain multiple graphemes, so these metrics alone do not yet 
 editor caret position. Empty text is not currently returned by the SVG parser.
 
 For explicit text/byte conversions, each runtime defaults to UTF-8. Set `createRuntime(transport, { charset: 'shift_jis' })` or call `runtime.textEncoding.setCharset('windows-1252')`, then use `runtime.textEncoding.encode(text)` and `decode(bytes)`. This setting does not restrict or recode editor strings or change the platform ABI. Unknown charsets throw; invalid bytes and characters not representable in the chosen charset are replaced according to the codec.
-
----
-
-## Quick Start
-
-```typescript
-import { createBunTransport } from '@galfus/transport-bun';
-import { createRuntime } from '@galfus/engine';
-
-// 1. Initialize transport and runtime
-const transport = createBunTransport({ targetFps: 60, headless: false });
-const runtime = createRuntime(transport);
-const windowId = runtime.platform.window.create({ title: 'Galfus Engine', size: [1280, 720] });
-
-// 2. Create 3D Realm and resources
-const realm3d = runtime.createRealm3D(1);
-const { geometryId } = realm3d.createGeometry({ kind: 'cube', size: 1.0 });
-const { materialId } = realm3d.createMaterial({ baseColor: [0.8, 0.2, 0.3, 1.0] });
-
-// 3. Create Model entity and attach Mesh
-const entity = realm3d.createModel({ geometryId, materialId }, { position: [0, 1, 0] });
-
-// 4. Set up Multiverse Target and Invocation
-const targetId = runtime.multiverse.createTarget({
-  kind: { type: 'window', windowId }
-});
-
-const invocationId = runtime.multiverse.createInvocation({
-  realmId: realm3d.realmId,
-  targetId,
-  viewport: { width: { vw: 100 }, height: { vh: 100 } }
-});
-
-// 5. Start main loop
-runtime.start();
-```
 
 ---
 
