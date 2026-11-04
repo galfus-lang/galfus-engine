@@ -141,7 +141,7 @@ export async function runDemo3d3(options: HostDemoOptions = {}): Promise<void> {
       roughness: 0.35,
       metallic: 0.05,
       side: 'double',
-      surfaceType: 'transparent'
+      surfaceType: 'masked'
     });
 
     realm3d.createPlane(30, 30, groundMat, { position: [0, 0, 0] });
