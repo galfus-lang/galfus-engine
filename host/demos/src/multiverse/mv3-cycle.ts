@@ -100,6 +100,7 @@ export async function runDemoMv3(options: HostDemoOptions = {}): Promise<void> {
     const portalMat = realm2d.createMaterial({
       surfaceType: 'opaque',
       textureId: target3dRtt,
+      textureSlots: [target3dRtt],
       baseColor: [1, 1, 1, 1]
     });
     const ringMat = realm2d.createMaterial({
@@ -108,16 +109,27 @@ export async function runDemoMv3(options: HostDemoOptions = {}): Promise<void> {
     });
 
     realm2d.createSprite(
-      { dimensions: [24, 18], materialId: bgMat },
+      { dimensions: [24, 18], materialId: bgMat, castShadow: false, receiveShadow: false },
       { position: [0, 0], zLayer: -10 }
     );
-    realm2d.createSprite(
-      { dimensions: [6.5, 6.5], materialId: portalMat },
-      { position: [0, 0], zLayer: 0 }
-    );
     const ring = realm2d.createShape(
-      { kind: 'rectangle', size: [7.2, 7.2], materialId: ringMat },
-      { position: [0, 0], zLayer: 2 }
+      {
+        kind: 'rectangle',
+        size: [7.2, 7.2],
+        materialId: ringMat,
+        castShadow: false,
+        receiveShadow: false
+      },
+      { position: [0, 0], zLayer: -1 }
+    );
+    realm2d.createSprite(
+      {
+        dimensions: [6.5, 6.5],
+        materialId: portalMat,
+        castShadow: false,
+        receiveShadow: false
+      },
+      { position: [0, 0], zLayer: 0 }
     );
     const light2d = realm2d.createLight(
       { color: [0, 0.8, 1], intensity: 2.5, range: 12, lightRadius: 0.2 },
