@@ -65,7 +65,7 @@ export class JointSync3D {
   }
 
   syncBeforeStep(): void {
-    // 1. Prune invalid orstale joints
+    // 1. Prune invalid or stale joints
     for (const [originId, record] of Array.from(this.joints.entries())) {
       if (!this.ecsWorld.isAlive(originId) || !this.ecsWorld.isAlive(record.targetId)) {
         this._removeJointRecord(originId, record);

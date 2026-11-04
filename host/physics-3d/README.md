@@ -113,7 +113,7 @@ physics.applyImpulse(sphere, [0, 5.0, -3.0]);
 physics.applyTorqueImpulse(sphere, [0.5, 0, 0.2]);
 
 // Set linear velocity directly
-physics.setLinvel(sphere, [2.0, 0, 0]);
+physics.setLinearVelocity(sphere, [2.0, 0, 0]);
 ```
 
 ---
