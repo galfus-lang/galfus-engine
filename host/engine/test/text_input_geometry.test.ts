@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { SvgTextLayout } from '@galfus/transport-types';
-import { textInputGeometry } from '../demo/text-input-geometry';
+import { textInputGeometry } from '../../demos/src/host/text-input-geometry';
 
 describe('text input demo geometry', () => {
   it('maps UTF-8 cluster offsets to UTF-16 selection positions', () => {
