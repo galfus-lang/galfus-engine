@@ -26,7 +26,7 @@ impl From<SkyboxConfig3DDesc> for SkyboxConfig3D {
     fn from(d: SkyboxConfig3DDesc) -> Self {
         let mode = match d.mode.as_deref() {
             Some("procedural") => SkyboxMode3D::Procedural,
-            Some("cubemap") | Some("panoramic") => SkyboxMode3D::Cubemap,
+            Some("cubemap") | Some("panoramic") | Some("imported") => SkyboxMode3D::Cubemap,
             _ => SkyboxMode3D::None,
         };
         Self {

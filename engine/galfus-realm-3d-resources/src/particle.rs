@@ -43,6 +43,8 @@ pub struct Particle3DInstance {
     pub rotation: f32,
     /// 16-byte alignment padding.
     pub _pad: [f32; 3],
+    /// UV crop rectangle `[u, v, width, height]` from the emitter descriptor.
+    pub uv_rect: [f32; 4],
 }
 
 /// Configuration descriptor for a 3D particle emitter entity.
@@ -305,6 +307,15 @@ impl ParticleEmitterState3D {
 
     /// Appends GPU instance data for all currently active particles to a reusable staging buffer.
     pub fn append_instances(&self, instances: &mut Vec<Particle3DInstance>) {
+        self.append_instances_with_uv([0.0, 0.0, 1.0, 1.0], instances);
+    }
+
+    /// Appends GPU instance data for all currently active particles using the specified `uv_rect`.
+    pub fn append_instances_with_uv(
+        &self,
+        uv_rect: [f32; 4],
+        instances: &mut Vec<Particle3DInstance>,
+    ) {
         instances.reserve(self.particles.len());
         for p in &self.particles {
             let t = (p.age / p.lifetime).clamp(0.0, 1.0);
@@ -317,6 +328,7 @@ impl ParticleEmitterState3D {
                 color: color.to_array(),
                 rotation: p.rotation,
                 _pad: [0.0; 3],
+                uv_rect,
             });
         }
     }

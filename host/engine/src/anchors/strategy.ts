@@ -2,13 +2,37 @@
  * Extensible Anchor strategies for 2D and 3D hierarchical solving.
  */
 
+import type { EntityId } from '../ecs/entity';
 import { mat2d, type Mat2d, mat4, type Mat4 } from '../math/index';
+import type { AnchorStrategyParams } from './component';
+import {
+  AngularSpringAnchorStrategy2D,
+  AngularSpringAnchorStrategy3D,
+  ChainAnchorStrategy2D,
+  ChainAnchorStrategy3D,
+  HingeAnchorStrategy2D,
+  HingeAnchorStrategy3D,
+  RopeAnchorStrategy2D,
+  RopeAnchorStrategy3D,
+  SpringAnchorStrategy2D,
+  SpringAnchorStrategy3D
+} from './presets';
 
 export interface AnchorContext {
   /** Delta time of the frame in seconds. */
   dt: number;
   /** Total elapsed time in seconds. */
   time: number;
+  /** Origin entity ID being solved. */
+  originId?: EntityId;
+  /** Target entity ID being followed. */
+  targetId?: EntityId;
+  /** Optional distance configured on the AnchorComponent. */
+  distance?: number;
+  /** Optional strategy parameters configured on the AnchorComponent. */
+  params?: AnchorStrategyParams;
+  /** Output flag that stateful strategies (e.g. 'spring') can set to remain active next frame. */
+  keepAwake?: boolean;
 }
 
 export type AnchorConstraintCallback2D = (
@@ -120,8 +144,22 @@ export class AnchorStrategyRegistry {
   constructor() {
     this.register2D(StaticAnchorStrategy2D);
     this.register2D(TranslationAnchorStrategy2D);
+    this.register2D(RopeAnchorStrategy2D);
+    this.register2D(ChainAnchorStrategy2D);
+    this.register2D(SpringAnchorStrategy2D);
+    this.register2D(HingeAnchorStrategy2D);
+    this.register2D({ ...HingeAnchorStrategy2D, name: 'revolute' });
+    this.register2D(AngularSpringAnchorStrategy2D);
+    this.register2D({ ...AngularSpringAnchorStrategy2D, name: 'torsionSpring' });
     this.register3D(StaticAnchorStrategy3D);
     this.register3D(TranslationAnchorStrategy3D);
+    this.register3D(RopeAnchorStrategy3D);
+    this.register3D(ChainAnchorStrategy3D);
+    this.register3D(SpringAnchorStrategy3D);
+    this.register3D(HingeAnchorStrategy3D);
+    this.register3D({ ...HingeAnchorStrategy3D, name: 'revolute' });
+    this.register3D(AngularSpringAnchorStrategy3D);
+    this.register3D({ ...AngularSpringAnchorStrategy3D, name: 'torsionSpring' });
   }
 
   register2D(strategy: AnchorStrategy2D): void {

@@ -1,8 +1,22 @@
-import { extractKey } from '../../scripts/demos/utils.ts';
 import type { RoomMarker, TourConfig } from './types.ts';
 import tourJsonData from './tour.json';
 import { buildRoomScene, makeTexture, makeSound, computeBonePalette } from './procedural.ts';
 import { renderCompanionPanelSvg } from './panel_svg.ts';
+
+function extractKey(input: { physicalKey: string; logicalKey: any }): string {
+  if (typeof input.logicalKey === 'object' && input.logicalKey !== null) {
+    if ('character' in input.logicalKey && typeof input.logicalKey.character === 'string') {
+      return input.logicalKey.character.toLowerCase();
+    }
+    if ('named' in input.logicalKey && typeof input.logicalKey.named === 'string') {
+      return input.logicalKey.named.toLowerCase();
+    }
+  }
+  const phys = String(input.physicalKey ?? '').toLowerCase();
+  if (phys.startsWith('key') && phys.length === 4) return phys.slice(3);
+  if (phys.startsWith('digit') && phys.length === 6) return phys.slice(5);
+  return phys;
+}
 
 const TARGET_WINDOW = 1;
 const REALM_3D = 10;

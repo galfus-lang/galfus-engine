@@ -4,5 +4,6 @@
 export * from './cache';
 export * from './component';
 export * from './hierarchy';
+export * from './presets';
 export * from './solver';
 export * from './strategy';

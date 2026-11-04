@@ -46,6 +46,8 @@ pub struct Realm3DContext {
     pub(crate) particle_renderer: Option<crate::particle::ParticleRenderer3D>,
     pub(crate) particle_alpha_instances: Vec<Particle3DInstance>,
     pub(crate) particle_additive_instances: Vec<Particle3DInstance>,
+    pub(crate) particle_alpha_batches: Vec<crate::particle::ParticleBatch3D>,
+    pub(crate) particle_additive_batches: Vec<crate::particle::ParticleBatch3D>,
     pub(crate) refraction_pipeline: Option<crate::refraction::RefractionPipeline3D>,
     pub(crate) portal_pipelines: BTreeMap<u32, crate::portal::PortalPipeline3D>,
     pub(crate) scene_buffers: Option<SceneGpuBuffers>,
@@ -83,6 +85,8 @@ impl Realm3DContext {
             particle_renderer: None,
             particle_alpha_instances: Vec::new(),
             particle_additive_instances: Vec::new(),
+            particle_alpha_batches: Vec::new(),
+            particle_additive_batches: Vec::new(),
             refraction_pipeline: None,
             portal_pipelines: BTreeMap::new(),
             scene_buffers: None,
@@ -108,6 +112,8 @@ impl Realm3DContext {
         self.emitters.clear();
         self.particle_alpha_instances.clear();
         self.particle_additive_instances.clear();
+        self.particle_alpha_batches.clear();
+        self.particle_additive_batches.clear();
         self.portals.clear();
         self.model_bones.clear();
         self.bones.clear();
@@ -116,6 +122,20 @@ impl Realm3DContext {
         self.gizmos.clear();
         self.portal_pipelines.clear();
         self.dirty = true;
+    }
+
+    pub(crate) fn clear_gpu_pipelines(&mut self) {
+        self.pipeline = None;
+        self.shadow_pipeline = None;
+        self.shadow_map = None;
+        self.skybox_pipeline = None;
+        self.post_pipelines = crate::postprocess::PostProcessPipelines::new();
+        self.light_cull_pipeline = None;
+        self.particle_renderer = None;
+        self.refraction_pipeline = None;
+        self.portal_pipelines.clear();
+        self.scene_buffers = None;
+        self.depth_texture = None;
     }
 
     /// Returns the number of active models currently registered in this realm.
@@ -138,11 +158,6 @@ impl Realm3DContext {
 
     /// Drops offscreen pipelines whose model no longer owns an active mirror/portal surface.
     pub(crate) fn prune_portal_pipelines(&mut self) {
-        let has_active_portal = |model_id| {
-            self.portals
-                .values()
-                .any(|portal| portal.model_id == model_id && portal.active)
-        };
         let is_retained_surface = |model_id: u32, material_id: u32, active: bool| {
             if !active {
                 return false;
@@ -152,8 +167,9 @@ impl Realm3DContext {
                 .get(&material_id)
                 .map(|entry| entry.0.surface_type)
             {
-                Some(SurfaceType3D::Mirror) => true,
-                Some(SurfaceType3D::Portal) => has_active_portal(model_id),
+                Some(st @ (SurfaceType3D::Mirror | SurfaceType3D::Portal)) => {
+                    crate::portal::is_mirror_or_portal_active(&self.portals, model_id, st)
+                }
                 _ => false,
             }
         };

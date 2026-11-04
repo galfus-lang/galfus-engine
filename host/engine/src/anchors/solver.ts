@@ -105,6 +105,21 @@ export class AnchorSolveSystem {
     );
     visiting.delete(id);
 
+    // When managed by a physics package, the entity's localMatrix holds its world pose solved in fixedTick.
+    if (anchor.managedByPhysics) {
+      const isLocalDirty = (model.flags & SpatialDirtyFlags.LocalDirty) !== 0;
+      if (isLocalDirty) {
+        mat2d.copy(worldMatrix, localMatrix);
+        mat2d.copy(model.worldMatrix, worldMatrix);
+        model.flags = (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
+        dirtyTargets.add(id);
+      } else {
+        mat2d.copy(worldMatrix, model.worldMatrix);
+      }
+      resolved.add(id);
+      return worldMatrix;
+    }
+
     const isTargetDirty = dirtyTargets.has(anchor.targetEntityId);
     const isLocalDirty = model ? (model.flags & SpatialDirtyFlags.LocalDirty) !== 0 : true;
 
@@ -117,16 +132,28 @@ export class AnchorSolveSystem {
       return worldMatrix;
     }
 
+    const anchorCtx = {
+      dt: context.dt,
+      time: context.time,
+      originId: id,
+      targetId: anchor.targetEntityId,
+      distance: anchor.distance,
+      params: anchor.params,
+      keepAwake: false
+    };
+
     if (anchor.callback2d) {
-      anchor.callback2d(targetWorld, localMatrix, worldMatrix, context);
+      anchor.callback2d(targetWorld, localMatrix, worldMatrix, anchorCtx);
     } else {
       const strategy = this.strategies.get2D(anchor.strategy);
-      strategy.apply(targetWorld, localMatrix, worldMatrix, anchor.offset2d, context);
+      strategy.apply(targetWorld, localMatrix, worldMatrix, anchor.offset2d, anchorCtx);
     }
 
     if (model) {
       mat2d.copy(model.worldMatrix, worldMatrix);
-      model.flags = (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
+      model.flags = anchorCtx.keepAwake
+        ? model.flags | SpatialDirtyFlags.LocalDirty | SpatialDirtyFlags.WorldDirty
+        : (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
       dirtyTargets.add(id);
     }
 
@@ -209,6 +236,21 @@ export class AnchorSolveSystem {
     );
     visiting.delete(id);
 
+    // When managed by a physics package, the entity's localMatrix holds its world pose solved in fixedTick.
+    if (anchor.managedByPhysics) {
+      const isLocalDirty = (model.flags & SpatialDirtyFlags.LocalDirty) !== 0;
+      if (isLocalDirty) {
+        mat4.copy(worldMatrix, localMatrix);
+        mat4.copy(model.worldMatrix, worldMatrix);
+        model.flags = (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
+        dirtyTargets.add(id);
+      } else {
+        mat4.copy(worldMatrix, model.worldMatrix);
+      }
+      resolved.add(id);
+      return worldMatrix;
+    }
+
     const isTargetDirty = dirtyTargets.has(anchor.targetEntityId);
     const isLocalDirty = model ? (model.flags & SpatialDirtyFlags.LocalDirty) !== 0 : true;
 
@@ -221,16 +263,28 @@ export class AnchorSolveSystem {
       return worldMatrix;
     }
 
+    const anchorCtx = {
+      dt: context.dt,
+      time: context.time,
+      originId: id,
+      targetId: anchor.targetEntityId,
+      distance: anchor.distance,
+      params: anchor.params,
+      keepAwake: false
+    };
+
     if (anchor.callback3d) {
-      anchor.callback3d(targetWorld, localMatrix, worldMatrix, context);
+      anchor.callback3d(targetWorld, localMatrix, worldMatrix, anchorCtx);
     } else {
       const strategy = this.strategies.get3D(anchor.strategy);
-      strategy.apply(targetWorld, localMatrix, worldMatrix, anchor.offset3d, context);
+      strategy.apply(targetWorld, localMatrix, worldMatrix, anchor.offset3d, anchorCtx);
     }
 
     if (model) {
       mat4.copy(model.worldMatrix, worldMatrix);
-      model.flags = (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
+      model.flags = anchorCtx.keepAwake
+        ? model.flags | SpatialDirtyFlags.LocalDirty | SpatialDirtyFlags.WorldDirty
+        : (model.flags & ~SpatialDirtyFlags.LocalDirty) | SpatialDirtyFlags.WorldDirty;
       dirtyTargets.add(id);
     }
 

@@ -44,6 +44,7 @@ import {
   type Mesh3DComponent,
   type Mesh3DDesc,
   type Model3DComponent,
+  type Portal3DComponent,
   type Primitive3DKind
 } from './components';
 import {
@@ -52,6 +53,7 @@ import {
   packGeometryData,
   prepareMorphTargets
 } from './geometry';
+import * as primitives from './primitive-factory';
 import { resolveCameraId, resolveEmitterId, storeCameraLookAt } from './resource-ids';
 import { SkinningSolveSystem } from './skinning';
 import { type Realm3DResourceProvider, Realm3DSyncSystem } from './sync';
@@ -330,54 +332,64 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
 
   createPrimitive(
     primitive: Primitive3DKind,
-    materialId: number,
-    transform?: Transform3DProps
-  ): { entityId: EntityId; geometryId: number; modelId: number } {
-    const { geometryId } = this.createGeometry(primitive);
-    const entityId = this.createModel({ geometryId, materialId }, transform);
-    const model = this.world.getComponent<Model3DComponent>(entityId, 'Model3D')!;
-    return { entityId, geometryId, modelId: model.modelId };
+    matId: number,
+    t?: Transform3DProps,
+    mesh?: Partial<Model3DDesc>
+  ) {
+    return primitives.createPrimitiveModel(this, primitive, matId, t, mesh);
   }
 
-  createCube(size: number, materialId: number, transform?: Transform3DProps) {
-    return this.createPrimitive({ kind: 'cube', size }, materialId, transform);
+  createCube(size: number, mat: number, t?: Transform3DProps, m?: Partial<Model3DDesc>) {
+    return primitives.createCube(this, size, mat, t, m);
   }
 
-  createPlane(width: number, depth: number, materialId: number, transform?: Transform3DProps) {
-    return this.createPrimitive({ kind: 'plane', width, depth }, materialId, transform);
+  createPlane(w: number, d: number, mat: number, t?: Transform3DProps, m?: Partial<Model3DDesc>) {
+    return primitives.createPlane(this, w, d, mat, t, m);
   }
 
   createSphere(
-    radius: number,
-    rings: number,
-    sectors: number,
-    materialId: number,
-    transform?: Transform3DProps
+    r: number,
+    rg: number,
+    s: number,
+    mat: number,
+    t?: Transform3DProps,
+    m?: Partial<Model3DDesc>
   ) {
-    return this.createPrimitive({ kind: 'sphere', radius, rings, sectors }, materialId, transform);
+    return primitives.createSphere(this, r, rg, s, mat, t, m);
   }
 
-  createCylinder(r: number, h: number, s: number, matId: number, t?: Transform3DProps) {
-    return this.createPrimitive({ kind: 'cylinder', radius: r, height: h, sectors: s }, matId, t);
+  createCylinder(
+    r: number,
+    h: number,
+    s: number,
+    mat: number,
+    t?: Transform3DProps,
+    m?: Partial<Model3DDesc>
+  ) {
+    return primitives.createCylinder(this, r, h, s, mat, t, m);
   }
 
   createCapsule(
     r: number,
     ch: number,
-    rings: number,
+    rg: number,
     s: number,
-    matId: number,
-    t?: Transform3DProps
+    mat: number,
+    t?: Transform3DProps,
+    m?: Partial<Model3DDesc>
   ) {
-    return this.createPrimitive(
-      { kind: 'capsule', radius: r, cylinderHeight: ch, rings, sectors: s },
-      matId,
-      t
-    );
+    return primitives.createCapsule(this, r, ch, rg, s, mat, t, m);
   }
 
-  createPyramid(w: number, d: number, h: number, matId: number, t?: Transform3DProps) {
-    return this.createPrimitive({ kind: 'pyramid', width: w, depth: d, height: h }, matId, t);
+  createPyramid(
+    w: number,
+    d: number,
+    h: number,
+    mat: number,
+    t?: Transform3DProps,
+    m?: Partial<Model3DDesc>
+  ) {
+    return primitives.createPyramid(this, w, d, h, mat, t, m);
   }
 
   createTorus(
@@ -385,34 +397,22 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     minR: number,
     majS: number,
     minS: number,
-    matId: number,
-    t?: Transform3DProps
+    mat: number,
+    t?: Transform3DProps,
+    m?: Partial<Model3DDesc>
   ) {
-    return this.createPrimitive(
-      {
-        kind: 'torus',
-        majorRadius: majR,
-        minorRadius: minR,
-        majorSegments: majS,
-        minorSegments: minS
-      },
-      matId,
-      t
-    );
+    return primitives.createTorus(this, majR, minR, majS, minS, mat, t, m);
   }
 
   createCustomGeometry(
     top: number,
     vData: Uint8Array,
     idx: Uint32Array,
-    matId: number,
-    t?: Transform3DProps
+    mat: number,
+    t?: Transform3DProps,
+    m?: Partial<Model3DDesc>
   ) {
-    return this.createPrimitive(
-      { kind: 'custom', topology: top, vertexData: vData, indices: idx },
-      matId,
-      t
-    );
+    return primitives.createCustomGeometry(this, top, vData, idx, mat, t, m);
   }
 
   // Camera LookAt, Environment & Debug Gizmos
@@ -507,6 +507,13 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   }
 
   setPortalActive(portalId: number, active: boolean): void {
+    for (const entityId of this.world.query('Portal3D')) {
+      const comp = this.world.getComponent<Portal3DComponent>(entityId, 'Portal3D');
+      if (comp && comp.portalId === portalId) {
+        comp.desc.active = active;
+        break;
+      }
+    }
     this._engine?.realm3dSetPortalActive(this.realmId, portalId, active);
   }
 

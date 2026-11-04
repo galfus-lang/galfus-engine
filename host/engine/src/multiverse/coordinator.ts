@@ -15,6 +15,7 @@ import type {
 import { assertValidLogicalId } from '@galfus/transport-types';
 import type { SystemContext } from '../ecs/system';
 import { IdAllocator, type InvocationId, type RealmId, type TargetId } from '../types';
+import { ColorRealm } from './color-realm';
 import {
   PresentationGraph,
   type PresentationGraphView,
@@ -39,6 +40,8 @@ export class MultiverseCoordinator {
   private _engine: GalfusEngine | null = null;
   private readonly _targetIdAllocator = new IdAllocator<TargetId>(1);
   private readonly _invocationIdAllocator = new IdAllocator<InvocationId>(1);
+  private readonly _realmIdAllocator = new IdAllocator<RealmId>(1);
+  private readonly _shaderIdAllocator = new IdAllocator<number>(1);
   private readonly _realms = new Map<RealmId, RealmConnector>();
   private readonly _targets = new Map<TargetId, TargetDesc>();
   private readonly _invocations = new Map<InvocationId, InvocationDesc>();
@@ -182,6 +185,16 @@ export class MultiverseCoordinator {
   }
 
   /**
+   * Registers a built-in ColorRealm with a solid RGBA clear color.
+   */
+  registerColorRealm(color: [number, number, number, number], realmId?: RealmId | number): RealmId {
+    const id = (realmId ?? this._realmIdAllocator.allocate('RealmId')) as RealmId;
+    const realm = new ColorRealm(id, color);
+    this.registerRealm(realm);
+    return id;
+  }
+
+  /**
    * Unregisters and disposes a realm connector, removing any dependent invocations.
    */
   unregisterRealm(realmId: RealmId | number): void {
@@ -308,6 +321,29 @@ export class MultiverseCoordinator {
     this._dirtyInvocations.set(id, { ...existing, ...patch });
   }
 
+  setInvocationViewport(invocationId: InvocationId | number, viewport: ViewportRect): void {
+    this.updateInvocation(invocationId, { viewport });
+    this.flushUpdates();
+  }
+
+  setInvocationFilters(invocationId: InvocationId | number, filters: InvocationFilter[]): void {
+    this.updateInvocation(invocationId, { filters });
+    this.flushUpdates();
+  }
+
+  setInvocationClearColor(
+    invocationId: InvocationId | number,
+    clearColor: [number, number, number, number] | null
+  ): void {
+    this.updateInvocation(invocationId, { clearColor });
+    this.flushUpdates();
+  }
+
+  setInvocationEnabled(invocationId: InvocationId | number, enabled: boolean): void {
+    this.updateInvocation(invocationId, { enabled });
+    this.flushUpdates();
+  }
+
   /**
    * Flushes all coalesced dirty invocation updates to the native engine driver.
    */
@@ -414,17 +450,32 @@ export class MultiverseCoordinator {
   /**
    * Registers a custom WGSL post-processing shader.
    */
-  registerShader(shaderId: number, source: string): void {
+  registerShader(source: string): number;
+  registerShader(shaderId: number, source: string): void;
+  registerShader(arg1: number | string, arg2?: string): number | void {
+    let shaderId: number;
+    let source: string;
+    if (typeof arg1 === 'string') {
+      shaderId = this._shaderIdAllocator.allocate('ShaderId');
+      source = arg1;
+    } else {
+      shaderId = arg1;
+      source = arg2!;
+    }
     assertValidLogicalId(shaderId, 'ShaderId');
     if (this._engine) {
       this._engine.multiverseRegisterShader(shaderId, source);
     }
+    return shaderId;
   }
 
   /**
    * Updates anti-aliasing configuration on a target.
    */
-  setAntiAliasing(_targetId: TargetId | number, mode: AntiAliasingMode): void {
+  setAntiAliasing(mode: AntiAliasingMode): void;
+  setAntiAliasing(targetId: TargetId | number, mode: AntiAliasingMode): void;
+  setAntiAliasing(arg1: TargetId | number | AntiAliasingMode, arg2?: AntiAliasingMode): void {
+    const mode = typeof arg1 === 'string' ? arg1 : arg2!;
     if (this._engine) {
       this._engine.multiverseSetAntiAliasing(mode);
     }

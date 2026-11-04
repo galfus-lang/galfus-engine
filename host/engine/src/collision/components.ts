@@ -10,6 +10,8 @@ export type ColliderShape2D =
 export type ColliderShape3D =
   | { type: 'box'; halfExtents: [number, number, number] }
   | { type: 'sphere'; radius: number }
+  | { type: 'cylinder'; radius: number; halfHeight: number }
+  | { type: 'capsule'; radius: number; halfHeight: number }
   | { type: 'plane'; halfExtents: [number, number] };
 
 export interface ColliderHit2D {
@@ -83,6 +85,14 @@ function validateShape(shape: ColliderShape2D | ColliderShape3D): void {
   if (shape.type === 'circle' || shape.type === 'sphere') {
     if (!Number.isFinite(shape.radius) || shape.radius <= 0)
       throw new Error('Collider radius must be positive and finite.');
+  } else if (shape.type === 'cylinder' || shape.type === 'capsule') {
+    if (
+      !Number.isFinite(shape.radius) ||
+      shape.radius <= 0 ||
+      !Number.isFinite(shape.halfHeight) ||
+      shape.halfHeight <= 0
+    )
+      throw new Error('Collider dimensions must be positive and finite.');
   } else if (shape.type === 'polygon') {
     if (!validPolygon(shape.vertices))
       throw new Error('Collider polygon must be simple, non-degenerate, and finite.');
@@ -95,6 +105,11 @@ function validateShape(shape: ColliderShape2D | ColliderShape3D): void {
 }
 function computeBoundingRadius(shape: ColliderShape2D | ColliderShape3D): number {
   if (shape.type === 'circle' || shape.type === 'sphere') return shape.radius;
+  if (shape.type === 'cylinder' || shape.type === 'capsule')
+    return Math.hypot(
+      shape.radius,
+      shape.halfHeight + (shape.type === 'capsule' ? shape.radius : 0)
+    );
   if (shape.type === 'rectangle' || shape.type === 'plane')
     return Math.hypot(shape.halfExtents[0], shape.halfExtents[1]);
   if (shape.type === 'box')
