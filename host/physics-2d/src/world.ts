@@ -85,10 +85,32 @@ export class RapierPhysicsWorld2D implements PhysicsWorld2D {
     body.addForce({ x: force[0], y: force[1] }, true);
   }
 
+  applyForceAtPoint(entityId: EntityId, force: [number, number], point: [number, number]): void {
+    const body = this._getOrSyncBody(entityId);
+    if (!body) return;
+    body.addForceAtPoint({ x: force[0], y: force[1] }, { x: point[0], y: point[1] }, true);
+  }
+
   applyImpulse(entityId: EntityId, impulse: [number, number]): void {
     const body = this._getOrSyncBody(entityId);
     if (!body) return;
     body.applyImpulse({ x: impulse[0], y: impulse[1] }, true);
+  }
+
+  applyImpulseAtPoint(
+    entityId: EntityId,
+    impulse: [number, number],
+    point: [number, number]
+  ): void {
+    const body = this._getOrSyncBody(entityId);
+    if (!body) return;
+    body.applyImpulseAtPoint({ x: impulse[0], y: impulse[1] }, { x: point[0], y: point[1] }, true);
+  }
+
+  applyTorque(entityId: EntityId, torque: number): void {
+    const body = this._getOrSyncBody(entityId);
+    if (!body) return;
+    body.addTorque(torque, true);
   }
 
   applyTorqueImpulse(entityId: EntityId, torqueImpulse: number): void {

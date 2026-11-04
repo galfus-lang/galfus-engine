@@ -12,9 +12,11 @@ import { runDemoAnchor1 } from './physics/anchor1-kinematic';
 import { runDemoPhys2d1 } from './physics/phys2d1-arena';
 import { runDemoPhys2d2 } from './physics/phys2d2-chains';
 import { runDemoPhys2d3 } from './physics/phys2d3-hinge';
+import { runDemoPhys2d4 } from './physics/phys2d4-forces';
 import { runDemoPhys3d1 } from './physics/phys3d1-sandbox';
 import { runDemoPhys3d2 } from './physics/phys3d2-joints';
 import { runDemoPhys3d3 } from './physics/phys3d3-hinge';
+import { runDemoPhys3d4 } from './physics/phys3d4-forces';
 import { runDemoAnim1 } from './realm2d/anim1-transitions';
 import { runDemo2d1 } from './realm2d/d2d1-shadows';
 import { runDemo2d2 } from './realm2d/d2d2-effects-particles';
@@ -137,6 +139,16 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     run: runDemoPhys3d3
   },
   {
+    id: 'phys3d4',
+    aliases: ['forces-3d', 'torque-3d', 'point-impulse-3d'],
+    title: '3D Forces, Continuous Torque & Point Impulses',
+    category: 'Physics & Anchors',
+    tags: ['physics', '3d', 'forces', 'torque', 'point-impulse', 'turbine', 'drone'],
+    description:
+      '3D physics playground featuring continuous torque-driven turbine, thrusters with forceAtPoint, and off-center point impulses.',
+    run: runDemoPhys3d4
+  },
+  {
     id: 'phys2d1',
     aliases: ['physics-2d', 'arena-2d'],
     title: '2D RigidBodies, Collisions & Dynamic Shadows',
@@ -165,6 +177,16 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     description:
       '2D swinging saloon gates with angular limits funneling falling balls with live angular velocity telemetry.',
     run: runDemoPhys2d3
+  },
+  {
+    id: 'phys2d4',
+    aliases: ['forces-2d', 'torque-2d', 'point-impulse-2d'],
+    title: '2D Forces, Continuous Torque & Point Impulses',
+    category: 'Physics & Anchors',
+    tags: ['physics', '2d', 'forces', 'torque', 'point-impulse', 'rotor', 'thrust'],
+    description:
+      '2D physics arena showcasing continuous torque spinner, off-center point impulses, and directional thrusters.',
+    run: runDemoPhys2d4
   },
 
   // 3. Multiverse (4 demos)

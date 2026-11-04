@@ -242,4 +242,31 @@ describe('@galfus/physics-3d (Rapier 3D Integration & Anchor Joint Handoff)', ()
 
     physics.dispose();
   });
+
+  it('applies continuous torque, forceAtPoint, and impulseAtPoint in 3D', async () => {
+    await initPhysics3D();
+    const realm = new Realm3D(2);
+    const physics = new RapierPhysicsWorld3D(realm, { gravity: [0, 0, 0] });
+
+    const box = realm.createSpatialNode({ position: [0, 0, 0] });
+    realm.addCollider(box, { type: 'box', halfExtents: [1, 1, 1] });
+    physics.addRigidBody(box, { type: 'dynamic', mass: 2 });
+
+    for (let i = 0; i < 5; i++) {
+      physics.applyTorque(box, [0, 10.0, 0]);
+      physics.step(1 / 60);
+    }
+    const w = physics.getAngularVelocity(box)!;
+    expect(w[1]).toBeGreaterThan(0.1);
+
+    physics.applyImpulseAtPoint(box, [0, 10, 0], [1, 0, 0]);
+    physics.step(1 / 60);
+    const v = physics.getLinearVelocity(box)!;
+    expect(v[1]).toBeGreaterThan(2.0);
+
+    physics.applyForceAtPoint(box, [10, 0, 0], [0, 1, 0]);
+    physics.step(1 / 60);
+
+    physics.dispose();
+  });
 });

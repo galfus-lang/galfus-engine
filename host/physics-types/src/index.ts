@@ -185,7 +185,10 @@ export interface PhysicsWorld2D {
   removeRigidBody(entityId: EntityId): boolean;
   hasRigidBody(entityId: EntityId): boolean;
   applyForce(entityId: EntityId, force: [number, number]): void;
+  applyForceAtPoint(entityId: EntityId, force: [number, number], point: [number, number]): void;
   applyImpulse(entityId: EntityId, impulse: [number, number]): void;
+  applyImpulseAtPoint(entityId: EntityId, impulse: [number, number], point: [number, number]): void;
+  applyTorque(entityId: EntityId, torque: number): void;
   applyTorqueImpulse(entityId: EntityId, torqueImpulse: number): void;
   setLinearVelocity(entityId: EntityId, velocity: [number, number]): void;
   getLinearVelocity(entityId: EntityId): [number, number] | undefined;
@@ -208,7 +211,18 @@ export interface PhysicsWorld3D {
   removeRigidBody(entityId: EntityId): boolean;
   hasRigidBody(entityId: EntityId): boolean;
   applyForce(entityId: EntityId, force: [number, number, number]): void;
+  applyForceAtPoint(
+    entityId: EntityId,
+    force: [number, number, number],
+    point: [number, number, number]
+  ): void;
   applyImpulse(entityId: EntityId, impulse: [number, number, number]): void;
+  applyImpulseAtPoint(
+    entityId: EntityId,
+    impulse: [number, number, number],
+    point: [number, number, number]
+  ): void;
+  applyTorque(entityId: EntityId, torque: [number, number, number]): void;
   applyTorqueImpulse(entityId: EntityId, torqueImpulse: [number, number, number]): void;
   setLinearVelocity(entityId: EntityId, velocity: [number, number, number]): void;
   getLinearVelocity(entityId: EntityId): [number, number, number] | undefined;

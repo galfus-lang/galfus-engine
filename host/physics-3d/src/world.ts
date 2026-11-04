@@ -86,10 +86,44 @@ export class RapierPhysicsWorld3D implements PhysicsWorld3D {
     body.addForce({ x: force[0], y: force[1], z: force[2] }, true);
   }
 
+  applyForceAtPoint(
+    entityId: EntityId,
+    force: [number, number, number],
+    point: [number, number, number]
+  ): void {
+    const body = this._getOrSyncBody(entityId);
+    if (!body) return;
+    body.addForceAtPoint(
+      { x: force[0], y: force[1], z: force[2] },
+      { x: point[0], y: point[1], z: point[2] },
+      true
+    );
+  }
+
   applyImpulse(entityId: EntityId, impulse: [number, number, number]): void {
     const body = this._getOrSyncBody(entityId);
     if (!body) return;
     body.applyImpulse({ x: impulse[0], y: impulse[1], z: impulse[2] }, true);
+  }
+
+  applyImpulseAtPoint(
+    entityId: EntityId,
+    impulse: [number, number, number],
+    point: [number, number, number]
+  ): void {
+    const body = this._getOrSyncBody(entityId);
+    if (!body) return;
+    body.applyImpulseAtPoint(
+      { x: impulse[0], y: impulse[1], z: impulse[2] },
+      { x: point[0], y: point[1], z: point[2] },
+      true
+    );
+  }
+
+  applyTorque(entityId: EntityId, torque: [number, number, number]): void {
+    const body = this._getOrSyncBody(entityId);
+    if (!body) return;
+    body.addTorque({ x: torque[0], y: torque[1], z: torque[2] }, true);
   }
 
   applyTorqueImpulse(entityId: EntityId, torqueImpulse: [number, number, number]): void {

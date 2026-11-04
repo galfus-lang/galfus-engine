@@ -145,6 +145,32 @@ physics.on('sensorExit', ({ sensorEntity, otherEntity }) => {
 
 ---
 
+## Forces, Impulses & Torques
+
+Interact with dynamic 3D rigid bodies using linear and angular methods:
+
+```typescript
+// 1. Instantaneous linear impulse (bullets, jumps, explosions)
+physics.applyImpulse(entity, [0, 15.0, 0]);
+
+// 2. Off-center impulse (creates linear motion + angular spin)
+physics.applyImpulseAtPoint(entity, [0, 10.0, 0], [1.5, 0, 0]);
+
+// 3. Continuous linear force (wind, rocket thrust — call during fixedTick)
+physics.applyForce(entity, [0, 98.1, 0]);
+
+// 4. Continuous force applied at an off-center point
+physics.applyForceAtPoint(entity, [5.0, 0, 0], [0, 1.0, 0]);
+
+// 5. Continuous torque (rotational motors, propellers around [x, y, z])
+physics.applyTorque(entity, [0, 12.0, 0]);
+
+// 6. Instantaneous torque impulse (kicking doors, angular shock)
+physics.applyTorqueImpulse(entity, [0, 35.0, 0]);
+```
+
+---
+
 ## Anchor Joint Handoff
 
 Entities connected via Galfus `AnchorComponent` (`rope`, `chain`, `spring`, `hinge`, or `angularSpring`) are automatically handed over to Rapier as physical impulse joints when rigid bodies are present on both entities (or when `managedByPhysics` is active).
