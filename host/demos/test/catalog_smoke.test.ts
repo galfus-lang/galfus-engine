@@ -8,12 +8,12 @@ import {
 } from '../src/catalog';
 
 describe('@galfus/demos catalog & headless smoke suite', () => {
-  it('registers all 27 demos across 5 categories with unique IDs', () => {
-    expect(DEMO_CATALOG.length).toBe(27);
+  it('registers all 28 demos across 5 categories with unique IDs', () => {
+    expect(DEMO_CATALOG.length).toBe(28);
     expect(DEMO_CATEGORIES.length).toBe(5);
 
     const ids = new Set(DEMO_CATALOG.map((d) => d.id));
-    expect(ids.size).toBe(27);
+    expect(ids.size).toBe(28);
 
     for (const cat of DEMO_CATEGORIES) {
       const entries = filterDemosByCategory(cat);

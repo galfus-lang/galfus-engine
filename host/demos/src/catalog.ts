@@ -27,6 +27,7 @@ import { runDemo3d7 } from './realm3d/d3d7-portal-mirror';
 import { runDemo3d8 } from './realm3d/d3d8-instancing';
 import { runDemo3d9 } from './realm3d/d3d9-sides-normals';
 import { runDemo3d10 } from './realm3d/d3d10-morph-targets';
+import { runDemo3d11 } from './realm3d/d3d11-imported-skybox';
 
 export type DemoCategory =
   'Host & Interaction' | 'Physics & Anchors' | 'Multiverse' | 'Realm 3D' | 'Realm 2D & Animation';
@@ -286,6 +287,16 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     description:
       'Custom sphere mesh blending smoothly across 3 morph targets (Starburst Spikes, Rounded Cube, Spiral Twist).',
     run: runDemo3d10
+  },
+  {
+    id: '3d11',
+    aliases: ['skybox', 'panoramic', 'hdr-skybox', 'cubemap'],
+    title: 'Imported 360° Panoramic Skybox & Reflections',
+    category: 'Realm 3D',
+    tags: ['3d', 'skybox', 'panoramic', 'equirectangular', 'reflections', 'pbr'],
+    description:
+      'Imports a 360° equirectangular panoramic texture as a background skybox, reflected across chrome, gold, and glass PBR materials.',
+    run: runDemo3d11
   },
 
   // 5. Realm 2D & Animation (4 demos)

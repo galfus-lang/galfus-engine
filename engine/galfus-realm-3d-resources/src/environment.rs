@@ -36,7 +36,8 @@ pub enum SkyboxMode3D {
     None,
     /// Procedural hemispherical sky with ground, horizon, sky gradient and sun disc.
     Procedural,
-    /// Cubemap textured skybox.
+    /// Cubemap or equirectangular panoramic textured skybox.
+    #[serde(alias = "panoramic", alias = "imported")]
     Cubemap,
 }
 

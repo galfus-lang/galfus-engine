@@ -25,17 +25,7 @@ impl Realm for Realm3DContext {
 
     fn destroy(&mut self) -> RealmResult<()> {
         self.clear()?;
-        self.pipeline = None;
-        self.shadow_pipeline = None;
-        self.shadow_map = None;
-        self.skybox_pipeline = None;
-        self.post_pipelines = crate::postprocess::PostProcessPipelines::new();
-        self.light_cull_pipeline = None;
-        self.particle_renderer = None;
-        self.refraction_pipeline = None;
-        self.portal_pipelines.clear();
-        self.scene_buffers = None;
-        self.depth_texture = None;
+        self.clear_gpu_pipelines();
         Ok(())
     }
 
@@ -76,6 +66,12 @@ impl Realm for Realm3DContext {
             &mut self.models,
             &mut self.instanced_models,
         );
+
+        let sky_pipe = self.skybox_pipeline.get_or_insert_with(|| {
+            crate::skybox::SkyboxPipeline3D::new(device, wgpu::TextureFormat::Rgba8Unorm)
+        });
+        let sky_tex = self.environment.skybox.texture_id.and_then(ctx.textures);
+        sky_pipe.sync_texture(device, self.environment.skybox.texture_id, sky_tex);
 
         // 4. Sync Scene Buffers (Environment, Lights, Shadows)
         let shadow_pipe = self.shadow_pipeline.get_or_insert_with(|| {
@@ -152,6 +148,7 @@ impl Realm for Realm3DContext {
         let sky_pipe = self
             .skybox_pipeline
             .get_or_insert_with(|| crate::skybox::SkyboxPipeline3D::new(device, ctx.target_format));
+        sky_pipe.ensure_format(device, ctx.target_format);
         sky_pipe.update(
             queue,
             &camera_uniform.view_projection,
@@ -581,11 +578,16 @@ impl Realm for Realm3DContext {
     }
 
     fn referenced_texture_ids(&self) -> Vec<u32> {
-        self.materials
+        let mut ids: Vec<u32> = self
+            .materials
             .values()
             .flat_map(|(mat, _, _)| mat.resolved_texture_slots().into_iter().flatten())
             .filter(|&id| id != 0)
-            .collect()
+            .collect();
+        if let Some(tex_id) = self.environment.skybox.texture_id.filter(|&id| id != 0) {
+            ids.push(tex_id);
+        }
+        ids
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

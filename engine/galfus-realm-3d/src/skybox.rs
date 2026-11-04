@@ -127,15 +127,67 @@ pub struct SkyboxPipeline3D {
     pub fallback_texture: wgpu::Texture,
     pub fallback_view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
+    pub current_texture_id: Option<u32>,
+    pub target_format: wgpu::TextureFormat,
+}
+
+fn create_skybox_render_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    target_format: wgpu::TextureFormat,
+) -> wgpu::RenderPipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Realm3D Skybox Shader"),
+        source: wgpu::ShaderSource::Wgsl(SKYBOX_SHADER.into()),
+    });
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Realm3D Skybox Pipeline Layout"),
+        bind_group_layouts: &[layout],
+        immediate_size: 0,
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Realm3D Skybox Pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: target_format,
+                blend: Some(wgpu::BlendState::REPLACE),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            unclipped_depth: false,
+            conservative: false,
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: false,
+            depth_compare: wgpu::CompareFunction::GreaterEqual,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
 }
 
 impl SkyboxPipeline3D {
     pub fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat) -> Self {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Realm3D Skybox Shader"),
-            source: wgpu::ShaderSource::Wgsl(SKYBOX_SHADER.into()),
-        });
-
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Realm3D Skybox Layout"),
             entries: &[
@@ -230,52 +282,7 @@ impl SkyboxPipeline3D {
             ],
         });
 
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Realm3D Skybox Pipeline Layout"),
-            bind_group_layouts: &[&layout],
-            immediate_size: 0,
-        });
-
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Realm3D Skybox Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                buffers: &[],
-                compilation_options: Default::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: target_format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: false,
-                // Reverse-Z: Far plane is 0.0. Sky draws only where depth is <= 0.0 (unoccluded background).
-                depth_compare: wgpu::CompareFunction::GreaterEqual,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
+        let pipeline = create_skybox_render_pipeline(device, &layout, target_format);
 
         Self {
             pipeline,
@@ -285,7 +292,50 @@ impl SkyboxPipeline3D {
             fallback_texture,
             fallback_view,
             sampler,
+            current_texture_id: None,
+            target_format,
         }
+    }
+
+    /// Recreates the render pipeline if the target format changes (e.g. from RGBA to BGRA).
+    pub fn ensure_format(&mut self, device: &wgpu::Device, format: wgpu::TextureFormat) {
+        if self.target_format == format {
+            return;
+        }
+        self.target_format = format;
+        self.pipeline = create_skybox_render_pipeline(device, &self.layout, format);
+    }
+
+    /// Binds an imported equirectangular/panoramic skybox texture, or resets to fallback.
+    pub fn sync_texture(
+        &mut self,
+        device: &wgpu::Device,
+        texture_id: Option<u32>,
+        texture_view: Option<&wgpu::TextureView>,
+    ) {
+        if self.current_texture_id == texture_id {
+            return;
+        }
+        self.current_texture_id = texture_id;
+        let view = texture_view.unwrap_or(&self.fallback_view);
+        self.bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Realm3D Skybox Bind Group"),
+            layout: &self.layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
     }
 
     /// Updates the uniform buffer with camera matrices and skybox properties.

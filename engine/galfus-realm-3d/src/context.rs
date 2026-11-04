@@ -124,6 +124,20 @@ impl Realm3DContext {
         self.dirty = true;
     }
 
+    pub(crate) fn clear_gpu_pipelines(&mut self) {
+        self.pipeline = None;
+        self.shadow_pipeline = None;
+        self.shadow_map = None;
+        self.skybox_pipeline = None;
+        self.post_pipelines = crate::postprocess::PostProcessPipelines::new();
+        self.light_cull_pipeline = None;
+        self.particle_renderer = None;
+        self.refraction_pipeline = None;
+        self.portal_pipelines.clear();
+        self.scene_buffers = None;
+        self.depth_texture = None;
+    }
+
     /// Returns the number of active models currently registered in this realm.
     #[inline]
     pub fn model_count(&self) -> usize {
