@@ -181,6 +181,7 @@ impl Realm for Realm2DContext {
             &gpu_res.fallback_normal_view,
             &gpu_res.fallback_black_view,
             &gpu_res.fallback_material_buffer,
+            ctx.textures,
             &mut self.material_bind_groups,
         );
 
@@ -204,7 +205,7 @@ impl Realm for Realm2DContext {
 
             let draw_order = sprite.draw_order.unwrap_or(transform.draw_order);
             self.batch_builder.push(PreparedItem2D {
-                order: (id, 0),
+                order: (id, 0, 0),
                 key: BatchKey2D {
                     z_layer: transform.z_layer,
                     draw_order,
@@ -236,7 +237,7 @@ impl Realm for Realm2DContext {
 
             let draw_order = shape.draw_order.unwrap_or(transform.draw_order);
             self.batch_builder.push(PreparedItem2D {
-                order: (id, 1),
+                order: (id, 1, 0),
                 key: BatchKey2D {
                     z_layer: transform.z_layer,
                     draw_order,
@@ -285,7 +286,7 @@ impl Realm for Realm2DContext {
                 };
 
                 self.batch_builder.push(PreparedItem2D {
-                    order: (id, 2),
+                    order: (id, 2, 0),
                     key: BatchKey2D {
                         z_layer: transform.z_layer,
                         draw_order: transform.draw_order,
@@ -455,6 +456,11 @@ impl Realm for Realm2DContext {
                 {
                     ids.push(id);
                 }
+            }
+        }
+        for tex_id in self.svg_manager.referenced_texture_ids() {
+            if !ids.contains(&tex_id) {
+                ids.push(tex_id);
             }
         }
         ids

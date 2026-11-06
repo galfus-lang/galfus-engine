@@ -136,6 +136,9 @@ impl crate::Tree {
                 resolve_data: Box::new(|a, b, c| (opt.image_href_resolver.resolve_data)(a, b, c)),
                 // External images should be ignored.
                 resolve_string: Box::new(|_, _| None),
+                resolve_texture_size: Box::new(|id| {
+                    (opt.image_href_resolver.resolve_texture_size)(id)
+                }),
             },
             // In the referenced SVG, we start with the unmodified user-provided
             // fontdb, not the one from the cache.

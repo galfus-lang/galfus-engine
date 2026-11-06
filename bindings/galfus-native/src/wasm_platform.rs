@@ -177,6 +177,18 @@ pub fn platform_release_event_batch(batch_id: f64) -> Result<()> {
         .map_err(|error| Error::from_reason(Status::GenericFailure, error))
 }
 
+#[wasm_bindgen(js_name = "platformGetClipboardText")]
+pub fn platform_get_clipboard_text() -> Result<String> {
+    with_context_mut(|ctx| ctx.get_clipboard_text().map_err(|e| e.to_string()))
+        .map_err(|e| Error::from_reason(Status::GenericFailure, e))
+}
+
+#[wasm_bindgen(js_name = "platformSetClipboardText")]
+pub fn platform_set_clipboard_text(text: String) -> Result<()> {
+    with_context_mut(|ctx| ctx.set_clipboard_text(&text).map_err(|e| e.to_string()))
+        .map_err(|e| Error::from_reason(Status::GenericFailure, e))
+}
+
 #[wasm_bindgen(js_name = "gamepadGetConnected")]
 pub fn gamepad_get_connected() -> Result<JsUnknown> {
     let env = Env;

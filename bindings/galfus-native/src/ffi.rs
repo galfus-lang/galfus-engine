@@ -424,6 +424,44 @@ pub extern "C" fn galfus_platform_release_event_batch(batch_id: u64) -> i32 {
     }
 }
 
+/// Returns the current text stored in the platform clipboard as a newly allocated C string, or null on failure.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_platform_get_clipboard_text() -> *mut c_char {
+    let result = with_context_mut(|ctx| ctx.get_clipboard_text().map_err(|e| e.to_string()));
+    match result {
+        Ok(text) => to_c_string(&text),
+        Err(e) => {
+            set_last_error(&e);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Replaces the text stored in the platform clipboard. Returns 0 on success, -1 on failure.
+///
+/// # Safety
+/// `text` must be a valid, null-terminated UTF-8 string pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_platform_set_clipboard_text(text: *const c_char) -> i32 {
+    let text_str = match unsafe { from_c_str(text) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+
+    let result =
+        with_context_mut(|ctx| ctx.set_clipboard_text(text_str).map_err(|e| e.to_string()));
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
 /// Returns a JSON array string describing all currently connected gamepads.
 #[unsafe(no_mangle)]
 pub extern "C" fn galfus_gamepad_get_connected() -> *mut c_char {

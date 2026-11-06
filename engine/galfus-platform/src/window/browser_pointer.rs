@@ -1,4 +1,4 @@
-//! Browser canvas pointer event adapter.
+//! Browser canvas pointer, wheel, focus, and clipboard event adapter.
 
 use glam::Vec2;
 use std::{
@@ -6,21 +6,77 @@ use std::{
     collections::HashMap,
     rc::Rc,
 };
-use wasm_bindgen::{JsCast, closure::Closure};
+use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
 use crate::{
     error::{PlatformError, PlatformResult},
     event::PlatformEvent,
-    pointer::{PointerButton, PointerButtonState, PointerEvent, PointerType},
+    pointer::{PointerButton, PointerButtonState, PointerEvent, PointerType, ScrollDelta},
+    window::WindowEvent,
 };
 
 type Callback<T> = (&'static str, Closure<dyn FnMut(T)>);
 
+pub(crate) fn sync_navigator_clipboard(clipboard: &Rc<RefCell<String>>) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let navigator = window.navigator();
+    let Ok(clip_obj) = js_sys::Reflect::get(&navigator, &JsValue::from_str("clipboard")) else {
+        return;
+    };
+    if clip_obj.is_undefined() || clip_obj.is_null() {
+        return;
+    }
+    let Ok(read_fn) = js_sys::Reflect::get(&clip_obj, &JsValue::from_str("readText")) else {
+        return;
+    };
+    let Some(read_fn) = read_fn.dyn_ref::<js_sys::Function>() else {
+        return;
+    };
+    let Ok(promise_val) = read_fn.call0(&clip_obj) else {
+        return;
+    };
+    let Ok(promise) = promise_val.dyn_into::<js_sys::Promise>() else {
+        return;
+    };
+    let clipboard_ref = Rc::clone(clipboard);
+    let on_resolve = Closure::once(move |val: JsValue| {
+        if let Some(s) = val.as_string() {
+            *clipboard_ref.borrow_mut() = s;
+        }
+    });
+    let _ = promise.then(&on_resolve);
+    on_resolve.forget();
+}
+
+pub(crate) fn write_navigator_clipboard(text: &str) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let navigator = window.navigator();
+    let Ok(clip_obj) = js_sys::Reflect::get(&navigator, &JsValue::from_str("clipboard")) else {
+        return;
+    };
+    if clip_obj.is_undefined() || clip_obj.is_null() {
+        return;
+    }
+    let Ok(write_fn) = js_sys::Reflect::get(&clip_obj, &JsValue::from_str("writeText")) else {
+        return;
+    };
+    let Some(write_fn) = write_fn.dyn_ref::<js_sys::Function>() else {
+        return;
+    };
+    let _ = write_fn.call1(&clip_obj, &JsValue::from_str(text));
+}
+
 pub(super) struct BrowserPointer {
     canvas: web_sys::HtmlCanvasElement,
     callbacks: Vec<Callback<web_sys::PointerEvent>>,
+    wheel_callbacks: Vec<Callback<web_sys::WheelEvent>>,
     keyboard_callbacks: Vec<Callback<web_sys::KeyboardEvent>>,
-    window_callbacks: Vec<Callback<web_sys::Event>>,
+    focus_callbacks: Vec<Callback<web_sys::FocusEvent>>,
+    clipboard_callbacks: Vec<Callback<web_sys::ClipboardEvent>>,
     added_tabindex: bool,
 }
 
@@ -29,16 +85,25 @@ impl BrowserPointer {
         window_id: u32,
         canvas: &web_sys::HtmlCanvasElement,
         tab_capture: Rc<Cell<bool>>,
+        focused: Rc<Cell<bool>>,
+        clipboard: Rc<RefCell<String>>,
         events: Rc<RefCell<Vec<PlatformEvent>>>,
     ) -> PlatformResult<Self> {
         let positions = Rc::new(RefCell::new(HashMap::<u64, Vec2>::new()));
         let mut result = Self {
             canvas: canvas.clone(),
             callbacks: Vec::new(),
+            wheel_callbacks: Vec::new(),
             keyboard_callbacks: Vec::new(),
-            window_callbacks: Vec::new(),
+            focus_callbacks: Vec::new(),
+            clipboard_callbacks: Vec::new(),
             added_tabindex: false,
         };
+        canvas
+            .set_attribute("data-galfus-window", &window_id.to_string())
+            .map_err(|error| {
+                PlatformError::WindowCreationFailed(format!("Browser canvas attribute: {error:?}"))
+            })?;
         for name in [
             "pointerenter",
             "pointerleave",
@@ -155,6 +220,51 @@ impl BrowserPointer {
                 })?;
             result.callbacks.push((name, callback));
         }
+
+        {
+            let queue = Rc::clone(&events);
+            let surface = canvas.clone();
+            let wheel_cb = Closure::<dyn FnMut(web_sys::WheelEvent)>::new(
+                move |event: web_sys::WheelEvent| {
+                    event.prevent_default();
+                    let rect = surface.get_bounding_client_rect();
+                    if rect.width() <= 0.0 || rect.height() <= 0.0 {
+                        return;
+                    }
+                    let position = Vec2::new(
+                        ((event.client_x() - rect.left()) * f64::from(surface.width())
+                            / rect.width()) as f32,
+                        ((event.client_y() - rect.top()) * f64::from(surface.height())
+                            / rect.height()) as f32,
+                    );
+                    let dx = -(event.delta_x() as f32);
+                    let dy = -(event.delta_y() as f32);
+                    let delta = if event.delta_mode() == 0 {
+                        ScrollDelta::Pixels(Vec2::new(dx, dy))
+                    } else {
+                        ScrollDelta::Lines(Vec2::new(dx, dy))
+                    };
+                    queue
+                        .borrow_mut()
+                        .push(PlatformEvent::Pointer(PointerEvent::Scroll {
+                            window_id,
+                            pointer_id: 0,
+                            pointer_type: PointerType::Mouse,
+                            position,
+                            delta,
+                        }));
+                },
+            );
+            canvas
+                .add_event_listener_with_callback("wheel", wheel_cb.as_ref().unchecked_ref())
+                .map_err(|error| {
+                    PlatformError::WindowCreationFailed(format!(
+                        "Browser wheel listener: {error:?}"
+                    ))
+                })?;
+            result.wheel_callbacks.push(("wheel", wheel_cb));
+        }
+
         let added_tabindex = !canvas.has_attribute("tabindex");
         if added_tabindex {
             canvas.set_attribute("tabindex", "0").map_err(|error| {
@@ -192,28 +302,86 @@ impl BrowserPointer {
                 })?;
             result.keyboard_callbacks.push((name, callback));
         }
-        let window = web_sys::window().ok_or_else(|| {
-            PlatformError::WindowCreationFailed("Browser window is unavailable".into())
-        })?;
-        for name in ["focus", "blur"] {
+
+        {
             let queue = Rc::clone(&events);
-            let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
-                queue.borrow_mut().push(PlatformEvent::Window(
-                    crate::window::WindowEvent::FocusChanged {
-                        window_id,
-                        focused: name == "focus",
-                    },
-                ));
+            let focused_ref = Rc::clone(&focused);
+            let clipboard_ref = Rc::clone(&clipboard);
+            let focus_cb = Closure::<dyn FnMut(web_sys::FocusEvent)>::new(move |_| {
+                sync_navigator_clipboard(&clipboard_ref);
+                if !focused_ref.replace(true) {
+                    queue
+                        .borrow_mut()
+                        .push(PlatformEvent::Window(WindowEvent::FocusChanged {
+                            window_id,
+                            focused: true,
+                        }));
+                }
             });
-            window
-                .add_event_listener_with_callback(name, callback.as_ref().unchecked_ref())
+            canvas
+                .add_event_listener_with_callback("focus", focus_cb.as_ref().unchecked_ref())
                 .map_err(|error| {
                     PlatformError::WindowCreationFailed(format!(
-                        "Browser window listener: {error:?}"
+                        "Browser focus listener: {error:?}"
                     ))
                 })?;
-            result.window_callbacks.push((name, callback));
+            result.focus_callbacks.push(("focus", focus_cb));
         }
+
+        {
+            let queue = Rc::clone(&events);
+            let focused_ref = Rc::clone(&focused);
+            let blur_cb =
+                Closure::<dyn FnMut(web_sys::FocusEvent)>::new(move |ev: web_sys::FocusEvent| {
+                    let stay_in_window = ev
+                        .related_target()
+                        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+                        .is_some_and(|el| {
+                            el.get_attribute("data-galfus-window")
+                                .is_some_and(|id| id.parse::<u32>().ok() == Some(window_id))
+                                || el
+                                    .get_attribute("data-galfus-ime")
+                                    .is_some_and(|id| id.parse::<u32>().ok() == Some(window_id))
+                        });
+                    if !stay_in_window && focused_ref.replace(false) {
+                        queue
+                            .borrow_mut()
+                            .push(PlatformEvent::Window(WindowEvent::FocusChanged {
+                                window_id,
+                                focused: false,
+                            }));
+                    }
+                });
+            canvas
+                .add_event_listener_with_callback("blur", blur_cb.as_ref().unchecked_ref())
+                .map_err(|error| {
+                    PlatformError::WindowCreationFailed(format!("Browser blur listener: {error:?}"))
+                })?;
+            result.focus_callbacks.push(("blur", blur_cb));
+        }
+
+        {
+            let clipboard_ref = Rc::clone(&clipboard);
+            let paste_cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
+                move |ev: web_sys::ClipboardEvent| {
+                    if let Some(dt) = ev.clipboard_data()
+                        && let Ok(text) = dt.get_data("text/plain")
+                    {
+                        *clipboard_ref.borrow_mut() = text;
+                    }
+                    ev.prevent_default();
+                },
+            );
+            canvas
+                .add_event_listener_with_callback("paste", paste_cb.as_ref().unchecked_ref())
+                .map_err(|error| {
+                    PlatformError::WindowCreationFailed(format!(
+                        "Browser paste listener: {error:?}"
+                    ))
+                })?;
+            result.clipboard_callbacks.push(("paste", paste_cb));
+        }
+
         Ok(result)
     }
 }
@@ -225,17 +393,27 @@ impl Drop for BrowserPointer {
                 .canvas
                 .remove_event_listener_with_callback(name, callback.as_ref().unchecked_ref());
         }
+        for (name, callback) in &self.wheel_callbacks {
+            let _ = self
+                .canvas
+                .remove_event_listener_with_callback(name, callback.as_ref().unchecked_ref());
+        }
         for (name, callback) in &self.keyboard_callbacks {
             let _ = self
                 .canvas
                 .remove_event_listener_with_callback(name, callback.as_ref().unchecked_ref());
         }
-        if let Some(window) = web_sys::window() {
-            for (name, callback) in &self.window_callbacks {
-                let _ = window
-                    .remove_event_listener_with_callback(name, callback.as_ref().unchecked_ref());
-            }
+        for (name, callback) in &self.focus_callbacks {
+            let _ = self
+                .canvas
+                .remove_event_listener_with_callback(name, callback.as_ref().unchecked_ref());
         }
+        for (name, callback) in &self.clipboard_callbacks {
+            let _ = self
+                .canvas
+                .remove_event_listener_with_callback(name, callback.as_ref().unchecked_ref());
+        }
+        let _ = self.canvas.remove_attribute("data-galfus-window");
         if self.added_tabindex && self.canvas.get_attribute("tabindex").as_deref() == Some("0") {
             let _ = self.canvas.remove_attribute("tabindex");
         }

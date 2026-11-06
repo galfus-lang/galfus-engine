@@ -175,6 +175,18 @@ pub fn platform_release_event_batch(batch_id: i64) -> Result<()> {
 }
 
 #[napi]
+pub fn platform_get_clipboard_text() -> Result<String> {
+    with_context_mut(|ctx| ctx.get_clipboard_text().map_err(|e| e.to_string()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn platform_set_clipboard_text(text: String) -> Result<()> {
+    with_context_mut(|ctx| ctx.set_clipboard_text(&text).map_err(|e| e.to_string()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
 pub fn gamepad_get_connected(env: Env) -> Result<JsUnknown> {
     let gamepads = with_context(|ctx| Ok(ctx.connected_gamepads()))
         .map_err(|e| Error::new(Status::GenericFailure, e))?;

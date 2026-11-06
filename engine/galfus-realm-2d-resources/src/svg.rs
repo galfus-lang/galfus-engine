@@ -110,6 +110,30 @@ impl SvgDocument {
         false
     }
 
+    /// Extracts all valid host logical texture IDs referenced by `<image textureId="...">` elements.
+    pub fn referenced_texture_ids(&self) -> Vec<u32> {
+        let mut ids = Vec::new();
+        Self::collect_texture_ids_recursive(&self.root, &mut ids);
+        ids
+    }
+
+    fn collect_texture_ids_recursive(elem: &xmltree::Element, out: &mut Vec<u32>) {
+        if elem.name == "image"
+            && let Some(val) = elem.attributes.get("textureId")
+            && let Ok(id) = val.trim().parse::<u32>()
+            && !galfus_core::id::is_reserved_logical_id(id)
+            && id != 0
+            && !out.contains(&id)
+        {
+            out.push(id);
+        }
+        for child in &elem.children {
+            if let xmltree::XMLNode::Element(child_elem) = child {
+                Self::collect_texture_ids_recursive(child_elem, out);
+            }
+        }
+    }
+
     /// Serializes the document tree back into an XML string.
     pub fn to_xml_string(&self) -> Result<String, String> {
         let mut buf = Vec::new();
@@ -293,6 +317,14 @@ impl Svg2D {
     /// Returns the current serialized XML string of the SVG.
     pub fn current_xml(&self) -> &str {
         &self.source
+    }
+
+    /// Returns all valid host logical texture IDs referenced by `<image textureId="...">` elements in this SVG.
+    pub fn referenced_texture_ids(&self) -> Vec<u32> {
+        self.doc
+            .as_ref()
+            .map(SvgDocument::referenced_texture_ids)
+            .unwrap_or_default()
     }
 
     /// Computes world-space bounding corners for 2D polar shadow occlusion.

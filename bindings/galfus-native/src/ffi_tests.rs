@@ -80,6 +80,18 @@ fn test_c_api_lifecycle_and_json_exchange() {
     assert_eq!(galfus_audio_play_sound(999, 1.0, 0.0, 1.0, false), 0);
     assert_eq!(galfus_audio_unload_sound(999), -1);
 
+    // 4.2 Clipboard get/set
+    let clip_in = CString::new("Clipboard FFI Test").unwrap();
+    assert_eq!(
+        unsafe { galfus_platform_set_clipboard_text(clip_in.as_ptr()) },
+        0
+    );
+    let clip_out_ptr = galfus_platform_get_clipboard_text();
+    assert!(!clip_out_ptr.is_null());
+    let clip_out_str = unsafe { from_c_str(clip_out_ptr) }.unwrap();
+    assert_eq!(clip_out_str, "Clipboard FFI Test");
+    unsafe { galfus_string_free(clip_out_ptr) };
+
     // 5. Shutdown
     assert_eq!(galfus_platform_shutdown(), 0);
 }

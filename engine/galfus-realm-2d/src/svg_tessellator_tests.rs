@@ -251,3 +251,99 @@ fn test_tessellate_demo_2d3_hud_card() {
     }
     assert!(!mesh.vertices.is_empty());
 }
+
+#[test]
+fn test_svg_clip_path_clips_geometry_and_element_rect() {
+    let db = Arc::new(fontdb::Database::new());
+    let xml = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+        <defs>
+            <clipPath id="panel-clip">
+                <rect x="20" y="10" width="60" height="40"/>
+            </clipPath>
+        </defs>
+        <g clip-path="url(#panel-clip)">
+            <rect id="partial-item" x="0" y="0" width="120" height="80" fill="#ff0000"/>
+            <rect id="outside-item" x="120" y="60" width="40" height="30" fill="#00ff00"/>
+        </g>
+    </svg>"##;
+
+    let mesh = tessellate_svg(xml, db.clone(), "sans-serif").unwrap();
+    assert!(!mesh.vertices.is_empty());
+    // In a 200x100 SVG, x in [20..80] maps to normalized [20/200 - 0.5 .. 80/200 - 0.5] = [-0.4 .. -0.1]
+    // and y in [10..50] maps to normalized [0.5 - 50/100 .. 0.5 - 10/100] = [0.0 .. 0.4].
+    for v in &mesh.vertices {
+        assert!(
+            v[0] >= -0.4 - 1e-4 && v[0] <= -0.1 + 1e-4,
+            "x out of clip bounds: {}",
+            v[0]
+        );
+        assert!(
+            v[1] >= 0.0 - 1e-4 && v[1] <= 0.4 + 1e-4,
+            "y out of clip bounds: {}",
+            v[1]
+        );
+    }
+
+    let partial = svg_element_rect(xml, "partial-item", db.clone(), "sans-serif")
+        .unwrap()
+        .unwrap();
+    assert!((partial.x - 20.0).abs() < 1e-3);
+    assert!((partial.y - 10.0).abs() < 1e-3);
+    assert!((partial.width - 60.0).abs() < 1e-3);
+    assert!((partial.height - 40.0).abs() < 1e-3);
+
+    let outside = svg_element_rect(xml, "outside-item", db, "sans-serif").unwrap();
+    assert!(
+        outside.is_none(),
+        "Completely clipped element should return None"
+    );
+}
+
+#[test]
+fn test_svg_image_texture_id_tessellation_and_slice_clip() {
+    let db = Arc::new(fontdb::Database::new());
+    let xml = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+        <rect x="0" y="0" width="200" height="100" fill="#112233"/>
+        <image id="avatar" textureId="42" x="20" y="10" width="80" height="40" image-rendering="pixelated"/>
+        <rect x="40" y="20" width="20" height="20" fill="#ffffff"/>
+    </svg>"##;
+
+    let mesh = tessellate_svg(xml, db.clone(), "sans-serif").unwrap();
+    assert_eq!(
+        mesh.sub_meshes.len(),
+        3,
+        "Expected untextured background, textured image, and untextured foreground in order"
+    );
+    assert_eq!(mesh.sub_meshes[0].texture_id, None);
+    assert_eq!(mesh.sub_meshes[1].texture_id, Some(42));
+    assert!(mesh.sub_meshes[1].pixelated);
+    assert_eq!(mesh.sub_meshes[2].texture_id, None);
+
+    let img_verts = &mesh.sub_meshes[1].vertices;
+    assert_eq!(img_verts.len(), 4);
+    assert!(
+        img_verts
+            .iter()
+            .any(|v| (v[3] - 0.0).abs() < 1e-4 && (v[4] - 0.0).abs() < 1e-4)
+    );
+    assert!(
+        img_verts
+            .iter()
+            .any(|v| (v[3] - 1.0).abs() < 1e-4 && (v[4] - 1.0).abs() < 1e-4)
+    );
+
+    let rect = svg_element_rect(xml, "avatar", db.clone(), "sans-serif")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (rect.x, rect.y, rect.width, rect.height),
+        (20.0, 10.0, 80.0, 40.0)
+    );
+
+    // Reserved logical IDs must be ignored by `<image textureId="...">`
+    let reserved_xml = r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+        <image id="bad" textureId="4294967295" x="0" y="0" width="50" height="50"/>
+    </svg>"##;
+    let reserved_mesh = tessellate_svg(reserved_xml, db, "sans-serif").unwrap();
+    assert!(reserved_mesh.sub_meshes.is_empty());
+}

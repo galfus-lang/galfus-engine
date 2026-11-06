@@ -1,4 +1,4 @@
-//! Browser input-method bridge. Editing state remains owned by the host.
+//!Browser input-method bridge. Editing state remains owned by the host.
 
 use std::{
     cell::{Cell, RefCell},
@@ -10,6 +10,7 @@ use crate::{
     error::{PlatformError, PlatformResult},
     event::PlatformEvent,
     keyboard::KeyboardEvent,
+    window::WindowEvent,
 };
 
 fn error(value: impl std::fmt::Debug) -> PlatformError {
@@ -25,6 +26,8 @@ pub(super) struct BrowserIme {
     callbacks: Vec<DomCallback<web_sys::CompositionEvent>>,
     key_callbacks: Vec<DomCallback<web_sys::KeyboardEvent>>,
     event_callbacks: Vec<DomCallback<web_sys::Event>>,
+    focus_callbacks: Vec<DomCallback<web_sys::FocusEvent>>,
+    clipboard_callbacks: Vec<DomCallback<web_sys::ClipboardEvent>>,
     enabled: Rc<Cell<bool>>,
     composing: Rc<Cell<bool>>,
 }
@@ -33,6 +36,8 @@ impl BrowserIme {
     pub(super) fn new(
         window_id: u32,
         tab_capture: Rc<Cell<bool>>,
+        focused: Rc<Cell<bool>>,
+        clipboard: Rc<RefCell<String>>,
         events: Rc<RefCell<Vec<PlatformEvent>>>,
     ) -> PlatformResult<Self> {
         let document = web_sys::window()
@@ -130,24 +135,86 @@ impl BrowserIme {
                 .map_err(error)?;
             key_callbacks.push((name, callback));
         }
+
+        let mut focus_callbacks = Vec::new();
+        {
+            let queue = Rc::clone(&events);
+            let focused_ref = Rc::clone(&focused);
+            let clipboard_ref = Rc::clone(&clipboard);
+            let focus_cb = Closure::<dyn FnMut(web_sys::FocusEvent)>::new(move |_| {
+                super::browser_pointer::sync_navigator_clipboard(&clipboard_ref);
+                if !focused_ref.replace(true) {
+                    queue
+                        .borrow_mut()
+                        .push(PlatformEvent::Window(WindowEvent::FocusChanged {
+                            window_id,
+                            focused: true,
+                        }));
+                }
+            });
+            input
+                .add_event_listener_with_callback("focus", focus_cb.as_ref().unchecked_ref())
+                .map_err(error)?;
+            focus_callbacks.push(("focus", focus_cb));
+        }
+        {
+            let active = Rc::clone(&enabled);
+            let queue = Rc::clone(&events);
+            let composing_ref = Rc::clone(&composing);
+            let focused_ref = Rc::clone(&focused);
+            let blur_cb =
+                Closure::<dyn FnMut(web_sys::FocusEvent)>::new(move |ev: web_sys::FocusEvent| {
+                    if active.replace(false) {
+                        composing_ref.set(false);
+                        queue.borrow_mut().push(PlatformEvent::Keyboard(
+                            KeyboardEvent::ImeDisabled { window_id },
+                        ));
+                    }
+                    let stay_in_window = ev
+                        .related_target()
+                        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+                        .is_some_and(|el| {
+                            el.get_attribute("data-galfus-window")
+                                .is_some_and(|id| id.parse::<u32>().ok() == Some(window_id))
+                                || el
+                                    .get_attribute("data-galfus-ime")
+                                    .is_some_and(|id| id.parse::<u32>().ok() == Some(window_id))
+                        });
+                    if !stay_in_window && focused_ref.replace(false) {
+                        queue
+                            .borrow_mut()
+                            .push(PlatformEvent::Window(WindowEvent::FocusChanged {
+                                window_id,
+                                focused: false,
+                            }));
+                    }
+                });
+            input
+                .add_event_listener_with_callback("blur", blur_cb.as_ref().unchecked_ref())
+                .map_err(error)?;
+            focus_callbacks.push(("blur", blur_cb));
+        }
+
+        let mut clipboard_callbacks = Vec::new();
+        {
+            let clipboard_ref = Rc::clone(&clipboard);
+            let paste_cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
+                move |ev: web_sys::ClipboardEvent| {
+                    if let Some(dt) = ev.clipboard_data()
+                        && let Ok(text) = dt.get_data("text/plain")
+                    {
+                        *clipboard_ref.borrow_mut() = text;
+                    }
+                    ev.prevent_default();
+                },
+            );
+            input
+                .add_event_listener_with_callback("paste", paste_cb.as_ref().unchecked_ref())
+                .map_err(error)?;
+            clipboard_callbacks.push(("paste", paste_cb));
+        }
+
         let mut event_callbacks = Vec::new();
-        let active = Rc::clone(&enabled);
-        let queue = Rc::clone(&events);
-        let composing_ref = Rc::clone(&composing);
-        let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
-            if active.replace(false) {
-                composing_ref.set(false);
-                queue
-                    .borrow_mut()
-                    .push(PlatformEvent::Keyboard(KeyboardEvent::ImeDisabled {
-                        window_id,
-                    }));
-            }
-        });
-        input
-            .add_event_listener_with_callback("blur", callback.as_ref().unchecked_ref())
-            .map_err(error)?;
-        event_callbacks.push(("blur", callback));
         let input_ref = input.clone();
         let composing_ref = Rc::clone(&composing);
         let queue = Rc::clone(&events);
@@ -164,6 +231,9 @@ impl BrowserIme {
                 if kind.starts_with("insert")
                     && kind != "insertCompositionText"
                     && kind != "insertFromComposition"
+                    && kind != "insertFromPaste"
+                    && kind != "insertFromPasteAsQuotation"
+                    && kind != "insertFromDrop"
                 {
                     let text = input_event.data().unwrap_or_else(|| input_ref.value());
                     if !text.is_empty() {
@@ -185,6 +255,8 @@ impl BrowserIme {
             callbacks,
             key_callbacks,
             event_callbacks,
+            focus_callbacks,
+            clipboard_callbacks,
             enabled,
             composing,
         })
@@ -245,6 +317,16 @@ impl Drop for BrowserIme {
                 .remove_event_listener_with_callback(name, callback.as_ref().unchecked_ref());
         }
         for (name, callback) in &self.event_callbacks {
+            let _ = self
+                .input
+                .remove_event_listener_with_callback(name, callback.as_ref().unchecked_ref());
+        }
+        for (name, callback) in &self.focus_callbacks {
+            let _ = self
+                .input
+                .remove_event_listener_with_callback(name, callback.as_ref().unchecked_ref());
+        }
+        for (name, callback) in &self.clipboard_callbacks {
             let _ = self
                 .input
                 .remove_event_listener_with_callback(name, callback.as_ref().unchecked_ref());

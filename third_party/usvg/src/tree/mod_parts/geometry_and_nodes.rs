@@ -259,11 +259,17 @@ pub struct Image {
     pub(crate) size: Size,
     pub(crate) rendering_mode: ImageRendering,
     pub(crate) kind: ImageKind,
+    pub(crate) texture_id: Option<u32>,
     pub(crate) abs_transform: Transform,
     pub(crate) abs_bounding_box: NonZeroRect,
 }
 
 impl Image {
+    /// Logical engine texture ID bound via `textureId` attribute, if any.
+    pub fn texture_id(&self) -> Option<u32> {
+        self.texture_id
+    }
+
     /// Element's ID.
     ///
     /// Taken from the SVG itself.

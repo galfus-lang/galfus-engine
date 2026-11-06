@@ -4,8 +4,8 @@ use crate::types::{BatchKey2D, BatchRange2D, Item2DInstanceRaw};
 #[derive(Debug, Clone)]
 pub struct PreparedItem2D {
     pub key: BatchKey2D,
-    /// Stable logical resource ID and kind used to break ties in draw order.
-    pub order: (u32, u8),
+    /// Stable logical resource ID, kind, and sub-mesh index used to break ties in draw order.
+    pub order: (u32, u8, u32),
     pub instance: Item2DInstanceRaw,
     pub occluder_only: bool,
 }
@@ -109,7 +109,7 @@ mod tests {
         geometry_id: u64,
     ) -> PreparedItem2D {
         PreparedItem2D {
-            order: (material_id, 0),
+            order: (material_id, 0, 0),
             key: BatchKey2D {
                 z_layer,
                 draw_order,
@@ -174,9 +174,9 @@ mod tests {
     fn equal_layers_follow_resource_order_instead_of_material_order() {
         let mut builder = BatchBuilder2D::new();
         let mut front = make_item(0, 1, 0);
-        front.order = (20, 0);
+        front.order = (20, 0, 0);
         let mut back = make_item(0, 99, 0);
-        back.order = (10, 0);
+        back.order = (10, 0, 0);
         builder.push(front);
         builder.push(back);
         builder.build();

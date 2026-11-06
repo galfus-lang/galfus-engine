@@ -15,7 +15,7 @@ pub const NAMESPACE_SVG_GEOMETRY: u16 = 0x20;
 /// Default material ID reserved for SVG vector entities without custom shader materials.
 pub const SVG_DEFAULT_MATERIAL_ID: u32 = galfus_core::id::RESERVED_RANGE_START;
 
-/// GPU-uploaded vector geometry for an SVG instance.
+/// GPU-uploaded vector geometry for an SVG sub-mesh.
 pub struct SvgGeometry2D {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -23,11 +23,20 @@ pub struct SvgGeometry2D {
     pub dimensions: Vec2,
 }
 
+/// Active GPU sub-mesh handle and optional `<image textureId="...">` binding.
+#[derive(Debug, Clone, Copy)]
+pub struct SvgSubMeshBinding {
+    pub handle: Handle<SvgGeometry2D>,
+    pub texture_id: Option<u32>,
+    pub pixelated: bool,
+}
+
 /// Active instance of an SVG entity on the GPU.
 pub struct SvgInstance2D {
     pub svg: Svg2D,
     pub transform: Transform2D,
     pub geometry_handle: Option<Handle<SvgGeometry2D>>,
+    pub sub_meshes: Vec<SvgSubMeshBinding>,
 }
 
 impl SvgInstance2D {
@@ -36,6 +45,7 @@ impl SvgInstance2D {
             svg,
             transform,
             geometry_handle: None,
+            sub_meshes: Vec::new(),
         }
     }
 }
@@ -47,6 +57,10 @@ pub struct SvgManager2D {
     pub font_db: Arc<fontdb::Database>,
     pub default_font_family: String,
     material_uniform_buf: Option<wgpu::Buffer>,
+    textured_linear_uniform_buf: Option<wgpu::Buffer>,
+    textured_nearest_uniform_buf: Option<wgpu::Buffer>,
+    textured_material_ids: HashMap<(u32, bool), u32>,
+    next_reserved_mat_id: u32,
 }
 
 pub const DEFAULT_FONT_BYTES: &[u8] = include_bytes!("../assets/default_font.ttf");
@@ -73,6 +87,10 @@ impl Default for SvgManager2D {
             font_db: Arc::new(db),
             default_font_family,
             material_uniform_buf: None,
+            textured_linear_uniform_buf: None,
+            textured_nearest_uniform_buf: None,
+            textured_material_ids: HashMap::new(),
+            next_reserved_mat_id: SVG_DEFAULT_MATERIAL_ID + 1,
         }
     }
 }
@@ -80,6 +98,18 @@ impl Default for SvgManager2D {
 impl SvgManager2D {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    fn release_instance_geometries(
+        pool: &mut GenerationalPool<SvgGeometry2D>,
+        inst: &SvgInstance2D,
+    ) {
+        for sub in &inst.sub_meshes {
+            let _ = pool.remove(sub.handle);
+        }
+        if let Some(h) = inst.geometry_handle {
+            let _ = pool.remove(h);
+        }
     }
 
     /// Registers a custom TTF/OTF font directly from an in-memory byte buffer (zero filesystem access).
@@ -103,7 +133,6 @@ impl SvgManager2D {
             .map(|(f, _)| f.clone())
             .unwrap_or_else(|| "custom".to_string());
 
-        // Mark all active SVGs dirty so they re-tessellate if they use this font
         for inst in self.instances.values_mut() {
             inst.svg.dirty = true;
         }
@@ -112,10 +141,8 @@ impl SvgManager2D {
     }
 
     pub fn insert(&mut self, id: u32, svg: Svg2D, transform: Transform2D) {
-        if let Some(previous) = self.instances.remove(&id)
-            && let Some(handle) = previous.geometry_handle
-        {
-            let _ = self.pool.remove(handle);
+        if let Some(previous) = self.instances.remove(&id) {
+            Self::release_instance_geometries(&mut self.pool, &previous);
         }
         self.instances
             .insert(id, SvgInstance2D::new(svg, transform));
@@ -123,9 +150,7 @@ impl SvgManager2D {
 
     pub fn remove(&mut self, id: u32) -> Option<SvgInstance2D> {
         if let Some(inst) = self.instances.remove(&id) {
-            if let Some(h) = inst.geometry_handle {
-                let _ = self.pool.remove(h);
-            }
+            Self::release_instance_geometries(&mut self.pool, &inst);
             Some(inst)
         } else {
             None
@@ -134,11 +159,11 @@ impl SvgManager2D {
 
     pub fn clear(&mut self) {
         for inst in self.instances.values() {
-            if let Some(h) = inst.geometry_handle {
-                let _ = self.pool.remove(h);
-            }
+            Self::release_instance_geometries(&mut self.pool, inst);
         }
         self.instances.clear();
+        self.textured_material_ids.clear();
+        self.next_reserved_mat_id = SVG_DEFAULT_MATERIAL_ID + 1;
     }
 
     pub fn get(&self, id: u32) -> Option<&SvgInstance2D> {
@@ -189,9 +214,22 @@ impl SvgManager2D {
         self.pool.get(handle).ok()
     }
 
+    /// Returns all host logical texture IDs referenced by active SVG instances.
+    pub fn referenced_texture_ids(&self) -> Vec<u32> {
+        let mut ids = Vec::new();
+        for inst in self.instances.values() {
+            for tex_id in inst.svg.referenced_texture_ids() {
+                if !ids.contains(&tex_id) {
+                    ids.push(tex_id);
+                }
+            }
+        }
+        ids
+    }
+
     /// Tessellates dirty SVG entities directly on GPU geometry buffers.
     #[allow(clippy::too_many_arguments)]
-    pub fn sync_gpu(
+    pub fn sync_gpu<'a>(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -201,6 +239,7 @@ impl SvgManager2D {
         fallback_normal: &wgpu::TextureView,
         fallback_black: &wgpu::TextureView,
         _fallback_uniform_buf: &wgpu::Buffer,
+        textures: &'a (dyn Fn(u32) -> Option<&'a wgpu::TextureView> + 'a),
         material_bind_groups: &mut HashMap<u32, wgpu::BindGroup>,
     ) {
         let uniform_buf = self.material_uniform_buf.get_or_insert_with(|| {
@@ -221,6 +260,42 @@ impl SvgManager2D {
             buf
         });
 
+        let tex_linear_buf = self.textured_linear_uniform_buf.get_or_insert_with(|| {
+            let buf = crate::gpu::create_gpu_buffer(
+                device,
+                "galfus_2d_svg_tex_linear_mat_buf",
+                std::mem::size_of::<galfus_realm_2d_resources::Material2DUniform>() as u64,
+                wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            );
+            let mat = Material2D {
+                surface_type: SurfaceType2D::Transparent,
+                base_color: Vec4::ONE,
+                texture_id: Some(1),
+                sampler_index: 1,
+                ..Default::default()
+            };
+            queue.write_buffer(&buf, 0, bytemuck::bytes_of(&mat.build_uniform()));
+            buf
+        });
+
+        let tex_nearest_buf = self.textured_nearest_uniform_buf.get_or_insert_with(|| {
+            let buf = crate::gpu::create_gpu_buffer(
+                device,
+                "galfus_2d_svg_tex_nearest_mat_buf",
+                std::mem::size_of::<galfus_realm_2d_resources::Material2DUniform>() as u64,
+                wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            );
+            let mat = Material2D {
+                surface_type: SurfaceType2D::Transparent,
+                base_color: Vec4::ONE,
+                texture_id: Some(1),
+                sampler_index: 0,
+                ..Default::default()
+            };
+            queue.write_buffer(&buf, 0, bytemuck::bytes_of(&mat.build_uniform()));
+            buf
+        });
+
         for (&id, instance) in &mut self.instances {
             if instance.svg.dirty || instance.geometry_handle.is_none() {
                 let xml = instance.svg.current_xml();
@@ -230,35 +305,57 @@ impl SvgManager2D {
                     &self.default_font_family,
                 ) {
                     Ok(mesh) => {
-                        // Invalidate and remove old generational handle if any
-                        if let Some(old_h) = instance.geometry_handle.take() {
-                            let _ = self.pool.remove(old_h);
-                        }
+                        Self::release_instance_geometries(&mut self.pool, instance);
+                        instance.geometry_handle = None;
+                        instance.sub_meshes.clear();
 
-                        if !mesh.indices.is_empty() && !mesh.vertices.is_empty() {
+                        let sub_list = if !mesh.sub_meshes.is_empty() {
+                            mesh.sub_meshes
+                        } else if !mesh.indices.is_empty() && !mesh.vertices.is_empty() {
+                            vec![crate::svg_tessellator::SvgSubMesh {
+                                vertices: mesh.vertices,
+                                indices: mesh.indices,
+                                texture_id: None,
+                                pixelated: false,
+                            }]
+                        } else {
+                            Vec::new()
+                        };
+
+                        for (sub_idx, sub) in sub_list.into_iter().enumerate() {
+                            if sub.indices.is_empty() || sub.vertices.is_empty() {
+                                continue;
+                            }
                             let vbo = crate::gpu::create_gpu_buffer(
                                 device,
-                                &format!("galfus_svg_{id}_vbo"),
-                                std::mem::size_of_val(&mesh.vertices[..]) as u64,
+                                &format!("galfus_svg_{id}_{sub_idx}_vbo"),
+                                std::mem::size_of_val(&sub.vertices[..]) as u64,
                                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                             );
-                            queue.write_buffer(&vbo, 0, bytemuck::cast_slice(&mesh.vertices));
+                            queue.write_buffer(&vbo, 0, bytemuck::cast_slice(&sub.vertices));
 
                             let ibo = crate::gpu::create_gpu_buffer(
                                 device,
-                                &format!("galfus_svg_{id}_ibo"),
-                                std::mem::size_of_val(&mesh.indices[..]) as u64,
+                                &format!("galfus_svg_{id}_{sub_idx}_ibo"),
+                                std::mem::size_of_val(&sub.indices[..]) as u64,
                                 wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                             );
-                            queue.write_buffer(&ibo, 0, bytemuck::cast_slice(&mesh.indices));
+                            queue.write_buffer(&ibo, 0, bytemuck::cast_slice(&sub.indices));
 
                             if let Ok(handle) = self.pool.insert(SvgGeometry2D {
                                 vertex_buffer: vbo,
                                 index_buffer: ibo,
-                                index_count: mesh.indices.len() as u32,
+                                index_count: sub.indices.len() as u32,
                                 dimensions: mesh.dimensions,
                             }) {
-                                instance.geometry_handle = Some(handle);
+                                if instance.geometry_handle.is_none() {
+                                    instance.geometry_handle = Some(handle);
+                                }
+                                instance.sub_meshes.push(SvgSubMeshBinding {
+                                    handle,
+                                    texture_id: sub.texture_id,
+                                    pixelated: sub.pixelated,
+                                });
                             }
                         }
                         instance.svg.dirty = false;
@@ -271,7 +368,6 @@ impl SvgManager2D {
             }
 
             let mat_id = instance.svg.material_id.unwrap_or(SVG_DEFAULT_MATERIAL_ID);
-
             material_bind_groups.entry(mat_id).or_insert_with(|| {
                 crate::gpu::create_material_bind_group_2d(
                     device,
@@ -285,6 +381,36 @@ impl SvgManager2D {
                     &|_| None,
                 )
             });
+
+            for sub in &instance.sub_meshes {
+                if let Some(tex_id) = sub.texture_id {
+                    let key = (tex_id, sub.pixelated);
+                    let tex_mat_id = *self.textured_material_ids.entry(key).or_insert_with(|| {
+                        let allocated = self.next_reserved_mat_id;
+                        self.next_reserved_mat_id = self.next_reserved_mat_id.saturating_add(1);
+                        allocated
+                    });
+                    let mut slots = [None; 8];
+                    slots[0] = Some(tex_id);
+                    let u_buf = if sub.pixelated {
+                        &*tex_nearest_buf
+                    } else {
+                        &*tex_linear_buf
+                    };
+                    let bg = crate::gpu::create_material_bind_group_2d(
+                        device,
+                        material_bgl,
+                        samplers,
+                        fallback_white,
+                        fallback_normal,
+                        fallback_black,
+                        u_buf,
+                        &slots,
+                        textures,
+                    );
+                    material_bind_groups.insert(tex_mat_id, bg);
+                }
+            }
         }
     }
 
@@ -295,16 +421,25 @@ impl SvgManager2D {
         materials: &HashMap<u32, crate::types::Material2D>,
     ) {
         for (&id, instance) in &self.instances {
-            let Some(handle) = instance.geometry_handle else {
+            let sub_bindings: Vec<SvgSubMeshBinding> = if !instance.sub_meshes.is_empty() {
+                instance.sub_meshes.clone()
+            } else if let Some(handle) = instance.geometry_handle {
+                vec![SvgSubMeshBinding {
+                    handle,
+                    texture_id: None,
+                    pixelated: false,
+                }]
+            } else {
                 continue;
             };
-            let Some(geom) = self.pool.get(handle).ok() else {
+
+            let Some(first_geom) = self.pool.get(sub_bindings[0].handle).ok() else {
                 continue;
             };
 
             let model_matrix = instance
                 .svg
-                .compute_model_matrix(&instance.transform, geom.dimensions);
+                .compute_model_matrix(&instance.transform, first_geom.dimensions);
 
             let [min_z, max_z] = instance.svg.height_range.unwrap_or([-10000.0, 10000.0]);
             let item = Item2DInstanceRaw {
@@ -323,26 +458,40 @@ impl SvgManager2D {
                 ),
             };
 
-            let mat_id = instance.svg.material_id.unwrap_or(SVG_DEFAULT_MATERIAL_ID);
+            let default_mat_id = instance.svg.material_id.unwrap_or(SVG_DEFAULT_MATERIAL_ID);
             let draw_order = instance
                 .svg
                 .draw_order
                 .unwrap_or(instance.transform.draw_order);
 
-            batch_builder.push(PreparedItem2D {
-                order: (id, 3),
-                key: BatchKey2D {
-                    z_layer: instance.transform.z_layer,
-                    draw_order,
-                    surface_type: materials
-                        .get(&mat_id)
-                        .map_or(1, crate::types::Material2D::surface_type_id),
-                    material_id: mat_id,
-                    geometry_id: handle.to_u64(),
-                },
-                instance: item,
-                occluder_only: instance.svg.occluder_only,
-            });
+            for (sub_idx, sub) in sub_bindings.iter().enumerate() {
+                if self.pool.get(sub.handle).is_err() {
+                    continue;
+                }
+                let mat_id = if let Some(tex_id) = sub.texture_id {
+                    self.textured_material_ids
+                        .get(&(tex_id, sub.pixelated))
+                        .copied()
+                        .unwrap_or(default_mat_id)
+                } else {
+                    default_mat_id
+                };
+
+                batch_builder.push(PreparedItem2D {
+                    order: (id, 3, sub_idx as u32),
+                    key: BatchKey2D {
+                        z_layer: instance.transform.z_layer,
+                        draw_order,
+                        surface_type: materials
+                            .get(&mat_id)
+                            .map_or(1, crate::types::Material2D::surface_type_id),
+                        material_id: mat_id,
+                        geometry_id: sub.handle.to_u64(),
+                    },
+                    instance: item,
+                    occluder_only: instance.svg.occluder_only,
+                });
+            }
         }
     }
 }

@@ -20,7 +20,11 @@ pub type ImageHrefDataResolverFn<'a> =
 pub type ImageHrefStringResolverFn<'a> =
     Box<dyn Fn(&str, &Options) -> Option<ImageKind> + Send + Sync + 'a>;
 
-/// An `xlink:href` resolver for `<image>` elements.
+/// A shorthand for resolving logical engine texture dimensions `(width, height)` by `textureId`.
+pub type ImageTextureSizeResolverFn<'a> =
+    Box<dyn Fn(u32) -> Option<Size> + Send + Sync + 'a>;
+
+/// An `xlink:href` and `textureId` resolver for `<image>` elements.
 ///
 /// This type can be useful if you want to have an alternative `xlink:href` handling
 /// to the default one. For example, you can forbid access to local files (which is allowed by default)
@@ -34,6 +38,9 @@ pub struct ImageHrefResolver<'a> {
 
     /// Resolver function that will be used to handle an arbitrary string in `xlink:href`.
     pub resolve_string: ImageHrefStringResolverFn<'a>,
+
+    /// Resolver function returning the intrinsic dimensions of an engine texture by `textureId`.
+    pub resolve_texture_size: ImageTextureSizeResolverFn<'a>,
 }
 
 impl Default for ImageHrefResolver<'_> {
@@ -41,6 +48,7 @@ impl Default for ImageHrefResolver<'_> {
         ImageHrefResolver {
             resolve_data: ImageHrefResolver::default_data_resolver(),
             resolve_string: ImageHrefResolver::default_string_resolver(),
+            resolve_texture_size: Box::new(|_| None),
         }
     }
 }
@@ -135,11 +143,15 @@ pub(crate) fn convert(
     cache: &mut converter::Cache,
     parent: &mut Group,
 ) -> Option<()> {
-    let href = node
-        .try_attribute(AId::Href)
-        .log_none(|| log::warn!("Image lacks the 'xlink:href' attribute. Skipped."))?;
-
-    let kind = get_href_data(href, state)?;
+    let texture_id_str = node
+        .try_attribute::<&str>(AId::TextureId)
+        .log_none(|| log::warn!("Image lacks the 'textureId' attribute. Skipped."))?;
+    let texture_id = texture_id_str
+        .trim()
+        .parse::<u32>()
+        .ok()
+        .filter(|&id| id < 4_294_901_761)
+        .log_none(|| log::warn!("Image has an invalid or reserved 'textureId'. Skipped."))?;
 
     let visibility: Visibility = node.find_attribute(AId::Visibility).unwrap_or_default();
     let visible = visibility == Visibility::Visible;
@@ -155,20 +167,28 @@ pub(crate) fn convert(
         String::new()
     };
 
-    let actual_size = kind.actual_size()?;
+    let resolved_tex_size = (state.opt.image_href_resolver.resolve_texture_size)(texture_id);
+    let fallback_w = resolved_tex_size
+        .map(|s| s.width())
+        .unwrap_or_else(|| state.opt.default_size.width());
+    let fallback_h = resolved_tex_size
+        .map(|s| s.height())
+        .unwrap_or_else(|| state.opt.default_size.height());
 
     let x = node.convert_user_length(AId::X, state, Length::zero());
     let y = node.convert_user_length(AId::Y, state, Length::zero());
     let mut width = node.convert_user_length(
         AId::Width,
         state,
-        Length::new_number(actual_size.width() as f64),
+        Length::new_number(fallback_w as f64),
     );
     let mut height = node.convert_user_length(
         AId::Height,
         state,
-        Length::new_number(actual_size.height() as f64),
+        Length::new_number(fallback_h as f64),
     );
+
+    let actual_size = resolved_tex_size.or_else(|| Size::from_wh(width, height))?;
 
     match (
         node.attribute::<Length>(AId::Width),
@@ -191,7 +211,8 @@ pub(crate) fn convert(
     let rect = rect.log_none(|| log::warn!("Image has an invalid size. Skipped."))?;
 
     convert_inner(
-        kind,
+        ImageKind::PNG(Arc::new(Vec::new())),
+        Some(texture_id),
         id,
         visible,
         rendering_mode,
@@ -205,6 +226,7 @@ pub(crate) fn convert(
 
 pub(crate) fn convert_inner(
     kind: ImageKind,
+    texture_id: Option<u32>,
     id: String,
     visible: bool,
     rendering_mode: ImageRendering,
@@ -244,6 +266,7 @@ pub(crate) fn convert_inner(
         size: actual_size,
         rendering_mode,
         kind,
+        texture_id,
         abs_transform,
         abs_bounding_box,
     })));
@@ -261,6 +284,7 @@ pub(crate) fn convert_inner(
 
         let mut clip = ClipPath::empty(cache.gen_clip_path_id());
         clip.root.children.push(Node::Path(Box::new(path)));
+        clip.root.calculate_bounding_boxes();
 
         // Clip path should not be affected by the image viewbox transform.
         // The final structure should look like:

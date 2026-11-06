@@ -2,12 +2,18 @@
 
 impl AId {
     pub(crate) fn from_str(text: &str) -> Option<AId> {
+        if text == "textureId" {
+            return Some(AId::TextureId);
+        }
         ATTRIBUTES.get(text).cloned()
     }
 
     /// Returns the original string.
     #[inline(never)]
     pub fn to_str(self) -> &'static str {
+        if self == AId::TextureId {
+            return "textureId";
+        }
         ATTRIBUTES.key(&self)
     }
 }

@@ -52,6 +52,10 @@ pub struct PlatformContext {
     windows: HashMap<u32, Window>,
     #[cfg(all(target_arch = "wasm32", feature = "browser"))]
     browser_events: std::rc::Rc<std::cell::RefCell<Vec<PlatformEvent>>>,
+    #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+    browser_clipboard: std::rc::Rc<std::cell::RefCell<String>>,
+    #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
+    clipboard: String,
     #[cfg(not(target_arch = "wasm32"))]
     winit_to_logical: HashMap<WinitWindowId, u32>,
     #[cfg(not(target_arch = "wasm32"))]
@@ -97,6 +101,10 @@ impl PlatformContext {
             windows: HashMap::new(),
             #[cfg(all(target_arch = "wasm32", feature = "browser"))]
             browser_events: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
+            #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+            browser_clipboard: std::rc::Rc::new(std::cell::RefCell::new(String::new())),
+            #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
+            clipboard: String::new(),
             #[cfg(not(target_arch = "wasm32"))]
             winit_to_logical: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
@@ -128,6 +136,10 @@ impl PlatformContext {
             windows: HashMap::new(),
             #[cfg(all(target_arch = "wasm32", feature = "browser"))]
             browser_events: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
+            #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+            browser_clipboard: std::rc::Rc::new(std::cell::RefCell::new(String::new())),
+            #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
+            clipboard: String::new(),
             #[cfg(not(target_arch = "wasm32"))]
             winit_to_logical: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
@@ -216,8 +228,11 @@ impl PlatformContext {
         #[cfg(target_arch = "wasm32")]
         {
             #[cfg(feature = "browser")]
-            let browser_win =
-                BrowserWindow::new_with_events(&config, std::rc::Rc::clone(&self.browser_events))?;
+            let browser_win = BrowserWindow::new_with_events(
+                &config,
+                std::rc::Rc::clone(&self.browser_events),
+                std::rc::Rc::clone(&self.browser_clipboard),
+            )?;
             #[cfg(not(feature = "browser"))]
             let browser_win = BrowserWindow::new(&config)?;
             self.windows.insert(id, browser_win);
@@ -276,6 +291,44 @@ impl PlatformContext {
     /// Returns the number of active windows registered in this context.
     pub fn window_count(&self) -> usize {
         self.windows.len()
+    }
+
+    /// Returns the current text stored in the platform clipboard.
+    pub fn get_clipboard_text(&mut self) -> PlatformResult<String> {
+        self.ensure_main_thread()?;
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        {
+            if !self.windows.is_empty() && !self.windows.values().any(|w| w.is_focused()) {
+                return Ok(String::new());
+            }
+            crate::window::browser_pointer::sync_navigator_clipboard(&self.browser_clipboard);
+            return Ok(self.browser_clipboard.borrow().clone());
+        }
+        #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
+        {
+            Ok(self.clipboard.clone())
+        }
+    }
+
+    /// Replaces the text stored in the platform clipboard.
+    pub fn set_clipboard_text(&mut self, text: &str) -> PlatformResult<()> {
+        self.ensure_main_thread()?;
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        {
+            if !self.windows.is_empty() && !self.windows.values().any(|w| w.is_focused()) {
+                return Ok(());
+            }
+            *self.browser_clipboard.borrow_mut() = text.to_string();
+            if !self.windows.is_empty() {
+                crate::window::browser_pointer::write_navigator_clipboard(text);
+            }
+            return Ok(());
+        }
+        #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
+        {
+            self.clipboard = text.to_string();
+            Ok(())
+        }
     }
 
     /// Returns a list of currently connected gamepads and their capabilities.
@@ -522,5 +575,13 @@ mod tests {
                 "Window creation is not supported in headless mode"
             ))
         );
+    }
+
+    #[test]
+    fn test_clipboard_get_and_set_roundtrip() {
+        let mut ctx = PlatformContext::new_headless();
+        assert_eq!(ctx.get_clipboard_text().unwrap(), "");
+        ctx.set_clipboard_text("Galfus UI Clipboard").unwrap();
+        assert_eq!(ctx.get_clipboard_text().unwrap(), "Galfus UI Clipboard");
     }
 }

@@ -13,6 +13,7 @@ pub mod pipeline;
 pub mod shader;
 pub mod shadow;
 pub mod surface_effect;
+pub mod svg_clip;
 pub mod svg_manager;
 pub mod svg_tessellator;
 pub mod svg_text_layout;

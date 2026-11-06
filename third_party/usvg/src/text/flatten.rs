@@ -323,6 +323,7 @@ impl DatabaseExt for Database {
                             size: Size::from_wh(image.width as f32, image.height as f32)?,
                             rendering_mode: ImageRendering::OptimizeQuality,
                             kind: ImageKind::PNG(Arc::new(data.to_vec())),
+                            texture_id: None,
                             abs_transform: Transform::default(),
                             abs_bounding_box: NonZeroRect::from_xywh(
                                 0.0,

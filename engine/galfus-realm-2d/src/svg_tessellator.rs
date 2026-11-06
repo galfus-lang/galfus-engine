@@ -1,8 +1,8 @@
 //! GPU-accelerated vector tessellation for SVG documents using lyon and usvg.
 //!
-//! Converts SVG paths, basic shapes, and text into 2D indexed triangle meshes
-//! compatible with the Galfus Realm 2D render pipeline. Strictly operates on
-//! in-memory buffers with zero filesystem access.
+//! Converts SVG paths, basic shapes, `<image textureId="...">`, `<clipPath>`, and text
+//! into 2D indexed triangle meshes compatible with the Galfus Realm 2D render pipeline.
+//! Strictly operates on in-memory buffers with zero filesystem access.
 
 use glam::Vec2;
 use lyon_tessellation::math::point;
@@ -14,6 +14,11 @@ use lyon_tessellation::{
 use resvg::tiny_skia;
 use resvg::usvg::{self, Tree, fontdb};
 use std::sync::Arc;
+
+use crate::svg_clip::{
+    ClipLayer, append_sub_mesh, apply_clip_stack, push_clip_path_layers,
+    resolve_clipped_element_bounds, tessellate_image_node,
+};
 
 /// 9-float vertex format matching Galfus 2D pipeline: Pos(3) + UV(2) + Col(4).
 pub type SvgVertex = [f32; 9];
@@ -28,6 +33,24 @@ pub struct SvgElementRect {
     pub height: f32,
     pub viewport_width: f32,
     pub viewport_height: f32,
+}
+
+/// A contiguous sub-mesh within a tessellated SVG document, either untextured vector
+/// geometry (`texture_id: None`) or a textured `<image textureId="...">` quad (`texture_id: Some`).
+#[derive(Debug, Clone)]
+pub struct SvgSubMesh {
+    pub vertices: Vec<SvgVertex>,
+    pub indices: Vec<u32>,
+    pub texture_id: Option<u32>,
+    pub pixelated: bool,
+}
+
+/// Tessellated SVG geometry ready for GPU buffer upload.
+pub struct TessellatedSvgMesh {
+    pub vertices: Vec<SvgVertex>,
+    pub indices: Vec<u32>,
+    pub dimensions: Vec2,
+    pub sub_meshes: Vec<SvgSubMesh>,
 }
 
 fn parse_svg(
@@ -54,7 +77,8 @@ pub(crate) fn parse_svg_with_clusters(
     Tree::from_str(xml, &opt).map_err(|e| format!("SVG parsing failed: {e}"))
 }
 
-/// Resolves the geometric bounds using the same SVG parser and font database as rendering.
+/// Resolves the geometric bounds using the same SVG parser and font database as rendering,
+/// clipped against any active ancestor `<clipPath>` elements.
 pub fn svg_element_rect(
     xml: &str,
     element_id: &str,
@@ -62,10 +86,9 @@ pub fn svg_element_rect(
     default_font_family: &str,
 ) -> Result<Option<SvgElementRect>, String> {
     let tree = parse_svg(xml, font_db, default_font_family)?;
-    let Some(node) = tree.node_by_id(element_id) else {
+    let Some(bounds) = resolve_clipped_element_bounds(tree.root(), element_id) else {
         return Ok(None);
     };
-    let bounds = node.abs_bounding_box();
     if bounds.width() <= 0.0 || bounds.height() <= 0.0 {
         return Ok(None);
     }
@@ -77,23 +100,6 @@ pub fn svg_element_rect(
         viewport_width: tree.size().width(),
         viewport_height: tree.size().height(),
     }))
-}
-
-/// Decoded embedded image asset extracted from SVG data URI.
-pub struct SvgEmbeddedImage {
-    pub width: u32,
-    pub height: u32,
-    pub rgba: Vec<u8>,
-    pub start_index: u32,
-    pub index_count: u32,
-}
-
-/// Tessellated SVG geometry ready for GPU buffer upload.
-pub struct TessellatedSvgMesh {
-    pub vertices: Vec<SvgVertex>,
-    pub indices: Vec<u32>,
-    pub dimensions: Vec2,
-    pub embedded_images: Vec<SvgEmbeddedImage>,
 }
 
 /// Converts a usvg Path into a lyon Path.
@@ -249,17 +255,20 @@ pub fn tessellate_svg(
     let half_w = vw / 2.0;
     let half_h = vh / 2.0;
 
-    let mut buffers: VertexBuffers<SvgVertex, u32> = VertexBuffers::new();
+    let mut all_buffers: VertexBuffers<SvgVertex, u32> = VertexBuffers::new();
     let mut fill_tess = FillTessellator::new();
     let mut stroke_tess = StrokeTessellator::new();
-    let mut embedded_images = Vec::new();
+    let mut sub_meshes = Vec::new();
+    let mut clip_stack = Vec::new();
 
     tessellate_group(
         tree.root(),
-        &mut buffers,
+        &mut all_buffers,
         &mut fill_tess,
         &mut stroke_tess,
-        &mut embedded_images,
+        &mut sub_meshes,
+        &mut clip_stack,
+        1.0,
         half_w,
         half_h,
         vw,
@@ -267,34 +276,61 @@ pub fn tessellate_svg(
     )?;
 
     Ok(TessellatedSvgMesh {
-        vertices: buffers.vertices,
-        indices: buffers.indices,
+        vertices: all_buffers.vertices,
+        indices: all_buffers.indices,
         dimensions: Vec2::new(vw, vh),
-        embedded_images,
+        sub_meshes,
     })
 }
 
 #[allow(clippy::too_many_arguments)]
 fn tessellate_group(
     group: &usvg::Group,
-    buffers: &mut VertexBuffers<SvgVertex, u32>,
+    all_buffers: &mut VertexBuffers<SvgVertex, u32>,
     fill_tess: &mut FillTessellator,
     stroke_tess: &mut StrokeTessellator,
-    embedded_images: &mut Vec<SvgEmbeddedImage>,
+    sub_meshes: &mut Vec<SvgSubMesh>,
+    clip_stack: &mut Vec<ClipLayer>,
+    parent_opacity: f32,
     half_w: f32,
     half_h: f32,
     vw: f32,
     vh: f32,
 ) -> Result<(), String> {
+    let group_opacity = parent_opacity * group.opacity().get();
+    if group_opacity <= 0.0 {
+        return Ok(());
+    }
+
+    let inv_w = if vw > 0.0 { 1.0 / vw } else { 1.0 };
+    let inv_h = if vh > 0.0 { 1.0 / vh } else { 1.0 };
+
+    let pushed_clips = if let Some(clip) = group.clip_path() {
+        push_clip_path_layers(
+            clip,
+            group.abs_transform(),
+            fill_tess,
+            half_w,
+            half_h,
+            inv_w,
+            inv_h,
+            clip_stack,
+        )
+    } else {
+        0
+    };
+
     for node in group.children() {
         match node {
             usvg::Node::Group(child_group) => {
                 tessellate_group(
                     child_group,
-                    buffers,
+                    all_buffers,
                     fill_tess,
                     stroke_tess,
-                    embedded_images,
+                    sub_meshes,
+                    clip_stack,
+                    group_opacity,
                     half_w,
                     half_h,
                     vw,
@@ -302,27 +338,46 @@ fn tessellate_group(
                 )?;
             }
             usvg::Node::Path(path) => {
+                if !path.is_visible() {
+                    continue;
+                }
+                let mut local_buf: VertexBuffers<SvgVertex, u32> = VertexBuffers::new();
                 tessellate_path_node(
                     path,
-                    buffers,
+                    &mut local_buf,
                     fill_tess,
                     stroke_tess,
+                    group_opacity,
+                    half_w,
+                    half_h,
+                    vw,
+                    vh,
+                )?;
+                apply_clip_stack(&mut local_buf, clip_stack);
+                append_sub_mesh(&local_buf, None, false, all_buffers, sub_meshes);
+            }
+            usvg::Node::Image(img) => {
+                tessellate_image_node(
+                    img,
+                    all_buffers,
+                    sub_meshes,
+                    clip_stack,
+                    group_opacity,
                     half_w,
                     half_h,
                     vw,
                     vh,
                 )?;
             }
-            usvg::Node::Image(img) => {
-                tessellate_image_node(img, buffers, embedded_images, half_w, half_h, vw, vh)?;
-            }
             usvg::Node::Text(text) => {
                 tessellate_group(
                     text.flattened(),
-                    buffers,
+                    all_buffers,
                     fill_tess,
                     stroke_tess,
-                    embedded_images,
+                    sub_meshes,
+                    clip_stack,
+                    group_opacity,
                     half_w,
                     half_h,
                     vw,
@@ -331,6 +386,11 @@ fn tessellate_group(
             }
         }
     }
+
+    for _ in 0..pushed_clips {
+        clip_stack.pop();
+    }
+
     Ok(())
 }
 
@@ -340,6 +400,7 @@ fn tessellate_path_node(
     buffers: &mut VertexBuffers<SvgVertex, u32>,
     fill_tess: &mut FillTessellator,
     stroke_tess: &mut StrokeTessellator,
+    group_opacity: f32,
     half_w: f32,
     half_h: f32,
     vw: f32,
@@ -357,6 +418,7 @@ fn tessellate_path_node(
             usvg::FillRule::EvenOdd => FillRule::EvenOdd,
         };
         let options = FillOptions::default().with_fill_rule(rule);
+        let fill_opacity = fill.opacity().get() * group_opacity;
 
         fill_tess
             .tessellate_path(
@@ -369,7 +431,7 @@ fn tessellate_path_node(
                     let local_y = (half_h - my) * inv_h;
                     let u = mx * inv_w;
                     let v_uv = my * inv_h;
-                    let color = resolve_paint_at(fill.paint(), fill.opacity().get(), mx, my);
+                    let color = resolve_paint_at(fill.paint(), fill_opacity, mx, my);
                     [
                         local_x, local_y, 0.0, u, v_uv, color[0], color[1], color[2], color[3],
                     ]
@@ -394,7 +456,7 @@ fn tessellate_path_node(
                     let local_y = (half_h - my) * inv_h;
                     let u = mx * inv_w;
                     let v_uv = my * inv_h;
-                    let mut color = resolve_paint_at(fill.paint(), fill.opacity().get(), mx, my);
+                    let mut color = resolve_paint_at(fill.paint(), fill_opacity, mx, my);
                     color[3] *= 0.45;
                     [
                         local_x, local_y, 0.0, u, v_uv, color[0], color[1], color[2], color[3],
@@ -421,9 +483,9 @@ fn tessellate_path_node(
         let width = stroke.width().get();
         let miter_limit = stroke.miterlimit().get();
         let feather = 1.0f32;
+        let stroke_opacity = stroke.opacity().get() * group_opacity;
 
         if width <= 1.2 {
-            // Adaptive subpixel coverage for thin lines
             let eff_width = 1.2f32;
             let eff_alpha_scale = (width / eff_width).clamp(0.25, 1.0);
             let options = StrokeOptions::default()
@@ -443,8 +505,7 @@ fn tessellate_path_node(
                         let local_y = (half_h - my) * inv_h;
                         let u = mx * inv_w;
                         let v_uv = my * inv_h;
-                        let mut color =
-                            resolve_paint_at(stroke.paint(), stroke.opacity().get(), mx, my);
+                        let mut color = resolve_paint_at(stroke.paint(), stroke_opacity, mx, my);
                         color[3] *= eff_alpha_scale;
                         [
                             local_x, local_y, 0.0, u, v_uv, color[0], color[1], color[2], color[3],
@@ -453,8 +514,6 @@ fn tessellate_path_node(
                 )
                 .map_err(|e| format!("Path stroke tessellation failed: {e:?}"))?;
         } else {
-            // Dual-layer Feathering:
-            // 1. Soft fringe penumbra
             let fringe_opt = StrokeOptions::default()
                 .with_line_width(width + feather)
                 .with_line_cap(cap)
@@ -471,8 +530,7 @@ fn tessellate_path_node(
                     let local_y = (half_h - my) * inv_h;
                     let u = mx * inv_w;
                     let v_uv = my * inv_h;
-                    let mut color =
-                        resolve_paint_at(stroke.paint(), stroke.opacity().get(), mx, my);
+                    let mut color = resolve_paint_at(stroke.paint(), stroke_opacity, mx, my);
                     color[3] *= 0.45;
                     [
                         local_x, local_y, 0.0, u, v_uv, color[0], color[1], color[2], color[3],
@@ -480,7 +538,6 @@ fn tessellate_path_node(
                 }),
             );
 
-            // 2. Solid core umbra
             let core_width = (width - feather * 0.5).max(0.2);
             let core_opt = StrokeOptions::default()
                 .with_line_width(core_width)
@@ -499,8 +556,7 @@ fn tessellate_path_node(
                         let local_y = (half_h - my) * inv_h;
                         let u = mx * inv_w;
                         let v_uv = my * inv_h;
-                        let color =
-                            resolve_paint_at(stroke.paint(), stroke.opacity().get(), mx, my);
+                        let color = resolve_paint_at(stroke.paint(), stroke_opacity, mx, my);
                         [
                             local_x, local_y, 0.0, u, v_uv, color[0], color[1], color[2], color[3],
                         ]
@@ -509,76 +565,6 @@ fn tessellate_path_node(
                 .map_err(|e| format!("Path stroke tessellation failed: {e:?}"))?;
         }
     }
-
-    Ok(())
-}
-
-fn tessellate_image_node(
-    img: &usvg::Image,
-    buffers: &mut VertexBuffers<SvgVertex, u32>,
-    embedded_images: &mut Vec<SvgEmbeddedImage>,
-    half_w: f32,
-    half_h: f32,
-    vw: f32,
-    vh: f32,
-) -> Result<(), String> {
-    let (width, height, rgba) = match img.kind() {
-        usvg::ImageKind::PNG(data) => {
-            let pix = tiny_skia::Pixmap::decode_png(data)
-                .map_err(|e| format!("Failed to decode PNG in SVG: {e:?}"))?;
-            (pix.width(), pix.height(), pix.take())
-        }
-        _ => return Ok(()),
-    };
-
-    let bbox = img.bounding_box();
-    let transform = img.abs_transform();
-    let inv_w = if vw > 0.0 { 1.0 / vw } else { 1.0 };
-    let inv_h = if vh > 0.0 { 1.0 / vh } else { 1.0 };
-
-    let corners = [
-        (bbox.left(), bbox.top()),
-        (bbox.right(), bbox.top()),
-        (bbox.right(), bbox.bottom()),
-        (bbox.left(), bbox.bottom()),
-    ];
-
-    let start_v = buffers.vertices.len() as u32;
-    let start_i = buffers.indices.len() as u32;
-
-    for (i, (cx, cy)) in corners.iter().enumerate() {
-        let (mx, my) = map_pt(&transform, *cx, *cy);
-        let local_x = (mx - half_w) * inv_w;
-        let local_y = (half_h - my) * inv_h;
-        let u = mx * inv_w;
-        let v = my * inv_h;
-        let (u_tex, v_tex) = match i {
-            0 => (0.0, 0.0),
-            1 => (1.0, 0.0),
-            2 => (1.0, 1.0),
-            _ => (0.0, 1.0),
-        };
-        buffers
-            .vertices
-            .push([local_x, local_y, 0.0, u, v, u_tex, v_tex, 1.0, 1.0]);
-    }
-
-    buffers.indices.extend_from_slice(&[
-        start_v,
-        start_v + 1,
-        start_v + 2,
-        start_v + 2,
-        start_v + 3,
-        start_v,
-    ]);
-
-    embedded_images.push(SvgEmbeddedImage {
-        width,
-        height,
-        rgba,
-        start_index: start_i,
-        index_count: 6,
-    });
 
     Ok(())
 }

@@ -144,6 +144,7 @@ fn replacing_an_svg_reclaims_its_previous_geometry() {
             svg: Svg2D::default(),
             transform: Transform2D::default(),
             geometry_handle: Some(handle),
+            sub_meshes: Vec::new(),
         },
     );
 

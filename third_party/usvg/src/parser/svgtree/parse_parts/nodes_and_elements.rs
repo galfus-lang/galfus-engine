@@ -250,13 +250,6 @@ pub(crate) fn parse_svg_element<'input>(
         // For some reason those properties are allowed only inside a `style` attribute and CSS.
         if matches!(aid, AId::MixBlendMode | AId::Isolation | AId::FontKerning) {
             continue;
-        } else if aid == AId::ImageRendering
-            && matches!(
-                attr.value(),
-                "smooth" | "high-quality" | "crisp-edges" | "pixelated"
-            )
-        {
-            continue;
         }
 
         // SVG 2: when both `href` and `xlink:href` are present, the unprefixed

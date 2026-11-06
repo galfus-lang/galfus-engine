@@ -210,6 +210,26 @@ export const platformFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_platform_get_clipboard_text',
+    methodName: 'platformGetClipboardText',
+    doc: 'Reads the current plain-text content from the platform clipboard.',
+    params: [],
+    returnType: 'string'
+  },
+  {
+    cName: 'galfus_platform_set_clipboard_text',
+    methodName: 'platformSetClipboardText',
+    doc: 'Writes plain-text content to the platform clipboard.',
+    params: [
+      {
+        name: 'text',
+        type: 'string',
+        doc: 'Plain-text content to store in the clipboard'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_gamepad_get_connected',
     methodName: 'gamepadGetConnected',
     doc: 'Retrieves all currently connected gamepads and their capabilities.',

@@ -347,6 +347,7 @@ pub enum AId {
     TextRendering,
     TextUnderlinePosition,
     TextLength,
+    TextureId,
     Transform,
     TransformBox,
     TransformOrigin,
