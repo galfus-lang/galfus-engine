@@ -97,10 +97,8 @@ export class ScrollPanel extends Panel {
 
   override collectDefs(defs: string[]): void {
     const vp = this.viewportRect;
-    const rx = Math.max(0, (this._style.radius ?? 0) - 1);
-    const rxAttr = rx > 0 && this.headerOffset === 0 ? ` rx="${fmtNum(rx)}"` : '';
     defs.push(
-      `<clipPath id="${this.id}-clip"><rect id="${this.id}-clip-rect" x="${fmtNum(vp.x)}" y="${fmtNum(vp.y)}" width="${fmtNum(vp.width)}" height="${fmtNum(vp.height)}"${rxAttr}/></clipPath>`
+      `<clipPath id="${this.id}-clip"><rect id="${this.id}-clip-rect" x="${fmtNum(vp.x)}" y="${fmtNum(vp.y)}" width="${fmtNum(vp.width)}" height="${fmtNum(vp.height)}"/></clipPath>`
     );
     for (const child of this._children) child.collectDefs(defs);
   }

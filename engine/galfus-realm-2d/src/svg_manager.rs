@@ -68,9 +68,28 @@ impl SvgInstance2D {
             .as_ref()
             .is_none_or(|(cached_seq, _)| *cached_seq != seq);
         if needs_parse {
+            #[cfg(debug_assertions)]
+            let t_xml_start = std::time::Instant::now();
+
             let xml = self.svg.current_xml();
+
+            #[cfg(debug_assertions)]
+            let t_xml = t_xml_start.elapsed();
+
+            #[cfg(debug_assertions)]
+            let t_parse_start = std::time::Instant::now();
+
             let tree =
                 crate::svg_tessellator::parse_svg(xml, font_db.clone(), default_font_family)?;
+
+            #[cfg(debug_assertions)]
+            let t_parse = t_parse_start.elapsed();
+
+            #[cfg(debug_assertions)]
+            if std::env::var_os("GALFUS_PROFILE_SVG").is_some() {
+                eprintln!("[SVG-PERF] xml_serialize: {t_xml:?} | usvg_parse: {t_parse:?}");
+            }
+
             *guard = Some((seq, tree));
         }
         let (_, tree) = guard.as_ref().expect("cached_tree populated above");
@@ -280,7 +299,6 @@ impl SvgManager2D {
             let svg_mat = Material2D {
                 surface_type: SurfaceType2D::Transparent,
                 base_color: Vec4::ONE,
-                texture_id: None,
                 sampler_index: 1,
                 ..Default::default()
             };
@@ -326,11 +344,20 @@ impl SvgManager2D {
 
         for (&id, instance) in &mut self.instances {
             if instance.svg.dirty || instance.geometry_handle.is_none() {
+                #[cfg(debug_assertions)]
+                let t_tess_start = std::time::Instant::now();
+
                 let tess_res = instance
                     .with_parsed_tree(&self.font_db, &self.default_font_family, |tree| {
                         crate::svg_tessellator::tessellate_svg_tree(tree)
                     })
                     .and_then(|r| r);
+
+                #[cfg(debug_assertions)]
+                let t_tess = t_tess_start.elapsed();
+                #[cfg(debug_assertions)]
+                let t_upload_start = std::time::Instant::now();
+
                 match tess_res {
                     Ok(mesh) => {
                         let sub_list: Vec<crate::svg_tessellator::SvgSubMesh> =
@@ -428,6 +455,14 @@ impl SvgManager2D {
                             }
                         }
                         instance.svg.dirty = false;
+
+                        #[cfg(debug_assertions)]
+                        if std::env::var_os("GALFUS_PROFILE_SVG").is_some() {
+                            eprintln!(
+                                "[SVG-PERF] SVG #{id} | tessellate: {t_tess:?} | gpu_upload: {:?}",
+                                t_upload_start.elapsed()
+                            );
+                        }
                     }
                     Err(err) => {
                         eprintln!("[SvgManager2D] Failed to tessellate SVG #{id}: {err}");
@@ -459,25 +494,26 @@ impl SvgManager2D {
                         self.next_reserved_mat_id = self.next_reserved_mat_id.saturating_add(1);
                         allocated
                     });
-                    let mut slots = [None; 8];
-                    slots[0] = Some(tex_id);
-                    let u_buf = if sub.pixelated {
-                        &*tex_nearest_buf
-                    } else {
-                        &*tex_linear_buf
-                    };
-                    let bg = crate::gpu::create_material_bind_group_2d(
-                        device,
-                        material_bgl,
-                        samplers,
-                        fallback_white,
-                        fallback_normal,
-                        fallback_black,
-                        u_buf,
-                        &slots,
-                        textures,
-                    );
-                    material_bind_groups.insert(tex_mat_id, bg);
+                    material_bind_groups.entry(tex_mat_id).or_insert_with(|| {
+                        let mut slots = [None; 8];
+                        slots[0] = Some(tex_id);
+                        let u_buf = if sub.pixelated {
+                            &*tex_nearest_buf
+                        } else {
+                            &*tex_linear_buf
+                        };
+                        crate::gpu::create_material_bind_group_2d(
+                            device,
+                            material_bgl,
+                            samplers,
+                            fallback_white,
+                            fallback_normal,
+                            fallback_black,
+                            u_buf,
+                            &slots,
+                            textures,
+                        )
+                    });
                 }
             }
         }
@@ -510,28 +546,29 @@ impl SvgManager2D {
                 .svg
                 .compute_model_matrix(&instance.transform, first_geom.dimensions);
 
-            let [min_z, max_z] = instance.svg.height_range.unwrap_or([-10000.0, 10000.0]);
-            let item = Item2DInstanceRaw {
-                model_matrix,
-                tint: Vec4::ONE,
-                uv_rect: Vec4::new(0.0, 0.0, 1.0, 1.0),
-                shadow_params: Vec4::new(
-                    if instance.svg.receive_shadow {
-                        1.0
-                    } else {
-                        0.0
-                    },
-                    if instance.svg.cast_shadow { 1.0 } else { 0.0 },
-                    min_z,
-                    max_z,
-                ),
-            };
-
             let default_mat_id = instance.svg.material_id.unwrap_or(SVG_DEFAULT_MATERIAL_ID);
             let draw_order = instance
                 .svg
                 .draw_order
                 .unwrap_or(instance.transform.draw_order);
+
+            let [min_z, max_z] = instance.svg.height_range.unwrap_or([-10000.0, 10000.0]);
+            let shadow_params = Vec4::new(
+                if instance.svg.receive_shadow {
+                    1.0
+                } else {
+                    0.0
+                },
+                if instance.svg.cast_shadow { 1.0 } else { 0.0 },
+                min_z,
+                max_z,
+            );
+            let item = Item2DInstanceRaw {
+                model_matrix,
+                tint: Vec4::ONE,
+                uv_rect: Vec4::new(0.0, 0.0, 1.0, 1.0),
+                shadow_params,
+            };
 
             for (sub_idx, sub) in sub_bindings.iter().enumerate() {
                 if self.pool.get(sub.handle).is_err() {

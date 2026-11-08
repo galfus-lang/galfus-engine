@@ -274,10 +274,8 @@ export class Panel implements UiNode {
   collectDefs(defs: string[]): void {
     if (this._clip) {
       const body = this.bodyRect;
-      const rx = Math.max(0, (this._style.radius ?? 0) - 1);
-      const rxAttr = rx > 0 && this.headerOffset === 0 ? ` rx="${fmtNum(rx)}"` : '';
       defs.push(
-        `<clipPath id="${this.id}-clip"><rect id="${this.id}-clip-rect" x="${fmtNum(body.x)}" y="${fmtNum(body.y)}" width="${fmtNum(body.width)}" height="${fmtNum(body.height)}"${rxAttr}/></clipPath>`
+        `<clipPath id="${this.id}-clip"><rect id="${this.id}-clip-rect" x="${fmtNum(body.x)}" y="${fmtNum(body.y)}" width="${fmtNum(body.width)}" height="${fmtNum(body.height)}"/></clipPath>`
       );
     }
     for (const child of this._children) child.collectDefs(defs);

@@ -17,6 +17,45 @@ use crate::svg_tessellator::{SvgSubMesh, SvgVertex, usvg_path_to_lyon};
 pub struct ClipLayer {
     /// Triangles in SVG normalized local coordinates (`local_x`, `local_y`).
     pub triangles: Vec<[[f32; 2]; 3]>,
+    /// Axis-aligned bounding box `[min_x, min_y, max_x, max_y]`.
+    pub bounds: [f32; 4],
+    /// Whether this layer is a pure axis-aligned rectangle matching `bounds`.
+    pub is_rect: bool,
+}
+
+impl ClipLayer {
+    pub fn new(triangles: Vec<[[f32; 2]; 3]>) -> Self {
+        if triangles.is_empty() {
+            return Self {
+                triangles,
+                bounds: [0.0; 4],
+                is_rect: false,
+            };
+        }
+        let mut min_x = f32::INFINITY;
+        let mut min_y = f32::INFINITY;
+        let mut max_x = f32::NEG_INFINITY;
+        let mut max_y = f32::NEG_INFINITY;
+        let mut area = 0.0f32;
+        for t in &triangles {
+            for p in t {
+                min_x = min_x.min(p[0]);
+                min_y = min_y.min(p[1]);
+                max_x = max_x.max(p[0]);
+                max_y = max_y.max(p[1]);
+            }
+            let (ax, ay) = (t[1][0] - t[0][0], t[1][1] - t[0][1]);
+            let (bx, by) = (t[2][0] - t[0][0], t[2][1] - t[0][1]);
+            area += 0.5 * (ax * by - ay * bx).abs();
+        }
+        let rect_area = ((max_x - min_x) * (max_y - min_y)).max(0.0);
+        let is_rect = triangles.len() == 2 && (area - rect_area).abs() < 1e-4;
+        Self {
+            triangles,
+            bounds: [min_x, min_y, max_x, max_y],
+            is_rect,
+        }
+    }
 }
 
 /// Maps an (x, y) point through a tiny_skia transform.
@@ -136,6 +175,48 @@ pub fn apply_clip_stack(buffers: &mut VertexBuffers<SvgVertex, u32>, clip_stack:
         return;
     }
 
+    let mut b_min_x = f32::INFINITY;
+    let mut b_min_y = f32::INFINITY;
+    let mut b_max_x = f32::NEG_INFINITY;
+    let mut b_max_y = f32::NEG_INFINITY;
+    for v in &buffers.vertices {
+        b_min_x = b_min_x.min(v[0]);
+        b_min_y = b_min_y.min(v[1]);
+        b_max_x = b_max_x.max(v[0]);
+        b_max_y = b_max_y.max(v[1]);
+    }
+
+    let mut active_layers: Vec<&ClipLayer> = Vec::new();
+    for layer in clip_stack {
+        if layer.triangles.is_empty() {
+            buffers.vertices.clear();
+            buffers.indices.clear();
+            return;
+        }
+        if b_max_x < layer.bounds[0] - 1e-5
+            || b_min_x > layer.bounds[2] + 1e-5
+            || b_max_y < layer.bounds[1] - 1e-5
+            || b_min_y > layer.bounds[3] + 1e-5
+        {
+            buffers.vertices.clear();
+            buffers.indices.clear();
+            return;
+        }
+        if layer.is_rect
+            && b_min_x >= layer.bounds[0] - 1e-5
+            && b_max_x <= layer.bounds[2] + 1e-5
+            && b_min_y >= layer.bounds[1] - 1e-5
+            && b_max_y <= layer.bounds[3] + 1e-5
+        {
+            continue;
+        }
+        active_layers.push(layer);
+    }
+
+    if active_layers.is_empty() {
+        return;
+    }
+
     let mut current_tris: Vec<[SvgVertex; 3]> = Vec::with_capacity(buffers.indices.len() / 3);
     for &[i0, i1, i2] in buffers.indices.as_chunks::<3>().0 {
         let v0 = buffers.vertices[i0 as usize];
@@ -144,11 +225,7 @@ pub fn apply_clip_stack(buffers: &mut VertexBuffers<SvgVertex, u32>, clip_stack:
         current_tris.push([v0, v1, v2]);
     }
 
-    for layer in clip_stack {
-        if layer.triangles.is_empty() {
-            current_tris.clear();
-            break;
-        }
+    for layer in active_layers {
         let mut next_tris = Vec::new();
         for tri in &current_tris {
             for clip_tri in &layer.triangles {
@@ -209,7 +286,7 @@ pub fn push_clip_path_layers(
         &mut triangles,
     );
 
-    clip_stack.push(ClipLayer { triangles });
+    clip_stack.push(ClipLayer::new(triangles));
     pushed + 1
 }
 
@@ -502,90 +579,7 @@ pub fn tessellate_image_node(
     Ok(())
 }
 
-thread_local! {
-    static TEXT_MESH_CACHE: std::cell::RefCell<std::collections::HashMap<u64, VertexBuffers<SvgVertex, u32>>> =
-        std::cell::RefCell::new(std::collections::HashMap::new());
-}
-
-fn hash_paint(paint: &usvg::Paint, hasher: &mut std::collections::hash_map::DefaultHasher) {
-    use std::hash::Hash;
-    match paint {
-        usvg::Paint::Color(c) => (1u8, c.red, c.green, c.blue).hash(hasher),
-        usvg::Paint::LinearGradient(lg) => (2u8, lg.id()).hash(hasher),
-        usvg::Paint::RadialGradient(rg) => (3u8, rg.id()).hash(hasher),
-        usvg::Paint::Pattern(p) => (4u8, p.id()).hash(hasher),
-    }
-}
-
-/// Computes a 64-bit cache key for an unclipped `<text>` node and appends its cached mesh
-/// directly if already tessellated. Returns `Some(key)` on cache miss.
-pub fn try_append_cached_text(
-    text: &usvg::Text,
-    group_opacity: f32,
-    vw: f32,
-    vh: f32,
-    all_buffers: &mut VertexBuffers<SvgVertex, u32>,
-    sub_meshes: &mut Vec<SvgSubMesh>,
-) -> Option<u64> {
-    use std::hash::{Hash, Hasher};
-
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    (group_opacity.to_bits(), vw.to_bits(), vh.to_bits()).hash(&mut hasher);
-    for chunk in text.chunks() {
-        chunk.text().hash(&mut hasher);
-    }
-    let flat = text.flattened();
-    let gt = flat.abs_transform();
-    [gt.sx, gt.kx, gt.ky, gt.sy, gt.tx, gt.ty]
-        .map(f32::to_bits)
-        .hash(&mut hasher);
-    for child in flat.children() {
-        if let usvg::Node::Path(p) = child {
-            p.is_visible().hash(&mut hasher);
-            let t = p.abs_transform();
-            [t.sx, t.kx, t.ky, t.sy, t.tx, t.ty]
-                .map(f32::to_bits)
-                .hash(&mut hasher);
-            let b = p.bounding_box();
-            [b.left(), b.top(), b.right(), b.bottom()]
-                .map(f32::to_bits)
-                .hash(&mut hasher);
-            if let Some(fill) = p.fill() {
-                fill.opacity().get().to_bits().hash(&mut hasher);
-                hash_paint(fill.paint(), &mut hasher);
-            }
-            if let Some(stroke) = p.stroke() {
-                (
-                    stroke.width().get().to_bits(),
-                    stroke.opacity().get().to_bits(),
-                )
-                    .hash(&mut hasher);
-                hash_paint(stroke.paint(), &mut hasher);
-            }
-        }
-    }
-    let key = hasher.finish();
-    let hit = TEXT_MESH_CACHE.with(|cache| {
-        cache.borrow().get(&key).map(|buf| {
-            append_sub_mesh(buf, None, false, all_buffers, sub_meshes);
-        })
-    });
-    if hit.is_some() { None } else { Some(key) }
-}
-
-/// Stores a newly tessellated `<text>` mesh in the thread-local cache and appends it.
-pub fn store_and_append_cached_text(
-    key: u64,
-    text_buf: VertexBuffers<SvgVertex, u32>,
-    all_buffers: &mut VertexBuffers<SvgVertex, u32>,
-    sub_meshes: &mut Vec<SvgSubMesh>,
-) {
-    append_sub_mesh(&text_buf, None, false, all_buffers, sub_meshes);
-    TEXT_MESH_CACHE.with(|cache| {
-        let mut cache = cache.borrow_mut();
-        if cache.len() >= 512 {
-            cache.clear();
-        }
-        cache.insert(key, text_buf);
-    });
-}
+pub use crate::svg_text_cache::{
+    compute_text_cache_key, get_cached_text, store_and_append_cached_text, store_cached_text,
+    try_append_cached_text,
+};

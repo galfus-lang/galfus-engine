@@ -16,9 +16,9 @@ use resvg::usvg::{self, Tree, fontdb};
 use std::sync::Arc;
 
 use crate::svg_clip::{
-    ClipLayer, append_sub_mesh, apply_clip_stack, map_pt, push_clip_path_layers,
-    resolve_clipped_element_bounds, store_and_append_cached_text, tessellate_image_node,
-    try_append_cached_text,
+    ClipLayer, append_sub_mesh, apply_clip_stack, compute_text_cache_key, get_cached_text, map_pt,
+    push_clip_path_layers, resolve_clipped_element_bounds, store_cached_text,
+    tessellate_image_node,
 };
 
 /// 9-float vertex format matching Galfus 2D pipeline: Pos(3) + UV(2) + Col(4).
@@ -363,17 +363,12 @@ fn tessellate_group(
                 )?;
             }
             usvg::Node::Text(text) => {
-                if state.clip_stack.is_empty() && text.flattened().clip_path().is_none() {
-                    if let Some(cache_key) = try_append_cached_text(
-                        text,
-                        group_opacity,
-                        state.vw,
-                        state.vh,
-                        all_buffers,
-                        sub_meshes,
-                    ) {
-                        let mut text_buf: VertexBuffers<SvgVertex, u32> = VertexBuffers::new();
+                if text.flattened().clip_path().is_none() {
+                    let key = compute_text_cache_key(text, group_opacity, state.vw, state.vh);
+                    let mut text_buf: VertexBuffers<SvgVertex, u32> = VertexBuffers::new();
+                    if !get_cached_text(key, &mut text_buf) {
                         let mut text_subs: Vec<SvgSubMesh> = Vec::new();
+                        let saved_clips = std::mem::take(&mut state.clip_stack);
                         tessellate_group(
                             text.flattened(),
                             state,
@@ -381,8 +376,11 @@ fn tessellate_group(
                             &mut text_subs,
                             group_opacity,
                         )?;
-                        store_and_append_cached_text(cache_key, text_buf, all_buffers, sub_meshes);
+                        state.clip_stack = saved_clips;
+                        store_cached_text(key, text_buf.clone());
                     }
+                    apply_clip_stack(&mut text_buf, &state.clip_stack);
+                    append_sub_mesh(&text_buf, None, false, all_buffers, sub_meshes);
                 } else {
                     tessellate_group(
                         text.flattened(),
