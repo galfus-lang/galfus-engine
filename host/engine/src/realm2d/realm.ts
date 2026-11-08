@@ -28,6 +28,7 @@ import type { SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
 import type { RealmConnector, RealmId, RealmKind } from '../multiverse/realm';
 import type { TransitionId } from '../types';
+import { DebugLatencyTracker } from '../debug/latency-tracker';
 import {
   createCamera2D,
   createLight2D,
@@ -396,6 +397,13 @@ export class Realm2D implements RealmConnector {
     value: string
   ): void {
     const svgId = this._resolveSvgId(svg);
+    DebugLatencyTracker.recordStyleUpdate(
+      DebugLatencyTracker.currentFrameId,
+      svgId,
+      elementId,
+      name,
+      value
+    );
     const lowerName = name.toLowerCase();
     if (lowerName === 'viewbox' || elementId === '') {
       this.invalidateSvgCache(svgId);

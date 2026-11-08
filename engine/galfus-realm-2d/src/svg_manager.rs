@@ -166,8 +166,7 @@ impl SvgManager2D {
         let db = Arc::make_mut(&mut self.font_db);
         let prev_count = db.faces().count();
         db.load_font_data(data.to_vec());
-        let new_count = db.faces().count();
-        if new_count <= prev_count {
+        if db.faces().count() <= prev_count {
             return Err("No valid font faces found in binary data".to_string());
         }
         let last_face = db
@@ -553,16 +552,13 @@ impl SvgManager2D {
                 .unwrap_or(instance.transform.draw_order);
 
             let [min_z, max_z] = instance.svg.height_range.unwrap_or([-10000.0, 10000.0]);
-            let shadow_params = Vec4::new(
-                if instance.svg.receive_shadow {
-                    1.0
-                } else {
-                    0.0
-                },
-                if instance.svg.cast_shadow { 1.0 } else { 0.0 },
-                min_z,
-                max_z,
-            );
+            let rx_sh = if instance.svg.receive_shadow {
+                1.0
+            } else {
+                0.0
+            };
+            let cast_sh = if instance.svg.cast_shadow { 1.0 } else { 0.0 };
+            let shadow_params = Vec4::new(rx_sh, cast_sh, min_z, max_z);
             let item = Item2DInstanceRaw {
                 model_matrix,
                 tint: Vec4::ONE,

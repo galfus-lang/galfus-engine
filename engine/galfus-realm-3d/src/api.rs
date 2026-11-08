@@ -11,23 +11,8 @@ use galfus_realm_3d_resources::portal::Portal3D;
 use galfus_realm_3d_resources::transform::Transform3D;
 use galfus_realm_core::error::RealmResult;
 
-use crate::context::{Realm3DContext, not_found};
+use crate::context::{Realm3DContext, not_found, validate_morph_weights};
 use crate::types::validate_id;
-
-fn validate_morph_weights(weights: &[f32], target_count: usize) -> RealmResult<()> {
-    if !weights.is_empty() && weights.len() != target_count {
-        return Err(galfus_realm_core::error::RealmError::Internal(format!(
-            "Morph weight count {} does not match geometry target count {target_count}",
-            weights.len()
-        )));
-    }
-    if weights.iter().any(|weight| !weight.is_finite()) {
-        return Err(galfus_realm_core::error::RealmError::Internal(
-            "Morph weights must be finite".into(),
-        ));
-    }
-    Ok(())
-}
 
 impl Realm3DContext {
     /// Registers or updates a `Camera3D` with its `Transform3D`.
@@ -293,6 +278,13 @@ impl Realm3DContext {
 
     /// Updates the transform of an existing `Model3D`.
     pub fn set_model_transform(&mut self, id: u32, transform: Transform3D) -> RealmResult<()> {
+        #[cfg(debug_assertions)]
+        if std::env::var_os("GALFUS_DEBUG_LATENCY").is_some() {
+            eprintln!(
+                "[RUST-MODEL3D-TRANSFORM] id={id} pos={:?}",
+                transform.position
+            );
+        }
         let entry = self
             .models
             .get_mut(&id)
@@ -306,7 +298,7 @@ impl Realm3DContext {
     pub fn get_model_transform(&self, id: u32) -> RealmResult<Transform3D> {
         self.models
             .get(&id)
-            .map(|entry| entry.1)
+            .map(|e| e.1)
             .ok_or_else(|| not_found(self.id, "Model", id))
     }
 
@@ -314,7 +306,7 @@ impl Realm3DContext {
     pub fn get_camera_transform(&self, id: u32) -> RealmResult<Transform3D> {
         self.cameras
             .get(&id)
-            .map(|entry| entry.1)
+            .map(|e| e.1)
             .ok_or_else(|| not_found(self.id, "Camera", id))
     }
 

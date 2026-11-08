@@ -23,6 +23,7 @@ import { Realm3D } from './realm3d/realm';
 import { storeCameraLookAt } from './realm3d/resource-ids';
 import { ResourceManager } from './resources/manager';
 import { TextEncoding } from './text/encoding';
+import { DebugLatencyTracker } from './debug/latency-tracker';
 import {
   type FixedTickTiming,
   IdAllocator,
@@ -377,6 +378,7 @@ export class MultiverseRuntime {
     // 1. Advance frameId and elapsed simulation time exactly once
     this._frameId = timing.frameId;
     this._elapsedSeconds += timing.dt;
+    DebugLatencyTracker.setFrameId(timing.frameId);
 
     // 2. Pump platform events internally (separated into structural window pass and urgent input pass)
     const rawEvents = this.platform.pumpEvents();
@@ -411,6 +413,7 @@ export class MultiverseRuntime {
       // Pass 2b: Urgent input events (pointer, keyboard, gamepad)
       for (const event of platformEvents) {
         if (event.kind === 'window') continue;
+        DebugLatencyTracker.recordInput(timing.frameId, event);
         if (event.kind === 'pointer') {
           this.interaction.handle(event);
         } else if (event.kind === 'keyboard') {
@@ -472,6 +475,7 @@ export class MultiverseRuntime {
 
     // 9. Resolve multiverse schedule and dispatch to GPU
     this.multiverse.dispatch(timing.frameId, timing.dt);
+    DebugLatencyTracker.recordDispatch(timing.frameId);
     this.interaction.afterDispatch();
 
     // 10. Step post-render stage: postRender (metrics, cleanups) AFTER dispatch

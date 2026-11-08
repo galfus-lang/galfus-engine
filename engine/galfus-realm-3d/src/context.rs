@@ -23,6 +23,22 @@ pub(crate) fn not_found(realm_id: u32, kind: &str, id: u32) -> RealmError {
     RealmError::ResourceNotFound(realm_id, format!("{kind} {id} not found"))
 }
 
+pub(crate) fn validate_morph_weights(
+    weights: &[f32],
+    target_count: usize,
+) -> galfus_realm_core::error::RealmResult<()> {
+    if !weights.is_empty() && weights.len() != target_count {
+        return Err(RealmError::Internal(format!(
+            "Morph weight count {} does not match geometry target count {target_count}",
+            weights.len()
+        )));
+    }
+    if weights.iter().any(|weight| !weight.is_finite()) {
+        return Err(RealmError::Internal("Morph weights must be finite".into()));
+    }
+    Ok(())
+}
+
 /// Autonomous 3D Realm managing 3D scenes, entities, Reverse-Z rendering, and lighting.
 pub struct Realm3DContext {
     pub id: u32,

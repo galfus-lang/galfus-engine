@@ -7,6 +7,7 @@ export * from './audio/index';
 export * from './ecs/index';
 export * from './interaction/index';
 export * from './collision/index';
+export * from './debug/index';
 export * from './math/index';
 export * from './multiverse/index';
 export * from './platform/index';

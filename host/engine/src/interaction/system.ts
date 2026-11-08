@@ -18,6 +18,7 @@ import {
   getColliderEntries
 } from '../collision/components';
 import { vec3 } from '../math';
+import { DebugLatencyTracker } from '../debug/latency-tracker';
 import { InteractiveListener } from './listener';
 import {
   type CameraSnapshot2D,
@@ -99,9 +100,10 @@ export class InteractiveSystem {
         if (invocation?.realmId === listener.realmId) {
           const cameras = record.realm instanceof Realm2D ? state.cameras2D : state.cameras3D;
           const slot = invocation.cameraSlot;
-          for (const camera of cameras)
+          for (const camera of cameras) {
             if (camera.slot === (slot ?? 0) || (slot !== undefined && camera.id === slot))
               return order;
+          }
         }
         order++;
         if (depth < 3) {
@@ -197,11 +199,10 @@ export class InteractiveSystem {
     };
     this.records.set(listener, record);
     let state = this.realms.get(realmId);
-    if (!state)
-      this.realms.set(
-        realmId,
-        (state = { realm, cameras2D: [], cameras3D: [], records: new Set() })
-      );
+    if (!state) {
+      state = { realm, cameras2D: [], cameras3D: [], records: new Set() };
+      this.realms.set(realmId, state);
+    }
     state.records.add(record);
     return listener;
   }
@@ -503,7 +504,10 @@ export class InteractiveSystem {
       this.emit(previous, 'leave', pointer);
       this.prunePointerCache(pointer, previous);
     }
-    if (next && pointer.hover === next) this.emit(next, 'hover', pointer);
+    if (next && pointer.hover === next) {
+      DebugLatencyTracker.recordHover(DebugLatencyTracker.currentFrameId, next.target);
+      this.emit(next, 'hover', pointer);
+    }
   }
 
   handleWindow(event: WindowEvent): void {
@@ -566,16 +570,12 @@ export class InteractiveSystem {
 
   /** Delivers once per listener even when several pointer buttons are pressed. */
   private emitPressed(pointer: PointerState, type: 'pressmove' | 'cancel'): void {
-    for (const [button, listener] of pointer.pressed) {
-      let first = true;
-      for (const [previousButton, previous] of pointer.pressed) {
-        if (previousButton === button) break;
-        if (previous === listener) {
-          first = false;
-          break;
-        }
+    const seen = new Set<InteractiveListener>();
+    for (const listener of pointer.pressed.values()) {
+      if (!seen.has(listener)) {
+        seen.add(listener);
+        this.emit(listener, type, pointer);
       }
-      if (first) this.emit(listener, type, pointer);
     }
   }
 

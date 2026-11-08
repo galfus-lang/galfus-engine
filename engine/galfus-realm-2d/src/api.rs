@@ -284,6 +284,10 @@ impl Realm2DContext {
         name: &str,
         value: &str,
     ) -> RealmResult<()> {
+        #[cfg(debug_assertions)]
+        if std::env::var_os("GALFUS_DEBUG_LATENCY").is_some() {
+            eprintln!("[RUST-SVG-ATTR] svg={svg_id} el=\"{element_id}\" {name}=\"{value}\"");
+        }
         let instance = self.svg_manager.get_mut(svg_id).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
         })?;
@@ -337,6 +341,13 @@ impl Realm2DContext {
 
     /// Updates the spatial transform of an existing SVG entity.
     pub fn set_svg_transform(&mut self, svg_id: u32, transform: Transform2D) -> RealmResult<()> {
+        #[cfg(debug_assertions)]
+        if std::env::var_os("GALFUS_DEBUG_LATENCY").is_some() {
+            eprintln!(
+                "[RUST-SVG-TRANSFORM] svg={svg_id} pos=({:?})",
+                transform.position
+            );
+        }
         let instance = self.svg_manager.get_mut(svg_id).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("SVG {svg_id}"))
         })?;

@@ -115,4 +115,3 @@ pub fn store_and_append_cached_text(
     append_sub_mesh(&text_buf, None, false, all_buffers, sub_meshes);
     store_cached_text(key, text_buf);
 }
-
