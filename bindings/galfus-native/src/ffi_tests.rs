@@ -47,17 +47,11 @@ fn test_c_api_lifecycle_and_json_exchange() {
     assert!(err_str.contains("headless mode"));
     unsafe { galfus_string_free(err_ptr) };
 
-    // 4. Pump events
-    let mut event_batch = crate::ffi_event_batch::GalfusEventBatch {
-        batch_id: 0,
-        events: std::ptr::null(),
-        event_count: 0,
-        text_data: std::ptr::null(),
-        text_length: 0,
-    };
-    assert_eq!(unsafe { galfus_platform_pump_events(&mut event_batch) }, 0);
-    assert_eq!(event_batch.event_count, 0);
-    assert_eq!(galfus_platform_release_event_batch(event_batch.batch_id), 0);
+    // 4. Pump events (1-by-1 128-byte struct)
+    let mut event_record = crate::ffi_event_batch::GalfusPlatformEvent::default();
+    assert_eq!(unsafe { galfus_platform_pump_events(&mut event_record) }, 0);
+    assert_eq!(event_record.kind, 0);
+    assert_eq!(event_record.has_more, 0);
 
     // 4.1 Window & Audio error paths on non-existent IDs
     assert_eq!(galfus_window_close(999), -1);
@@ -97,14 +91,15 @@ fn test_c_api_lifecycle_and_json_exchange() {
 }
 
 #[test]
-fn shutdown_releases_unclaimed_event_batches() {
+fn shutdown_clears_pending_events() {
     let _ = galfus_platform_shutdown();
     assert_eq!(galfus_platform_init_headless(), 0);
 
-    let batch = crate::ffi_event_batch::store_event_batch(Vec::new());
-    assert_eq!(crate::ffi_event_batch::event_batch_count(), 1);
+    crate::ffi_event_batch::enqueue_events(vec![galfus_platform::PlatformEvent::Window(
+        galfus_platform::WindowEvent::CloseRequested { window_id: 1 },
+    )]);
+    assert_eq!(crate::ffi_event_batch::pending_event_count(), 1);
 
     assert_eq!(galfus_platform_shutdown(), 0);
-    assert_eq!(crate::ffi_event_batch::event_batch_count(), 0);
-    assert!(crate::ffi_event_batch::release_event_batch(batch.batch_id).is_err());
+    assert_eq!(crate::ffi_event_batch::pending_event_count(), 0);
 }

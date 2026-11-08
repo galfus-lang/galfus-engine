@@ -1,4 +1,4 @@
-import type { PointerButton, PointerEvent } from '@galfus/transport-types';
+import type { PointerButton, PointerEvent, ScrollDelta } from '@galfus/transport-types';
 import type { Component } from '../ecs/component';
 import type { MultiverseCoordinator } from '../multiverse/coordinator';
 import type { PresentationConnection, WindowPresentation } from '../multiverse/presentation-graph';
@@ -40,6 +40,7 @@ interface PointerState {
   hover?: InteractiveListener;
   pressed: Map<PointerButton | number, InteractiveListener>;
   positions: Map<InteractiveListener, [number, number]>;
+  uvs: Map<InteractiveListener, [number, number]>;
 }
 interface RealmState {
   realm: Realm2D | Realm3D;
@@ -201,6 +202,7 @@ export class InteractiveSystem {
     for (const pointers of this.pointers.values())
       for (const pointer of pointers.values()) {
         pointer.positions.delete(listener);
+        pointer.uvs.delete(listener);
         if (pointer.hover === listener) pointer.hover = undefined;
         for (const [button, pressed] of pointer.pressed)
           if (pressed === listener) pointer.pressed.delete(button);
@@ -250,7 +252,7 @@ export class InteractiveSystem {
                 pressed = true;
               }
             }
-            if (pressed) this.emit(record.listener, 'cancel', pointer.event);
+            if (pressed) this.emit(record.listener, 'cancel', pointer);
           }
         }
       }
@@ -260,22 +262,28 @@ export class InteractiveSystem {
     if (removed) for (const record of removed) record.listener.dispose();
   }
 
-  private pick(
-    event: PointerEvent
-  ): { listener: InteractiveListener; localPos?: [number, number] } | undefined {
+  private pick(event: PointerEvent):
+    | {
+        listener: InteractiveListener;
+        localPos?: [number, number];
+        uv: [number, number];
+      }
+    | undefined {
     const view = this.multiverse.presentationGraph.getWindow(event.windowId);
     if (!view) return;
     const visited = new Set<number>();
     const localPos: [number, number] = [0, 0];
+    const uv: [number, number] = [0.5, 0.5];
     for (let r = view.rootTargetIds.length - 1; r >= 0; r--) {
       const rootId = view.rootTargetIds[r]!;
       visited.add(rootId);
-      const hit = this.pickInTarget(view, rootId, event.position, 1, visited, localPos);
+      const hit = this.pickInTarget(view, rootId, event.position, 1, visited, localPos, uv);
       visited.delete(rootId);
       if (hit) {
         return {
           listener: hit.listener,
-          localPos: hit.transformed ? [localPos[0], localPos[1]] : undefined
+          localPos: hit.transformed ? [localPos[0], localPos[1]] : undefined,
+          uv: [uv[0], uv[1]]
         };
       }
     }
@@ -288,7 +296,8 @@ export class InteractiveSystem {
     position: [number, number],
     depth: number,
     visitedTargets: Set<number>,
-    outLocalPos: [number, number]
+    outLocalPos: [number, number],
+    outUv: [number, number]
   ): { listener: InteractiveListener; transformed: boolean } | undefined {
     const ids = view.getInvocations(targetId);
     for (let i = ids.length - 1; i >= 0; i--) {
@@ -398,18 +407,22 @@ export class InteractiveSystem {
               const nextPos: [number, number] = [bestUv[0] * tw, bestUv[1] * th];
               visitedTargets.add(connection.sourceTargetId);
               const innerPos: [number, number] = [0, 0];
+              const innerUv: [number, number] = [0.5, 0.5];
               const inner = this.pickInTarget(
                 view,
                 connection.sourceTargetId,
                 nextPos,
                 depth + 1,
                 visitedTargets,
-                innerPos
+                innerPos,
+                innerUv
               );
               visitedTargets.delete(connection.sourceTargetId);
               if (inner) {
                 outLocalPos[0] = innerPos[0];
                 outLocalPos[1] = innerPos[1];
+                outUv[0] = innerUv[0];
+                outUv[1] = innerUv[1];
                 return { listener: inner.listener, transformed: true };
               }
             }
@@ -417,6 +430,8 @@ export class InteractiveSystem {
         }
         outLocalPos[0] = position[0];
         outLocalPos[1] = position[1];
+        outUv[0] = bestUv[0];
+        outUv[1] = bestUv[1];
         return { listener: best.listener, transformed: depth > 1 };
       }
     }
@@ -426,39 +441,52 @@ export class InteractiveSystem {
   private emit(
     listener: InteractiveListener | undefined,
     type: InteractiveEventType,
-    pointer: PointerEvent,
-    localPos?: [number, number]
+    pointer: PointerState,
+    scrollDelta?: ScrollDelta
   ): void {
     if (listener?.hasListeners(type)) {
+      const localPos = pointer.positions.get(listener);
+      const uv = pointer.uvs.get(listener);
+      const ev = pointer.event;
       const p =
-        localPos && (localPos[0] !== pointer.position[0] || localPos[1] !== pointer.position[1])
-          ? { ...pointer, position: [localPos[0], localPos[1]] as [number, number] }
-          : pointer;
-      listener.emit({ type, realmId: listener.realmId, target: listener.target, pointer: p });
+        localPos && (localPos[0] !== ev.position[0] || localPos[1] !== ev.position[1])
+          ? { ...ev, position: [localPos[0], localPos[1]] as [number, number] }
+          : ev;
+      listener.emit({
+        type,
+        realmId: listener.realmId,
+        target: listener.target,
+        pointer: p,
+        uv: uv ? [uv[0], uv[1]] : undefined,
+        scrollDelta
+      });
     }
+  }
+
+  private prunePointerCache(pointer: PointerState, listener: InteractiveListener): void {
+    for (const pressed of pointer.pressed.values()) {
+      if (pressed === listener) return;
+    }
+    pointer.positions.delete(listener);
+    pointer.uvs.delete(listener);
   }
 
   private updateHover(pointer: PointerState): void {
     const hit = this.pick(pointer.event);
     const next = hit?.listener;
-    if (hit?.localPos) pointer.positions.set(hit.listener, hit.localPos);
-    else if (next) pointer.positions.delete(next);
+    if (hit) {
+      pointer.uvs.set(hit.listener, hit.uv);
+      if (hit.localPos) pointer.positions.set(hit.listener, hit.localPos);
+      else pointer.positions.delete(hit.listener);
+    }
     if (next === pointer.hover) return;
     const previous = pointer.hover;
     pointer.hover = next;
     if (previous) {
-      this.emit(previous, 'leave', pointer.event, pointer.positions.get(previous));
-      let isPressed = false;
-      for (const pressed of pointer.pressed.values()) {
-        if (pressed === previous) {
-          isPressed = true;
-          break;
-        }
-      }
-      if (!isPressed) pointer.positions.delete(previous);
+      this.emit(previous, 'leave', pointer);
+      this.prunePointerCache(pointer, previous);
     }
-    if (next && pointer.hover === next)
-      this.emit(next, 'hover', pointer.event, pointer.positions.get(next));
+    if (next && pointer.hover === next) this.emit(next, 'hover', pointer);
   }
 
   handle(event: PointerEvent): void {
@@ -467,7 +495,10 @@ export class InteractiveSystem {
     if (!window) this.pointers.set(event.windowId, (window = new Map()));
     let pointer = window.get(event.pointerId);
     if (!pointer)
-      window.set(event.pointerId, (pointer = { event, pressed: new Map(), positions: new Map() }));
+      window.set(
+        event.pointerId,
+        (pointer = { event, pressed: new Map(), positions: new Map(), uvs: new Map() })
+      );
     pointer.event = event;
     if (event.type === 'leave' || event.type === 'cancel') {
       this.cancel(pointer);
@@ -477,30 +508,25 @@ export class InteractiveSystem {
     }
     this.updateHover(pointer);
     if (event.type === 'move') {
-      this.emit(pointer.hover, 'move', event, pointer.positions.get(pointer.hover!));
+      this.emit(pointer.hover, 'move', pointer);
       this.emitPressed(pointer, 'pressmove');
+    }
+    if (event.type === 'scroll') {
+      this.emit(pointer.hover, 'scroll', pointer, event.delta);
     }
     if (event.type === 'button') {
       const button = typeof event.button === 'string' ? event.button : event.button.other;
       if (event.state === 'pressed') {
         if (pointer.hover) pointer.pressed.set(button, pointer.hover);
-        this.emit(pointer.hover, 'down', event, pointer.positions.get(pointer.hover!));
+        this.emit(pointer.hover, 'down', pointer);
       } else {
         const pressed = pointer.pressed.get(button);
         pointer.pressed.delete(button);
-        this.emit(pointer.hover, 'up', event, pointer.positions.get(pointer.hover!));
-        this.emit(pressed, 'pressup', event, pointer.positions.get(pressed!));
-        if (pressed && pressed === pointer.hover)
-          this.emit(pressed, 'click', event, pointer.positions.get(pressed));
+        this.emit(pointer.hover, 'up', pointer);
+        this.emit(pressed, 'pressup', pointer);
+        if (pressed && pressed === pointer.hover) this.emit(pressed, 'click', pointer);
         if (pressed && pressed !== pointer.hover) {
-          let isStillPressed = false;
-          for (const remaining of pointer.pressed.values()) {
-            if (remaining === pressed) {
-              isStillPressed = true;
-              break;
-            }
-          }
-          if (!isStillPressed) pointer.positions.delete(pressed);
+          this.prunePointerCache(pointer, pressed);
         }
       }
     }
@@ -509,8 +535,9 @@ export class InteractiveSystem {
   private cancel(pointer: PointerState): void {
     this.emitPressed(pointer, 'cancel');
     pointer.pressed.clear();
+    this.emit(pointer.hover, 'leave', pointer);
     pointer.positions.clear();
-    this.emit(pointer.hover, 'leave', pointer.event, pointer.positions.get(pointer.hover!));
+    pointer.uvs.clear();
     pointer.hover = undefined;
   }
 
@@ -525,7 +552,7 @@ export class InteractiveSystem {
           break;
         }
       }
-      if (first) this.emit(listener, type, pointer.event, pointer.positions.get(listener));
+      if (first) this.emit(listener, type, pointer);
     }
   }
 

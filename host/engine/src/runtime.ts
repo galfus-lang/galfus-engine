@@ -453,44 +453,49 @@ export class MultiverseRuntime {
     this._frameId = timing.frameId;
     this._elapsedSeconds += timing.dt;
 
-    // 2. Pump platform events internally
+    // 2. Pump platform events internally (separated into structural window pass and urgent input pass)
     const platformEvents = this.platform.pumpEvents();
     if (platformEvents.length > 0) {
       const platformListeners = this._eventListeners.get('platform');
-      for (const event of platformEvents) {
-        if (event.kind === 'pointer') {
-          this._interactive.handle(event);
-          this._focus.handlePointer(event);
-        }
-        if (event.kind === 'keyboard') {
-          this._focus.handleKeyboard(event);
-          const focused = this._focus.getFocused(event.windowId);
-          if (focused) this._textInputs.get(focused)?.handleKeyboard(event);
-        }
-        if (event.kind === 'window' && event.type === 'focusChanged')
-          this._focus.windowFocusChanged(event.windowId, event.focused);
-        // Auto-synchronize window swapchain size in Multiverse on resize
-        if (event.kind === 'window' && event.type === 'resized') {
-          this.platform.window.updateSize(event.windowId as any, event.width, event.height);
-        }
-
-        // Dispatch to kind listeners ('window', 'pointer', 'keyboard', 'gamepad')
+      const dispatchCommon = (event: PlatformEvent) => {
         const kindListeners = this._eventListeners.get(event.kind as RuntimeEventType);
         if (kindListeners && kindListeners.size > 0) {
           for (const listener of kindListeners) {
             listener(event);
           }
         }
-
-        // Forward through platform coordinator
         this.platform.dispatch(event);
-
-        // Dispatch to generic 'platform' listeners
         if (platformListeners && platformListeners.size > 0) {
           for (const listener of platformListeners) {
             listener(event);
           }
         }
+      };
+
+      // Pass 2a: Structural window events first
+      for (const event of platformEvents) {
+        if (event.kind !== 'window') continue;
+        if (event.type === 'focusChanged') {
+          this._focus.windowFocusChanged(event.windowId, event.focused);
+        }
+        if (event.type === 'resized') {
+          this.platform.window.updateSize(event.windowId as any, event.width, event.height);
+        }
+        dispatchCommon(event);
+      }
+
+      // Pass 2b: Urgent input events (pointer, keyboard, gamepad)
+      for (const event of platformEvents) {
+        if (event.kind === 'window') continue;
+        if (event.kind === 'pointer') {
+          this._interactive.handle(event);
+          this._focus.handlePointer(event);
+        } else if (event.kind === 'keyboard') {
+          this._focus.handleKeyboard(event);
+          const focused = this._focus.getFocused(event.windowId);
+          if (focused) this._textInputs.get(focused)?.handleKeyboard(event);
+        }
+        dispatchCommon(event);
       }
     }
 

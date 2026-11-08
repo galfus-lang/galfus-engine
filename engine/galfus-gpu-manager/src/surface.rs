@@ -6,6 +6,7 @@ use glam::UVec2;
 pub struct GpuSurface {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
+    supported_present_modes: Vec<wgpu::PresentMode>,
     size: UVec2,
 }
 
@@ -34,14 +35,15 @@ impl GpuSurface {
 
         let width = width.max(1);
         let height = height.max(1);
+        let resolved_present_mode = present_mode.resolve(&caps.present_modes);
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
             width,
             height,
-            present_mode: present_mode.to_wgpu(),
-            desired_maximum_frame_latency: 2,
+            present_mode: resolved_present_mode,
+            desired_maximum_frame_latency: 1,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
         };
@@ -51,6 +53,7 @@ impl GpuSurface {
         Ok(Self {
             surface,
             config,
+            supported_present_modes: caps.present_modes,
             size: UVec2::new(width, height),
         })
     }
@@ -72,7 +75,7 @@ impl GpuSurface {
 
     /// Updates the swapchain presentation mode.
     pub fn set_present_mode(&mut self, device: &wgpu::Device, present_mode: GpuPresentMode) {
-        self.config.present_mode = present_mode.to_wgpu();
+        self.config.present_mode = present_mode.resolve(&self.supported_present_modes);
         self.surface.configure(device, &self.config);
     }
 

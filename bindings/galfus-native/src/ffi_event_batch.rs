@@ -1,15 +1,25 @@
-//! Fixed-layout platform event batches with a shared UTF-8 text arena.
+//! Fixed-layout 128-byte platform event records with an inline UTF-8 text arena.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::VecDeque;
 
 use galfus_platform::{
     GamepadEvent, KeyboardEvent, PlatformEvent, PointerEvent, ScrollDelta, WindowEvent,
 };
 
-/// One normalized platform event. Text fields are byte ranges inside `GalfusEventBatch::text_data`.
+/// Inline UTF-8 byte capacity inside each `GalfusPlatformEvent`.
+pub const EVENT_TEXT_CAPACITY: usize = 80;
+
+/// One normalized 128-byte platform event record.
+///
+/// - `kind == 0` indicates that the event queue is empty.
+/// - `has_more == 1` indicates that additional events remain queued for the current pump cycle.
+/// - `text0`, `text1`, and `text2` are stored contiguously in `text_bytes`:
+///   - `text0`: `text_bytes[0 .. text0_length]`
+///   - `text1`: `text_bytes[text0_length .. text0_length + text1_length]`
+///   - `text2`: `text_bytes[text0_length + text1_length .. text0_length + text1_length + text2_length]`
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct GalfusPlatformEvent {
     pub kind: u16,
     pub event_type: u16,
@@ -18,36 +28,34 @@ pub struct GalfusPlatformEvent {
     pub subject_id: u32,
     pub id: u64,
     pub values: [f32; 5],
-    pub text0_offset: u32,
-    pub text0_length: u32,
-    pub text1_offset: u32,
-    pub text1_length: u32,
-    pub text2_offset: u32,
-    pub text2_length: u32,
+    pub text0_length: u8,
+    pub text1_length: u8,
+    pub text2_length: u8,
+    pub has_more: u8,
+    pub text_bytes: [u8; EVENT_TEXT_CAPACITY],
 }
 
-/// Caller-visible view of an event batch.
-///
-/// It remains valid until `galfus_platform_release_event_batch` or platform shutdown, whichever
-/// happens first.
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct GalfusEventBatch {
-    pub batch_id: u64,
-    pub events: *const GalfusPlatformEvent,
-    pub event_count: u32,
-    pub text_data: *const u8,
-    pub text_length: u32,
-}
-
-struct EventBatchStorage {
-    events: Vec<GalfusPlatformEvent>,
-    text: Vec<u8>,
+impl Default for GalfusPlatformEvent {
+    fn default() -> Self {
+        Self {
+            kind: 0,
+            event_type: 0,
+            flags: 0,
+            window_id: 0,
+            subject_id: 0,
+            id: 0,
+            values: [0.0; 5],
+            text0_length: 0,
+            text1_length: 0,
+            text2_length: 0,
+            has_more: 0,
+            text_bytes: [0; EVENT_TEXT_CAPACITY],
+        }
+    }
 }
 
 thread_local! {
-    static EVENT_BATCHES: RefCell<HashMap<u64, Box<EventBatchStorage>>> = RefCell::new(HashMap::new());
-    static NEXT_BATCH_ID: RefCell<u64> = const { RefCell::new(1) };
+    static PENDING_EVENTS: RefCell<VecDeque<GalfusPlatformEvent>> = const { RefCell::new(VecDeque::new()) };
 }
 
 const FLAG_TRUE: u32 = 1;
@@ -59,20 +67,25 @@ const FLAG_REPEAT: u32 = 1 << 5;
 const FLAG_SCROLL_PIXELS: u32 = 1 << 6;
 const FLAG_TEXT_PRESENT: u32 = 1 << 8;
 
-fn push_text(text: &mut Vec<u8>, value: &str) -> (u32, u32) {
-    let offset = u32::try_from(text.len()).expect("event text arena exceeds u32 length");
-    text.extend_from_slice(value.as_bytes());
-    let length = u32::try_from(value.len()).expect("event text value exceeds u32 length");
-    (offset, length)
+fn push_inline_text(buf: &mut [u8; EVENT_TEXT_CAPACITY], cursor: &mut usize, value: &str) -> u8 {
+    let remaining = EVENT_TEXT_CAPACITY.saturating_sub(*cursor);
+    if remaining == 0 || value.is_empty() {
+        return 0;
+    }
+    let max_len = value.len().min(remaining);
+    let valid_len = value.floor_char_boundary(max_len);
+    buf[*cursor..*cursor + valid_len].copy_from_slice(&value.as_bytes()[..valid_len]);
+    *cursor += valid_len;
+    valid_len as u8
 }
 
-fn push_debug<T: std::fmt::Debug>(text: &mut Vec<u8>, value: T) -> (u32, u32) {
-    use std::io::Write;
-    let offset = u32::try_from(text.len()).expect("event text arena exceeds u32 length");
-    let _ = write!(text, "{value:?}");
-    let length =
-        u32::try_from(text.len() - offset as usize).expect("event text value exceeds u32 length");
-    (offset, length)
+fn push_inline_debug<T: std::fmt::Debug>(
+    buf: &mut [u8; EVENT_TEXT_CAPACITY],
+    cursor: &mut usize,
+    value: T,
+) -> u8 {
+    let formatted = format!("{value:?}");
+    push_inline_text(buf, cursor, &formatted)
 }
 
 fn modifier_flags(modifiers: galfus_platform::ModifiersState) -> u32 {
@@ -82,8 +95,9 @@ fn modifier_flags(modifiers: galfus_platform::ModifiersState) -> u32 {
         | (u32::from(modifiers.super_key) * FLAG_SUPER)
 }
 
-fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent {
+pub(crate) fn encode_event(event: PlatformEvent) -> GalfusPlatformEvent {
     let mut output = GalfusPlatformEvent::default();
+    let mut cursor = 0usize;
     match event {
         PlatformEvent::Window(event) => {
             output.kind = 1;
@@ -158,7 +172,6 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
                     output.event_type = 1;
                     output.values[2] = delta.x;
                     output.values[3] = delta.y;
-                    output.id = pointer_id;
                     output.values[4] = pressure;
                 }
                 PointerEvent::Button {
@@ -170,7 +183,8 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
                     output.event_type = 2;
                     output.values[2] = pressure;
                     output.flags = u32::from(state.is_pressed()) * FLAG_TRUE;
-                    (output.text0_offset, output.text0_length) = push_debug(text, button);
+                    output.text0_length =
+                        push_inline_debug(&mut output.text_bytes, &mut cursor, button);
                 }
                 PointerEvent::Enter { .. } => output.event_type = 3,
                 PointerEvent::Leave { .. } => output.event_type = 4,
@@ -203,12 +217,14 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
                     output.event_type = 1;
                     output.flags |= u32::from(state.is_pressed()) * FLAG_TRUE;
                     output.flags |= u32::from(repeat) * FLAG_REPEAT;
-                    (output.text0_offset, output.text0_length) = push_debug(text, physical_key);
-                    (output.text1_offset, output.text1_length) =
-                        push_text(text, logical_key.as_str());
+                    output.text0_length =
+                        push_inline_debug(&mut output.text_bytes, &mut cursor, physical_key);
+                    output.text1_length =
+                        push_inline_text(&mut output.text_bytes, &mut cursor, logical_key.as_str());
                     if let Some(value) = input_text {
                         output.flags |= FLAG_TEXT_PRESENT;
-                        (output.text2_offset, output.text2_length) = push_text(text, &value);
+                        output.text2_length =
+                            push_inline_text(&mut output.text_bytes, &mut cursor, &value);
                     }
                 }
                 KeyboardEvent::ModifiersChanged { .. } => output.event_type = 2,
@@ -219,7 +235,8 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
                     ..
                 } => {
                     output.event_type = 4;
-                    (output.text0_offset, output.text0_length) = push_text(text, &value);
+                    output.text0_length =
+                        push_inline_text(&mut output.text_bytes, &mut cursor, &value);
                     if let Some([start, end]) = selection {
                         output.flags |= FLAG_TRUE;
                         output.subject_id = start;
@@ -228,12 +245,14 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
                 }
                 KeyboardEvent::ImeCommit { text: value, .. } => {
                     output.event_type = 5;
-                    (output.text0_offset, output.text0_length) = push_text(text, &value);
+                    output.text0_length =
+                        push_inline_text(&mut output.text_bytes, &mut cursor, &value);
                 }
                 KeyboardEvent::ImeDisabled { .. } => output.event_type = 6,
                 KeyboardEvent::TextInput { text: value, .. } => {
                     output.event_type = 7;
-                    (output.text0_offset, output.text0_length) = push_text(text, &value);
+                    output.text0_length =
+                        push_inline_text(&mut output.text_bytes, &mut cursor, &value);
                 }
             }
         }
@@ -243,18 +262,21 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
             match event {
                 GamepadEvent::Connected { name, .. } => {
                     output.event_type = 1;
-                    (output.text0_offset, output.text0_length) = push_text(text, &name);
+                    output.text0_length =
+                        push_inline_text(&mut output.text_bytes, &mut cursor, &name);
                 }
                 GamepadEvent::Disconnected { .. } => output.event_type = 2,
                 GamepadEvent::Button { button, state, .. } => {
                     output.event_type = 3;
                     output.flags = u32::from(state.is_pressed()) * FLAG_TRUE;
-                    (output.text0_offset, output.text0_length) = push_debug(text, button);
+                    output.text0_length =
+                        push_inline_debug(&mut output.text_bytes, &mut cursor, button);
                 }
                 GamepadEvent::Axis { axis, value, .. } => {
                     output.event_type = 4;
                     output.values[0] = value;
-                    (output.text0_offset, output.text0_length) = push_debug(text, axis);
+                    output.text0_length =
+                        push_inline_debug(&mut output.text_bytes, &mut cursor, axis);
                 }
             }
         }
@@ -262,59 +284,43 @@ fn encode_event(event: PlatformEvent, text: &mut Vec<u8>) -> GalfusPlatformEvent
     output
 }
 
-/// Stores a converted event batch and returns its stable ABI view.
-pub fn store_event_batch(events: Vec<PlatformEvent>) -> GalfusEventBatch {
-    let mut text = Vec::new();
-    let events = events
-        .into_iter()
-        .map(|event| encode_event(event, &mut text))
-        .collect::<Vec<_>>();
-    let batch_id = NEXT_BATCH_ID.with(|next| {
-        let mut next = next.borrow_mut();
-        let id = *next;
-        *next = next.wrapping_add(1).max(1);
-        id
+/// Returns `true` if there are still unconsumed events queued from the current pump cycle.
+pub fn has_pending_events() -> bool {
+    PENDING_EVENTS.with(|q| !q.borrow().is_empty())
+}
+
+/// Enqueues a newly pumped list of platform events into the thread-local queue.
+pub fn enqueue_events(events: Vec<PlatformEvent>) {
+    PENDING_EVENTS.with(|q| {
+        let mut q = q.borrow_mut();
+        for ev in events {
+            q.push_back(encode_event(ev));
+        }
     });
-    EVENT_BATCHES.with(|batches| {
-        let mut batches = batches.borrow_mut();
-        batches.insert(batch_id, Box::new(EventBatchStorage { events, text }));
-        let storage = batches
-            .get(&batch_id)
-            .expect("inserted event batch is missing");
-        GalfusEventBatch {
-            batch_id,
-            events: storage.events.as_ptr(),
-            event_count: u32::try_from(storage.events.len())
-                .expect("event count exceeds u32 length"),
-            text_data: storage.text.as_ptr(),
-            text_length: u32::try_from(storage.text.len())
-                .expect("event text arena exceeds u32 length"),
+}
+
+/// Pops the next encoded event from the thread-local queue, setting `has_more = 1` if more remain.
+/// Returns a zeroed record (`kind == 0, has_more == 0`) if the queue is empty.
+pub fn pop_next_event() -> GalfusPlatformEvent {
+    PENDING_EVENTS.with(|q| {
+        let mut q = q.borrow_mut();
+        if let Some(mut ev) = q.pop_front() {
+            ev.has_more = u8::from(!q.is_empty());
+            ev
+        } else {
+            GalfusPlatformEvent::default()
         }
     })
 }
 
-/// Releases one event batch. The pointer ranges returned for it become invalid immediately.
-pub fn release_event_batch(batch_id: u64) -> Result<(), String> {
-    EVENT_BATCHES.with(|batches| {
-        batches
-            .borrow_mut()
-            .remove(&batch_id)
-            .map(|_| ())
-            .ok_or_else(|| format!("Event batch #{batch_id} not found or already released"))
-    })
-}
-
-/// Releases all event batches owned by the current native binding thread.
-///
-/// This invalidates every event and text pointer previously exposed through the C ABI.
-pub(crate) fn clear_event_batches() {
-    EVENT_BATCHES.with(|batches| batches.borrow_mut().clear());
-    NEXT_BATCH_ID.with(|next| *next.borrow_mut() = 1);
+/// Clears all pending events on platform shutdown.
+pub(crate) fn clear_pending_events() {
+    PENDING_EVENTS.with(|q| q.borrow_mut().clear());
 }
 
 #[cfg(test)]
-pub(crate) fn event_batch_count() -> usize {
-    EVENT_BATCHES.with(|batches| batches.borrow().len())
+pub(crate) fn pending_event_count() -> usize {
+    PENDING_EVENTS.with(|q| q.borrow().len())
 }
 
 #[cfg(test)]
@@ -323,97 +329,91 @@ mod tests {
     use galfus_platform::{KeyCode, KeyState, LogicalKey, ModifiersState};
 
     #[test]
-    fn ffi_layout_is_stable_on_64_bit_targets() {
-        assert_eq!(std::mem::size_of::<GalfusPlatformEvent>(), 72);
-        #[cfg(target_pointer_width = "64")]
-        assert_eq!(std::mem::size_of::<GalfusEventBatch>(), 40);
+    fn ffi_layout_is_128_bytes() {
+        assert_eq!(std::mem::size_of::<GalfusPlatformEvent>(), 128);
     }
 
     #[test]
-    fn event_batches_preserve_utf8_text() {
-        let batch = store_event_batch(vec![PlatformEvent::Keyboard(KeyboardEvent::Input {
-            window_id: 1,
-            physical_key: KeyCode::KeyW,
-            logical_key: LogicalKey::Character("w".into()),
-            text: Some("w".into()),
-            state: KeyState::Pressed,
-            modifiers: ModifiersState::EMPTY,
-            repeat: false,
-        })]);
-        assert_eq!(batch.event_count, 1);
-        assert!(batch.text_length > 0);
-        // SAFETY: The batch has not been released and stores exactly one event.
-        let event = unsafe { *batch.events };
-        assert_eq!(event.kind, 3);
-        assert_eq!(event.event_type, 1);
-        // SAFETY: The text range was generated from the batch's owned UTF-8 arena.
-        let physical_key = unsafe {
-            std::str::from_utf8(std::slice::from_raw_parts(
-                batch.text_data.add(event.text0_offset as usize),
-                event.text0_length as usize,
-            ))
-        }
-        .unwrap();
-        assert_eq!(physical_key, "KeyW");
+    fn inline_event_encoding_preserves_utf8_text_and_has_more() {
+        clear_pending_events();
+        enqueue_events(vec![
+            PlatformEvent::Keyboard(KeyboardEvent::Input {
+                window_id: 1,
+                physical_key: KeyCode::KeyW,
+                logical_key: LogicalKey::Character("w".into()),
+                text: Some("w".into()),
+                state: KeyState::Pressed,
+                modifiers: ModifiersState::EMPTY,
+                repeat: false,
+            }),
+            PlatformEvent::Window(WindowEvent::CloseRequested { window_id: 1 }),
+        ]);
 
-        let logical_key = unsafe {
-            std::str::from_utf8(std::slice::from_raw_parts(
-                batch.text_data.add(event.text1_offset as usize),
-                event.text1_length as usize,
-            ))
-        }
-        .unwrap();
-        assert_eq!(logical_key, "w");
-        release_event_batch(batch.batch_id).unwrap();
+        let first = pop_next_event();
+        assert_eq!(first.kind, 3);
+        assert_eq!(first.event_type, 1);
+        assert_eq!(first.has_more, 1);
+        let t0_end = first.text0_length as usize;
+        let t1_end = t0_end + first.text1_length as usize;
+        let t2_end = t1_end + first.text2_length as usize;
+        assert_eq!(
+            std::str::from_utf8(&first.text_bytes[..t0_end]).unwrap(),
+            "KeyW"
+        );
+        assert_eq!(
+            std::str::from_utf8(&first.text_bytes[t0_end..t1_end]).unwrap(),
+            "w"
+        );
+        assert_eq!(
+            std::str::from_utf8(&first.text_bytes[t1_end..t2_end]).unwrap(),
+            "w"
+        );
+
+        let second = pop_next_event();
+        assert_eq!(second.kind, 1);
+        assert_eq!(second.event_type, 3);
+        assert_eq!(second.has_more, 0);
+
+        let empty = pop_next_event();
+        assert_eq!(empty.kind, 0);
+        assert_eq!(empty.has_more, 0);
     }
 
     #[test]
     fn ime_event_encoding_preserves_text_and_utf16_selection() {
-        let mut text = Vec::new();
-        let event = encode_event(
-            PlatformEvent::Keyboard(KeyboardEvent::ImePreedit {
-                window_id: 9,
-                text: "あ😀".into(),
-                selection: Some([1, 3]),
-            }),
-            &mut text,
-        );
+        let event = encode_event(PlatformEvent::Keyboard(KeyboardEvent::ImePreedit {
+            window_id: 9,
+            text: "あ😀".into(),
+            selection: Some([1, 3]),
+        }));
         assert_eq!((event.kind, event.event_type, event.window_id), (3, 4, 9));
         assert_eq!(
             (event.subject_id, event.id, event.flags & FLAG_TRUE),
             (1, 3, FLAG_TRUE)
         );
-        assert_eq!(std::str::from_utf8(&text).unwrap(), "あ😀");
-        let commit = encode_event(
-            PlatformEvent::Keyboard(KeyboardEvent::ImeCommit {
-                window_id: 9,
-                text: "漢字".into(),
-            }),
-            &mut Vec::new(),
+        assert_eq!(
+            std::str::from_utf8(&event.text_bytes[..event.text0_length as usize]).unwrap(),
+            "あ😀"
         );
+        let commit = encode_event(PlatformEvent::Keyboard(KeyboardEvent::ImeCommit {
+            window_id: 9,
+            text: "漢字".into(),
+        }));
         assert_eq!(commit.event_type, 5);
-        let mut arena = Vec::new();
-        let input = encode_event(
-            PlatformEvent::Keyboard(KeyboardEvent::TextInput {
-                window_id: 9,
-                text: "漢字".into(),
-            }),
-            &mut arena,
+        assert_eq!(
+            std::str::from_utf8(&commit.text_bytes[..commit.text0_length as usize]).unwrap(),
+            "漢字"
         );
-        assert_eq!(input.event_type, 7);
-        assert_eq!(std::str::from_utf8(&arena).unwrap(), "漢字");
     }
 
     #[test]
-    fn clearing_event_batches_reclaims_every_pending_batch() {
-        let first = store_event_batch(Vec::new());
-        let second = store_event_batch(Vec::new());
-        assert_eq!(event_batch_count(), 2);
-
-        clear_event_batches();
-
-        assert_eq!(event_batch_count(), 0);
-        assert!(release_event_batch(first.batch_id).is_err());
-        assert!(release_event_batch(second.batch_id).is_err());
+    fn clearing_events_empties_pending_queue() {
+        clear_pending_events();
+        enqueue_events(vec![PlatformEvent::Window(WindowEvent::CloseRequested {
+            window_id: 1,
+        })]);
+        assert_eq!(pending_event_count(), 1);
+        clear_pending_events();
+        assert_eq!(pending_event_count(), 0);
     }
 }

@@ -1,4 +1,4 @@
-import type { PointerEvent } from '@galfus/transport-types';
+import type { PointerEvent, ScrollDelta } from '@galfus/transport-types';
 
 export type InteractiveTarget =
   | { type: 'collider'; entityId: number; colliderId?: number }
@@ -12,6 +12,7 @@ export type InteractiveEventType =
   | 'up'
   | 'click'
   | 'cancel'
+  | 'scroll'
   /** Movement delivered to the original pressed target, including outside its hit area. */
   | 'pressmove'
   /** Release delivered to the original pressed target, including outside its hit area. */
@@ -22,6 +23,10 @@ export interface InteractiveEvent {
   readonly realmId: number;
   readonly target: InteractiveTarget;
   readonly pointer: PointerEvent;
+  /** Normalized `[u, v]` coordinates (`0..1`) within the target surface or SVG element bounds. */
+  readonly uv?: [number, number];
+  /** Wheel / scroll delta when `type === 'scroll'`. */
+  readonly scrollDelta?: ScrollDelta;
 }
 
 export type InteractiveCallback = (event: InteractiveEvent) => void;

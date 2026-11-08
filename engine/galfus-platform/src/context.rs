@@ -520,7 +520,7 @@ impl PlatformContext {
             }
         }
 
-        Ok(events)
+        Ok(crate::event::coalesce_platform_events(events))
     }
 
     /// On browser, returns empty or collected events from DOM listeners.
@@ -528,7 +528,9 @@ impl PlatformContext {
     pub fn pump_events(&mut self) -> PlatformResult<Vec<PlatformEvent>> {
         self.reap_finished_audio_voices();
         #[cfg(feature = "browser")]
-        return Ok(std::mem::take(&mut self.browser_events.borrow_mut()));
+        return Ok(crate::event::coalesce_platform_events(std::mem::take(
+            &mut self.browser_events.borrow_mut(),
+        )));
         #[cfg(not(feature = "browser"))]
         Ok(Vec::new())
     }

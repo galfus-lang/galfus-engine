@@ -2,6 +2,7 @@ use crate::GpuShared;
 use crate::error::{GpuError, GpuResult};
 
 /// Global graphics context holding `wgpu` device, queue, and instance state.
+#[derive(Clone)]
 pub struct GpuContext {
     instance: GpuShared<wgpu::Instance>,
     adapter: GpuShared<wgpu::Adapter>,
@@ -18,7 +19,23 @@ impl GpuContext {
 
     /// Synchronously initializes a headless `GpuContext` without any surface compatibility requirements.
     pub fn new_headless() -> GpuResult<Self> {
-        Self::new(None)
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            static HEADLESS_CTX: std::sync::Mutex<Option<GpuContext>> = std::sync::Mutex::new(None);
+            let mut guard = HEADLESS_CTX
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(ctx) = guard.as_ref() {
+                return Ok(ctx.clone());
+            }
+            let ctx = Self::new(None)?;
+            *guard = Some(ctx.clone());
+            Ok(ctx)
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            Self::new(None)
+        }
     }
 
     /// Synchronously initializes a new `GpuContext` reusing an existing `wgpu::Instance`.

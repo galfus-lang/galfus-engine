@@ -207,6 +207,12 @@ pub struct Svg2D {
     pub source: String,
     /// Parsed mutable SVG XML document.
     pub doc: Option<SvgDocument>,
+    /// Lazily serialized XML cache populated on demand after DOM mutations.
+    pub cached_xml: std::sync::OnceLock<String>,
+    /// Whether `doc` has unserialized mutations relative to `source`.
+    pub xml_dirty: bool,
+    /// Monotonic counter incremented on every DOM or source mutation.
+    pub mod_seq: u64,
     /// Target raster dimensions in pixels (if None, derived from SVG viewBox/width/height).
     pub dimensions: Option<Vec2>,
     /// DPI/retina scale factor.
@@ -237,6 +243,9 @@ impl Default for Svg2D {
             label: None,
             source: String::new(),
             doc: None,
+            cached_xml: std::sync::OnceLock::new(),
+            xml_dirty: false,
+            mod_seq: 1,
             dimensions: None,
             scale_factor: 1.0,
             material_id: None,
@@ -269,6 +278,9 @@ impl Svg2D {
     pub fn set_source(&mut self, source: String) {
         self.doc = SvgDocument::parse(&source).ok();
         self.source = source;
+        self.cached_xml.take();
+        self.xml_dirty = false;
+        self.mod_seq = self.mod_seq.wrapping_add(1);
         self.dirty = true;
     }
 
@@ -277,9 +289,9 @@ impl Svg2D {
         if let Some(ref mut doc) = self.doc
             && doc.set_attribute(element_id, name, value)
         {
-            if let Ok(updated) = doc.to_xml_string() {
-                self.source = updated;
-            }
+            self.cached_xml.take();
+            self.xml_dirty = true;
+            self.mod_seq = self.mod_seq.wrapping_add(1);
             self.dirty = true;
             return true;
         }
@@ -291,9 +303,9 @@ impl Svg2D {
         if let Some(ref mut doc) = self.doc
             && doc.remove_attribute(element_id, name)
         {
-            if let Ok(updated) = doc.to_xml_string() {
-                self.source = updated;
-            }
+            self.cached_xml.take();
+            self.xml_dirty = true;
+            self.mod_seq = self.mod_seq.wrapping_add(1);
             self.dirty = true;
             return true;
         }
@@ -305,18 +317,26 @@ impl Svg2D {
         if let Some(ref mut doc) = self.doc
             && doc.set_text(element_id, text)
         {
-            if let Ok(updated) = doc.to_xml_string() {
-                self.source = updated;
-            }
+            self.cached_xml.take();
+            self.xml_dirty = true;
+            self.mod_seq = self.mod_seq.wrapping_add(1);
             self.dirty = true;
             return true;
         }
         false
     }
 
-    /// Returns the current serialized XML string of the SVG.
+    /// Returns the current serialized XML string of the SVG, serializing lazily if modified.
     pub fn current_xml(&self) -> &str {
-        &self.source
+        if !self.xml_dirty {
+            return &self.source;
+        }
+        self.cached_xml.get_or_init(|| {
+            self.doc
+                .as_ref()
+                .and_then(|d| d.to_xml_string().ok())
+                .unwrap_or_else(|| self.source.clone())
+        })
     }
 
     /// Returns all valid host logical texture IDs referenced by `<image textureId="...">` elements in this SVG.
@@ -362,6 +382,9 @@ impl From<Svg2DDesc> for Svg2D {
             label: desc.label,
             source: desc.source,
             doc,
+            cached_xml: std::sync::OnceLock::new(),
+            xml_dirty: false,
+            mod_seq: 1,
             dimensions: desc.dimensions,
             scale_factor: if desc.scale_factor <= 0.0 {
                 1.0
@@ -388,7 +411,7 @@ impl Serialize for Svg2D {
     {
         Svg2DDesc {
             label: self.label.clone(),
-            source: self.source.clone(),
+            source: self.current_xml().to_owned(),
             dimensions: self.dimensions,
             scale_factor: self.scale_factor,
             material_id: self.material_id,

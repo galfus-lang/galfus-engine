@@ -185,26 +185,13 @@ export const platformFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_platform_pump_events',
     methodName: 'platformPumpEvents',
-    doc: 'Pumps platform input events into a fixed-layout batch; its pointers expire on release or shutdown.',
+    doc: 'Pumps platform events one fixed-size 128-byte struct at a time until has_more is zero.',
     params: [
       {
-        name: 'outBatch',
-        type: { nativeStruct: 'EventBatch' },
-        doc: 'Caller-owned output event batch.',
+        name: 'outEvent',
+        type: { nativeStruct: 'PlatformEvent' },
+        doc: 'Caller-owned 128-byte output platform event struct.',
         out: true
-      }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_platform_release_event_batch',
-    methodName: 'platformReleaseEventBatch',
-    doc: 'Releases an event batch and invalidates its native pointer ranges.',
-    params: [
-      {
-        name: 'batchId',
-        type: 'u64',
-        doc: 'Batch identifier returned by platformPumpEvents.'
       }
     ],
     returnType: 'i32'

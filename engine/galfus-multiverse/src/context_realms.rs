@@ -115,6 +115,9 @@ impl MultiverseContext {
         self.post_processor = None;
         self.surfaces.clear();
         self.window_sizes.clear();
+        if let Some(gpu) = &self.gpu_manager {
+            let _ = gpu.device().poll(wgpu::PollType::wait_indefinitely());
+        }
         self.gpu_manager = None;
         self.cached_schedule = None;
         self.anti_aliasing = AntiAliasingMode::None;

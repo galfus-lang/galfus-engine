@@ -134,19 +134,15 @@ fn replacing_an_svg_reclaims_its_previous_geometry() {
         .insert(SvgGeometry2D {
             vertex_buffer,
             index_buffer,
+            vertex_capacity: 16,
+            index_capacity: 16,
             index_count: 0,
             dimensions: Vec2::ONE,
         })
         .expect("the empty pool accepts the test geometry");
-    manager.instances.insert(
-        7,
-        SvgInstance2D {
-            svg: Svg2D::default(),
-            transform: Transform2D::default(),
-            geometry_handle: Some(handle),
-            sub_meshes: Vec::new(),
-        },
-    );
+    let mut inst = SvgInstance2D::new(Svg2D::default(), Transform2D::default());
+    inst.geometry_handle = Some(handle);
+    manager.instances.insert(7, inst);
 
     manager.insert(7, Svg2D::default(), Transform2D::default());
 

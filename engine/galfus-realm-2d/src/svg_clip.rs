@@ -21,7 +21,7 @@ pub struct ClipLayer {
 
 /// Maps an (x, y) point through a tiny_skia transform.
 #[inline]
-fn map_pt(ts: &tiny_skia::Transform, x: f32, y: f32) -> (f32, f32) {
+pub(crate) fn map_pt(ts: &tiny_skia::Transform, x: f32, y: f32) -> (f32, f32) {
     let mut pt = tiny_skia::Point::from_xy(x, y);
     ts.map_point(&mut pt);
     (pt.x, pt.y)
@@ -468,19 +468,12 @@ pub fn tessellate_image_node(
     ];
 
     let mut local_buf: VertexBuffers<SvgVertex, u32> = VertexBuffers::new();
-    for (i, (cx, cy)) in corners.iter().enumerate() {
+    let uvs = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+    for ((cx, cy), (u_tex, v_tex)) in corners.iter().zip(uvs) {
         let (mx, my) = map_pt(&transform, *cx, *cy);
-        let local_x = (mx - half_w) * inv_w;
-        let local_y = (half_h - my) * inv_h;
-        let (u_tex, v_tex) = match i {
-            0 => (0.0, 0.0),
-            1 => (1.0, 0.0),
-            2 => (1.0, 1.0),
-            _ => (0.0, 1.0),
-        };
         local_buf.vertices.push([
-            local_x,
-            local_y,
+            (mx - half_w) * inv_w,
+            (half_h - my) * inv_h,
             0.0,
             u_tex,
             v_tex,
@@ -491,7 +484,6 @@ pub fn tessellate_image_node(
         ]);
     }
     local_buf.indices.extend_from_slice(&[0, 1, 2, 2, 3, 0]);
-
     apply_clip_stack(&mut local_buf, clip_stack);
 
     let pixelated = matches!(
@@ -507,6 +499,93 @@ pub fn tessellate_image_node(
         all_buffers,
         sub_meshes,
     );
-
     Ok(())
+}
+
+thread_local! {
+    static TEXT_MESH_CACHE: std::cell::RefCell<std::collections::HashMap<u64, VertexBuffers<SvgVertex, u32>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+fn hash_paint(paint: &usvg::Paint, hasher: &mut std::collections::hash_map::DefaultHasher) {
+    use std::hash::Hash;
+    match paint {
+        usvg::Paint::Color(c) => (1u8, c.red, c.green, c.blue).hash(hasher),
+        usvg::Paint::LinearGradient(lg) => (2u8, lg.id()).hash(hasher),
+        usvg::Paint::RadialGradient(rg) => (3u8, rg.id()).hash(hasher),
+        usvg::Paint::Pattern(p) => (4u8, p.id()).hash(hasher),
+    }
+}
+
+/// Computes a 64-bit cache key for an unclipped `<text>` node and appends its cached mesh
+/// directly if already tessellated. Returns `Some(key)` on cache miss.
+pub fn try_append_cached_text(
+    text: &usvg::Text,
+    group_opacity: f32,
+    vw: f32,
+    vh: f32,
+    all_buffers: &mut VertexBuffers<SvgVertex, u32>,
+    sub_meshes: &mut Vec<SvgSubMesh>,
+) -> Option<u64> {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    (group_opacity.to_bits(), vw.to_bits(), vh.to_bits()).hash(&mut hasher);
+    for chunk in text.chunks() {
+        chunk.text().hash(&mut hasher);
+    }
+    let flat = text.flattened();
+    let gt = flat.abs_transform();
+    [gt.sx, gt.kx, gt.ky, gt.sy, gt.tx, gt.ty]
+        .map(f32::to_bits)
+        .hash(&mut hasher);
+    for child in flat.children() {
+        if let usvg::Node::Path(p) = child {
+            p.is_visible().hash(&mut hasher);
+            let t = p.abs_transform();
+            [t.sx, t.kx, t.ky, t.sy, t.tx, t.ty]
+                .map(f32::to_bits)
+                .hash(&mut hasher);
+            let b = p.bounding_box();
+            [b.left(), b.top(), b.right(), b.bottom()]
+                .map(f32::to_bits)
+                .hash(&mut hasher);
+            if let Some(fill) = p.fill() {
+                fill.opacity().get().to_bits().hash(&mut hasher);
+                hash_paint(fill.paint(), &mut hasher);
+            }
+            if let Some(stroke) = p.stroke() {
+                (
+                    stroke.width().get().to_bits(),
+                    stroke.opacity().get().to_bits(),
+                )
+                    .hash(&mut hasher);
+                hash_paint(stroke.paint(), &mut hasher);
+            }
+        }
+    }
+    let key = hasher.finish();
+    let hit = TEXT_MESH_CACHE.with(|cache| {
+        cache.borrow().get(&key).map(|buf| {
+            append_sub_mesh(buf, None, false, all_buffers, sub_meshes);
+        })
+    });
+    if hit.is_some() { None } else { Some(key) }
+}
+
+/// Stores a newly tessellated `<text>` mesh in the thread-local cache and appends it.
+pub fn store_and_append_cached_text(
+    key: u64,
+    text_buf: VertexBuffers<SvgVertex, u32>,
+    all_buffers: &mut VertexBuffers<SvgVertex, u32>,
+    sub_meshes: &mut Vec<SvgSubMesh>,
+) {
+    append_sub_mesh(&text_buf, None, false, all_buffers, sub_meshes);
+    TEXT_MESH_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if cache.len() >= 512 {
+            cache.clear();
+        }
+        cache.insert(key, text_buf);
+    });
 }

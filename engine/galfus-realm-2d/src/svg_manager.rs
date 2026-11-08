@@ -19,6 +19,8 @@ pub const SVG_DEFAULT_MATERIAL_ID: u32 = galfus_core::id::RESERVED_RANGE_START;
 pub struct SvgGeometry2D {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
+    pub vertex_capacity: u64,
+    pub index_capacity: u64,
     pub index_count: u32,
     pub dimensions: Vec2,
 }
@@ -37,6 +39,7 @@ pub struct SvgInstance2D {
     pub transform: Transform2D,
     pub geometry_handle: Option<Handle<SvgGeometry2D>>,
     pub sub_meshes: Vec<SvgSubMeshBinding>,
+    cached_tree: std::sync::Mutex<Option<(u64, resvg::usvg::Tree)>>,
 }
 
 impl SvgInstance2D {
@@ -46,7 +49,32 @@ impl SvgInstance2D {
             transform,
             geometry_handle: None,
             sub_meshes: Vec::new(),
+            cached_tree: std::sync::Mutex::new(None),
         }
+    }
+
+    fn with_parsed_tree<R>(
+        &self,
+        font_db: &Arc<fontdb::Database>,
+        default_font_family: &str,
+        f: impl FnOnce(&resvg::usvg::Tree) -> R,
+    ) -> Result<R, String> {
+        let seq = self.svg.mod_seq;
+        let mut guard = self
+            .cached_tree
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let needs_parse = guard
+            .as_ref()
+            .is_none_or(|(cached_seq, _)| *cached_seq != seq);
+        if needs_parse {
+            let xml = self.svg.current_xml();
+            let tree =
+                crate::svg_tessellator::parse_svg(xml, font_db.clone(), default_font_family)?;
+            *guard = Some((seq, tree));
+        }
+        let (_, tree) = guard.as_ref().expect("cached_tree populated above");
+        Ok(f(tree))
     }
 }
 
@@ -135,6 +163,9 @@ impl SvgManager2D {
 
         for inst in self.instances.values_mut() {
             inst.svg.dirty = true;
+            if let Ok(mut guard) = inst.cached_tree.lock() {
+                *guard = None;
+            }
         }
 
         Ok(family_name)
@@ -183,12 +214,9 @@ impl SvgManager2D {
         let Some(instance) = self.instances.get(&svg_id) else {
             return Ok(None);
         };
-        crate::svg_tessellator::svg_element_rect(
-            &instance.svg.source,
-            element_id,
-            self.font_db.clone(),
-            &self.default_font_family,
-        )
+        instance.with_parsed_tree(&self.font_db, &self.default_font_family, |tree| {
+            crate::svg_tessellator::svg_element_rect_from_tree(tree, element_id)
+        })
     }
 
     /// Reads the raw text shaping layout for the current SVG document.
@@ -298,64 +326,105 @@ impl SvgManager2D {
 
         for (&id, instance) in &mut self.instances {
             if instance.svg.dirty || instance.geometry_handle.is_none() {
-                let xml = instance.svg.current_xml();
-                match crate::svg_tessellator::tessellate_svg(
-                    xml,
-                    self.font_db.clone(),
-                    &self.default_font_family,
-                ) {
+                let tess_res = instance
+                    .with_parsed_tree(&self.font_db, &self.default_font_family, |tree| {
+                        crate::svg_tessellator::tessellate_svg_tree(tree)
+                    })
+                    .and_then(|r| r);
+                match tess_res {
                     Ok(mesh) => {
-                        Self::release_instance_geometries(&mut self.pool, instance);
-                        instance.geometry_handle = None;
-                        instance.sub_meshes.clear();
+                        let sub_list: Vec<crate::svg_tessellator::SvgSubMesh> =
+                            if !mesh.sub_meshes.is_empty() {
+                                mesh.sub_meshes
+                                    .into_iter()
+                                    .filter(|s| !s.indices.is_empty() && !s.vertices.is_empty())
+                                    .collect()
+                            } else if !mesh.indices.is_empty() && !mesh.vertices.is_empty() {
+                                vec![crate::svg_tessellator::SvgSubMesh {
+                                    vertices: mesh.vertices,
+                                    indices: mesh.indices,
+                                    texture_id: None,
+                                    pixelated: false,
+                                }]
+                            } else {
+                                Vec::new()
+                            };
 
-                        let sub_list = if !mesh.sub_meshes.is_empty() {
-                            mesh.sub_meshes
-                        } else if !mesh.indices.is_empty() && !mesh.vertices.is_empty() {
-                            vec![crate::svg_tessellator::SvgSubMesh {
-                                vertices: mesh.vertices,
-                                indices: mesh.indices,
-                                texture_id: None,
-                                pixelated: false,
-                            }]
-                        } else {
-                            Vec::new()
-                        };
-
-                        for (sub_idx, sub) in sub_list.into_iter().enumerate() {
-                            if sub.indices.is_empty() || sub.vertices.is_empty() {
-                                continue;
-                            }
-                            let vbo = crate::gpu::create_gpu_buffer(
-                                device,
-                                &format!("galfus_svg_{id}_{sub_idx}_vbo"),
-                                std::mem::size_of_val(&sub.vertices[..]) as u64,
-                                wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                        let can_reuse = instance.sub_meshes.len() == sub_list.len()
+                            && !sub_list.is_empty()
+                            && instance.sub_meshes.iter().zip(sub_list.iter()).all(
+                                |(binding, sub)| {
+                                    let vb_bytes = std::mem::size_of_val(&sub.vertices[..]) as u64;
+                                    let ib_bytes = std::mem::size_of_val(&sub.indices[..]) as u64;
+                                    self.pool.get(binding.handle).is_ok_and(|g| {
+                                        g.vertex_capacity >= vb_bytes
+                                            && g.index_capacity >= ib_bytes
+                                    })
+                                },
                             );
-                            queue.write_buffer(&vbo, 0, bytemuck::cast_slice(&sub.vertices));
 
-                            let ibo = crate::gpu::create_gpu_buffer(
-                                device,
-                                &format!("galfus_svg_{id}_{sub_idx}_ibo"),
-                                std::mem::size_of_val(&sub.indices[..]) as u64,
-                                wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                            );
-                            queue.write_buffer(&ibo, 0, bytemuck::cast_slice(&sub.indices));
-
-                            if let Ok(handle) = self.pool.insert(SvgGeometry2D {
-                                vertex_buffer: vbo,
-                                index_buffer: ibo,
-                                index_count: sub.indices.len() as u32,
-                                dimensions: mesh.dimensions,
-                            }) {
-                                if instance.geometry_handle.is_none() {
-                                    instance.geometry_handle = Some(handle);
+                        if can_reuse {
+                            for (binding, sub) in instance.sub_meshes.iter_mut().zip(sub_list) {
+                                if let Ok(geom) = self.pool.get_mut(binding.handle) {
+                                    queue.write_buffer(
+                                        &geom.vertex_buffer,
+                                        0,
+                                        bytemuck::cast_slice(&sub.vertices),
+                                    );
+                                    queue.write_buffer(
+                                        &geom.index_buffer,
+                                        0,
+                                        bytemuck::cast_slice(&sub.indices),
+                                    );
+                                    geom.index_count = sub.indices.len() as u32;
+                                    geom.dimensions = mesh.dimensions;
                                 }
-                                instance.sub_meshes.push(SvgSubMeshBinding {
-                                    handle,
-                                    texture_id: sub.texture_id,
-                                    pixelated: sub.pixelated,
-                                });
+                                binding.texture_id = sub.texture_id;
+                                binding.pixelated = sub.pixelated;
+                            }
+                        } else {
+                            Self::release_instance_geometries(&mut self.pool, instance);
+                            instance.geometry_handle = None;
+                            instance.sub_meshes.clear();
+
+                            for (sub_idx, sub) in sub_list.into_iter().enumerate() {
+                                let vb_bytes = std::mem::size_of_val(&sub.vertices[..]) as u64;
+                                let ib_bytes = std::mem::size_of_val(&sub.indices[..]) as u64;
+                                let vb_cap = ((vb_bytes * 3 / 2).max(16384) + 3) & !3;
+                                let ib_cap = ((ib_bytes * 3 / 2).max(16384) + 3) & !3;
+                                let vbo = crate::gpu::create_gpu_buffer(
+                                    device,
+                                    &format!("galfus_svg_{id}_{sub_idx}_vbo"),
+                                    vb_cap,
+                                    wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                                );
+                                queue.write_buffer(&vbo, 0, bytemuck::cast_slice(&sub.vertices));
+
+                                let ibo = crate::gpu::create_gpu_buffer(
+                                    device,
+                                    &format!("galfus_svg_{id}_{sub_idx}_ibo"),
+                                    ib_cap,
+                                    wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                                );
+                                queue.write_buffer(&ibo, 0, bytemuck::cast_slice(&sub.indices));
+
+                                if let Ok(handle) = self.pool.insert(SvgGeometry2D {
+                                    vertex_buffer: vbo,
+                                    index_buffer: ibo,
+                                    vertex_capacity: vb_cap,
+                                    index_capacity: ib_cap,
+                                    index_count: sub.indices.len() as u32,
+                                    dimensions: mesh.dimensions,
+                                }) {
+                                    if instance.geometry_handle.is_none() {
+                                        instance.geometry_handle = Some(handle);
+                                    }
+                                    instance.sub_meshes.push(SvgSubMeshBinding {
+                                        handle,
+                                        texture_id: sub.texture_id,
+                                        pixelated: sub.pixelated,
+                                    });
+                                }
                             }
                         }
                         instance.svg.dirty = false;

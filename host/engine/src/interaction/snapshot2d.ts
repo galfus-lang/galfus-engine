@@ -157,12 +157,12 @@ export class TargetSnapshot2D {
     vec2.transformMat2d(this.point, worldPoint, this.svgInverse);
     const x = (this.point[0] / this.svgWidth + 0.5) * rect.viewportWidth;
     const y = (0.5 - this.point[1] / this.svgHeight) * rect.viewportHeight;
-    const inside =
-      x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
-    if (inside && outUv) {
+    if (outUv) {
       outUv[0] = Math.max(0, Math.min(1, (x - rect.x) / (rect.width || 1)));
       outUv[1] = Math.max(0, Math.min(1, (y - rect.y) / (rect.height || 1)));
     }
+    const inside =
+      x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
     return inside;
   }
 }

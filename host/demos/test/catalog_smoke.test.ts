@@ -8,12 +8,12 @@ import {
 } from '../src/catalog';
 
 describe('@galfus/demos catalog & headless smoke suite', () => {
-  it('registers all 32 demos across 5 categories with unique IDs', () => {
-    expect(DEMO_CATALOG.length).toBe(32);
-    expect(DEMO_CATEGORIES.length).toBe(5);
+  it('registers all 33 demos across 6 categories with unique IDs', () => {
+    expect(DEMO_CATALOG.length).toBe(33);
+    expect(DEMO_CATEGORIES.length).toBe(6);
 
     const ids = new Set(DEMO_CATALOG.map((d) => d.id));
-    expect(ids.size).toBe(32);
+    expect(ids.size).toBe(33);
 
     for (const cat of DEMO_CATEGORIES) {
       const entries = filterDemosByCategory(cat);
@@ -22,6 +22,8 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
   });
 
   it('resolves demos by exact ID, alias, and fuzzy search query', () => {
+    expect(findDemo('ui1')?.id).toBe('ui1');
+    expect(findDemo('svg-image')?.id).toBe('ui1');
     expect(findDemo('3d5')?.id).toBe('3d5');
     expect(findDemo('textured-particles-3d')?.id).toBe('3d5');
     expect(findDemo('phys3d2')?.id).toBe('phys3d2');
@@ -88,8 +90,8 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
     }
   }, 30000);
 
-  it('runs all Host & Interaction demos headlessly', async () => {
-    const hostIds = ['tutorial', 'interaction', 'text-input', 'trans-realm'];
+  it('runs all Host & Interaction and UI demos headlessly', async () => {
+    const hostIds = ['tutorial', 'interaction', 'text-input', 'trans-realm', 'ui1'];
     for (const id of hostIds) {
       const demo = findDemo(id);
       expect(demo).toBeDefined();

@@ -32,12 +32,19 @@ import { runDemo3d8 } from './realm3d/d3d8-instancing';
 import { runDemo3d9 } from './realm3d/d3d9-sides-normals';
 import { runDemo3d10 } from './realm3d/d3d10-morph-targets';
 import { runDemo3d11 } from './realm3d/d3d11-imported-skybox';
+import { runDemoUi1 } from './ui/ui1-pointer-wheel-image';
 
 export type DemoCategory =
-  'Host & Interaction' | 'Physics & Anchors' | 'Multiverse' | 'Realm 3D' | 'Realm 2D & Animation';
+  | 'Host & Interaction'
+  | 'UI'
+  | 'Physics & Anchors'
+  | 'Multiverse'
+  | 'Realm 3D'
+  | 'Realm 2D & Animation';
 
 export const DEMO_CATEGORIES: readonly DemoCategory[] = [
   'Host & Interaction',
+  'UI',
   'Physics & Anchors',
   'Multiverse',
   'Realm 3D',
@@ -97,7 +104,19 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     run: runTransRealmDemo
   },
 
-  // 2. Physics & Anchors (5 demos)
+  // 2. UI (1 demo)
+  {
+    id: 'ui1',
+    aliases: ['ui-events', 'svg-image', 'wheel'],
+    title: 'SVG Pointer, Wheel & Engine Texture <image> Lab',
+    category: 'UI',
+    tags: ['ui', 'svg', 'pointer', 'wheel', 'scroll', 'image', 'textureId', 'clipPath'],
+    description:
+      'Interactive SVG UI receiving pointer and wheel scroll events, zooming/panning engine textures inside <image textureId="..."> and <clipPath>.',
+    run: runDemoUi1
+  },
+
+  // 3. Physics & Anchors (5 demos)
   {
     id: 'anchor1',
     aliases: ['anchors', 'kinematic-anchors'],

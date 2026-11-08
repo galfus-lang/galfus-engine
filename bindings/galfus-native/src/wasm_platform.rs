@@ -164,19 +164,6 @@ pub fn platform_pump_events() -> Result<JsUnknown> {
     env.to_js_value(&events)
 }
 
-/// Releases a native event batch created through the C ABI.
-///
-/// Node-API event pumping returns JavaScript values directly, so normal Node callers never need
-/// this. It remains exported to keep the generated API surface aligned with the C bindings.
-#[wasm_bindgen(js_name = "platformReleaseEventBatch")]
-pub fn platform_release_event_batch(batch_id: f64) -> Result<()> {
-    let batch_id = Ok::<u64, std::convert::Infallible>(batch_id as u64).map_err(|_| {
-        Error::from_reason(Status::InvalidArg, "batchId must be a non-negative u64")
-    })?;
-    crate::ffi_event_batch::release_event_batch(batch_id)
-        .map_err(|error| Error::from_reason(Status::GenericFailure, error))
-}
-
 #[wasm_bindgen(js_name = "platformGetClipboardText")]
 pub fn platform_get_clipboard_text() -> Result<String> {
     with_context_mut(|ctx| ctx.get_clipboard_text().map_err(|e| e.to_string()))

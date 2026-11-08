@@ -76,7 +76,7 @@ function renderDescriptor(desc: DescSpec): string {
 
 function mapParamTsType(type: DataType): string {
   if (isNativeStruct(type)) {
-    if (type.nativeStruct === 'EventBatch') return 'never';
+    if (type.nativeStruct === 'PlatformEvent') return 'never';
     return type.nativeStruct === 'SpatialAudio' ? 'SpatialAudio' : type.nativeStruct;
   }
   if (isBuffer(type)) {
@@ -230,7 +230,7 @@ export class TypeScriptStrategy implements CodegenStrategy {
         .map((p) => `${p.name}: ${mapParamTsType(p.type)}`)
         .join(', ');
       const baseReturnType = outStruct
-        ? outStruct === 'EventBatch'
+        ? outStruct === 'PlatformEvent'
           ? 'PlatformEvent[]'
           : outStruct === 'CameraLookAt3D'
             ? 'CameraLookAt3DStateDesc'

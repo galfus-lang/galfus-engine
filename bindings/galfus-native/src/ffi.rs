@@ -382,46 +382,36 @@ pub unsafe extern "C" fn galfus_window_set_icon(
     }
 }
 
-/// Pumps pending platform events into a stable fixed-layout batch.
+/// Pumps pending platform events and writes the next 128-byte `GalfusPlatformEvent` record into `out_event`.
 ///
-/// The returned pointers remain valid until `galfus_platform_release_event_batch` is called or
-/// platform shutdown, whichever happens first.
+/// - If `out_event.kind == 0`, no events were available.
+/// - If `out_event.has_more == 1`, more events remain queued in the current cycle and the caller
+///   should invoke `galfus_platform_pump_events` again until `has_more == 0`.
 ///
 /// # Safety
 ///
-/// `out_batch` must be a non-null, valid pointer to writable `GalfusEventBatch` storage.
+/// `out_event` must be a non-null, valid pointer to writable `GalfusPlatformEvent` storage (128 bytes).
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_platform_pump_events(
-    out_batch: *mut crate::ffi_event_batch::GalfusEventBatch,
+    out_event: *mut crate::ffi_event_batch::GalfusPlatformEvent,
 ) -> i32 {
-    if out_batch.is_null() {
+    if out_event.is_null() {
         set_last_error("Null pointer passed to platform_pump_events");
         return -1;
     }
-    match with_context_mut(|ctx| ctx.pump_events().map_err(|error| error.to_string())) {
-        Ok(events) => {
-            let batch = crate::ffi_event_batch::store_event_batch(events);
-            // SAFETY: The pointer was checked above and points to one caller-owned output struct.
-            unsafe { *out_batch = batch };
-            0
-        }
-        Err(error) => {
-            set_last_error(&error);
-            -1
+    if !crate::ffi_event_batch::has_pending_events() {
+        match with_context_mut(|ctx| ctx.pump_events().map_err(|error| error.to_string())) {
+            Ok(events) => crate::ffi_event_batch::enqueue_events(events),
+            Err(error) => {
+                set_last_error(&error);
+                return -1;
+            }
         }
     }
-}
-
-/// Releases a platform event batch and invalidates all pointers in its view.
-#[unsafe(no_mangle)]
-pub extern "C" fn galfus_platform_release_event_batch(batch_id: u64) -> i32 {
-    match crate::ffi_event_batch::release_event_batch(batch_id) {
-        Ok(()) => 0,
-        Err(error) => {
-            set_last_error(&error);
-            -1
-        }
-    }
+    let next = crate::ffi_event_batch::pop_next_event();
+    // SAFETY: `out_event` was checked for null above and points to caller-owned `GalfusPlatformEvent` storage.
+    unsafe { *out_event = next };
+    0
 }
 
 /// Returns the current text stored in the platform clipboard as a newly allocated C string, or null on failure.
