@@ -33,6 +33,7 @@ import { runDemo3d9 } from './realm3d/d3d9-sides-normals';
 import { runDemo3d10 } from './realm3d/d3d10-morph-targets';
 import { runDemo3d11 } from './realm3d/d3d11-imported-skybox';
 import { runDemoUi1 } from './ui/ui1-pointer-wheel-image';
+import { runDemoUi2 } from './ui/ui2-panels-layout';
 
 export type DemoCategory =
   | 'Host & Interaction'
@@ -104,7 +105,7 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     run: runTransRealmDemo
   },
 
-  // 2. UI (1 demo)
+  // 2. UI (2 demos)
   {
     id: 'ui1',
     aliases: ['ui-events', 'svg-image', 'wheel'],
@@ -114,6 +115,16 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     description:
       'Interactive SVG UI receiving pointer and wheel scroll events, zooming/panning engine textures inside <image textureId="..."> and <clipPath>.',
     run: runDemoUi1
+  },
+  {
+    id: 'ui2',
+    aliases: ['panels', 'split-group', 'scroll-panel', 'layout'],
+    title: 'Panels, SplitGroup, ScrollPanel & Layout Solver',
+    category: 'UI',
+    tags: ['ui', 'panel', 'split', 'sash', 'scroll', 'scrollbar', 'grid', 'flex', 'layout', 'svg'],
+    description:
+      'Auto-generated SVG panel hierarchy with horizontal/vertical SplitGroup sashes, ScrollPanel wheel/thumb scrolling, grid/flex layouts, and floating resizable panels.',
+    run: runDemoUi2
   },
 
   // 3. Physics & Anchors (5 demos)

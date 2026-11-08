@@ -5,11 +5,13 @@ import {
   type WindowId
 } from '@galfus/engine';
 import { type Focusable, FocusManager } from './focus';
+import { UiRoot, type UiRootOptions } from './panel/root';
 import { TextInput, type TextInputOptions } from './text/input';
 
-/** Coordinates UI focus, Tab navigation, and SVG text inputs on top of a `MultiverseRuntime`. */
+/** Coordinates UI focus, Tab navigation, SVG text inputs, and panel hierarchies on top of a `MultiverseRuntime`. */
 export class UiSystem {
   private readonly _textInputs = new Map<Focusable, TextInput>();
+  private readonly _roots = new Set<UiRoot>();
   private readonly _focus: FocusManager;
   private readonly _unobserve: () => void;
   private _disposed = false;
@@ -116,8 +118,18 @@ export class UiSystem {
     }
   }
 
-  /** Clears all registered focusables and text inputs while remaining attached to the runtime. */
+  /** Creates a `UiRoot` that auto-generates and manages an `Svg2D` panel hierarchy in `realm`. */
+  createRoot(realm: Realm2D, options: UiRootOptions = {}): UiRoot {
+    if (this._disposed) throw new Error('UiSystem is disposed.');
+    const root = new UiRoot(this.runtime, realm, options);
+    this._roots.add(root);
+    return root;
+  }
+
+  /** Clears all registered focusables, text inputs, and UI roots while remaining attached to the runtime. */
   reset(): void {
+    for (const root of [...this._roots]) root.dispose();
+    this._roots.clear();
     for (const input of [...this._textInputs.values()]) input.dispose();
     this._focus.dispose();
   }

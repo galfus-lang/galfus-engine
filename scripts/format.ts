@@ -1,14 +1,18 @@
 type Command = {
   label: string;
   args: string[];
+  requiredBinary?: string;
+  resolveArgs?: () => string[] | null;
 };
 
 const isCheck = Bun.argv.includes('--check');
+const isCI = Boolean(process.env.CI);
 
 const COMMANDS: Command[] = [
   {
     label: 'cargo fmt',
-    args: ['cargo', 'fmt', '--all', ...(isCheck ? ['--check'] : [])]
+    args: ['cargo', 'fmt', '--all', ...(isCheck ? ['--check'] : [])],
+    requiredBinary: 'cargo'
   },
   {
     label: 'clean imports (ts)',
@@ -24,23 +28,49 @@ const COMMANDS: Command[] = [
       'clang-format',
       ...(isCheck ? ['--dry-run', '--Werror'] : ['-i']),
       'examples/feature-tour/runners/c/main.c'
-    ]
+    ],
+    requiredBinary: 'clang-format'
   },
   {
     label: 'ruff',
-    args: [
-      'uv',
-      'tool',
-      'run',
-      'ruff',
-      'format',
-      ...(isCheck ? ['--check'] : []),
-      'examples/feature-tour/runners/python'
-    ]
+    args: [],
+    resolveArgs: () => {
+      if (Bun.which('uv')) {
+        return [
+          'uv',
+          'tool',
+          'run',
+          'ruff',
+          'format',
+          ...(isCheck ? ['--check'] : []),
+          'examples/feature-tour/runners/python'
+        ];
+      }
+      if (Bun.which('ruff')) {
+        return [
+          'ruff',
+          'format',
+          ...(isCheck ? ['--check'] : []),
+          'examples/feature-tour/runners/python'
+        ];
+      }
+      return null;
+    }
   },
   {
     label: 'stylua',
-    args: ['stylua', ...(isCheck ? ['--check'] : []), 'examples/feature-tour/runners/lua']
+    args: [],
+    resolveArgs: () => {
+      if (Bun.which('stylua')) {
+        return ['stylua', ...(isCheck ? ['--check'] : []), 'examples/feature-tour/runners/lua'];
+      }
+      return [
+        'bunx',
+        'stylua',
+        ...(isCheck ? ['--check'] : []),
+        'examples/feature-tour/runners/lua'
+      ];
+    }
   },
   {
     label: 'dotnet format',
@@ -49,14 +79,33 @@ const COMMANDS: Command[] = [
       'format',
       'examples/feature-tour/runners/csharp/FeatureTour.csproj',
       ...(isCheck ? ['--verify-no-changes'] : [])
-    ]
+    ],
+    requiredBinary: 'dotnet'
   }
 ];
 
 async function runCommand(cmd: Command): Promise<void> {
+  const args = cmd.resolveArgs ? cmd.resolveArgs() : cmd.args;
+  if (!args) {
+    if (isCI) {
+      throw new Error(`Required tool for '${cmd.label}' not found in PATH on CI.`);
+    }
+    console.log(`\x1b[33m==> [format]\x1b[0m ${cmd.label} (skipped: tool not found in $PATH)`);
+    return;
+  }
+
+  const binary = cmd.requiredBinary ?? args[0]!;
+  if (!Bun.which(binary)) {
+    if (isCI) {
+      throw new Error(`Executable '${binary}' required for '${cmd.label}' not found in PATH.`);
+    }
+    console.log(`\x1b[33m==> [format]\x1b[0m ${cmd.label} (skipped: ${binary} not found in $PATH)`);
+    return;
+  }
+
   console.log(`\x1b[36m==> [format]\x1b[0m ${cmd.label}`);
   const proc = Bun.spawn({
-    cmd: cmd.args,
+    cmd: args,
     cwd: process.cwd(),
     stdout: 'inherit',
     stderr: 'inherit',

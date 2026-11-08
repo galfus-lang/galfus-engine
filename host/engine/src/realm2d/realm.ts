@@ -41,6 +41,34 @@ import {
 } from './components';
 import { Realm2DSyncSystem } from './sync';
 
+const NON_GEOMETRIC_SVG_ATTRIBUTES = new Set([
+  'fill',
+  'fill-rule',
+  'fill-opacity',
+  'stroke',
+  'stroke-width',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'stroke-miterlimit',
+  'stroke-dasharray',
+  'stroke-dashoffset',
+  'stroke-opacity',
+  'opacity',
+  'color',
+  'visibility',
+  'display',
+  'stop-color',
+  'stop-opacity',
+  'cursor',
+  'pointer-events',
+  'image-rendering',
+  'shape-rendering',
+  'text-rendering',
+  'clip-path',
+  'mask',
+  'filter'
+]);
+
 export class Realm2D implements RealmConnector {
   readonly realmKind: RealmKind = '2d';
   readonly realmId: RealmId;
@@ -368,7 +396,16 @@ export class Realm2D implements RealmConnector {
     value: string
   ): void {
     const svgId = this._resolveSvgId(svg);
-    this.invalidateSvgCache(svgId);
+    const lowerName = name.toLowerCase();
+    if (lowerName === 'viewbox' || elementId === '') {
+      this.invalidateSvgCache(svgId);
+    } else if (!NON_GEOMETRIC_SVG_ATTRIBUTES.has(lowerName)) {
+      const entry = this._svgCache.get(svgId);
+      if (entry) {
+        entry.rects.delete(elementId);
+        entry.layouts.delete(elementId);
+      }
+    }
     if (this._engine) {
       if (!this.syncSystem.isSvgSynced(svgId)) {
         this.flush();
@@ -383,7 +420,16 @@ export class Realm2D implements RealmConnector {
     name: string
   ): void {
     const svgId = this._resolveSvgId(svg);
-    this.invalidateSvgCache(svgId);
+    const lowerName = name.toLowerCase();
+    if (lowerName === 'viewbox' || elementId === '') {
+      this.invalidateSvgCache(svgId);
+    } else if (!NON_GEOMETRIC_SVG_ATTRIBUTES.has(lowerName)) {
+      const entry = this._svgCache.get(svgId);
+      if (entry) {
+        entry.rects.delete(elementId);
+        entry.layouts.delete(elementId);
+      }
+    }
     if (this._engine) {
       if (!this.syncSystem.isSvgSynced(svgId)) {
         this.flush();
@@ -398,7 +444,11 @@ export class Realm2D implements RealmConnector {
     text: string
   ): void {
     const svgId = this._resolveSvgId(svg);
-    this.invalidateSvgCache(svgId);
+    const entry = this._svgCache.get(svgId);
+    if (entry) {
+      entry.rects.delete(elementId);
+      entry.layouts.delete(elementId);
+    }
     if (this._engine) {
       if (!this.syncSystem.isSvgSynced(svgId)) {
         this.flush();

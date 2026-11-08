@@ -379,7 +379,8 @@ export class MultiverseRuntime {
     this._elapsedSeconds += timing.dt;
 
     // 2. Pump platform events internally (separated into structural window pass and urgent input pass)
-    const platformEvents = this.platform.pumpEvents();
+    const rawEvents = this.platform.pumpEvents();
+    const platformEvents = coalescePlatformEvents(rawEvents);
     if (platformEvents.length > 0) {
       const platformListeners = this._eventListeners.get('platform');
       const dispatchCommon = (event: PlatformEvent) => {
@@ -476,6 +477,37 @@ export class MultiverseRuntime {
     // 10. Step post-render stage: postRender (metrics, cleanups) AFTER dispatch
     this.multiverse.stepRealmsPostRender(context);
   }
+}
+
+/**
+ * Coalesces consecutive pointer move events for the same window and pointer within a single tick,
+ * accumulating deltas while retaining the most recent position.
+ */
+function coalescePlatformEvents(events: PlatformEvent[]): PlatformEvent[] {
+  if (events.length <= 1) return events;
+  const result: PlatformEvent[] = [];
+  for (const event of events) {
+    if (event.kind === 'pointer' && event.type === 'move') {
+      const prev = result[result.length - 1];
+      if (
+        prev &&
+        prev.kind === 'pointer' &&
+        prev.type === 'move' &&
+        prev.windowId === event.windowId &&
+        prev.pointerId === event.pointerId
+      ) {
+        result[result.length - 1] = {
+          ...prev,
+          position: event.position,
+          delta: [prev.delta[0] + event.delta[0], prev.delta[1] + event.delta[1]],
+          pressure: event.pressure
+        };
+        continue;
+      }
+    }
+    result.push(event);
+  }
+  return result;
 }
 
 /**

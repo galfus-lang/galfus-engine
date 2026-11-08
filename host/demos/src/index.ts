@@ -30,3 +30,4 @@ export * from './realm3d/d3d8-instancing';
 export * from './realm3d/d3d9-sides-normals';
 export * from './realm3d/d3d10-morph-targets';
 export * from './ui/ui1-pointer-wheel-image';
+export * from './ui/ui2-panels-layout';
