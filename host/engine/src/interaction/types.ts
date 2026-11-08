@@ -1,4 +1,9 @@
-import type { PointerEvent, ScrollDelta } from '@galfus/transport-types';
+import type {
+  KeyboardEvent,
+  PointerEvent,
+  ScrollDelta,
+  WindowEvent
+} from '@galfus/transport-types';
 
 export type InteractiveTarget =
   | { type: 'collider'; entityId: number; colliderId?: number }
@@ -30,3 +35,13 @@ export interface InteractiveEvent {
 }
 
 export type InteractiveCallback = (event: InteractiveEvent) => void;
+
+/** Lifecycle hooks allowing external systems (such as `@galfus/ui`) to attach to `InteractiveSystem`. */
+export interface InteractiveObserver {
+  onWindowEvent?(event: WindowEvent): void;
+  onPointerEvent?(event: PointerEvent): void;
+  onKeyboardEvent?(event: KeyboardEvent): void;
+  onWindowClosed?(windowId: number): void;
+  onAfterDispatch?(): void;
+  onDispose?(): void;
+}

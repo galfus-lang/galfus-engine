@@ -4,7 +4,6 @@ export * from './common/options';
 export * from './common/textures';
 export * from './host/interaction';
 export * from './host/text-input';
-export * from './host/text-input-geometry';
 export * from './host/trans-realm';
 export * from './host/tutorial';
 export * from './multiverse/mv1-split';

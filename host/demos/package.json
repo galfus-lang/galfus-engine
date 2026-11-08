@@ -30,8 +30,8 @@
     "@galfus/physics-types": "workspace:*",
     "@galfus/transport-bun": "workspace:*",
     "@galfus/transport-types": "workspace:*",
+    "@galfus/ui": "workspace:*",
     "commander": "^15.0.0",
-    "fuse.js": "^7.5.0",
-    "unicode-segmenter": "0.17.3"
+    "fuse.js": "^7.5.0"
   }
 }

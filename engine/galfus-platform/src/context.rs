@@ -302,7 +302,7 @@ impl PlatformContext {
                 return Ok(String::new());
             }
             crate::window::browser_pointer::sync_navigator_clipboard(&self.browser_clipboard);
-            return Ok(self.browser_clipboard.borrow().clone());
+            Ok(self.browser_clipboard.borrow().clone())
         }
         #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
         {
@@ -322,7 +322,7 @@ impl PlatformContext {
             if !self.windows.is_empty() {
                 crate::window::browser_pointer::write_navigator_clipboard(text);
             }
-            return Ok(());
+            Ok(())
         }
         #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
         {

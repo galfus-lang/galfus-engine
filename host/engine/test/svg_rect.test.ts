@@ -1,39 +1,9 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { createBunTransport } from '@galfus/transport-bun';
 import { createNodeTransport } from '@galfus/transport-node';
-import { textInputGeometry } from '../../demos/src/host/text-input-geometry';
-import { SvgTextDecorations } from '../src/text/svg-decorations';
 import { createRuntime } from '../src/runtime';
 
 describe('SVG element bounds', () => {
-  it('renders demo caret and selection from actual SVG text metrics', () => {
-    const runtime = createRuntime(createBunTransport({ headless: true }));
-    try {
-      const realm = runtime.createRealm2D();
-      const { svgId } = realm.createSvg({
-        source:
-          '<svg xmlns="http://www.w3.org/2000/svg" width="760" height="560"><path id="selection" display="none"/><text id="text" x="56" y="161" font-size="19" xml:space="preserve">Ada</text><rect id="cursor" display="none"/></svg>'
-      });
-      const layout = runtime.svg.getTextLayout(realm.realmId, svgId, 'text');
-      const geometry = textInputGeometry(layout, 'Ada', { anchor: 0, focus: 2 }, undefined, 161)!;
-      const decorations = new SvgTextDecorations(realm, svgId, {
-        cursorId: 'cursor',
-        selectionPathId: 'selection',
-        cursorColor: '#ffffff',
-        selectionColor: '#477bb6'
-      });
-      decorations.update(geometry.cursor, geometry.selections);
-      const cursor = runtime.svg.getRect(realm.realmId, svgId, 'cursor');
-      const selection = runtime.svg.getRect(realm.realmId, svgId, 'selection');
-      expect(cursor?.x).toBeCloseTo(geometry.cursor.x);
-      expect(selection?.x).toBeCloseTo(56);
-      expect(selection!.width).toBeCloseTo(geometry.cursor.x - 56);
-      expect(selection!.height).toBeGreaterThan(0);
-      decorations.dispose();
-    } finally {
-      runtime.dispose();
-    }
-  });
   it('caches real SVG text cluster metrics and invalidates them after edits', () => {
     const transport = createBunTransport({ headless: true });
     const runtime = createRuntime(transport);
@@ -56,35 +26,6 @@ describe('SVG element bounds', () => {
       expect(runtime.svg.getTextLayout(realm.realmId, svgId, 'missing')).toBeUndefined();
     } finally {
       readLayout.mockRestore();
-      runtime.dispose();
-    }
-  });
-  it('updates a real SVG text element through the host text input', () => {
-    const transport = createBunTransport({ headless: true });
-    const runtime = createRuntime(transport);
-    const writeText = spyOn(transport.engine, 'realm2dSetSvgText');
-    try {
-      const realm = runtime.createRealm2D();
-      const { svgId } = realm.createSvg({
-        source:
-          '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><rect id="hit" width="100" height="50"/><text id="text" x="0" y="20">old</text></svg>'
-      });
-      const input = runtime.textInput(realm.realmId, {
-        svgId,
-        elementId: 'text',
-        hitAreaId: 'hit',
-        value: 'hello'
-      });
-      input.setValue('漢字');
-      expect(input.value).toBe('漢字');
-      expect(writeText).toHaveBeenCalledTimes(2);
-      expect(writeText).toHaveBeenLastCalledWith(realm.realmId, svgId, 'text', '漢字');
-      input.dispose();
-      expect(() =>
-        runtime.textInput(realm.realmId, { svgId, elementId: 'missing', hitAreaId: 'hit' })
-      ).toThrow();
-    } finally {
-      writeText.mockRestore();
       runtime.dispose();
     }
   });

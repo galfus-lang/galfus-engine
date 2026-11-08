@@ -1,6 +1,7 @@
 import type { SvgTextLayout } from '@galfus/transport-types';
-import type { TextComposition, TextDecorationRect, TextSelection } from '@galfus/engine';
 import { graphemeSegments } from 'unicode-segmenter/grapheme';
+import type { TextComposition, TextSelection } from './editor';
+import type { TextDecorationRect } from './svg-decorations';
 
 interface Cluster {
   start: number;
@@ -14,7 +15,7 @@ interface Cluster {
   rtl: boolean;
 }
 
-/** Geometry for the demo's untransformed, single-line SVG text elements. */
+/** Geometry for untransformed, single-line SVG text elements. */
 export function textInputGeometry(
   layout: Readonly<SvgTextLayout> | undefined,
   displayValue: string,

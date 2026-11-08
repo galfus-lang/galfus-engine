@@ -11,6 +11,7 @@ import {
   type WindowId
 } from '@galfus/engine';
 import { createBunTransport } from '@galfus/transport-bun';
+import { createUi } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { type HostDemoOptions, resolveDemoOptions } from '../common/options';
 
@@ -20,6 +21,7 @@ export function createTransRealmScene(
   _windowId?: WindowId,
   _initialSize: readonly [number, number] = [1000, 700]
 ) {
+  const ui = createUi(runtime);
   const clicks = { r1: 0, r2: 0, r3: 0 };
   const transition = { duration: 0.15 };
 
@@ -71,7 +73,7 @@ export function createTransRealmScene(
     position: [-2.0, 0, 0]
   });
   realm1.addCollider(r1SphereEntity.entityId, { type: 'sphere', radius: 0.7 });
-  const r1Sphere = runtime.focusable(
+  const r1Sphere = ui.focusable(
     1,
     { type: 'collider', entityId: r1SphereEntity.entityId },
     { tabIndex: 0 }
@@ -161,7 +163,7 @@ export function createTransRealmScene(
     { position: [-120, 0] }
   );
   realm2.addCollider(r2BtnEntity, { type: 'rectangle', halfExtents: [70, 35] });
-  const r2Btn = runtime.focusable(2, { type: 'collider', entityId: r2BtnEntity }, { tabIndex: 0 });
+  const r2Btn = ui.focusable(2, { type: 'collider', entityId: r2BtnEntity }, { tabIndex: 0 });
   r2Btn.listener.on('hover', () => {
     realm2.animateModel(r2BtnEntity, { scale: [1.12, 1.12] }, transition, runtime.animation);
   });
@@ -241,7 +243,7 @@ export function createTransRealmScene(
   }).materialId;
   const r3OrbEntity = realm3.createSphere(0.8, 24, 24, r3OrbMat, { position: [0, 0, 0] });
   realm3.addCollider(r3OrbEntity.entityId, { type: 'sphere', radius: 0.8 });
-  const r3Orb = runtime.focusable(
+  const r3Orb = ui.focusable(
     3,
     { type: 'collider', entityId: r3OrbEntity.entityId },
     { tabIndex: 0 }
@@ -306,6 +308,7 @@ export function createTransRealmScene(
   });
 
   return {
+    ui,
     realm1,
     realm2,
     realm3,

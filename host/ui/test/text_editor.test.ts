@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { TextEditor } from '../src/text/editor';
-import { applyTextKeyboardEvent } from '../src/text/keyboard';
 import type { KeyboardEvent } from '@galfus/transport-types';
+import { applyTextKeyboardEvent, TextEditor } from '../src/index';
 
 describe('text editor', () => {
   it('navigates and deletes complete Unicode graphemes', () => {

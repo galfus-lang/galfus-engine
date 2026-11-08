@@ -85,7 +85,7 @@ describe('text input demo', () => {
     const runtime = createRuntime(transport);
     const windowId = runtime.platform.window.create();
     const target = runtime.multiverse.createTarget({ kind: { type: 'window', windowId } });
-    const { fields } = createTextInputScene(runtime, target, windowId);
+    const { fields, ui } = createTextInputScene(runtime, target, windowId);
     const tab = (shift = false): PlatformEvent => ({
       kind: 'keyboard',
       type: 'input',
@@ -120,7 +120,7 @@ describe('text input demo', () => {
         pressure: 0
       });
       advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)).toBe(fields[0]!.focusable);
+      expect(ui.getFocused(windowId)).toBe(fields[0]!.focusable);
       expect(text.get('status')).toBe('Focused: Name');
       expect(attributes.get('name-hit:stroke')).toBe('#72d9e9');
       expect(attributes.get('name-cursor:display')).toBe('inline');
@@ -137,13 +137,13 @@ describe('text input demo', () => {
       events.push(tab());
       advanceFrame(runtime, transport);
       expect(fields[0]!.value).toBe('Ada!');
-      expect(runtime.getFocused(windowId)).toBe(fields[1]!.focusable);
+      expect(ui.getFocused(windowId)).toBe(fields[1]!.focusable);
       expect(attributes.get('name-cursor:display')).toBe('none');
       expect(attributes.get('name-hit:stroke')).toBe('#476078');
       expect(attributes.get('project-hit:stroke')).toBe('#72d9e9');
       events.push(tab());
       advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)).toBe(fields[2]!.focusable);
+      expect(ui.getFocused(windowId)).toBe(fields[2]!.focusable);
       expect(attributes.get('note-cursor:display')).toBe('inline');
       expect(Number(attributes.get('note-cursor:x'))).toBe(56);
       events.push({ kind: 'keyboard', type: 'imePreedit', windowId, text: 'かな' });
@@ -157,7 +157,7 @@ describe('text input demo', () => {
       events.push(tab(true));
       advanceFrame(runtime, transport);
       expect(fields[2]!.value).toBe('仮名');
-      expect(runtime.getFocused(windowId)).toBe(fields[1]!.focusable);
+      expect(ui.getFocused(windowId)).toBe(fields[1]!.focusable);
       expect(ime.length).toBeGreaterThan(0);
     } finally {
       runtime.dispose();

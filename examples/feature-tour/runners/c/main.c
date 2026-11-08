@@ -1019,53 +1019,53 @@ int main(int argc, char **argv) {
             dt = 0.1f;
         last_time = now;
 
-        GalfusEventBatch batch;
-        if (galfus_platform_pump_events(&batch) == 0) {
-            for (uint32_t i = 0; i < batch.event_count; i++) {
-                const GalfusPlatformEvent *ev = &batch.events[i];
-                if (ev->kind == 1) {           // Window
-                    if (ev->event_type == 3) { // closeRequested
-                        running = false;
-                    } else if (ev->event_type == 1) { // resized
-                        galfus_multiverse_update_window_size(window_id, (uint32_t)ev->values[0],
-                                                             (uint32_t)ev->values[1]);
+        for (;;) {
+            GalfusPlatformEvent ev;
+            if (galfus_platform_pump_events(&ev) != 0 || ev.kind == 0)
+                break;
+            if (ev.kind == 1) {           // Window
+                if (ev.event_type == 3) { // closeRequested
+                    running = false;
+                } else if (ev.event_type == 1) { // resized
+                    galfus_multiverse_update_window_size(window_id, (uint32_t)ev.values[0],
+                                                         (uint32_t)ev.values[1]);
+                }
+            } else if (ev.kind == 3 && ev.event_type == 1) { // Keyboard input
+                bool is_pressed = (ev.flags & 1) != 0;
+                if (is_pressed) {
+                    char text0[81] = {0};
+                    char text1[81] = {0};
+                    if (ev.text0_length > 0 && ev.text0_length <= 80) {
+                        memcpy(text0, ev.text_bytes, ev.text0_length);
                     }
-                } else if (ev->kind == 3 && ev->event_type == 1) { // Keyboard input
-                    bool is_pressed = (ev->flags & 1) != 0;
-                    if (is_pressed && batch.text_data) {
-                        char text0[64] = {0};
-                        char text1[64] = {0};
-                        if (ev->text0_length > 0 && ev->text0_length < 63) {
-                            memcpy(text0, batch.text_data + ev->text0_offset, ev->text0_length);
-                        }
-                        if (ev->text1_length > 0 && ev->text1_length < 63) {
-                            memcpy(text1, batch.text_data + ev->text1_offset, ev->text1_length);
-                        }
+                    if (ev.text1_length > 0 &&
+                        (uint32_t)ev.text0_length + (uint32_t)ev.text1_length <= 80) {
+                        memcpy(text1, ev.text_bytes + ev.text0_length, ev.text1_length);
+                    }
 
-                        if (strcmp(text0, "Escape") == 0 || strcmp(text1, "Escape") == 0) {
-                            running = false;
-                        } else if (strcmp(text0, "Space") == 0 || strcmp(text1, " ") == 0 ||
-                                   strcmp(text1, "Space") == 0) {
-                            is_paused = !is_paused;
-                            if (!is_paused) {
-                                setup_camera_paths(current_room);
-                            }
-                            apply_room(current_room, tour_clock, is_paused);
-                            printf("[Tour] Playback %s\n", is_paused ? "PAUSED" : "RESUMED");
-                        } else if (strcmp(text0, "KeyR") == 0 || strcmp(text1, "r") == 0 ||
-                                   strcmp(text1, "R") == 0) {
-                            seek_room(0, &tour_clock, &current_room, is_paused);
-                        } else if (strcmp(text0, "ArrowRight") == 0 ||
-                                   strcmp(text1, "ArrowRight") == 0) {
-                            seek_room(current_room + 1, &tour_clock, &current_room, is_paused);
-                        } else if (strcmp(text0, "ArrowLeft") == 0 ||
-                                   strcmp(text1, "ArrowLeft") == 0) {
-                            seek_room(current_room - 1, &tour_clock, &current_room, is_paused);
+                    if (strcmp(text0, "Escape") == 0 || strcmp(text1, "Escape") == 0) {
+                        running = false;
+                    } else if (strcmp(text0, "Space") == 0 || strcmp(text1, " ") == 0 ||
+                               strcmp(text1, "Space") == 0) {
+                        is_paused = !is_paused;
+                        if (!is_paused) {
+                            setup_camera_paths(current_room);
                         }
+                        apply_room(current_room, tour_clock, is_paused);
+                        printf("[Tour] Playback %s\n", is_paused ? "PAUSED" : "RESUMED");
+                    } else if (strcmp(text0, "KeyR") == 0 || strcmp(text1, "r") == 0 ||
+                               strcmp(text1, "R") == 0) {
+                        seek_room(0, &tour_clock, &current_room, is_paused);
+                    } else if (strcmp(text0, "ArrowRight") == 0 ||
+                               strcmp(text1, "ArrowRight") == 0) {
+                        seek_room(current_room + 1, &tour_clock, &current_room, is_paused);
+                    } else if (strcmp(text0, "ArrowLeft") == 0 || strcmp(text1, "ArrowLeft") == 0) {
+                        seek_room(current_room - 1, &tour_clock, &current_room, is_paused);
                     }
                 }
             }
-            galfus_platform_release_event_batch(batch.batch_id);
+            if (!ev.has_more)
+                break;
         }
 
         anim_clock += dt;

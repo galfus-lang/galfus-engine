@@ -200,13 +200,7 @@ off();
 
 Selection offsets, when supplied, use UTF-16 code units within the preedit text. The browser does not expose this selection in composition events. The browser input bridge takes DOM focus and releases it on disable or focus loss; enable it from a user interaction when the browser requires a user gesture.
 
-`textInput` is the committed text stream; `input.text` and `imeCommit.text` remain available as raw platform details. Text editors should insert from `textInput` only to avoid processing the same text twice. `TextEditor` stores Unicode text and grapheme-aware selection; `applyTextKeyboardEvent` maps the normalized keyboard stream to the editor.
-
-`runtime.textInput(realmId, { svgId, elementId, hitAreaId, value, tabIndex })` binds an editor to an SVG text element and a focusable SVG hit area. `hitAreaId` defaults to `elementId`; use a separate visible hit area when the text can be empty. The `value` option defaults to an empty string and replaces the element's existing children. The returned input supports `requestFocus`, `blur`, `setValue`, `setSelection`, `selectAll`, `on`, `off`, and `dispose`. It updates the SVG with the IME preview while retaining the committed `value`. Automatic caret and selection rendering, pointer-based text selection, candidate positioning, clipboard integration, and full native/browser IME parity are not yet implemented.
-
-Focusable pointer targets can be registered with `runtime.focusable(realmId, target, { tabIndex })`. Call `requestFocus(windowId)`, `blur(windowId)`, and `dispose()` on the returned target; subscribe to `focus` and `blur` with `on`. `runtime.getFocused(windowId)` reports the focused target. Tab and Shift+Tab navigate registered targets in direct, successfully submitted window presentations. A negative `tabIndex` excludes a target from Tab navigation but permits explicit focus. Browser keyboard delivery still depends on platform focus and must not be interpreted as complete SVG text input support.
-
-`SvgTextDecorations` updates an existing SVG rectangle for a caret and either rectangles or a path for selection spans. It accepts `cursorColor` and `selectionColor`; its caller must provide viewport-space geometry. Automatic cursor placement, pointer selection, and blinking are not provided by this low-level utility.
+`textInput` is the committed text stream; `input.text` and `imeCommit.text` remain available as raw platform details. Text editors should insert from `textInput` only to avoid processing the same text twice. High-level focus management (`Focusable`, `FocusManager`), Unicode text editing (`TextEditor`, `applyTextKeyboardEvent`), and SVG text inputs (`TextInput`, `SvgTextDecorations`, `textInputGeometry`) are provided by `@galfus/ui` via `createUi(runtime)`.
 
 `runtime.svg.getTextLayout(realmId, svgId, elementId)` returns shaped cluster metrics on demand.
 The result contains normalized text chunks, cluster byte ranges within those UTF-8 chunks,

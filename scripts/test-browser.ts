@@ -94,6 +94,15 @@ async function main(): Promise<void> {
     '--outfile',
     resolve(testDir, 'host-runtime.js')
   ]);
+  run([
+    'bun',
+    'build',
+    'host/ui/src/index.ts',
+    '--target',
+    'browser',
+    '--outfile',
+    resolve(testDir, 'host-ui.js')
+  ]);
 
   await Bun.write(
     resolve(testDir, 'index.html'),
@@ -109,8 +118,9 @@ async function main(): Promise<void> {
     <script type="module">
       import init, * as wasm from './pkg/galfus_browser.js';
       import { initializeGalfusBrowser } from './galfus-sdk.js';
-      import { TextEditor, TextEncoding } from './text-encoding.js';
+      import { TextEncoding } from './text-encoding.js';
       import { createRuntime } from './host-runtime.js';
+      import { createUi, TextEditor } from './host-ui.js';
 
       let galfus;
       let windowId;
@@ -304,6 +314,7 @@ async function main(): Promise<void> {
         let frame;
         const transport = { engine, isInitialized: true, isDisposed: false, isRunning: false, startLoop: (callback) => { frame = callback; }, stopLoop: () => {}, dispose: () => {} };
         const runtime = createRuntime(transport);
+        const ui = createUi(runtime);
         const hostWindow = runtime.platform.window.create();
         const realm = runtime.createRealm2D(1);
         realm.createCamera({ orthoScale: 10 });
@@ -313,8 +324,8 @@ async function main(): Promise<void> {
         const second = realm.createSpatialNode({ position: [1, 0] });
         realm.addCollider(first, { type: 'circle', radius: 0.5 });
         realm.addCollider(second, { type: 'circle', radius: 0.5 });
-        const firstFocus = runtime.focusable(1, { type: 'collider', entityId: first });
-        const secondFocus = runtime.focusable(1, { type: 'collider', entityId: second });
+        const firstFocus = ui.focusable(1, { type: 'collider', entityId: first });
+        const secondFocus = ui.focusable(1, { type: 'collider', entityId: second });
         runtime.start();
         let frameId = 0;
         const tick = () => frame({ frameId: ++frameId, timeMs: frameId * 16, deltaMs: 16, dt: 0.016, fps: 62.5 });
@@ -323,7 +334,7 @@ async function main(): Promise<void> {
         canvas.dispatchEvent(new PointerEvent('pointermove', hitFirst));
         canvas.dispatchEvent(new PointerEvent('pointerdown', hitFirst));
         tick();
-        if (runtime.getFocused(hostWindow) !== firstFocus) throw new Error('Browser pointer did not focus the host target');
+        if (ui.getFocused(hostWindow) !== firstFocus) throw new Error('Browser pointer did not focus the host target');
         const captured = [];
         firstFocus.listener.on('pressmove', () => captured.push('move'));
         firstFocus.listener.on('pressup', () => captured.push('up'));
@@ -335,9 +346,9 @@ async function main(): Promise<void> {
         const hostTab = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', cancelable: true });
         canvas.dispatchEvent(hostTab);
         tick();
-        if (!hostTab.defaultPrevented || runtime.getFocused(hostWindow) !== secondFocus) throw new Error('Browser Tab did not advance host focus');
+        if (!hostTab.defaultPrevented || ui.getFocused(hostWindow) !== secondFocus) throw new Error('Browser Tab did not advance host focus');
         const svg = realm.createSvg({ source: '<svg/>', dimensions: [4, 4] });
-        const textInput = runtime.textInput(1, { svgId: svg.svgId, elementId: 'text', value: 'a' });
+        const textInput = ui.textInput(1, { svgId: svg.svgId, elementId: 'text', value: 'a' });
         tick();
         if (!textInput.requestFocus(hostWindow) || document.activeElement !== input) throw new Error('SVG input did not activate the browser IME');
         input.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));

@@ -2,256 +2,45 @@ import { describe, expect, it } from 'bun:test';
 import type { PlatformEvent } from '@galfus/transport-types';
 import type { Collider2DComponent } from '../src/collision';
 import { advanceFrame } from './controlled-transport';
-import { button, move, setup, tab } from './interactive-fixture';
+import { button, move, setup } from './interactive-fixture';
 
 describe('pointer interaction in direct realms', () => {
-  it('moves focus by Tab and Shift+Tab using priority and submitted visibility', () => {
-    const { runtime, transport, realm, events, windowId, schedule, failDispatch, tabCapture } =
-      setup();
-    try {
-      const a = realm.createSpatialNode();
-      const b = realm.createSpatialNode();
-      const c = realm.createSpatialNode();
-      for (const entity of [a, b, c]) realm.addCollider(entity, { type: 'circle', radius: 1 });
-      const first = runtime.focusable(1, { type: 'collider', entityId: a });
-      const second = runtime.focusable(1, { type: 'collider', entityId: b }, { tabIndex: 2 });
-      const third = runtime.focusable(1, { type: 'collider', entityId: c }, { tabIndex: -1 });
-      const seen: string[] = [];
-      first.on('focus', () => seen.push('first focus'));
-      first.on('blur', () => seen.push('first blur'));
-      second.on('focus', () => seen.push('second focus'));
-      expect(first.requestFocus(windowId)).toBe(false);
-      advanceFrame(runtime, transport);
-      expect(tabCapture).toEqual([[windowId, 1]]);
-      events.push(tab(windowId));
-      advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)).toBe(second);
-      events.push(tab(windowId));
-      advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)).toBe(first);
-      events.push(tab(windowId, true));
-      advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)).toBe(second);
-      expect(third.requestFocus(windowId)).toBe(true);
-      expect(runtime.getFocused(windowId)).toBe(third);
-      expect(seen).toEqual(['second focus', 'first focus', 'first blur', 'second focus']);
-      schedule.targetBlocks[0]!.invocations.length = 0;
-      failDispatch(true);
-      expect(() => advanceFrame(runtime, transport)).toThrow('dispatch failed');
-      expect(runtime.getFocused(windowId)).toBe(third);
-      failDispatch(false);
-      advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)).toBeUndefined();
-      expect(tabCapture).toEqual([
-        [windowId, 1],
-        [windowId, 0]
-      ]);
-    } finally {
-      runtime.dispose();
-    }
-  });
-
-  it('focuses pointer targets and releases focus safely on disable and destruction', () => {
+  it('delivers movement and release to the pressed target outside its hit area', () => {
     const { runtime, transport, realm, events, windowId } = setup();
     try {
-      const entityId = realm.createSpatialNode();
-      realm.addCollider(entityId, { type: 'circle', radius: 1 });
-      const target = runtime.focusable(1, { type: 'collider', entityId });
-      let blurs = 0;
-      target.on('blur', () => {
-        blurs++;
-        target.dispose();
-      });
+      const entity = realm.createSpatialNode();
+      realm.addCollider(entity, { type: 'circle', radius: 1 });
+      const listener = runtime.interactive(1, { type: 'collider', entityId: entity });
+      const received: string[] = [];
+      for (const type of ['move', 'pressmove', 'pressup', 'click', 'cancel'] as const)
+        listener.on(type, ({ pointer }) => received.push(`${type}:${pointer.position[0]}`));
       advanceFrame(runtime, transport);
       events.push(move(windowId, 50, 50), button(windowId, 50, 50, 'pressed'));
+      events.push(move(windowId, 80, 50), button(windowId, 80, 50, 'released'));
       advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)).toBe(target);
-      target.dispose();
-      expect(blurs).toBe(1);
-      expect(runtime.getFocused(windowId)).toBeUndefined();
-      expect(target.isDisposed).toBe(true);
-    } finally {
-      runtime.dispose();
-    }
-  });
-
-  it('does not navigate focus while an IME composition is active', () => {
-    const { runtime, transport, realm, events, windowId } = setup();
-    try {
-      const entity = realm.createSpatialNode();
-      realm.addCollider(entity, { type: 'circle', radius: 1 });
-      const target = runtime.focusable(1, { type: 'collider', entityId: entity });
-      advanceFrame(runtime, transport);
-      events.push({ kind: 'keyboard', type: 'imePreedit', windowId, text: 'かな' }, tab(windowId));
-      advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)).toBeUndefined();
-      events.push({ kind: 'keyboard', type: 'imeDisabled', windowId }, tab(windowId));
-      advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)).toBe(target);
-    } finally {
-      runtime.dispose();
-    }
-  });
-
-  it('clears focus on window blur and rejects focus until the window is focused again', () => {
-    const { runtime, transport, realm, events, windowId } = setup();
-    try {
-      const entity = realm.createSpatialNode();
-      realm.addCollider(entity, { type: 'circle', radius: 1 });
-      const target = runtime.focusable(1, { type: 'collider', entityId: entity });
-      advanceFrame(runtime, transport);
-      expect(target.requestFocus(windowId)).toBe(true);
-      let refocus: boolean | undefined;
-      target.on('blur', () => {
-        refocus = target.requestFocus(windowId);
+      expect(received).toEqual(['move:50', 'pressmove:80', 'pressup:80']);
+      events.push(move(windowId, 50, 50), button(windowId, 50, 50, 'pressed'));
+      events.push({
+        kind: 'pointer',
+        type: 'button',
+        windowId,
+        pointerId: 0,
+        pointerType: 'mouse',
+        position: [50, 50],
+        button: 'secondary',
+        state: 'pressed',
+        pressure: 0
       });
-      events.push({ kind: 'window', type: 'focusChanged', windowId, focused: false });
+      events.push(move(windowId, 80, 50));
       advanceFrame(runtime, transport);
-      expect(refocus).toBe(false);
-      expect(runtime.getFocused(windowId)).toBeUndefined();
-      events.push({ kind: 'window', type: 'focusChanged', windowId, focused: true });
-      advanceFrame(runtime, transport);
-      expect(target.requestFocus(windowId)).toBe(true);
+      expect(received.filter((event) => event === 'pressmove:80')).toHaveLength(2);
+      runtime.platform.window.close(windowId);
+      expect(received.filter((event) => event === 'cancel:80')).toHaveLength(1);
     } finally {
       runtime.dispose();
     }
   });
 
-  it('clears focus when the user clicks outside focusable targets', () => {
-    const { runtime, transport, realm, events, windowId } = setup();
-    try {
-      const entity = realm.createSpatialNode();
-      realm.addCollider(entity, { type: 'circle', radius: 1 });
-      const target = runtime.focusable(1, { type: 'collider', entityId: entity });
-      advanceFrame(runtime, transport);
-      expect(target.requestFocus(windowId)).toBe(true);
-      events.push(move(windowId, 95, 95), button(windowId, 95, 95, 'pressed'));
-      advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)).toBeUndefined();
-    } finally {
-      runtime.dispose();
-    }
-  });
-
-  it('does not override a focus change made by a blur callback', () => {
-    const { runtime, transport, realm, windowId } = setup();
-    try {
-      const a = realm.createSpatialNode();
-      const b = realm.createSpatialNode();
-      const c = realm.createSpatialNode();
-      for (const entity of [a, b, c]) realm.addCollider(entity, { type: 'circle', radius: 1 });
-      const first = runtime.focusable(1, { type: 'collider', entityId: a });
-      const second = runtime.focusable(1, { type: 'collider', entityId: b });
-      const redirected = runtime.focusable(1, { type: 'collider', entityId: c });
-      advanceFrame(runtime, transport);
-      expect(first.requestFocus(windowId)).toBe(true);
-      first.on('blur', () => redirected.requestFocus(windowId));
-      expect(second.requestFocus(windowId)).toBe(false);
-      expect(runtime.getFocused(windowId)).toBe(redirected);
-    } finally {
-      runtime.dispose();
-    }
-  });
-
-  it('captures Tab while a programmatically focused negative tabIndex target is active', () => {
-    const { runtime, transport, realm, events, windowId, tabCapture } = setup();
-    try {
-      const entity = realm.createSpatialNode();
-      realm.addCollider(entity, { type: 'circle', radius: 1 });
-      const target = runtime.focusable(1, { type: 'collider', entityId: entity }, { tabIndex: -1 });
-      advanceFrame(runtime, transport);
-      expect(tabCapture).toEqual([]);
-      expect(target.requestFocus(windowId)).toBe(true);
-      expect(tabCapture).toEqual([[windowId, 1]]);
-      events.push(tab(windowId));
-      advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)).toBe(target);
-      target.blur(windowId);
-      expect(tabCapture).toEqual([
-        [windowId, 1],
-        [windowId, 0]
-      ]);
-    } finally {
-      runtime.dispose();
-    }
-  });
-
-  it('releases Tab capture when an open window is no longer in the presented schedule', () => {
-    const { runtime, transport, realm, windowId, tabCapture, schedule } = setup();
-    try {
-      const entity = realm.createSpatialNode();
-      realm.addCollider(entity, { type: 'circle', radius: 1 });
-      const target = runtime.focusable(1, { type: 'collider', entityId: entity });
-      advanceFrame(runtime, transport);
-      expect(target.requestFocus(windowId)).toBe(true);
-      schedule.targetBlocks.length = 0;
-      advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)).toBeUndefined();
-      expect(tabCapture).toEqual([
-        [windowId, 1],
-        [windowId, 0]
-      ]);
-    } finally {
-      runtime.dispose();
-    }
-  });
-
-  it('tracks focus independently per window and rejects ambiguous requests', () => {
-    const { runtime, transport, realm, windowId, schedule } = setup();
-    try {
-      const otherWindow = runtime.platform.window.create();
-      const targetId = runtime.multiverse.createTarget({
-        kind: { type: 'window', windowId: otherWindow }
-      });
-      runtime.multiverse.createInvocation({ realmId: 1, targetId });
-      schedule.targetBlocks.push({
-        targetId,
-        invocations: [
-          {
-            invocationId: 2,
-            realmId: 1,
-            resolvedViewport: [0, 0, 100, 100],
-            zIndex: 0,
-            filters: []
-          }
-        ]
-      });
-      const entity = realm.createSpatialNode();
-      realm.addCollider(entity, { type: 'circle', radius: 1 });
-      const target = runtime.focusable(1, { type: 'collider', entityId: entity });
-      advanceFrame(runtime, transport);
-      expect(target.requestFocus()).toBe(false);
-      expect(target.requestFocus(windowId)).toBe(true);
-      expect(target.requestFocus(otherWindow)).toBe(true);
-      expect(runtime.getFocused(windowId)).toBe(target);
-      expect(runtime.getFocused(otherWindow)).toBe(target);
-      runtime.platform.window.close(otherWindow);
-      expect(runtime.getFocused(otherWindow)).toBeUndefined();
-      expect(runtime.getFocused(windowId)).toBe(target);
-    } finally {
-      runtime.dispose();
-    }
-  });
-
-  it('releases a focused target after its entity is destroyed and a frame is submitted', () => {
-    const { runtime, transport, realm, windowId } = setup();
-    try {
-      const entity = realm.createSpatialNode();
-      realm.addCollider(entity, { type: 'circle', radius: 1 });
-      const target = runtime.focusable(1, { type: 'collider', entityId: entity });
-      const events: string[] = [];
-      target.on('blur', () => events.push('blur'));
-      advanceFrame(runtime, transport);
-      expect(target.requestFocus(windowId)).toBe(true);
-      realm.destroyEntity(entity);
-      advanceFrame(runtime, transport);
-      expect(events).toEqual(['blur']);
-      expect(target.isDisposed).toBe(true);
-      expect(runtime.getFocused(windowId)).toBeUndefined();
-    } finally {
-      runtime.dispose();
-    }
-  });
   it('uses the submitted frame and emits hover, move, down, up, click and leave', () => {
     const { runtime, transport, realm, events, windowId } = setup();
     try {

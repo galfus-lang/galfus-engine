@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { SvgTextDecorations } from '../src/text/svg-decorations';
+import { SvgTextDecorations } from '../src/index';
 
 describe('SVG text decorations', () => {
   it('draws multiple selection spans in a single path and updates its color', () => {
@@ -24,6 +24,7 @@ describe('SVG text decorations', () => {
     view.dispose();
     expect(attributes.get('selection:display')).toBe('none');
   });
+
   it('draws configured cursor and selection colors and avoids unchanged updates', () => {
     const calls: string[] = [];
     const realm = {

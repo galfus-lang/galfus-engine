@@ -1,4 +1,10 @@
-import type { PointerButton, PointerEvent, ScrollDelta } from '@galfus/transport-types';
+import type {
+  KeyboardEvent,
+  PointerButton,
+  PointerEvent,
+  ScrollDelta,
+  WindowEvent
+} from '@galfus/transport-types';
 import type { Component } from '../ecs/component';
 import type { MultiverseCoordinator } from '../multiverse/coordinator';
 import type { PresentationConnection, WindowPresentation } from '../multiverse/presentation-graph';
@@ -25,7 +31,7 @@ import {
   pointerToRay3D,
   TargetSnapshot3D
 } from './snapshot3d';
-import type { InteractiveEventType, InteractiveTarget } from './types';
+import type { InteractiveEventType, InteractiveObserver, InteractiveTarget } from './types';
 
 interface TargetRecord {
   listener: InteractiveListener;
@@ -54,11 +60,18 @@ export class InteractiveSystem {
   private readonly records = new Map<InteractiveListener, TargetRecord>();
   private readonly realms = new Map<number, RealmState>();
   private readonly pointers = new Map<number, Map<number, PointerState>>();
+  private readonly observers = new Set<InteractiveObserver>();
   private readonly worldPoint: [number, number] = [0, 0];
   private readonly rayOrigin = vec3.create();
   private readonly rayDirection = vec3.create();
 
   constructor(private readonly multiverse: MultiverseCoordinator) {}
+
+  /** Registers an external observer to receive interaction lifecycle callbacks. */
+  observe(observer: InteractiveObserver): () => void {
+    this.observers.add(observer);
+    return () => void this.observers.delete(observer);
+  }
 
   /** @internal */
   usesRealm(realmId: number): boolean {
@@ -213,7 +226,10 @@ export class InteractiveSystem {
 
   /** Captures state only after a successful dispatch. */
   afterDispatch(): void {
-    if (!this.records.size) return;
+    if (!this.records.size) {
+      for (const observer of this.observers) observer.onAfterDispatch?.();
+      return;
+    }
     let removed: TargetRecord[] | undefined;
     for (const state of this.realms.values())
       if (!state.realm.isDisposed) {
@@ -260,6 +276,7 @@ export class InteractiveSystem {
     for (const pointers of this.pointers.values())
       for (const pointer of pointers.values()) this.updateHover(pointer);
     if (removed) for (const record of removed) record.listener.dispose();
+    for (const observer of this.observers) observer.onAfterDispatch?.();
   }
 
   private pick(event: PointerEvent):
@@ -489,47 +506,53 @@ export class InteractiveSystem {
     if (next && pointer.hover === next) this.emit(next, 'hover', pointer);
   }
 
+  handleWindow(event: WindowEvent): void {
+    for (const observer of this.observers) observer.onWindowEvent?.(event);
+  }
+
+  handleKeyboard(event: KeyboardEvent): void {
+    for (const observer of this.observers) observer.onKeyboardEvent?.(event);
+  }
+
   handle(event: PointerEvent): void {
-    if (!this.records.size) return;
-    let window = this.pointers.get(event.windowId);
-    if (!window) this.pointers.set(event.windowId, (window = new Map()));
-    let pointer = window.get(event.pointerId);
-    if (!pointer)
-      window.set(
-        event.pointerId,
-        (pointer = { event, pressed: new Map(), positions: new Map(), uvs: new Map() })
-      );
-    pointer.event = event;
-    if (event.type === 'leave' || event.type === 'cancel') {
-      this.cancel(pointer);
-      window.delete(event.pointerId);
-      if (!window.size) this.pointers.delete(event.windowId);
-      return;
-    }
-    this.updateHover(pointer);
-    if (event.type === 'move') {
-      this.emit(pointer.hover, 'move', pointer);
-      this.emitPressed(pointer, 'pressmove');
-    }
-    if (event.type === 'scroll') {
-      this.emit(pointer.hover, 'scroll', pointer, event.delta);
-    }
-    if (event.type === 'button') {
-      const button = typeof event.button === 'string' ? event.button : event.button.other;
-      if (event.state === 'pressed') {
-        if (pointer.hover) pointer.pressed.set(button, pointer.hover);
-        this.emit(pointer.hover, 'down', pointer);
+    if (this.records.size) {
+      let window = this.pointers.get(event.windowId);
+      if (!window) this.pointers.set(event.windowId, (window = new Map()));
+      let pointer = window.get(event.pointerId);
+      if (!pointer)
+        window.set(
+          event.pointerId,
+          (pointer = { event, pressed: new Map(), positions: new Map(), uvs: new Map() })
+        );
+      pointer.event = event;
+      if (event.type === 'leave' || event.type === 'cancel') {
+        this.cancel(pointer);
+        window.delete(event.pointerId);
+        if (!window.size) this.pointers.delete(event.windowId);
       } else {
-        const pressed = pointer.pressed.get(button);
-        pointer.pressed.delete(button);
-        this.emit(pointer.hover, 'up', pointer);
-        this.emit(pressed, 'pressup', pointer);
-        if (pressed && pressed === pointer.hover) this.emit(pressed, 'click', pointer);
-        if (pressed && pressed !== pointer.hover) {
-          this.prunePointerCache(pointer, pressed);
+        this.updateHover(pointer);
+        if (event.type === 'move') {
+          this.emit(pointer.hover, 'move', pointer);
+          this.emitPressed(pointer, 'pressmove');
+        } else if (event.type === 'scroll') {
+          this.emit(pointer.hover, 'scroll', pointer, event.delta);
+        } else if (event.type === 'button') {
+          const button = typeof event.button === 'string' ? event.button : event.button.other;
+          if (event.state === 'pressed') {
+            if (pointer.hover) pointer.pressed.set(button, pointer.hover);
+            this.emit(pointer.hover, 'down', pointer);
+          } else {
+            const pressed = pointer.pressed.get(button);
+            pointer.pressed.delete(button);
+            this.emit(pointer.hover, 'up', pointer);
+            this.emit(pressed, 'pressup', pointer);
+            if (pressed && pressed === pointer.hover) this.emit(pressed, 'click', pointer);
+            if (pressed && pressed !== pointer.hover) this.prunePointerCache(pointer, pressed);
+          }
         }
       }
     }
+    for (const observer of this.observers) observer.onPointerEvent?.(event);
   }
 
   private cancel(pointer: PointerState): void {
@@ -558,14 +581,17 @@ export class InteractiveSystem {
 
   windowClosed(windowId: number): void {
     const window = this.pointers.get(windowId);
-    if (!window) return;
-    this.pointers.delete(windowId);
-    for (const pointer of window.values()) this.cancel(pointer);
+    if (window) {
+      this.pointers.delete(windowId);
+      for (const pointer of window.values()) this.cancel(pointer);
+    }
+    for (const observer of this.observers) observer.onWindowClosed?.(windowId);
   }
 
   dispose(): void {
-    for (const id of this.pointers.keys()) this.windowClosed(id);
-    for (const listener of this.records.keys()) listener.dispose();
+    for (const id of [...this.pointers.keys()]) this.windowClosed(id);
+    for (const listener of [...this.records.keys()]) listener.dispose();
     this.realms.clear();
+    for (const observer of [...this.observers]) observer.onDispose?.();
   }
 }

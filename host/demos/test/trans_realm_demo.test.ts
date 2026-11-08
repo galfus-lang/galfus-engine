@@ -96,7 +96,7 @@ describe('trans-realm host demo (3D → 2D → 3D traversal)', () => {
       advanceFrame(runtime, transport);
 
       expect(scene.clicks.r1).toBe(1);
-      expect(runtime.getFocused(windowId)?.target).toEqual(scene.r1Sphere.target);
+      expect(scene.ui.getFocused(windowId)?.target).toEqual(scene.r1Sphere.target);
     } finally {
       runtime.dispose();
     }
@@ -114,7 +114,7 @@ describe('trans-realm host demo (3D → 2D → 3D traversal)', () => {
       advanceFrame(runtime, transport);
 
       expect(scene.clicks.r2).toBe(1);
-      expect(runtime.getFocused(windowId)?.target).toEqual(scene.r2Btn.target);
+      expect(scene.ui.getFocused(windowId)?.target).toEqual(scene.r2Btn.target);
     } finally {
       runtime.dispose();
     }
@@ -132,7 +132,7 @@ describe('trans-realm host demo (3D → 2D → 3D traversal)', () => {
       advanceFrame(runtime, transport);
 
       expect(scene.clicks.r3).toBe(1);
-      expect(runtime.getFocused(windowId)?.target).toEqual(scene.r3Orb.target);
+      expect(scene.ui.getFocused(windowId)?.target).toEqual(scene.r3Orb.target);
     } finally {
       runtime.dispose();
     }
@@ -144,12 +144,12 @@ describe('trans-realm host demo (3D → 2D → 3D traversal)', () => {
       // Focus r1Sphere in Realm 1
       expect(scene.r1Sphere.requestFocus(windowId)).toBe(true);
       advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)?.target).toEqual(scene.r1Sphere.target);
+      expect(scene.ui.getFocused(windowId)?.target).toEqual(scene.r1Sphere.target);
 
       // Tab within Realm 1 loops on Realm 1's focusable targets (never leaps to Realm 2 or 3)
       events.push(tab(windowId));
       advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)?.target).toEqual(scene.r1Sphere.target);
+      expect(scene.ui.getFocused(windowId)?.target).toEqual(scene.r1Sphere.target);
 
       // Direct click on Realm 2's button switches active realm to Realm 2 (Depth 2)
       events.push(
@@ -158,12 +158,12 @@ describe('trans-realm host demo (3D → 2D → 3D traversal)', () => {
         button(windowId, 492, 350, 'released')
       );
       advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)?.target).toEqual(scene.r2Btn.target);
+      expect(scene.ui.getFocused(windowId)?.target).toEqual(scene.r2Btn.target);
 
       // Tab within Realm 2 stays in Realm 2
       events.push(tab(windowId));
       advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)?.target).toEqual(scene.r2Btn.target);
+      expect(scene.ui.getFocused(windowId)?.target).toEqual(scene.r2Btn.target);
 
       // Direct click on Realm 3's 3D Orb switches active realm to Realm 3 (Depth 3)
       events.push(
@@ -172,17 +172,17 @@ describe('trans-realm host demo (3D → 2D → 3D traversal)', () => {
         button(windowId, 690, 350, 'released')
       );
       advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)?.target).toEqual(scene.r3Orb.target);
+      expect(scene.ui.getFocused(windowId)?.target).toEqual(scene.r3Orb.target);
 
       // Tab within Realm 3 stays in Realm 3
       events.push(tab(windowId));
       advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)?.target).toEqual(scene.r3Orb.target);
+      expect(scene.ui.getFocused(windowId)?.target).toEqual(scene.r3Orb.target);
 
       // Programmatic requestFocus() back to Realm 1 switches realm safely
       expect(scene.r1Sphere.requestFocus(windowId)).toBe(true);
       advanceFrame(runtime, transport);
-      expect(runtime.getFocused(windowId)?.target).toEqual(scene.r1Sphere.target);
+      expect(scene.ui.getFocused(windowId)?.target).toEqual(scene.r1Sphere.target);
     } finally {
       runtime.dispose();
     }

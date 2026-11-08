@@ -1,6 +1,4 @@
-import type { InteractiveListener } from './listener';
-import type { InteractiveTarget } from './types';
-import type { InteractiveSystem } from './system';
+import type { InteractiveListener, InteractiveSystem, InteractiveTarget } from '@galfus/engine';
 import type { KeyboardEvent, PointerEvent } from '@galfus/transport-types';
 
 export type FocusEventType = 'focus' | 'blur';

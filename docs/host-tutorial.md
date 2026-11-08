@@ -564,12 +564,15 @@ const svgButton = runtime.interactive(realm2D.realmId, {
 svgButton.on('click', () => console.log('Score clicked!'));
 ```
 
-### Focus, SVG Text Input & Layout Queries
+### Focus, SVG Text Input & Layout Queries (`@galfus/ui`)
 
-Bind keyboard/IME text editing and `Tab` / `Shift+Tab` focus navigation directly to SVG elements:
+Bind keyboard/IME text editing and `Tab` / `Shift+Tab` focus navigation directly to SVG elements via `@galfus/ui`:
 
 ```ts
-const nameInput = runtime.textInput(realm2D.realmId, {
+import { createUi } from '@galfus/ui';
+
+const ui = createUi(runtime);
+const nameInput = ui.textInput(realm2D.realmId, {
   svgId: hudSvg.svgId,
   elementId: 'score',
   value: 'Player 1',

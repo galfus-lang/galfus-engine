@@ -3,14 +3,13 @@ import {
   type Camera2DComponent,
   createRuntime,
   type MultiverseRuntime,
-  SvgTextDecorations,
   type TargetId,
   type WindowId
 } from '@galfus/engine';
 import { createBunTransport } from '@galfus/transport-bun';
+import { createUi, SvgTextDecorations, textInputGeometry } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { type HostDemoOptions, resolveDemoOptions } from '../common/options';
-import { textInputGeometry } from './text-input-geometry';
 
 const PANEL = `<svg xmlns="http://www.w3.org/2000/svg" width="760" height="560" viewBox="0 0 760 560">
   <rect width="760" height="560" rx="16" fill="#101d2d"/>
@@ -41,6 +40,7 @@ export function createTextInputScene(
   fontData?: Uint8Array
 ) {
   const realm = runtime.createRealm2D();
+  const ui = createUi(runtime);
   runtime.multiverse.createInvocation({
     realmId: realm.realmId,
     targetId,
@@ -80,7 +80,7 @@ export function createTextInputScene(
       })
   );
   const fields = definitions.map(({ name, id, value }) => {
-    const input = runtime.textInput(realm.realmId, {
+    const input = ui.textInput(realm.realmId, {
       svgId: svg.svgId,
       elementId: `${id}-text`,
       hitAreaId: `${id}-hit`,
@@ -125,7 +125,7 @@ export function createTextInputScene(
   runtime.on('tick', () => {
     if (!dirty) return;
     dirty = false;
-    const focus = windowId === undefined ? undefined : runtime.getFocused(windowId);
+    const focus = windowId === undefined ? undefined : ui.getFocused(windowId);
     const index = fields.findIndex((field) => field.focusable === focus);
     if (lastFocused >= 0 && lastFocused !== index) decorations[lastFocused]!.update(undefined, []);
     lastFocused = index;
@@ -145,7 +145,7 @@ export function createTextInputScene(
     );
     decorations[index]!.update(geometry?.cursor, geometry?.selections ?? []);
   });
-  return { realm, svg, fields };
+  return { realm, svg, fields, ui };
 }
 
 export interface TextInputDemoOptions extends HostDemoOptions {

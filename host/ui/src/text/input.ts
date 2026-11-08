@@ -1,6 +1,6 @@
+import type { Realm2D } from '@galfus/engine';
 import type { KeyboardEvent } from '@galfus/transport-types';
-import type { Focusable } from '../interaction/focus';
-import type { Realm2D } from '../realm2d/realm';
+import type { Focusable } from '../focus';
 import { TextEditor, type TextSelection } from './editor';
 import { applyTextKeyboardEvent } from './keyboard';
 

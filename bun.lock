@@ -16,6 +16,7 @@
         "@galfus/transport-bun": "workspace:*",
         "@galfus/transport-node": "workspace:*",
         "@galfus/transport-types": "workspace:*",
+        "@galfus/ui": "workspace:*",
         "@johnnymorganz/stylua-bin": "^2.6.0",
         "@playwright/test": "^1.64.1",
         "@types/bun": "^1.4.4",
@@ -36,9 +37,9 @@
         "@galfus/physics-types": "workspace:*",
         "@galfus/transport-bun": "workspace:*",
         "@galfus/transport-types": "workspace:*",
+        "@galfus/ui": "workspace:*",
         "commander": "^15.0.0",
         "fuse.js": "^7.5.0",
-        "unicode-segmenter": "0.17.3",
       },
     },
     "host/engine": {
@@ -52,7 +53,6 @@
         "@galfus/transport-types": "workspace:*",
         "commander": "^15.0.0",
         "iconv-lite": "^0.7.3",
-        "unicode-segmenter": "0.17.3",
       },
     },
     "host/gltf-loader": {
@@ -121,6 +121,15 @@
       "name": "@galfus/transport-types",
       "version": "0.0.0",
     },
+    "host/ui": {
+      "name": "@galfus/ui",
+      "version": "0.0.0",
+      "dependencies": {
+        "@galfus/engine": "workspace:*",
+        "@galfus/transport-types": "workspace:*",
+        "unicode-segmenter": "0.17.3",
+      },
+    },
   },
   "packages": {
     "@clack/core": ["@clack/core@1.5.1", "", { "dependencies": { "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-iHTrHA8MtVuLl2TfZySmcKv1qO2PoyC9Z7pfSDozEuV5vtY3/wcOPKJXlqJ5Oq2Cx5DDGQGAMVx6HZfRRoVEbQ=="],
@@ -152,6 +161,8 @@
     "@galfus/transport-node": ["@galfus/transport-node@workspace:host/transport-node"],
 
     "@galfus/transport-types": ["@galfus/transport-types@workspace:host/transport-types"],
+
+    "@galfus/ui": ["@galfus/ui@workspace:host/ui"],
 
     "@johnnymorganz/stylua-bin": ["@johnnymorganz/stylua-bin@2.6.0", "", { "optionalDependencies": { "@johnnymorganz/stylua-bin-darwin-arm64": "2.6.0", "@johnnymorganz/stylua-bin-darwin-x64": "2.6.0", "@johnnymorganz/stylua-bin-linux-arm64": "2.6.0", "@johnnymorganz/stylua-bin-linux-x64": "2.6.0", "@johnnymorganz/stylua-bin-win32-x64": "2.6.0" }, "bin": { "stylua": "run.js" } }, "sha512-cg3vKROljsCbPGIIxOuo+zNAulOjzarSzC6jijT8x3Y69NdFPjFktV8l3pxUBOh8hM9lRJheJ71qGCQVzBFQQw=="],
 

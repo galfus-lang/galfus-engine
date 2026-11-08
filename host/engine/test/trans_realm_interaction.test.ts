@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import type { GalfusEngine, GalfusTransport, PlatformEvent } from '@galfus/transport-types';
 import { createRuntime } from '../src/runtime';
 import { advanceFrame } from './controlled-transport';
-import { button, move, tab } from './interactive-fixture';
+import { button, move } from './interactive-fixture';
 
 function setupMultiRealm() {
   const events: PlatformEvent[] = [];
@@ -190,70 +190,5 @@ describe('trans-realm event traversal and depth limit', () => {
 
     expect(clicks).toHaveLength(1);
     expect(clicks[0].realmId).toBe(3);
-  });
-
-  it('confines Tab navigation to the active realm and switches realms only via click or requestFocus', () => {
-    const { runtime, transport, realm1, realm2, events, windowId } = setupMultiRealm();
-
-    // Realm 1 has two focusable targets positioned on the sides
-    const e1A = realm1.createSpatialNode({ position: [-4, 0] });
-    realm1.addCollider(e1A, { type: 'rectangle', halfExtents: [0.5, 0.5] });
-    const e1B = realm1.createSpatialNode({ position: [4, 0] });
-    realm1.addCollider(e1B, { type: 'rectangle', halfExtents: [0.5, 0.5] });
-    const f1A = runtime.focusable(1, { type: 'collider', entityId: e1A }, { tabIndex: 1 });
-    const f1B = runtime.focusable(1, { type: 'collider', entityId: e1B }, { tabIndex: 2 });
-
-    // Surface in Realm 1 pointing to Realm 2 at center [0, 0]
-    const screen = realm1.createSpatialNode({ position: [0, 0] });
-    realm1.addCollider(screen, { type: 'rectangle', halfExtents: [3, 3] });
-    runtime.interactive(1, { type: 'collider', entityId: screen });
-    runtime.multiverse.bindTargetTexture({ realmId: 1, slot: 'sub', sourceTargetId: 20 });
-    runtime.multiverse.connectPresentationSurface({ realmId: 1, slot: 'sub', entityId: screen });
-
-    // Realm 2 has two focusable targets inside the screen
-    const e2A = realm2.createSpatialNode({ position: [-1.5, 0] });
-    realm2.addCollider(e2A, { type: 'rectangle', halfExtents: [1, 1] });
-    const e2B = realm2.createSpatialNode({ position: [1.5, 0] });
-    realm2.addCollider(e2B, { type: 'rectangle', halfExtents: [1, 1] });
-    const f2A = runtime.focusable(2, { type: 'collider', entityId: e2A }, { tabIndex: 1 });
-    const f2B = runtime.focusable(2, { type: 'collider', entityId: e2B }, { tabIndex: 2 });
-
-    advanceFrame(runtime, transport);
-
-    // Initial Tab: focuses f1A in Realm 1
-    events.push(tab(windowId));
-    advanceFrame(runtime, transport);
-    expect(runtime.getFocused(windowId)).toBe(f1A);
-
-    // Next Tab: focuses f1B in Realm 1
-    events.push(tab(windowId));
-    advanceFrame(runtime, transport);
-    expect(runtime.getFocused(windowId)).toBe(f1B);
-
-    // Next Tab: loops back to f1A in Realm 1 (does NOT escape to Realm 2)
-    events.push(tab(windowId));
-    advanceFrame(runtime, transport);
-    expect(runtime.getFocused(windowId)).toBe(f1A);
-
-    // Click on screen at center-left [40, 50]:
-    // In Realm 1: [40, 50] corresponds to localX = -1 on the screen!
-    // In Realm 2: hits e2A (at [-1, 0])
-    events.push(move(windowId, 40, 50), button(windowId, 40, 50, 'pressed'));
-    advanceFrame(runtime, transport);
-    expect(runtime.getFocused(windowId)).toBe(f2A);
-
-    // Tab while in Realm 2: navigates to f2B
-    events.push(tab(windowId));
-    advanceFrame(runtime, transport);
-    expect(runtime.getFocused(windowId)).toBe(f2B);
-
-    // Next Tab in Realm 2: loops back to f2A (does NOT escape back to Realm 1)
-    events.push(tab(windowId));
-    advanceFrame(runtime, transport);
-    expect(runtime.getFocused(windowId)).toBe(f2A);
-
-    // Explicit requestFocus switches back to Realm 1
-    f1B.requestFocus(windowId);
-    expect(runtime.getFocused(windowId)).toBe(f1B);
   });
 });
