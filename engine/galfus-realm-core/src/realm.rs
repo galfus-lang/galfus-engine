@@ -56,6 +56,24 @@ pub trait Realm: RealmThreadBound + 'static {
         Vec::new()
     }
 
+    /// Performs a 2D hit test against colliders in the realm using a world coordinate point.
+    fn pick_2d(
+        &self,
+        _camera_slot: Option<u32>,
+        _world_pos: glam::Vec2,
+    ) -> Option<crate::collision::HitResult2D> {
+        None
+    }
+
+    /// Performs a 3D raycast picking hit test against colliders in the realm.
+    fn pick_3d(
+        &self,
+        _camera_slot: Option<u32>,
+        _ray: crate::collision::Ray3D,
+    ) -> Option<crate::collision::HitResult3D> {
+        None
+    }
+
     /// Returns a reference for downcasting to a concrete Realm type.
     fn as_any(&self) -> &dyn std::any::Any;
 

@@ -9,8 +9,10 @@
 //! - Compiles deterministic execution schedules via [`resolve`](MultiverseContext::resolve) and dispatches them via [`dispatch`](MultiverseContext::dispatch).
 
 pub mod context;
+pub mod context_interaction;
 pub mod error;
 pub(crate) mod executor;
+pub mod interaction;
 pub(crate) mod postprocess;
 pub mod resolver;
 pub mod schedule;
@@ -21,6 +23,10 @@ pub mod types;
 
 pub use context::MultiverseContext;
 pub use error::{MultiverseError, MultiverseResult};
+pub use interaction::{
+    InteractionButtonState, InteractionEvent, InteractionPointerEvent, InteractionType,
+    MultiverseInteractionSystem,
+};
 pub use schedule::{MultiverseSchedule, ResolvedInvocationStep, TargetExecutionBlock};
 pub use screen_effect::{
     BUILTIN_BLIT_SNIPPET, BUILTIN_SEPIA_SNIPPET, SCREEN_EFFECT_TEMPLATE, compose_screen_effect,

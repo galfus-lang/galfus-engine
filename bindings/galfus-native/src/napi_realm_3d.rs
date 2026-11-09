@@ -427,3 +427,30 @@ pub fn realm_3d_create_portal(
         )
     })
 }
+
+#[napi(js_name = "realm3dCreateCollider")]
+pub fn realm_3d_create_collider(
+    realm_id: u32,
+    collider_id: u32,
+    model_id: u32,
+    shape_json: String,
+) -> Result<()> {
+    let c_str = std::ffi::CString::new(shape_json)
+        .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
+    check_ffi_res(unsafe {
+        crate::ffi_interaction::galfus_realm_3d_create_collider(
+            realm_id,
+            collider_id,
+            model_id,
+            c_str.as_ptr(),
+        )
+    })
+}
+
+#[napi(js_name = "realm3dDestroyCollider")]
+pub fn realm_3d_destroy_collider(realm_id: u32, collider_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_interaction::galfus_realm_3d_destroy_collider(
+        realm_id,
+        collider_id,
+    ))
+}

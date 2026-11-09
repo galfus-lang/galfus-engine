@@ -226,3 +226,30 @@ pub fn realm_2d_destroy_svg(realm_id: u32, svg_id: u32) -> Result<()> {
         realm_id, svg_id,
     ))
 }
+
+#[wasm_bindgen(js_name = "realm2dCreateCollider")]
+pub fn realm_2d_create_collider(
+    realm_id: u32,
+    collider_id: u32,
+    model_id: u32,
+    shape_json: String,
+) -> Result<()> {
+    let c_str = std::ffi::CString::new(shape_json)
+        .map_err(|e| Error::from_reason(Status::GenericFailure, e.to_string()))?;
+    check_ffi_res(unsafe {
+        crate::ffi_interaction::galfus_realm_2d_create_collider(
+            realm_id,
+            collider_id,
+            model_id,
+            c_str.as_ptr(),
+        )
+    })
+}
+
+#[wasm_bindgen(js_name = "realm2dDestroyCollider")]
+pub fn realm_2d_destroy_collider(realm_id: u32, collider_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_interaction::galfus_realm_2d_destroy_collider(
+        realm_id,
+        collider_id,
+    ))
+}

@@ -2,6 +2,9 @@
 
 use super::*;
 use crate::ffi_audio::*;
+use crate::ffi_interaction::*;
+use crate::ffi_multiverse::*;
+use crate::ffi_realm_2d::*;
 use crate::ffi_transforms_getters::galfus_platform_get_window_size;
 
 #[test]
@@ -102,4 +105,62 @@ fn shutdown_clears_pending_events() {
 
     assert_eq!(galfus_platform_shutdown(), 0);
     assert_eq!(crate::ffi_event_batch::pending_event_count(), 0);
+}
+
+#[test]
+fn test_ffi_interaction_and_collision() {
+    let _ = galfus_platform_shutdown();
+    assert_eq!(galfus_platform_init_headless(), 0);
+
+    // 1. Create Target (Window target with id 1)
+    let target_json =
+        CString::new(r#"{"kind":{"type":"window","windowId":100},"size":[800,600]}"#).unwrap();
+    assert_eq!(
+        unsafe { galfus_multiverse_create_target(1, target_json.as_ptr()) },
+        0
+    );
+    assert_eq!(galfus_multiverse_update_window_size(100, 800, 600), 0);
+
+    // 2. Create Realm 2D
+    assert_eq!(galfus_realm_2d_create(10), 0);
+
+    // 3. Create Collider on Model 42
+    let collider_json =
+        CString::new(r#"{"shape":{"type":"rectangle","halfExtents":[50.0,25.0]}}"#).unwrap();
+    let res = unsafe { galfus_realm_2d_create_collider(10, 1, 42, collider_json.as_ptr()) };
+    if res != 0 {
+        let err = galfus_get_last_error();
+        let err_str = unsafe { from_c_str(err) }.unwrap();
+        panic!("create_collider failed: {err_str}");
+    }
+
+    // 4. Create Invocation
+    let inv_json =
+        CString::new(r#"{"targetId":1,"realmId":10,"zIndex":0,"enabled":true}"#).unwrap();
+    assert_eq!(
+        unsafe { galfus_multiverse_create_invocation(1000, inv_json.as_ptr()) },
+        0
+    );
+
+    // 5. Send Pointer Move at center of screen (400, 300) -> should hit model 42 at (0, 0)
+    let move_json = CString::new(r#"{"type":"move","windowId":100,"pointerId":1,"position":[400.0,300.0],"delta":[0.0,0.0]}"#).unwrap();
+    assert_eq!(
+        unsafe { galfus_multiverse_handle_pointer_event(move_json.as_ptr()) },
+        0
+    );
+
+    // 6. Poll interaction events
+    let events_ptr = galfus_multiverse_poll_interaction_events();
+    assert!(!events_ptr.is_null());
+    let events_json = unsafe { from_c_str(events_ptr) }.unwrap();
+    assert!(events_json.contains("\"interactionType\":\"hover\""));
+    assert!(events_json.contains("\"modelId\":42"));
+    unsafe { galfus_string_free(events_ptr) };
+
+    // 7. Cleanup
+    assert_eq!(galfus_realm_2d_destroy_collider(10, 1), 0);
+    assert_eq!(galfus_multiverse_destroy_invocation(1000), 0);
+    assert_eq!(galfus_realm_2d_destroy(10), 0);
+    assert_eq!(galfus_multiverse_destroy_target(1), 0);
+    assert_eq!(galfus_platform_shutdown(), 0);
 }

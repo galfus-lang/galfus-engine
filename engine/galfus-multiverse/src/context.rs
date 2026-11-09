@@ -58,6 +58,9 @@ pub struct MultiverseContext {
     pub(crate) post_processor: Option<PostProcessor>,
     pub(crate) gpu_manager: Option<GpuManager>,
 
+    /// Multiverse-level interaction and picking engine.
+    pub interaction: crate::interaction::MultiverseInteractionSystem,
+
     /// Cached resolved schedule.
     pub(crate) cached_schedule: Option<MultiverseSchedule>,
     /// Dirty flag indicating graph mutations requiring recalculation.
@@ -89,6 +92,7 @@ impl MultiverseContext {
             smaa_intermediates: None,
             taa_history: HashMap::new(),
             post_processor: None,
+            interaction: crate::interaction::MultiverseInteractionSystem::new(),
             cached_schedule: None,
             dirty: true,
         }

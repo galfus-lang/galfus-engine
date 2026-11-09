@@ -7,6 +7,7 @@ pub mod api;
 mod api_animation;
 pub mod batch;
 pub mod context;
+mod context_collision;
 mod context_shadows;
 pub mod gpu;
 pub mod pipeline;

@@ -23,6 +23,8 @@ pub struct Realm2DContext {
     pub lights: HashMap<u32, Light2D>,
     pub emitters: HashMap<u32, (ParticleEmitter2D, Transform2D, ParticleEmitterState2D)>,
     pub svg_manager: crate::svg_manager::SvgManager2D,
+    pub colliders: HashMap<u32, galfus_realm_core::Collider2D>,
+    pub model_transforms: HashMap<u32, Transform2D>,
     pub dirty: bool,
 
     pub pipeline_manager: Option<PipelineManager2D>,
@@ -48,6 +50,8 @@ impl Realm2DContext {
             lights: HashMap::new(),
             emitters: HashMap::new(),
             svg_manager: crate::svg_manager::SvgManager2D::new(),
+            colliders: HashMap::new(),
+            model_transforms: HashMap::new(),
             dirty: true,
             pipeline_manager: None,
             batch_builder: BatchBuilder2D::new(),
@@ -464,6 +468,14 @@ impl Realm for Realm2DContext {
             }
         }
         ids
+    }
+
+    fn pick_2d(
+        &self,
+        camera_slot: Option<u32>,
+        world_pos: glam::Vec2,
+    ) -> Option<galfus_realm_core::HitResult2D> {
+        self.perform_pick_2d(camera_slot, world_pos)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

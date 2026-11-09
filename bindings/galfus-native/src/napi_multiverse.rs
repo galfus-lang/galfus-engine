@@ -274,3 +274,28 @@ pub fn multiverse_get_anti_aliasing() -> Result<String> {
         .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
     Ok(s.trim_matches('"').to_string())
 }
+
+#[napi]
+pub fn multiverse_handle_pointer_event(event_json: String) -> Result<()> {
+    let event: galfus_multiverse::InteractionPointerEvent = serde_json::from_str(&event_json)
+        .map_err(|e| {
+            Error::new(
+                Status::GenericFailure,
+                format!("Invalid InteractionPointerEvent: {e}"),
+            )
+        })?;
+
+    with_multiverse_mut(|mv| {
+        mv.handle_pointer_event(&event);
+        Ok(())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_poll_interaction_events(env: Env) -> Result<JsUnknown> {
+    let events = with_multiverse_mut(|mv| Ok(mv.poll_interaction_events()))
+        .map_err(|e| Error::new(Status::GenericFailure, e))?;
+
+    env.to_js_value(&events)
+}
