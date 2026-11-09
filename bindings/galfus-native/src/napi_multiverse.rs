@@ -293,9 +293,9 @@ pub fn multiverse_handle_pointer_event(event_json: String) -> Result<()> {
 }
 
 #[napi]
-pub fn multiverse_poll_interaction_events(env: Env) -> Result<JsUnknown> {
+pub fn multiverse_poll_interaction_events() -> Result<String> {
     let events = with_multiverse_mut(|mv| Ok(mv.poll_interaction_events()))
         .map_err(|e| Error::new(Status::GenericFailure, e))?;
 
-    env.to_js_value(&events)
+    serde_json::to_string(&events).map_err(|e| Error::new(Status::GenericFailure, e.to_string()))
 }

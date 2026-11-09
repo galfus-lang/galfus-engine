@@ -2,8 +2,14 @@
  * Realm 2D synchronization system syncing ECS state with core GalfusEngine.
  */
 
-import type { GalfusEngine, Material2DDesc, Transform2DDesc } from '@galfus/transport-types';
+import type {
+  ColliderShape2D,
+  GalfusEngine,
+  Material2DDesc,
+  Transform2DDesc
+} from '@galfus/transport-types';
 import type { AnchorMatrixCache } from '../anchors/cache';
+import { type Collider2DComponent, getColliderEntries } from '../collision/components';
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';
 import { mat2d, vec2 } from '../math';
@@ -28,6 +34,7 @@ export class Realm2DSyncSystem {
   private readonly _syncedCameras = new Set<number>();
   private readonly _syncedSvgs = new Set<number>();
   private readonly _syncedEmitters = new Set<number>();
+  private readonly _syncedColliders = new Set<number>();
 
   constructor(
     readonly realmId: number,
@@ -243,7 +250,48 @@ export class Realm2DSyncSystem {
       }
     }
 
-    // 7. Clear WorldDirty for all Model2D entities after all Core sync steps are complete
+    // 7. Sync Colliders
+    const colliderEntities = world.query('Collider2D');
+    const currentColliders = new Set<number>();
+    for (const id of colliderEntities) {
+      const colliderComp = world.getComponent<Collider2DComponent>(id, 'Collider2D');
+      const model = world.getComponent<Model2DComponent>(id, 'Model2D');
+      if (!colliderComp || !model) continue;
+
+      for (const entry of getColliderEntries(colliderComp)) {
+        if (!entry.active) continue;
+        currentColliders.add(entry.colliderId);
+        if (!this._syncedColliders.has(entry.colliderId)) {
+          let offset: [number, number] | undefined;
+          if (entry.matrix && (entry.matrix[4] !== 0 || entry.matrix[5] !== 0)) {
+            offset = [entry.matrix[4]!, entry.matrix[5]!];
+          }
+          let shapeDesc: ColliderShape2D;
+          if (entry.shape.type === 'rectangle') {
+            shapeDesc = { type: 'rectangle', halfExtents: entry.shape.halfExtents, offset };
+          } else if (entry.shape.type === 'circle') {
+            shapeDesc = { type: 'circle', radius: entry.shape.radius, offset };
+          } else {
+            continue;
+          }
+          engine.realm2dCreateCollider(this.realmId, entry.colliderId, model.modelId, {
+            shape: shapeDesc,
+            offset,
+            layer: entry.layer,
+            mask: entry.mask
+          });
+          this._syncedColliders.add(entry.colliderId);
+        }
+      }
+    }
+    for (const colliderId of this._syncedColliders) {
+      if (!currentColliders.has(colliderId)) {
+        engine.realm2dDestroyCollider(this.realmId, colliderId);
+        this._syncedColliders.delete(colliderId);
+      }
+    }
+
+    // 8. Clear WorldDirty for all Model2D entities after all Core sync steps are complete
     for (const id of world.query('Model2D')) {
       const model = world.getComponent<Model2DComponent>(id, 'Model2D');
       if (model) {
@@ -272,6 +320,7 @@ export class Realm2DSyncSystem {
       for (const id of this._syncedSvgs) engine.realm2dDestroySvg(this.realmId, id);
       for (const id of this._syncedEmitters) engine.realm2dDestroyParticleEmitter(this.realmId, id);
       for (const id of this._syncedMaterials) engine.realm2dDestroyMaterial(this.realmId, id);
+      for (const id of this._syncedColliders) engine.realm2dDestroyCollider(this.realmId, id);
     }
     this._syncedSprites.clear();
     this._syncedShapes.clear();
@@ -280,5 +329,6 @@ export class Realm2DSyncSystem {
     this._syncedSvgs.clear();
     this._syncedEmitters.clear();
     this._syncedMaterials.clear();
+    this._syncedColliders.clear();
   }
 }

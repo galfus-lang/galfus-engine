@@ -127,4 +127,69 @@ describe('@galfus/transport-bun', () => {
 
     transport.dispose();
   });
+
+  it('should create 2D/3D colliders and route native pointer interaction events via FFI', () => {
+    const transport = createBunTransport({ headless: true });
+    try {
+      const engine = transport.engine;
+
+      // 1. Setup Multiverse Target and Invocation
+      engine.multiverseCreateTarget(1, {
+        kind: { type: 'window', windowId: 1 }
+      });
+      engine.realm2dCreate(1);
+      engine.multiverseCreateInvocation(1, {
+        targetId: 1,
+        realmId: 1,
+        viewport: {
+          width: { px: 200 },
+          height: { px: 200 }
+        },
+        zIndex: 10
+      });
+
+      // 2. Create 2D Shape and attach Collider
+      engine.realm2dCreateShape(
+        1,
+        100,
+        { kind: 'rectangle', size: [50, 50] },
+        { position: [0, 0], rotation: 0, scale: [1, 1] }
+      );
+      engine.realm2dCreateCollider(1, 10, 100, {
+        shape: { type: 'rectangle', halfExtents: [25, 25] },
+        offset: [0, 0]
+      });
+
+      // 3. Send Pointer Move into collider area
+      engine.multiverseHandlePointerEvent(
+        JSON.stringify({
+          type: 'move',
+          windowId: 1,
+          pointerId: 0,
+          position: [100, 100],
+          delta: [0, 0]
+        })
+      );
+
+      // 4. Poll events
+      const raw = engine.multiversePollInteractionEvents();
+      expect(raw).toBeDefined();
+      const events = JSON.parse(raw);
+      expect(events.length).toBeGreaterThanOrEqual(1);
+      const hoverEvent = events.find((e: any) => e.interactionType === 'hover');
+      expect(hoverEvent).toBeDefined();
+      expect(hoverEvent.realmId).toBe(1);
+      expect(hoverEvent.modelId).toBe(100);
+      expect(hoverEvent.colliderId).toBe(10);
+
+      // 5. Cleanup
+      engine.realm2dDestroyCollider(1, 10);
+      engine.realm2dDestroyShape(1, 100);
+      engine.multiverseDestroyInvocation(1);
+      engine.realm2dDestroy(1);
+      engine.multiverseDestroyTarget(1);
+    } finally {
+      transport.dispose();
+    }
+  });
 });

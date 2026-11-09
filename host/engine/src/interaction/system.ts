@@ -1,85 +1,105 @@
 import type {
+  InteractionEvent,
   KeyboardEvent,
-  PointerButton,
   PointerEvent,
   ScrollDelta,
   WindowEvent
 } from '@galfus/transport-types';
-import type { Component } from '../ecs/component';
-import type { MultiverseCoordinator } from '../multiverse/coordinator';
-import type { PresentationConnection, WindowPresentation } from '../multiverse/presentation-graph';
-import { Realm2D } from '../realm2d/realm';
-import { Realm3D } from '../realm3d/realm';
-import type { Model2DComponent, Svg2DComponent } from '../realm2d/components';
-import type { Model3DComponent } from '../realm3d/components';
 import {
   type Collider2DComponent,
   type Collider3DComponent,
   getColliderEntries
 } from '../collision/components';
-import { vec3 } from '../math';
 import { DebugLatencyTracker } from '../debug/latency-tracker';
+import type { Component } from '../ecs/component';
+import type { MultiverseCoordinator } from '../multiverse/coordinator';
+import type { Model2DComponent, Svg2DComponent } from '../realm2d/components';
+import { Realm2D } from '../realm2d/realm';
+import type { Model3DComponent } from '../realm3d/components';
+import { Realm3D } from '../realm3d/realm';
 import { InteractiveListener } from './listener';
-import {
-  type CameraSnapshot2D,
-  captureCameras2D,
-  pointerToWorld2D,
-  TargetSnapshot2D
-} from './snapshot2d';
-import {
-  type CameraSnapshot3D,
-  captureCameras3D,
-  pointerToRay3D,
-  TargetSnapshot3D
-} from './snapshot3d';
+import { captureCameras2D, TargetSnapshot2D } from './snapshot2d';
+import { captureCameras3D, TargetSnapshot3D } from './snapshot3d';
+import { SoftwarePicker } from './software_picker';
 import type { InteractiveEventType, InteractiveObserver, InteractiveTarget } from './types';
+import type { PointerState, RealmState, TargetRecord } from './types_internal';
 
-interface TargetRecord {
-  listener: InteractiveListener;
-  realm: Realm2D | Realm3D;
-  entityId: number;
-  model: Model2DComponent | Model3DComponent;
-  component: Component;
-  snapshot: TargetSnapshot2D | TargetSnapshot3D;
-}
-interface PointerState {
-  event: PointerEvent;
-  hover?: InteractiveListener;
-  pressed: Map<PointerButton | number, InteractiveListener>;
-  positions: Map<InteractiveListener, [number, number]>;
-  uvs: Map<InteractiveListener, [number, number]>;
-}
-interface RealmState {
-  realm: Realm2D | Realm3D;
-  cameras2D: CameraSnapshot2D[];
-  cameras3D: CameraSnapshot3D[];
-  records: Set<TargetRecord>;
+function toCorePointerEvent(event: PointerEvent): object | null {
+  switch (event.type) {
+    case 'move':
+      return {
+        type: 'move',
+        windowId: event.windowId,
+        pointerId: event.pointerId,
+        position: event.position,
+        delta: event.delta
+      };
+    case 'button': {
+      let button = 0;
+      if (typeof event.button === 'string') {
+        if (event.button === 'secondary') button = 1;
+        else if (event.button === 'auxiliary') button = 2;
+        else if (event.button === 'back') button = 3;
+        else if (event.button === 'forward') button = 4;
+      } else {
+        button = event.button.other;
+      }
+      return {
+        type: 'button',
+        windowId: event.windowId,
+        pointerId: event.pointerId,
+        position: event.position,
+        button,
+        state: event.state
+      };
+    }
+    case 'scroll': {
+      const delta: [number, number] =
+        'pixels' in event.delta
+          ? event.delta.pixels
+          : [event.delta.lines[0] * 20, event.delta.lines[1] * 20];
+      return {
+        type: 'scroll',
+        windowId: event.windowId,
+        pointerId: event.pointerId,
+        position: event.position,
+        delta
+      };
+    }
+    case 'leave':
+    case 'cancel':
+      return {
+        type: 'leave',
+        windowId: event.windowId,
+        pointerId: event.pointerId
+      };
+    default:
+      return null;
+  }
 }
 
 /** Host-side pointer dispatch against the most recently submitted presentation. */
 export class InteractiveSystem {
   private readonly records = new Map<InteractiveListener, TargetRecord>();
+  private readonly modelRecords = new Map<string, Set<TargetRecord>>();
   private readonly realms = new Map<number, RealmState>();
   private readonly pointers = new Map<number, Map<number, PointerState>>();
   private readonly observers = new Set<InteractiveObserver>();
-  private readonly worldPoint: [number, number] = [0, 0];
-  private readonly rayOrigin = vec3.create();
-  private readonly rayDirection = vec3.create();
+  private readonly picker: SoftwarePicker;
 
-  constructor(private readonly multiverse: MultiverseCoordinator) {}
+  constructor(private readonly multiverse: MultiverseCoordinator) {
+    this.picker = new SoftwarePicker(multiverse);
+  }
 
-  /** Registers an external observer to receive interaction lifecycle callbacks. */
   observe(observer: InteractiveObserver): () => void {
     this.observers.add(observer);
     return () => void this.observers.delete(observer);
   }
 
-  /** @internal */
   usesRealm(realmId: number): boolean {
     return this.realms.has(realmId);
   }
 
-  /** Returns the first directly presented invocation order for a registered, visible target. */
   presentationOrder(listener: InteractiveListener, windowId: number): number | undefined {
     const record = this.records.get(listener);
     const view = this.multiverse.presentationGraph.getWindow(windowId);
@@ -129,7 +149,6 @@ export class InteractiveSystem {
     return undefined;
   }
 
-  /** @internal Current hit for an already processed pointer event. */
   hovered(windowId: number, pointerId: number): InteractiveListener | undefined {
     return this.pointers.get(windowId)?.get(pointerId)?.hover;
   }
@@ -189,7 +208,7 @@ export class InteractiveSystem {
     if (previous && previous.realm !== realm) {
       for (const old of previous.records) old.listener.dispose();
     }
-    const record = {
+    const record: TargetRecord = {
       listener,
       realm,
       entityId: entityId!,
@@ -198,6 +217,12 @@ export class InteractiveSystem {
       snapshot: realm instanceof Realm2D ? new TargetSnapshot2D() : new TargetSnapshot3D()
     };
     this.records.set(listener, record);
+
+    const modelKey = `${realmId}:${model.modelId}`;
+    let mSet = this.modelRecords.get(modelKey);
+    if (!mSet) this.modelRecords.set(modelKey, (mSet = new Set()));
+    mSet.add(record);
+
     let state = this.realms.get(realmId);
     if (!state) {
       state = { realm, cameras2D: [], cameras3D: [], records: new Set() };
@@ -211,32 +236,42 @@ export class InteractiveSystem {
     const record = this.records.get(listener);
     if (!record) return;
     this.records.delete(listener);
+
+    const modelKey = `${record.realm.realmId}:${record.model.modelId}`;
+    const mSet = this.modelRecords.get(modelKey);
+    if (mSet) {
+      mSet.delete(record);
+      if (!mSet.size) this.modelRecords.delete(modelKey);
+    }
+
     const realmState = this.realms.get(record.realm.realmId);
     realmState?.records.delete(record);
-    for (const pointers of this.pointers.values())
+    for (const pointers of this.pointers.values()) {
       for (const pointer of pointers.values()) {
         pointer.positions.delete(listener);
         pointer.uvs.delete(listener);
         if (pointer.hover === listener) pointer.hover = undefined;
-        for (const [button, pressed] of pointer.pressed)
+        for (const [button, pressed] of pointer.pressed) {
           if (pressed === listener) pointer.pressed.delete(button);
+        }
       }
+    }
     if (!realmState?.records.size) this.realms.delete(record.realm.realmId);
     if (!this.records.size) this.pointers.clear();
   }
 
-  /** Captures state only after a successful dispatch. */
   afterDispatch(): void {
     if (!this.records.size) {
       for (const observer of this.observers) observer.onAfterDispatch?.();
       return;
     }
     let removed: TargetRecord[] | undefined;
-    for (const state of this.realms.values())
+    for (const state of this.realms.values()) {
       if (!state.realm.isDisposed) {
         if (state.realm instanceof Realm2D) captureCameras2D(state.realm, state.cameras2D);
         else captureCameras3D(state.realm, state.cameras3D);
       }
+    }
     for (const record of this.records.values()) {
       const { realm, entityId, component, model, snapshot, listener } = record;
       if (
@@ -274,186 +309,11 @@ export class InteractiveSystem {
         }
       }
     }
-    for (const pointers of this.pointers.values())
+    for (const pointers of this.pointers.values()) {
       for (const pointer of pointers.values()) this.updateHover(pointer);
+    }
     if (removed) for (const record of removed) record.listener.dispose();
     for (const observer of this.observers) observer.onAfterDispatch?.();
-  }
-
-  private pick(event: PointerEvent):
-    | {
-        listener: InteractiveListener;
-        localPos?: [number, number];
-        uv: [number, number];
-      }
-    | undefined {
-    const view = this.multiverse.presentationGraph.getWindow(event.windowId);
-    if (!view) return;
-    const visited = new Set<number>();
-    const localPos: [number, number] = [0, 0];
-    const uv: [number, number] = [0.5, 0.5];
-    for (let r = view.rootTargetIds.length - 1; r >= 0; r--) {
-      const rootId = view.rootTargetIds[r]!;
-      visited.add(rootId);
-      const hit = this.pickInTarget(view, rootId, event.position, 1, visited, localPos, uv);
-      visited.delete(rootId);
-      if (hit) {
-        return {
-          listener: hit.listener,
-          localPos: hit.transformed ? [localPos[0], localPos[1]] : undefined,
-          uv: [uv[0], uv[1]]
-        };
-      }
-    }
-    return undefined;
-  }
-
-  private pickInTarget(
-    view: WindowPresentation,
-    targetId: number,
-    position: [number, number],
-    depth: number,
-    visitedTargets: Set<number>,
-    outLocalPos: [number, number],
-    outUv: [number, number]
-  ): { listener: InteractiveListener; transformed: boolean } | undefined {
-    const ids = view.getInvocations(targetId);
-    for (let i = ids.length - 1; i >= 0; i--) {
-      const invocation = view.getInvocation(ids[i]!)!;
-      const realm = this.realms.get(invocation.realmId);
-      if (!realm || realm.realm.isDisposed) continue;
-      const slot = invocation.cameraSlot;
-      const cameras = realm.realm instanceof Realm2D ? realm.cameras2D : realm.cameras3D;
-      let camera: CameraSnapshot2D | CameraSnapshot3D | undefined;
-      for (const item of cameras)
-        if (item.slot === (slot ?? 0) || (slot !== undefined && item.id === slot)) {
-          camera = item;
-          break;
-        }
-      if (!camera) continue;
-      let best: TargetRecord | undefined;
-      let closest = Infinity;
-      let maxDistance: number | undefined;
-      const bestUv: [number, number] = [0.5, 0.5];
-      const currentUv: [number, number] = [0.5, 0.5];
-
-      if (realm.realm instanceof Realm2D) {
-        if (
-          !pointerToWorld2D(
-            this.worldPoint,
-            position[0],
-            position[1],
-            invocation.resolvedViewport,
-            camera as CameraSnapshot2D
-          )
-        )
-          continue;
-      } else {
-        maxDistance = pointerToRay3D(
-          this.rayOrigin,
-          this.rayDirection,
-          position[0],
-          position[1],
-          invocation.resolvedViewport,
-          camera as CameraSnapshot3D
-        );
-        if (maxDistance === undefined) continue;
-      }
-
-      for (const record of realm.records) {
-        if (
-          record.realm !== realm.realm ||
-          record.realm.world.getComponent(record.entityId, record.model.type) !== record.model ||
-          record.realm.world.getComponent(record.entityId, record.component.type) !==
-            record.component
-        )
-          continue;
-
-        if (record.snapshot instanceof TargetSnapshot3D && maxDistance !== undefined) {
-          const distance = record.snapshot.distance(
-            this.rayOrigin,
-            this.rayDirection,
-            maxDistance,
-            currentUv
-          );
-          if (distance !== undefined && distance < closest) {
-            closest = distance;
-            best = record;
-            bestUv[0] = currentUv[0];
-            bestUv[1] = currentUv[1];
-          }
-        } else if (
-          record.snapshot instanceof TargetSnapshot2D &&
-          record.snapshot.contains(this.worldPoint, record.listener.target, currentUv)
-        ) {
-          const a = record.snapshot,
-            b = best?.snapshot as TargetSnapshot2D | undefined;
-          const camera2d = camera as CameraSnapshot2D;
-          const d = 10 - a.zLayer;
-          if (d < camera2d.near || d > camera2d.far) continue;
-          if (
-            !b ||
-            a.zLayer > b.zLayer ||
-            (a.zLayer === b.zLayer &&
-              (a.drawOrder > b.drawOrder ||
-                (a.drawOrder === b.drawOrder && a.resourceId > b.resourceId)))
-          ) {
-            best = record;
-            bestUv[0] = currentUv[0];
-            bestUv[1] = currentUv[1];
-          }
-        }
-      }
-
-      if (best) {
-        if (depth < 3) {
-          let connection: PresentationConnection | undefined;
-          for (const conn of view.connections) {
-            if (conn.realmId === best.realm.realmId && conn.entityId === best.entityId) {
-              connection = conn;
-              break;
-            }
-          }
-          if (connection && !visitedTargets.has(connection.sourceTargetId)) {
-            const isCut = view.softCutEdges.some(
-              ([src, dst]) => src === connection!.sourceTargetId && dst === targetId
-            );
-            if (!isCut) {
-              const targetDesc = this.multiverse.getTarget(connection.sourceTargetId);
-              const tw = targetDesc?.kind.type === 'texture' ? targetDesc.kind.width : 1;
-              const th = targetDesc?.kind.type === 'texture' ? targetDesc.kind.height : 1;
-              const nextPos: [number, number] = [bestUv[0] * tw, bestUv[1] * th];
-              visitedTargets.add(connection.sourceTargetId);
-              const innerPos: [number, number] = [0, 0];
-              const innerUv: [number, number] = [0.5, 0.5];
-              const inner = this.pickInTarget(
-                view,
-                connection.sourceTargetId,
-                nextPos,
-                depth + 1,
-                visitedTargets,
-                innerPos,
-                innerUv
-              );
-              visitedTargets.delete(connection.sourceTargetId);
-              if (inner) {
-                outLocalPos[0] = innerPos[0];
-                outLocalPos[1] = innerPos[1];
-                outUv[0] = innerUv[0];
-                outUv[1] = innerUv[1];
-                return { listener: inner.listener, transformed: true };
-              }
-            }
-          }
-        }
-        outLocalPos[0] = position[0];
-        outLocalPos[1] = position[1];
-        outUv[0] = bestUv[0];
-        outUv[1] = bestUv[1];
-        return { listener: best.listener, transformed: depth > 1 };
-      }
-    }
-    return undefined;
   }
 
   private emit(
@@ -490,7 +350,7 @@ export class InteractiveSystem {
   }
 
   private updateHover(pointer: PointerState): void {
-    const hit = this.pick(pointer.event);
+    const hit = this.picker.pick(pointer.event, this.realms);
     const next = hit?.listener;
     if (hit) {
       pointer.uvs.set(hit.listener, hit.uv);
@@ -519,15 +379,92 @@ export class InteractiveSystem {
   }
 
   handle(event: PointerEvent): void {
+    const engine = this.multiverse.engine;
+    if (engine && 'multiverseHandlePointerEvent' in engine) {
+      this.handleNativePointer(event, engine);
+      return;
+    }
+    this.handleSoftwarePointer(event);
+  }
+
+  private handleNativePointer(
+    event: PointerEvent,
+    engine: NonNullable<MultiverseCoordinator['engine']>
+  ): void {
+    let window = this.pointers.get(event.windowId);
+    if (!window) this.pointers.set(event.windowId, (window = new Map()));
+    let pointer = window.get(event.pointerId);
+    if (!pointer) {
+      window.set(
+        event.pointerId,
+        (pointer = { event, pressed: new Map(), positions: new Map(), uvs: new Map() })
+      );
+    }
+    pointer.event = event;
+
+    const coreInput = toCorePointerEvent(event);
+    if (coreInput) {
+      engine.multiverseHandlePointerEvent(JSON.stringify(coreInput));
+      const raw = engine.multiversePollInteractionEvents();
+      if (raw) {
+        const events = JSON.parse(raw) as InteractionEvent[];
+        for (const ev of events) {
+          const type: InteractiveEventType =
+            ev.interactionType === 'pressMove' ? 'pressmove' : (ev.interactionType as any);
+          const records = this.modelRecords.get(`${ev.realmId}:${ev.modelId}`);
+          if (records) {
+            for (const record of records) {
+              if (
+                record.listener.target.type === 'collider' &&
+                (record.listener.target.colliderId === undefined ||
+                  record.listener.target.colliderId === ev.colliderId)
+              ) {
+                pointer.positions.set(record.listener, ev.localPos);
+                pointer.uvs.set(record.listener, ev.uv);
+                if (type === 'hover') {
+                  pointer.hover = record.listener;
+                  DebugLatencyTracker.recordHover(
+                    DebugLatencyTracker.currentFrameId,
+                    record.listener.target
+                  );
+                } else if (type === 'leave') {
+                  if (pointer.hover === record.listener) pointer.hover = undefined;
+                } else if (type === 'down') {
+                  pointer.pressed.set(ev.button ?? 0, record.listener);
+                } else if (type === 'up') {
+                  pointer.pressed.delete(ev.button ?? 0);
+                }
+                const scrollDelta: ScrollDelta | undefined = ev.scrollDelta
+                  ? { pixels: [ev.scrollDelta[0], ev.scrollDelta[1]] }
+                  : undefined;
+                this.emit(record.listener, type, pointer, scrollDelta);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (event.type === 'leave' || event.type === 'cancel') {
+      this.cancel(pointer);
+      window.delete(event.pointerId);
+      if (!window.size) this.pointers.delete(event.windowId);
+    }
+
+    for (const observer of this.observers) observer.onPointerEvent?.(event);
+  }
+
+  private handleSoftwarePointer(event: PointerEvent): void {
     if (this.records.size) {
       let window = this.pointers.get(event.windowId);
       if (!window) this.pointers.set(event.windowId, (window = new Map()));
       let pointer = window.get(event.pointerId);
-      if (!pointer)
+      if (!pointer) {
         window.set(
           event.pointerId,
           (pointer = { event, pressed: new Map(), positions: new Map(), uvs: new Map() })
         );
+      }
       pointer.event = event;
       if (event.type === 'leave' || event.type === 'cancel') {
         this.cancel(pointer);
@@ -568,7 +505,6 @@ export class InteractiveSystem {
     pointer.hover = undefined;
   }
 
-  /** Delivers once per listener even when several pointer buttons are pressed. */
   private emitPressed(pointer: PointerState, type: 'pressmove' | 'cancel'): void {
     const seen = new Set<InteractiveListener>();
     for (const listener of pointer.pressed.values()) {
@@ -592,6 +528,7 @@ export class InteractiveSystem {
     for (const id of [...this.pointers.keys()]) this.windowClosed(id);
     for (const listener of [...this.records.keys()]) listener.dispose();
     this.realms.clear();
+    this.modelRecords.clear();
     for (const observer of [...this.observers]) observer.onDispose?.();
   }
 }

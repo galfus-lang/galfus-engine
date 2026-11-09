@@ -429,10 +429,11 @@ pub fn realm_3d_create_collider(
     realm_id: u32,
     collider_id: u32,
     model_id: u32,
-    shape_json: String,
+    shape_val: JsUnknown,
 ) -> Result<()> {
-    let c_str = std::ffi::CString::new(shape_json)
-        .map_err(|e| Error::from_reason(Status::GenericFailure, e.to_string()))?;
+    let env = Env;
+    let c_str = js_to_c_string(&env, Some(shape_val))?
+        .ok_or_else(|| Error::from_reason(Status::InvalidArg, "shape cannot be null"))?;
     check_ffi_res(unsafe {
         crate::ffi_interaction::galfus_realm_3d_create_collider(
             realm_id,
