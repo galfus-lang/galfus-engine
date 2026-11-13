@@ -300,7 +300,7 @@ pub extern "C" fn galfus_realm_2d_query_point(
         let realm = mv
             .get_realm_mut::<Realm2DContext>(realm_id)
             .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        let hits = realm.query_point_2d(Vec2::new(x, y), mask);
+        let hits = realm.query_colliders_point_2d(Vec2::new(x, y), mask);
         serde_json::to_string(&hits).map_err(|e| e.to_string())
     });
 

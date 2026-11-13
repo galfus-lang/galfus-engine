@@ -35,6 +35,7 @@ export const interactionDescriptors: DescSpec[] = [
     fields: {
       shape: { type: { ref: 'ColliderShape2D' } },
       offset: { type: { tuple: ['number', 'number'] }, optional: true },
+      localMatrix: { type: { array: 'number' }, optional: true },
       sensor: { type: 'boolean', optional: true },
       layer: { type: 'number', optional: true },
       mask: { type: 'number', optional: true }
@@ -45,6 +46,12 @@ export const interactionDescriptors: DescSpec[] = [
     name: 'ColliderShape3D',
     doc: 'Geometric shape definition for a 3D collider.',
     variants: [
+      {
+        inline: {
+          type: { type: { literal: 'rectangle' } },
+          halfExtents: { type: { tuple: ['number', 'number'] } }
+        }
+      },
       {
         inline: {
           type: { type: { literal: 'box' } },
@@ -84,6 +91,7 @@ export const interactionDescriptors: DescSpec[] = [
     fields: {
       shape: { type: { ref: 'ColliderShape3D' } },
       offset: { type: { tuple: ['number', 'number', 'number'] }, optional: true },
+      localMatrix: { type: { array: 'number' }, optional: true },
       sensor: { type: 'boolean', optional: true },
       layer: { type: 'number', optional: true },
       mask: { type: 'number', optional: true }

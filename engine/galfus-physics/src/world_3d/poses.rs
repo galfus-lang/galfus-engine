@@ -6,6 +6,15 @@ use glam::{Quat, Vec3};
 use super::PhysicsWorld3D;
 
 impl PhysicsWorld3D {
+    /// Checks whether an entity's rigid body is dynamic.
+    pub fn is_body_dynamic(&self, entity_id: u32) -> bool {
+        self.entity_to_body
+            .get(&entity_id)
+            .and_then(|&h| self.rigid_body_set.get(h))
+            .map(|b| b.is_dynamic())
+            .unwrap_or(false)
+    }
+
     /// Gets the current simulated world pose of an entity's rigid body.
     pub fn get_body_pose(&self, entity_id: u32) -> Option<Pose3D> {
         let handle = self.entity_to_body.get(&entity_id)?;

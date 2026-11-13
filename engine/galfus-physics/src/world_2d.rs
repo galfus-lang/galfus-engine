@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use galfus_realm_core::collision::{Collider2D, ColliderShape2D};
 use galfus_realm_core::hierarchy::Pose2D;
-use glam::Vec2;
+use glam::{Affine2, Vec2};
 use rapier2d::prelude::*;
 
 use crate::events::EventCollector2D;
@@ -310,8 +310,17 @@ impl PhysicsWorld2D {
         scale: [f32; 2],
     ) {
         self.remove_collider(collider.id);
-        let sx = scale[0].abs().max(1e-4);
-        let sy = scale[1].abs().max(1e-4);
+        let local = collider
+            .local_matrix
+            .map_or(Affine2::IDENTITY, |m| Affine2::from_cols_array(&m));
+        if local.matrix2.determinant() == 0.0 {
+            return;
+        }
+        let (local_scale, angle, _) = local.to_scale_angle_translation();
+        let sx = (scale[0] * local_scale.x).abs().max(1e-4);
+        let sy = (scale[1] * local_scale.y).abs().max(1e-4);
+        let position =
+            local.transform_point2(Vec2::from_array(collider.offset)) * Vec2::from_array(scale);
 
         let shape = match &collider.shape {
             ColliderShape2D::Rectangle { half_extents } => {
@@ -333,7 +342,8 @@ impl PhysicsWorld2D {
         let friction = desc.map(|d| d.friction).unwrap_or(0.5);
 
         let builder = ColliderBuilder::new(shape)
-            .translation(Vec2::new(collider.offset[0] * sx, collider.offset[1] * sy))
+            .translation(position)
+            .rotation(angle)
             .restitution(restitution)
             .friction(friction)
             .sensor(collider.sensor)

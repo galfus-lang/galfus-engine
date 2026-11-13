@@ -4,7 +4,7 @@ mod poses;
 
 use galfus_realm_core::collision::{Collider3D, ColliderShape3D};
 use galfus_realm_core::hierarchy::Pose3D;
-use glam::{Quat, Vec3};
+use glam::{Mat4, Quat, Vec3};
 use rapier3d::prelude::*;
 
 use crate::events::EventCollector3D;
@@ -318,15 +318,6 @@ impl PhysicsWorld3D {
         }
     }
 
-    /// Checks whether an entity's rigid body is dynamic.
-    pub fn is_body_dynamic(&self, entity_id: u32) -> bool {
-        self.entity_to_body
-            .get(&entity_id)
-            .and_then(|&h| self.rigid_body_set.get(h))
-            .map(|b| b.is_dynamic())
-            .unwrap_or(false)
-    }
-
     /// Attaches or synchronizes a canonical 3D collider into Rapier with model scaling.
     pub fn sync_collider(
         &mut self,
@@ -336,9 +327,18 @@ impl PhysicsWorld3D {
         scale: [f32; 3],
     ) {
         self.remove_collider(collider.id);
-        let sx = scale[0].abs().max(1e-4);
-        let sy = scale[1].abs().max(1e-4);
-        let sz = scale[2].abs().max(1e-4);
+        let local = collider
+            .local_matrix
+            .map_or(Mat4::IDENTITY, |m| Mat4::from_cols_array(&m));
+        if local.determinant() == 0.0 {
+            return;
+        }
+        let (local_scale, rotation, _) = local.to_scale_rotation_translation();
+        let sx = (scale[0] * local_scale.x).abs().max(1e-4);
+        let sy = (scale[1] * local_scale.y).abs().max(1e-4);
+        let sz = (scale[2] * local_scale.z).abs().max(1e-4);
+        let position =
+            local.transform_point3(Vec3::from_array(collider.offset)) * Vec3::from_array(scale);
 
         let shape = match &collider.shape {
             ColliderShape3D::Box { half_extents } => SharedShape::cuboid(
@@ -370,11 +370,8 @@ impl PhysicsWorld3D {
         let friction = desc.map(|d| d.friction).unwrap_or(0.5);
 
         let builder = ColliderBuilder::new(shape)
-            .translation(Vec3::new(
-                collider.offset[0] * sx,
-                collider.offset[1] * sy,
-                collider.offset[2] * sz,
-            ))
+            .translation(position)
+            .rotation(rotation.to_scaled_axis())
             .restitution(restitution)
             .friction(friction)
             .sensor(collider.sensor)

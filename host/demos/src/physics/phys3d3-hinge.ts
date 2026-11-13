@@ -19,8 +19,7 @@ export async function runDemoPhys3d3(options: HostDemoOptions = {}): Promise<voi
   try {
     const realm3d = runtime.createRealm3D();
     const physics = await attachPhysics3D(runtime, realm3d, {
-      gravity: [0, -9.81, 0],
-      interpolate: true
+      gravity: [0, -9.81, 0]
     });
 
     let camAngle = 0.35;

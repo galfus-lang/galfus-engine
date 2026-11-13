@@ -276,21 +276,17 @@ export class Realm2DSyncSystem {
         const previous = this._syncedColliders.get(entry.colliderId);
         currentColliders.add(entry.colliderId);
         if (!previous || previous.modelId !== model.modelId || previous.entry !== entry) {
-          let offset: [number, number] | undefined;
-          if (entry.matrix && (entry.matrix[4] !== 0 || entry.matrix[5] !== 0)) {
-            offset = [entry.matrix[4]!, entry.matrix[5]!];
-          }
           let shapeDesc: ColliderShape2D;
           if (entry.shape.type === 'rectangle') {
-            shapeDesc = { type: 'rectangle', halfExtents: entry.shape.halfExtents, offset };
+            shapeDesc = { type: 'rectangle', halfExtents: entry.shape.halfExtents };
           } else if (entry.shape.type === 'circle') {
-            shapeDesc = { type: 'circle', radius: entry.shape.radius, offset };
+            shapeDesc = { type: 'circle', radius: entry.shape.radius };
           } else {
             shapeDesc = { type: 'polygon', vertices: entry.shape.vertices };
           }
           engine.realm2dCreateCollider(this.realmId, entry.colliderId, model.modelId, {
             shape: shapeDesc,
-            offset,
+            localMatrix: [...entry.matrix],
             sensor: entry.sensor ?? false,
             layer: entry.layer,
             mask: entry.mask

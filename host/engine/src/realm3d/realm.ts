@@ -19,6 +19,7 @@ import type {
 import { assertValidLogicalId } from '@galfus/transport-types';
 import type { Transform3DProps } from '../anchors/component';
 import { HierarchyCoordinator } from '../anchors/hierarchy';
+import { translateColliderHits } from '../collision/transport-hits';
 import { AnchorSolveSystem } from '../anchors/solver';
 import type { AnimationCoordinator } from '../animation/coordinator';
 import { createAnimationPlaybackSystem } from '../animation/player';
@@ -120,6 +121,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     return this._physics;
   }
   set physics(val: PhysicsWorld3D) {
+    if (this._physics !== val) this._physics?.dispose();
     this._physics = val;
   }
 
@@ -169,6 +171,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   reset(): void {
     if (this._disposed) throw new Error('Cannot reset a disposed Realm3D.');
     this.world.reset();
+    this.hierarchy.reset();
     this.solver.cache.clear();
     this._geometries.clear();
     this._materials.clear();
@@ -180,11 +183,14 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
       this._engine.realm3dDestroy(this.realmId);
       this._engine.realm3dCreate(this.realmId);
     }
+    this._physics?.reset();
   }
 
   dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
+    this._physics?.dispose();
+    this.hierarchy.reset();
     this.syncSystem.dispose(this._engine);
     if (this._engine) {
       this._engine.realm3dDestroy(this.realmId);
@@ -238,12 +244,12 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
       );
       if (typeof res === 'string') {
         try {
-          return JSON.parse(res);
+          return translateColliderHits(this.world, '3D', JSON.parse(res));
         } catch {
           return [];
         }
       }
-      if (Array.isArray(res)) return res;
+      if (Array.isArray(res)) return translateColliderHits(this.world, '3D', res);
     }
     this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0 });
     return raycast3D(this.world, origin, direction, maxDistance, mask);

@@ -322,7 +322,7 @@ pub extern "C" fn galfus_realm_3d_raycast(
             origin: Vec3::new(origin_x, origin_y, origin_z),
             direction: Vec3::new(dir_x, dir_y, dir_z).normalize_or_zero(),
         };
-        let hits = realm.raycast_colliders_3d(ray, max_dist, mask);
+        let hits = realm.query_ray_3d(ray, max_dist, mask);
         serde_json::to_string(&hits).map_err(|e| e.to_string())
     });
 

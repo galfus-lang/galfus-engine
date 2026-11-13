@@ -44,11 +44,13 @@ export interface RigidBody3DDesc extends RigidBodyBaseDesc {
 
 export interface PhysicsWorld2DOptions {
   gravity?: [number, number];
+  /** Interpolation is not implemented. */
   interpolate?: boolean;
 }
 
 export interface PhysicsWorld3DOptions {
   gravity?: [number, number, number];
+  /** Interpolation is not implemented. */
   interpolate?: boolean;
 }
 
@@ -73,8 +75,10 @@ export class PhysicsWorld2D {
   private _initialized = false;
   private readonly _bodies = new Map<number, number>();
   private readonly _entities = new Map<number, number>();
+  private _unsubscribeTick?: () => void;
 
   constructor(realm: Realm2D, options: PhysicsWorld2DOptions = {}) {
+    if (options.interpolate) throw new Error('Physics interpolation is not implemented.');
     this._realm = realm;
     this._gravity = options.gravity ?? [0, -9.81];
     if (this._realm.transport) {
@@ -84,6 +88,25 @@ export class PhysicsWorld2D {
         this._gravity[1]
       );
     }
+  }
+
+  bindTick(unsubscribe?: () => void): void {
+    this._unsubscribeTick?.();
+    this._unsubscribeTick = unsubscribe;
+  }
+
+  reset(): void {
+    this._bodies.clear();
+    this._entities.clear();
+    this._initialized = false;
+    this.setGravity(this._gravity);
+  }
+
+  dispose(): void {
+    this.bindTick();
+    this._bodies.clear();
+    this._entities.clear();
+    this._listeners.clear();
   }
 
   private _command(entity: EntityLike, command: object): any {
@@ -279,6 +302,7 @@ export class PhysicsWorld2D {
     else this.applyImpulse(entity, impulse);
   }
 
+  /** Applies force for the next physics step; reapply each step for continuous force. */
   applyForce(entity: EntityLike, force: [number, number]): void {
     const entityId = this._bodies.get(resolveEntityId(entity));
     if (entityId === undefined) return;
@@ -316,12 +340,17 @@ export async function attachPhysics2D(
   realm: Realm2D,
   options: PhysicsWorld2DOptions = {}
 ): Promise<PhysicsWorld2D> {
-  const world = new PhysicsWorld2D(realm, options);
-  (realm as any).physics = world;
+  if (options.interpolate) throw new Error('Physics interpolation is not implemented.');
+  const world = realm.physics;
+  if (options.gravity) world.setGravity(options.gravity);
   if (runtime && typeof runtime.on === 'function') {
-    runtime.on('fixedTick', ({ fixedDt }: { fixedDt: number }) => {
-      world.step(fixedDt);
-    });
+    world.bindTick(
+      runtime.on('fixedTick', ({ fixedDt }: { fixedDt: number }) => {
+        world.step(fixedDt);
+      })
+    );
+  } else {
+    world.bindTick();
   }
   return world;
 }
@@ -334,12 +363,17 @@ export async function attachPhysics3D(
   realm: Realm3D,
   options: PhysicsWorld3DOptions = {}
 ): Promise<PhysicsWorld3D> {
-  const world = new PhysicsWorld3D(realm, options);
-  (realm as any).physics = world;
+  if (options.interpolate) throw new Error('Physics interpolation is not implemented.');
+  const world = realm.physics;
+  if (options.gravity) world.setGravity(options.gravity);
   if (runtime && typeof runtime.on === 'function') {
-    runtime.on('fixedTick', ({ fixedDt }: { fixedDt: number }) => {
-      world.step(fixedDt);
-    });
+    world.bindTick(
+      runtime.on('fixedTick', ({ fixedDt }: { fixedDt: number }) => {
+        world.step(fixedDt);
+      })
+    );
+  } else {
+    world.bindTick();
   }
   return world;
 }

@@ -33,7 +33,11 @@ export interface ColliderHit3D {
 }
 
 export interface ColliderOptions {
-  /** Local affine matrix, column-major, relative to the entity's Model. */
+  /**
+   * Local affine matrix, column-major, relative to the entity's Model.
+   * Spatial queries use the full matrix. Physics decomposes it into rotation and scale;
+   * shear and nonuniform scaling of curved shapes are approximated by Rapier primitives.
+   */
   matrix?: readonly number[];
   active?: boolean;
   sensor?: boolean;

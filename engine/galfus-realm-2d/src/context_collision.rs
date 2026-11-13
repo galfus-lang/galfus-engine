@@ -85,6 +85,22 @@ impl Realm2DContext {
             ));
         }
         self.model_transforms.insert(model_id, transform);
+        self.sync_physics_transform_2d(model_id, transform);
+        if let Some((_, tf)) = self.sprites.get_mut(&model_id) {
+            *tf = transform;
+        }
+        if let Some((_, tf)) = self.shapes.get_mut(&model_id) {
+            *tf = transform;
+        }
+        if let Some((_, tf)) = self.uis.get_mut(&model_id) {
+            *tf = transform;
+        }
+        self.shadow_manager.mark_dirty();
+        self.dirty = true;
+        Ok(())
+    }
+
+    pub(crate) fn sync_physics_transform_2d(&mut self, model_id: u32, transform: Transform2D) {
         if let Some(physics) = self.physics.as_mut()
             && physics.has_rigid_body(model_id)
             && !physics.is_body_dynamic(model_id)
@@ -98,18 +114,6 @@ impl Realm2DContext {
                 },
             );
         }
-        if let Some((_, tf)) = self.sprites.get_mut(&model_id) {
-            *tf = transform;
-        }
-        if let Some((_, tf)) = self.shapes.get_mut(&model_id) {
-            *tf = transform;
-        }
-        if let Some((_, tf)) = self.uis.get_mut(&model_id) {
-            *tf = transform;
-        }
-        self.shadow_manager.mark_dirty();
-        self.dirty = true;
-        Ok(())
     }
 
     /// Removes a spatial-only model and all colliders attached to it.

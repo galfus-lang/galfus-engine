@@ -13,8 +13,7 @@ export async function runDemoPhys2d4(options: HostDemoOptions = {}): Promise<voi
   try {
     const realm2d = runtime.createRealm2D();
     const physics = await attachPhysics2D(runtime, realm2d, {
-      gravity: [0, -9.81],
-      interpolate: true
+      gravity: [0, -9.81]
     });
 
     realm2d.createCamera(

@@ -18,6 +18,7 @@ import type {
 import { assertValidLogicalId } from '@galfus/transport-types';
 import type { Transform2DProps } from '../anchors/component';
 import { HierarchyCoordinator } from '../anchors/hierarchy';
+import { translateColliderHits } from '../collision/transport-hits';
 import { AnchorSolveSystem } from '../anchors/solver';
 import type { AnimationCoordinator } from '../animation/coordinator';
 import { Collider2DComponent, type ColliderOptions } from '../collision/components';
@@ -84,6 +85,7 @@ export class Realm2D implements RealmConnector {
     return this._physics;
   }
   set physics(val: PhysicsWorld2D) {
+    if (this._physics !== val) this._physics?.dispose();
     this._physics = val;
   }
 
@@ -136,6 +138,7 @@ export class Realm2D implements RealmConnector {
   reset(): void {
     if (this._disposed) throw new Error('Cannot reset a disposed Realm2D.');
     this.world.reset();
+    this.hierarchy.reset();
     this.solver.cache.clear();
     this._materials.clear();
     this._preRenderSteppedFrame = -1;
@@ -145,11 +148,14 @@ export class Realm2D implements RealmConnector {
       this._engine.realm2dDestroy(this.realmId);
       this._engine.realm2dCreate(this.realmId);
     }
+    this._physics?.reset();
   }
 
   dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
+    this._physics?.dispose();
+    this.hierarchy.reset();
     this.syncSystem.dispose(this._engine);
     if (this._engine) {
       this._engine.realm2dDestroy(this.realmId);
@@ -186,12 +192,12 @@ export class Realm2D implements RealmConnector {
       const res = this._engine.realm2dQueryPoint(this.realmId, point[0], point[1], mask);
       if (typeof res === 'string') {
         try {
-          return JSON.parse(res);
+          return translateColliderHits(this.world, '2D', JSON.parse(res));
         } catch {
           return [];
         }
       }
-      if (Array.isArray(res)) return res;
+      if (Array.isArray(res)) return translateColliderHits(this.world, '2D', res);
     }
     this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0 });
     return queryPoint2D(this.world, point, mask);
@@ -219,12 +225,12 @@ export class Realm2D implements RealmConnector {
       );
       if (typeof res === 'string') {
         try {
-          return JSON.parse(res);
+          return translateColliderHits(this.world, '2D', JSON.parse(res));
         } catch {
           return [];
         }
       }
-      if (Array.isArray(res)) return res;
+      if (Array.isArray(res)) return translateColliderHits(this.world, '2D', res);
     }
     this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0 });
     return raycast2D(this.world, origin, direction, maxDistance, mask);

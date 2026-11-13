@@ -301,7 +301,7 @@ async function main() {
   const transport = ${transportInstantiation};
   const runtime = createRuntime(transport);
   const realm3d = runtime.createRealm3D();
-  const physics = await attachPhysics3D(runtime, realm3d, { gravity: [0, -9.81, 0], interpolate: true });
+  const physics = await attachPhysics3D(runtime, realm3d, { gravity: [0, -9.81, 0] });
 
   const windowId = runtime.platform.window.create({
     title: '${config.name}',

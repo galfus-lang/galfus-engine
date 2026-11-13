@@ -427,43 +427,35 @@ export class Realm3DSyncSystem {
           entry.shape.type !== 'box' &&
           entry.shape.type !== 'sphere' &&
           entry.shape.type !== 'cylinder' &&
-          entry.shape.type !== 'capsule'
+          entry.shape.type !== 'capsule' &&
+          entry.shape.type !== 'plane'
         )
           continue;
         currentColliders.add(entry.colliderId);
         if (!previous || previous.modelId !== model.modelId || previous.entry !== entry) {
-          let offset: [number, number, number] | undefined;
-          if (
-            entry.matrix &&
-            (entry.matrix[12] !== 0 || entry.matrix[13] !== 0 || entry.matrix[14] !== 0)
-          ) {
-            offset = [entry.matrix[12]!, entry.matrix[13]!, entry.matrix[14]!];
-          }
           let shapeDesc: ColliderShape3D;
           if (entry.shape.type === 'box') {
-            shapeDesc = { type: 'box', halfExtents: entry.shape.halfExtents, offset };
+            shapeDesc = { type: 'box', halfExtents: entry.shape.halfExtents };
           } else if (entry.shape.type === 'sphere') {
-            shapeDesc = { type: 'sphere', radius: entry.shape.radius, offset };
+            shapeDesc = { type: 'sphere', radius: entry.shape.radius };
           } else if (entry.shape.type === 'cylinder') {
             shapeDesc = {
               type: 'cylinder',
               radius: entry.shape.radius,
-              halfHeight: entry.shape.halfHeight,
-              offset
+              halfHeight: entry.shape.halfHeight
             };
           } else if (entry.shape.type === 'capsule') {
             shapeDesc = {
               type: 'capsule',
               radius: entry.shape.radius,
-              halfHeight: entry.shape.halfHeight,
-              offset
+              halfHeight: entry.shape.halfHeight
             };
           } else {
-            continue;
+            shapeDesc = { type: 'rectangle', halfExtents: entry.shape.halfExtents };
           }
           engine.realm3dCreateCollider(this.realmId, entry.colliderId, model.modelId, {
             shape: shapeDesc,
-            offset,
+            localMatrix: [...entry.matrix],
             sensor: entry.sensor ?? false,
             layer: entry.layer,
             mask: entry.mask

@@ -1,11 +1,210 @@
 import { describe, expect, test } from 'bun:test';
 import { createBunTransport } from '@galfus/transport-bun';
+import { createUi } from '@galfus/ui';
 import { attachPhysics2D, attachPhysics3D, createRuntime, presetsAnchor } from '../src/index';
 
 // Run after building and syncing the native Bun library: GALFUS_TEST_NATIVE_PHYSICS=1 bun test host/engine/test/physics_native.test.ts
 const native = process.env.GALFUS_TEST_NATIVE_PHYSICS === '1' ? describe : describe.skip;
 
 native('native physics integration', () => {
+  test('forces last one step and unsupported interpolation fails explicitly', async () => {
+    const runtime = createRuntime(createBunTransport({ headless: true }));
+    try {
+      const realm = runtime.createRealm2D();
+      await expect(attachPhysics2D(runtime, realm, { interpolate: true })).rejects.toThrow(
+        'Physics interpolation is not implemented.'
+      );
+      const physics = await attachPhysics2D(runtime, realm, { gravity: [0, 0] });
+      const materialId = realm.createMaterial({ baseColor: [1, 1, 1, 1] });
+      const body = realm.createShape({ kind: 'rectangle', size: [1, 1], materialId });
+      realm.addCollider(body, { type: 'rectangle', halfExtents: [0.5, 0.5] });
+      physics.addRigidBody(body, { mass: 1 });
+      realm.flush();
+      physics.applyForce(body, [10, 0]);
+      physics.step(0.1);
+      expect(physics.getLinearVelocity(body)[0]).toBeCloseTo(1, 4);
+      physics.step(0.1);
+      expect(physics.getLinearVelocity(body)[0]).toBeCloseTo(1, 4);
+      physics.applyForce(body, [10, 0]);
+      physics.step(0.1);
+      expect(physics.getLinearVelocity(body)[0]).toBeCloseTo(2, 4);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  test('reattaching physics replaces its tick subscription and disposing unsubscribes', async () => {
+    const runtime = createRuntime(createBunTransport({ headless: true }));
+    const listeners = new Set<(event: { fixedDt: number }) => void>();
+    const ticks = {
+      on: (_: string, listener: (event: { fixedDt: number }) => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      }
+    };
+    const realm = runtime.createRealm2D();
+    const physics = await attachPhysics2D(ticks, realm);
+    expect(await attachPhysics2D(ticks, realm)).toBe(physics);
+    expect(listeners.size).toBe(1);
+    realm.reset();
+    expect(listeners.size).toBe(1);
+    realm.dispose();
+    expect(listeners.size).toBe(0);
+    runtime.dispose();
+  });
+
+  test('scaled UI retains the visible click area', () => {
+    const runtime = createRuntime(createBunTransport({ headless: true }));
+    try {
+      const realm = runtime.createRealm2D();
+      const root = createUi(runtime).createRoot(realm, {
+        width: 100,
+        height: 100,
+        scale: [0.1, 0.1]
+      });
+      realm.flush();
+      expect(realm.queryPoint([4, 0]).some((hit: any) => hit.entityId === root.entityId)).toBe(
+        true
+      );
+      root.resizeViewport(100, 100);
+      realm.flush();
+      expect(realm.queryPoint([4, 0]).some((hit: any) => hit.entityId === root.entityId)).toBe(
+        true
+      );
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  test('queries preserve collider matrices, plane geometry and host entity IDs', () => {
+    const runtime = createRuntime(createBunTransport({ headless: true }));
+    try {
+      const realm = runtime.createRealm2D();
+      const materialId = realm.createMaterial({ baseColor: [1, 1, 1, 1] });
+      const entity = realm.createShape({ kind: 'rectangle', size: [1, 1], materialId });
+      const colliderId = realm.addCollider(
+        entity,
+        { type: 'rectangle', halfExtents: [2, 0.5] },
+        {
+          matrix: [0, 1, -1, 0, 3, 0],
+          sensor: true
+        }
+      );
+      realm.flush();
+      const hit = realm.queryPoint([3, 1.5])[0];
+      expect(hit).toMatchObject({ entityId: entity, colliderId, sensor: true, distance: 0 });
+      expect(hit.modelId).toBeUndefined();
+      expect(realm.queryPoint([4.5, 0])).toEqual([]);
+
+      const realm3 = runtime.createRealm3D();
+      const material = realm3.createMaterial({ baseColor: [1, 1, 1, 1] }).materialId;
+      const entity3 = realm3.createCube(1, material).entityId;
+      const collider3 = realm3.addCollider(
+        entity3,
+        { type: 'plane', halfExtents: [2, 1] },
+        {
+          matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 3, 0, 0, 1],
+          sensor: true
+        }
+      );
+      realm3.flush();
+      const hit3 = realm3.raycast([3, 0, 2], [0, 0, -1], 4)[0];
+      expect(hit3).toMatchObject({
+        entityId: entity3,
+        colliderId: collider3,
+        sensor: true,
+        distance: 2
+      });
+      expect(hit3.modelId).toBeUndefined();
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  test('moving a fixed 2D model moves its physical body and reset clears physics state', async () => {
+    const runtime = createRuntime(createBunTransport({ headless: true }));
+    try {
+      const realm = runtime.createRealm2D();
+      const physics = await attachPhysics2D(runtime, realm);
+      const materialId = realm.createMaterial({ baseColor: [1, 1, 1, 1] });
+      const floor = realm.createShape({ kind: 'rectangle', size: [20, 1], materialId });
+      realm.addCollider(floor, { type: 'rectangle', halfExtents: [10, 0.5] });
+      physics.addRigidBody(floor, { type: 'fixed' });
+      realm.flush();
+      realm.world.getComponent<any>(floor, 'Model2D')!.setPosition([0, 3]);
+      realm.flush();
+      const body = realm.createShape(
+        { kind: 'rectangle', size: [1, 1], materialId },
+        { position: [0, 8] }
+      );
+      realm.addCollider(body, { type: 'rectangle', halfExtents: [0.5, 0.5] });
+      physics.addRigidBody(body, { mass: 1 });
+      realm.flush();
+      for (let i = 0; i < 180; i++) physics.step(1 / 60);
+      expect(realm.world.getComponent<any>(body, 'Model2D')!.localMatrix[5]).toBeCloseTo(4, 1);
+      realm.reset();
+      expect(physics.hasRigidBody(body)).toBe(false);
+      expect(await attachPhysics2D(runtime, realm)).toBe(physics);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  test('physics applies collider-local rotation, scale and translation', async () => {
+    const runtime = createRuntime(createBunTransport({ headless: true }));
+    try {
+      const realm = runtime.createRealm2D();
+      const physics = await attachPhysics2D(runtime, realm);
+      const materialId = realm.createMaterial({ baseColor: [1, 1, 1, 1] });
+      const floor = realm.createShape({ kind: 'rectangle', size: [1, 1], materialId });
+      realm.addCollider(
+        floor,
+        { type: 'rectangle', halfExtents: [1, 0.5] },
+        {
+          matrix: [0, 2, -1, 0, 3, 0]
+        }
+      );
+      physics.addRigidBody(floor, { type: 'fixed' });
+      const body = realm.createShape(
+        { kind: 'rectangle', size: [1, 1], materialId },
+        { position: [3, 6] }
+      );
+      realm.addCollider(body, { type: 'rectangle', halfExtents: [0.5, 0.5] });
+      physics.addRigidBody(body, { mass: 1 });
+      realm.flush();
+      for (let i = 0; i < 180; i++) physics.step(1 / 60);
+      expect(realm.world.getComponent<any>(body, 'Model2D')!.localMatrix[5]).toBeCloseTo(2.5, 1);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  test('3D physics applies collider-local rotation, scale and translation', async () => {
+    const runtime = createRuntime(createBunTransport({ headless: true }));
+    try {
+      const realm = runtime.createRealm3D();
+      const physics = await attachPhysics3D(runtime, realm);
+      const material = realm.createMaterial({ baseColor: [1, 1, 1, 1] }).materialId;
+      const floor = realm.createCube(1, material).entityId;
+      realm.addCollider(
+        floor,
+        { type: 'box', halfExtents: [1, 0.5, 0.5] },
+        {
+          matrix: [0, 2, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, 3, 0, 0, 1]
+        }
+      );
+      physics.addRigidBody(floor, { type: 'fixed' });
+      const body = realm.createCube(1, material, { position: [3, 6, 0] }).entityId;
+      realm.addCollider(body, { type: 'box', halfExtents: [0.5, 0.5, 0.5] });
+      physics.addRigidBody(body, { mass: 1 });
+      realm.flush();
+      for (let i = 0; i < 180; i++) physics.step(1 / 60);
+      expect(realm.world.getComponent<any>(body, 'Model3D')!.localMatrix[13]).toBeCloseTo(2.5, 1);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
   test('2D bodies use model IDs, collide, reset and release joints', async () => {
     const runtime = createRuntime(createBunTransport({ headless: true }));
     try {
@@ -64,6 +263,7 @@ native('native physics integration', () => {
         realm.flush();
       }
       expect(Math.hypot(model.worldMatrix[4], model.worldMatrix[5] - 4)).toBeLessThan(1.3);
+      realm.hierarchy.attach(body, pivot, 'translation');
       realm.hierarchy.detach(body);
       for (let i = 0; i < 90; i++) {
         physics.step(1 / 60);
@@ -103,6 +303,9 @@ native('native physics integration', () => {
       expect(
         Math.hypot(model.localMatrix[0], model.localMatrix[1], model.localMatrix[2])
       ).toBeCloseTo(2, 1);
+      realm.reset();
+      expect(physics.hasRigidBody(body)).toBe(false);
+      expect(await attachPhysics3D(runtime, realm)).toBe(physics);
     } finally {
       runtime.dispose();
     }

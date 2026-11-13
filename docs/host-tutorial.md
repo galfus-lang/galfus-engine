@@ -546,8 +546,7 @@ import { attachPhysics3D, presetsAnchor } from '@galfus/engine';
 
 // 1. Attach 3D Rapier physics world to runtime ('fixedTick') and realm3D
 const physics3D = await attachPhysics3D(runtime, realm3D, {
-  gravity: [0, -9.81, 0],
-  interpolate: true
+  gravity: [0, -9.81, 0]
 });
 
 // 2. Anchor weight to ceiling with rope strategy (or use hierarchy.attachChain([...]))

@@ -75,6 +75,11 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
     else this._physicsBodies.delete(entityId);
   }
 
+  reset(): void {
+    this._dependentsByTarget.clear();
+    this._physicsBodies.clear();
+  }
+
   /**
    * Attaches an origin entity to a target reference entity with an optional constraint.
    * Rejects self-anchoring and cycles proactively.
@@ -115,6 +120,8 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
     // Disconnect previous target from reverse index if re-anchoring
     const prevTarget = this.getTarget(originId);
     if (prevTarget !== undefined) {
+      const previous = this._world.getComponent<AnchorComponent>(originId, 'Anchor');
+      if (previous?.managedByPhysics) this.detach(originId, false);
       this._dependentsByTarget.get(prevTarget)?.delete(originId);
     }
 

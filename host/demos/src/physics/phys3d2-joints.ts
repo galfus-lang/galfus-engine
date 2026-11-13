@@ -20,8 +20,7 @@ export async function runDemoPhys3d2(options: HostDemoOptions = {}): Promise<voi
   try {
     const realm3d = runtime.createRealm3D();
     const physics = await attachPhysics3D(runtime, realm3d, {
-      gravity: [0, -9.81, 0],
-      interpolate: true
+      gravity: [0, -9.81, 0]
     });
 
     const atlasData = createParticleAtlasTexture(64);

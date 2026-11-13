@@ -150,7 +150,7 @@ export const hierarchyPhysicsFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_realm_2d_apply_force',
     methodName: 'realm2dApplyForce',
-    doc: 'Applies a continuous force to a 2D rigid body.',
+    doc: 'Applies a force for the next 2D physics step; reapply it each step for continuous force.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
       { name: 'entityId', type: 'u32', doc: 'Logical ID of the entity.' },
@@ -303,7 +303,7 @@ export const hierarchyPhysicsFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_realm_3d_apply_force',
     methodName: 'realm3dApplyForce',
-    doc: 'Applies a continuous force to a 3D rigid body.',
+    doc: 'Applies a force for the next 3D physics step; reapply it each step for continuous force.',
     params: [
       { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
       { name: 'entityId', type: 'u32', doc: 'Logical ID of the entity.' },

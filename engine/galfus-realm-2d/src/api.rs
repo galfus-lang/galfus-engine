@@ -78,6 +78,7 @@ impl Realm2DContext {
             if let Some(spatial) = self.model_transforms.get_mut(&sprite_id) {
                 *spatial = transform;
             }
+            self.sync_physics_transform_2d(sprite_id, transform);
             self.shadow_manager.mark_dirty();
             self.dirty = true;
         }
@@ -110,6 +111,7 @@ impl Realm2DContext {
             if let Some(spatial) = self.model_transforms.get_mut(&shape_id) {
                 *spatial = transform;
             }
+            self.sync_physics_transform_2d(shape_id, transform);
             self.shadow_manager.mark_dirty();
             self.dirty = true;
         }

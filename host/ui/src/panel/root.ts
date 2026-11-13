@@ -78,7 +78,7 @@ export class UiRoot implements UiHost {
     // Attach collider to make UiRoot interactive
     this._colliderId = realm.addCollider(this.entityId, {
       type: 'rectangle',
-      halfExtents: [this._width * 0.5 * Math.abs(scale[0]), this._height * 0.5 * Math.abs(scale[1])]
+      halfExtents: [this._width * 0.5, this._height * 0.5]
     });
 
     this.rootPanel.attachHost(this);

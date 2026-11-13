@@ -41,7 +41,7 @@
     "test:browser": "bun scripts/test-browser.ts",
     "test:tour:browser": "bun scripts/test-browser-tour.ts",
     "test:host": "bun test host",
-    "demo": "cargo build -p galfus-native && bun host/demos/src/main.ts",
+    "demo": "bun scripts/host-sync.ts --skip-wasm && bun host/demos/src/main.ts",
     "host:sync": "bun scripts/host-sync.ts",
     "host:demo": "bun host/demos/src/main.ts",
     "gltf": "bun scripts/gltf-viewer.ts",

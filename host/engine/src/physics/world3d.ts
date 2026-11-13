@@ -29,8 +29,10 @@ export class PhysicsWorld3D {
   private _initialized = false;
   private readonly _bodies = new Map<number, number>();
   private readonly _entities = new Map<number, number>();
+  private _unsubscribeTick?: () => void;
 
   constructor(realm: Realm3D, options: PhysicsWorld3DOptions = {}) {
+    if (options.interpolate) throw new Error('Physics interpolation is not implemented.');
     this._realm = realm;
     this._gravity = options.gravity ?? [0, -9.81, 0];
     if (this._realm.transport) {
@@ -41,6 +43,25 @@ export class PhysicsWorld3D {
         this._gravity[2]
       );
     }
+  }
+
+  bindTick(unsubscribe?: () => void): void {
+    this._unsubscribeTick?.();
+    this._unsubscribeTick = unsubscribe;
+  }
+
+  reset(): void {
+    this._bodies.clear();
+    this._entities.clear();
+    this._initialized = false;
+    this.setGravity(this._gravity);
+  }
+
+  dispose(): void {
+    this.bindTick();
+    this._bodies.clear();
+    this._entities.clear();
+    this._listeners.clear();
   }
 
   private _command(entity: EntityLike, command: object): any {
@@ -268,6 +289,7 @@ export class PhysicsWorld3D {
     else this.applyImpulse(entity, impulse);
   }
 
+  /** Applies force for the next physics step; reapply each step for continuous force. */
   applyForce(entity: EntityLike, force: [number, number, number]): void {
     const entityId = this._bodies.get(resolveEntityId(entity));
     if (entityId === undefined) return;
