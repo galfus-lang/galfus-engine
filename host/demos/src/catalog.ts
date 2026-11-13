@@ -107,7 +107,7 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
   // 2. UI (2 demos)
   {
     id: 'ui1',
-    aliases: ['ui-events', 'sprite-image', 'svg-image', 'wheel'],
+    aliases: ['ui-events', 'sprite-image', 'wheel'],
     title: 'Native SpritePanel, Wheel & Engine Texture Lab',
     category: 'UI',
     tags: ['ui', 'sprite', 'pointer', 'wheel', 'scroll', 'image', 'textureId'],

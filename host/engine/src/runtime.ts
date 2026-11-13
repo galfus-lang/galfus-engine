@@ -54,14 +54,6 @@ export class MultiverseRuntime {
   readonly animation = new AnimationCoordinator();
   readonly textEncoding: TextEncoding;
   readonly interaction = new InteractiveSystem(this.multiverse);
-  readonly svg = {
-    getRect: (_realmId: number, _svgId: number, _elementId: string) => {
-      return undefined;
-    },
-    getTextLayout: (_realmId: number, _svgId: number, _elementId: string) => {
-      return undefined;
-    }
-  };
   private readonly _realmIdAllocator = new IdAllocator<RealmId>(1);
   private readonly _eventListeners = new Map<RuntimeEventType, Set<(event: any) => void>>();
   private _animationUnsubscribe: (() => void) | null = null;

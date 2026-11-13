@@ -8,10 +8,7 @@ import { createMockInteractionEngine } from '../../engine/test/mock-core-interac
 describe('text input demo', () => {
   it('edits fields, navigates by Tab, and displays composition state', () => {
     const events: PlatformEvent[] = [];
-    const text = new Map<string, string>();
-    const attributes = new Map<string, string>();
     const ime: Array<[number, number]> = [];
-    let layoutCalls = 0;
     let runtimeRef: any;
     const mockInteractions = createMockInteractionEngine((id) =>
       runtimeRef?.multiverse.getRealm(id)
@@ -24,45 +21,6 @@ describe('text input demo', () => {
         },
         platformPumpEvents: () => events.splice(0),
         windowSetImeAllowed: (id: number, enabled: number) => ime.push([id, enabled]),
-        realm2dGetSvgElementRect: (_realm: number, _svg: number, id: string) => {
-          const y = { 'name-hit': 128, 'project-hit': 225, 'note-hit': 322 }[id];
-          return y === undefined
-            ? {}
-            : {
-                rect: { x: 40, y, width: 680, height: 52, viewportWidth: 760, viewportHeight: 560 }
-              };
-        },
-        realm2dSetSvgText: (_realm: number, _svg: number, id: string, value: string) =>
-          text.set(id, value),
-        realm2dGetSvgTextLayout: (_realm: number, _svg: number, id: string) => {
-          layoutCalls++;
-          const value = text.get(id) ?? '';
-          if (!value) return {};
-          const baseline = { 'name-text': 161, 'project-text': 258, 'note-text': 355 }[id]!;
-          let byte = 0;
-          const clusters = [...value].map((char, index) => {
-            const byteStart = byte;
-            byte += new TextEncoder().encode(char).length;
-            return {
-              chunkIndex: 0,
-              byteStart,
-              byteEnd: byte,
-              transform: [1, 0, 0, 1, 56 + index * 10, baseline],
-              advance: 10,
-              ascent: 15,
-              descent: -4,
-              rightToLeft: false
-            };
-          });
-          return { layout: { chunks: [value], clusters, viewportWidth: 760, viewportHeight: 560 } };
-        },
-        realm2dSetSvgAttribute: (
-          _realm: number,
-          _svg: number,
-          id: string,
-          key: string,
-          value: string
-        ) => attributes.set(`${id}:${key}`, value),
         multiverseResolve: () => ({
           targetBlocks: [
             {

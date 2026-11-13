@@ -5,10 +5,6 @@ import { TextEditor, type TextSelection } from './editor';
 import { applyTextKeyboardEvent } from './keyboard';
 
 export interface TextInputOptions {
-  readonly svgId?: number;
-  readonly elementId?: string;
-  /** SVG element used for hit testing; defaults to elementId. */
-  readonly hitAreaId?: string;
   readonly onRender?: (displayValue: string) => void;
   readonly value?: string;
   readonly tabIndex?: number;
@@ -23,7 +19,7 @@ export interface TextInputEvent {
 }
 export type TextInputCallback = (event: TextInputEvent) => void;
 
-/** Editable Unicode state bound to one SVG text element and one focus target. */
+/** Editable Unicode state bound to a focus target. */
 export class TextInput {
   private readonly editor: TextEditor;
   private readonly callbacks = new Map<TextInputEventType, Set<TextInputCallback>>();
@@ -55,12 +51,6 @@ export class TextInput {
 
   get value(): string {
     return this.editor.value;
-  }
-  get svgId(): number {
-    return this.options.svgId ?? 0;
-  }
-  get elementId(): string {
-    return this.options.elementId ?? '';
   }
   get displayValue(): string {
     return this.editor.displayValue;
@@ -141,17 +131,6 @@ export class TextInput {
   private render(): void {
     if (this.options.onRender) {
       this.options.onRender(this.editor.displayValue);
-    }
-    if (this.options.svgId !== undefined && this.options.elementId !== undefined) {
-      try {
-        (this.realm as any).setSvgText?.(
-          { svgId: this.options.svgId },
-          this.options.elementId,
-          this.editor.displayValue
-        );
-      } catch {
-        // SVG decoupled
-      }
     }
   }
 

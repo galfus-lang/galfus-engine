@@ -399,26 +399,6 @@ realm2D.createLight(
 realm2D.createSprite({ dimensions: [64, 64] }, { position: [200, 300] });
 realm2D.createShape({ kind: 'circle', radius: 32 }, { position: [400, 300] });
 
-// Dynamic Interactive Vector SVG (quad centered at origin; root element ID required for animations)
-const hudSvg = realm2D.createSvg(
-  {
-    source: `
-      <svg id="root" width="320" height="180" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
-        <rect width="320" height="180" rx="8" fill="#0d141e" stroke="#25384e" stroke-width="2"/>
-        <text x="16" y="32" font-family="sans-serif" font-size="14" font-weight="bold" fill="#00d8ff">GALFUS ENGINE</text>
-        <text id="score" x="16" y="60" font-family="sans-serif" font-size="12" fill="#4ade80">Score: 0</text>
-      </svg>
-    `,
-    castShadow: false,
-    receiveShadow: false
-  },
-  { position: [0, 0] }
-);
-
-// Mutate SVG DOM elements directly at runtime
-realm2D.setSvgText(hudSvg, 'score', 'Score: 1500');
-realm2D.setSvgAttribute(hudSvg, 'score', 'fill', '#FFD700');
-
 // Soft Polar SDF Shadows
 realm2D.setShadowConfig({ ambient: 0.15, lightRadius: 15 });
 ```
@@ -490,9 +470,6 @@ realm3D.animateModel(
   runtime.animation
 );
 
-// 2. Animate a 2D SVG opacity directly via Realm helper:
-realm2D.animateSvgOpacity(hudSvg.entityId, 0.0, 1.0, 1.5, runtime.animation);
-
 // 3. Create transition explicitly bound to a native AnimationTarget:
 const transId = runtime.animation.createTransition(
   { type: 'vec3', value: [0, 0, 0] },
@@ -500,7 +477,7 @@ const transId = runtime.animation.createTransition(
   { kind: 'modelTransform3D', realmId: realm3D.realmId, modelId: turret.modelId }
 );
 
-// 4. Follow declarative SVG-like path motion bound to a 3D camera:
+// 4. Follow declarative path motion bound to a 3D camera:
 const pathId = runtime.animation.createPathFollow(
   [
     { type: 'moveTo', to: [0, 5, -10] },
@@ -521,7 +498,7 @@ const offAnim = runtime.on('animation', (event) => {
 
 ---
 
-## 8. Colliders, Pointer Interaction, Trans-Realm & SVG Text Input
+## 8. Colliders, Pointer Interaction, Trans-Realm & Text Input
 
 ### Geometric Colliders & Raycasts
 
@@ -543,7 +520,7 @@ const hitEntities2D = realm2D.queryPoint([0, 0]);
 
 ### Pointer Interaction & Trans-Realm Traversal
 
-Register interactive pointer listeners on 2D/3D colliders or SVG elements. When a realm renders to an offscreen texture target bound to a 3D quad or 2D sprite in another realm via `bindTargetTexture` and `connectPresentationSurface`, pointer and focus events traverse seamlessly across realms:
+Register interactive pointer listeners on 2D/3D colliders. When a realm renders to an offscreen texture target bound to a 3D quad or 2D sprite in another realm via `bindTargetTexture` and `connectPresentationSurface`, pointer and focus events traverse seamlessly across realms:
 
 ```ts
 // Interactive 3D collider
@@ -554,36 +531,11 @@ const tankListener = runtime.interactive(realm3D.realmId, {
 tankListener.on('hover', () => runtime.platform.window.setCursorIcon(windowId, 'pointer'));
 tankListener.on('leave', () => runtime.platform.window.setCursorIcon(windowId, 'default'));
 tankListener.on('click', (event) => console.log('Clicked tank at:', event.pointer.position));
-
-// Interactive SVG element inside Realm2D
-const svgButton = runtime.interactive(realm2D.realmId, {
-  type: 'svg',
-  svgId: hudSvg.svgId,
-  elementId: 'score'
-});
-svgButton.on('click', () => console.log('Score clicked!'));
 ```
 
-### Focus, SVG Text Input & Layout Queries (`@galfus/ui`)
+### Focus and Text Input (`@galfus/ui`)
 
-Bind keyboard/IME text editing and `Tab` / `Shift+Tab` focus navigation directly to SVG elements via `@galfus/ui`:
-
-```ts
-import { createUi } from '@galfus/ui';
-
-const ui = createUi(runtime);
-const nameInput = ui.textInput(realm2D.realmId, {
-  svgId: hudSvg.svgId,
-  elementId: 'score',
-  value: 'Player 1',
-  tabIndex: 0
-});
-nameInput.on('change', (val) => console.log('Updated text:', val));
-
-// Query SVG element bounds and shaped text cluster metrics in SVG viewport coordinates
-const rect = runtime.svg.getRect(realm2D.realmId, hudSvg.svgId, 'score');
-const layout = runtime.svg.getTextLayout(realm2D.realmId, hudSvg.svgId, 'score');
-```
+Bind text editing to a collider with `ui.textInput(realmId, { entityId, value, onRender })`. The `onRender` callback updates the associated native text element.
 
 ### Anchor Presets (`rope`, `chain`, `spring`) & Physics Coupling
 

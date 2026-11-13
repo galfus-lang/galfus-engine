@@ -7,7 +7,6 @@ import type {
 
 export type InteractiveTarget =
   | { type: 'collider'; entityId: number; colliderId?: number }
-  | { type: 'svg'; svgId: number; elementId: string }
   | { type: 'ui'; uiId: number; elementId: string | number };
 
 export type InteractiveEventType =
@@ -29,7 +28,7 @@ export interface InteractiveEvent {
   readonly realmId: number;
   readonly target: InteractiveTarget;
   readonly pointer: PointerEvent;
-  /** Normalized `[u, v]` coordinates (`0..1`) within the target surface or SVG element bounds. */
+  /** Normalized `[u, v]` coordinates (`0..1`) within the target surface bounds. */
   readonly uv?: [number, number];
   /** Sub-element numeric ID if targeted (e.g. UI Panel). */
   readonly elementId?: number;

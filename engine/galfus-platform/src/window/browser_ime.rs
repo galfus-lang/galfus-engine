@@ -198,12 +198,19 @@ impl BrowserIme {
         let mut clipboard_callbacks = Vec::new();
         {
             let clipboard_ref = Rc::clone(&clipboard);
+            let queue = Rc::clone(&events);
+            let active = Rc::clone(&enabled);
             let paste_cb = Closure::<dyn FnMut(web_sys::ClipboardEvent)>::new(
                 move |ev: web_sys::ClipboardEvent| {
                     if let Some(dt) = ev.clipboard_data()
                         && let Ok(text) = dt.get_data("text/plain")
                     {
-                        *clipboard_ref.borrow_mut() = text;
+                        *clipboard_ref.borrow_mut() = text.clone();
+                        if active.get() && !text.is_empty() {
+                            queue.borrow_mut().push(PlatformEvent::Keyboard(
+                                KeyboardEvent::TextInput { window_id, text },
+                            ));
+                        }
                     }
                     ev.prevent_default();
                 },
@@ -231,8 +238,6 @@ impl BrowserIme {
                 if kind.starts_with("insert")
                     && kind != "insertCompositionText"
                     && kind != "insertFromComposition"
-                    && kind != "insertFromPaste"
-                    && kind != "insertFromPasteAsQuotation"
                     && kind != "insertFromDrop"
                 {
                     let text = input_event.data().unwrap_or_else(|| input_ref.value());

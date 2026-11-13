@@ -42,7 +42,7 @@ function createMockEngine(): GalfusEngine {
     realm2dCreateSprite: () => {},
     realm2dDestroySprite: () => {},
     realm2dSetSpriteTransform: () => {},
-    realm2dSetSvgSource: () => {},
+
     realm2dParticleEmitterBurst: () => {}
   } as unknown as GalfusEngine;
 }

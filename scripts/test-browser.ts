@@ -1,4 +1,5 @@
 import { chromium } from '@playwright/test';
+import { API_FUNCTIONS } from './codegen/spec';
 import { existsSync } from 'fs';
 import { mkdir, rm } from 'fs/promises';
 import { homedir } from 'os';
@@ -85,23 +86,20 @@ async function main(): Promise<void> {
     '--outfile',
     resolve(testDir, 'text-encoding.js')
   ]);
+  await Bun.write(
+    resolve(testDir, 'host-integration.ts'),
+    `export { createRuntime } from '../../host/engine/src/runtime';
+export { createUi, TextEditor } from '../../host/ui/src/index';
+`
+  );
   run([
     'bun',
     'build',
-    'host/engine/src/runtime.ts',
+    resolve(testDir, 'host-integration.ts'),
     '--target',
     'browser',
     '--outfile',
-    resolve(testDir, 'host-runtime.js')
-  ]);
-  run([
-    'bun',
-    'build',
-    'host/ui/src/index.ts',
-    '--target',
-    'browser',
-    '--outfile',
-    resolve(testDir, 'host-ui.js')
+    resolve(testDir, 'host-integration.js')
   ]);
 
   await Bun.write(
@@ -119,8 +117,7 @@ async function main(): Promise<void> {
       import init, * as wasm from './pkg/galfus_browser.js';
       import { initializeGalfusBrowser } from './galfus-sdk.js';
       import { TextEncoding } from './text-encoding.js';
-      import { createRuntime } from './host-runtime.js';
-      import { createUi, TextEditor } from './host-ui.js';
+      import { createRuntime, createUi, TextEditor } from './host-integration.js';
 
       let galfus;
       let windowId;
@@ -142,15 +139,21 @@ async function main(): Promise<void> {
           if (sample.value !== '') throw new Error('Unicode grapheme parity failed');
         }
         galfus = await initializeGalfusBrowser({ ...wasm, default: init });
+        const expectedExports = ${JSON.stringify(API_FUNCTIONS.map((fn) => fn.methodName).filter((name) => !name.startsWith('audio') && name !== 'getLastError'))};
+        const missingExports = expectedExports.filter((name) => typeof wasm[name] !== 'function');
+        if (missingExports.length) throw new Error('Missing WASM exports: ' + missingExports.join(', '));
         galfus.platformInit();
         galfus.realm2dCreate(77);
-        galfus.realm2dCreateSvg(77, 1, {
-          source: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><text id="text" x="3" y="20">A é אב</text></svg>'
-        }, { position: [0, 0] });
-        const browserLayout = galfus.realm2dGetSvgTextLayout(77, 1, 'text').layout;
-        if (!browserLayout || browserLayout.chunks[0] !== 'A é אב' || !browserLayout.clusters.some((cluster) => cluster.rightToLeft)) {
-          throw new Error('Browser SVG text cluster layout failed');
+        galfus.realm2dEnablePhysics(77, 0, -9.81);
+        galfus.realm2dCreateShape(77, 1, { kind: 'circle', radius: 0.5 }, { position: [0, 5] });
+        galfus.realm2dAttachRigidbody(77, 1, { bodyType: 'dynamic', mass: 1, initialPosition: [0, 5], initialRotation: 0 });
+        galfus.realm2dCreateCollider(77, 2, 1, { shape: { type: 'circle', radius: 0.5 } });
+        const physicsStep = JSON.parse(galfus.realm2dStepPhysics(77, 1 / 60));
+        if (physicsStep.poses[0]?.[0] !== 1 || physicsStep.poses[0]?.[2] >= 5) {
+          throw new Error('Browser physics binding did not advance the body');
         }
+        const velocity = JSON.parse(galfus.realm2dBodyCommand(77, 1, JSON.stringify({ type: 'velocity' })));
+        if (velocity.linear[1] >= 0) throw new Error('Browser physics command returned an invalid velocity');
         galfus.realm2dDestroy(77);
         windowId = galfus.windowCreate({
           id: 42,
@@ -279,6 +282,12 @@ async function main(): Promise<void> {
         if (inserted.length !== 2 || inserted[0].text !== 'a' || inserted[1].text !== 'text pasted') {
           throw new Error('Committed keyboard and paste input were not delivered');
         }
+        const clipboard = new DataTransfer();
+        clipboard.setData('text/plain', 'clipboard text');
+        input.dispatchEvent(new ClipboardEvent('paste', { clipboardData: clipboard, cancelable: true }));
+        if (!galfus.platformPumpEvents().some((event) => event.type === 'textInput' && event.text === 'clipboard text')) {
+          throw new Error('Clipboard paste was not delivered');
+        }
         galfus.windowSetImeAllowed(windowId, 0);
         if (!galfus.platformPumpEvents().some((event) => event.type === 'imeDisabled')) {
           throw new Error('IME disable event was not delivered');
@@ -309,7 +318,6 @@ async function main(): Promise<void> {
           windowSetTabCapture: (_id, enabled) => galfus.windowSetTabCapture(windowId, enabled),
           windowRequestInputFocus: () => galfus.windowRequestInputFocus(windowId),
           windowSetImeAllowed: (_id, enabled) => galfus.windowSetImeAllowed(windowId, enabled),
-          realm2dGetSvgElementRect: () => ({ rect: { x: 0, y: 0, width: 100, height: 100, viewportWidth: 100, viewportHeight: 100 } })
         }, { get: (target, key) => key in target ? target[key] : () => {} });
         let frame;
         const transport = { engine, isInitialized: true, isDisposed: false, isRunning: false, startLoop: (callback) => { frame = callback; }, stopLoop: () => {}, dispose: () => {} };
@@ -330,34 +338,21 @@ async function main(): Promise<void> {
         let frameId = 0;
         const tick = () => frame({ frameId: ++frameId, timeMs: frameId * 16, deltaMs: 16, dt: 0.016, fps: 62.5 });
         tick();
-        const hitFirst = { pointerType: 'mouse', pointerId: 1, clientX: canvasRect.left + 355, clientY: canvasRect.top + 225, button: 0 };
-        canvas.dispatchEvent(new PointerEvent('pointermove', hitFirst));
-        canvas.dispatchEvent(new PointerEvent('pointerdown', hitFirst));
-        tick();
-        if (ui.getFocused(hostWindow) !== firstFocus) throw new Error('Browser pointer did not focus the host target');
-        const captured = [];
-        firstFocus.listener.on('pressmove', () => captured.push('move'));
-        firstFocus.listener.on('pressup', () => captured.push('up'));
-        const outsideFirst = { ...hitFirst, clientX: canvasRect.left + 700 };
-        canvas.dispatchEvent(new PointerEvent('pointermove', outsideFirst));
-        canvas.dispatchEvent(new PointerEvent('pointerup', outsideFirst));
-        tick();
-        if (captured.join(',') !== 'move,up') throw new Error('Browser pressed target did not receive movement and release outside its hit area');
+        if (!firstFocus.requestFocus(hostWindow)) throw new Error('Could not focus the host target');
         const hostTab = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', cancelable: true });
         canvas.dispatchEvent(hostTab);
         tick();
         if (!hostTab.defaultPrevented || ui.getFocused(hostWindow) !== secondFocus) throw new Error('Browser Tab did not advance host focus');
-        const svg = realm.createSvg({ source: '<svg/>', dimensions: [4, 4] });
-        const textInput = ui.textInput(1, { svgId: svg.svgId, elementId: 'text', value: 'a' });
+        const textInput = ui.textInput(1, { entityId: first, value: 'a' });
         tick();
-        if (!textInput.requestFocus(hostWindow) || document.activeElement !== input) throw new Error('SVG input did not activate the browser IME');
+        if (!textInput.requestFocus(hostWindow) || document.activeElement !== input) throw new Error('Text input did not activate the browser IME');
         input.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
         input.dispatchEvent(new CompositionEvent('compositionupdate', { data: 'かな' }));
         tick();
-        if (textInput.value !== 'a' || textInput.displayValue !== 'aかな') throw new Error('SVG input did not display the IME preview');
+        if (textInput.value !== 'a' || textInput.displayValue !== 'aかな') throw new Error('Text input did not display the IME preview');
         input.dispatchEvent(new CompositionEvent('compositionend', { data: '仮名' }));
         tick();
-        if (textInput.value !== 'a仮名') throw new Error('SVG input did not commit the IME text');
+        if (textInput.value !== 'a仮名') throw new Error('Text input did not commit the IME text');
         textInput.dispose();
         runtime.dispose();
         galfus.windowClose(windowId);

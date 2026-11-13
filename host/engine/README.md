@@ -136,7 +136,7 @@ The engine provides two loop hooks:
 
 1. **ECS as Single Source of Truth**:
    - Entities hold spatial `Model3D` or `Model2D` components.
-   - Renderables (`Mesh3D`, `Sprite2D`, `Shape2D`, `Svg2D`) attach directly to the model entity.
+   - Renderables (`Mesh3D`, `Sprite2D`, `Shape2D`) attach directly to the model entity.
    - Assets (`Geometry`, `Material`, `Texture`) are managed in resource registries outside the ECS and survive entity destruction.
 
 2. **Anchor Graph (`origin` / `target`)**:
@@ -200,32 +200,16 @@ off();
 
 Selection offsets, when supplied, use UTF-16 code units within the preedit text. The browser does not expose this selection in composition events. The browser input bridge takes DOM focus and releases it on disable or focus loss; enable it from a user interaction when the browser requires a user gesture.
 
-`textInput` is the committed text stream; `input.text` and `imeCommit.text` remain available as raw platform details. Text editors should insert from `textInput` only to avoid processing the same text twice. High-level focus management (`Focusable`, `FocusManager`), Unicode text editing (`TextEditor`, `applyTextKeyboardEvent`), and SVG text inputs (`TextInput`, `SvgTextDecorations`, `textInputGeometry`) are provided by `@galfus/ui` via `createUi(runtime)`.
-
-`runtime.svg.getTextLayout(realmId, svgId, elementId)` returns shaped cluster metrics on demand.
-The result contains normalized text chunks, cluster byte ranges within those UTF-8 chunks,
-advances, ascent and descent, text direction, and affine transforms in SVG viewport coordinates.
-The host caches the result until the SVG or font data changes; missing or non-rendered text
-returns `undefined`. SVG whitespace normalization may change chunk text from the original source,
-and a cluster can contain multiple graphemes, so these metrics alone do not yet define every
-editor caret position. Empty text is not currently returned by the SVG parser.
+`textInput` is the committed text stream; `input.text` and `imeCommit.text` remain available as raw platform details. Text editors should insert from `textInput` only to avoid processing the same text twice. High-level focus management (`Focusable`, `FocusManager`), Unicode text editing (`TextEditor`, `applyTextKeyboardEvent`), and text inputs (`TextInput`) are provided by `@galfus/ui` via `createUi(runtime)`.
 
 For explicit text/byte conversions, each runtime defaults to UTF-8. Set `createRuntime(transport, { charset: 'shift_jis' })` or call `runtime.textEncoding.setCharset('windows-1252')`, then use `runtime.textEncoding.encode(text)` and `decode(bytes)`. This setting does not restrict or recode editor strings or change the platform ABI. Unknown charsets throw; invalid bytes and characters not representable in the chosen charset are replaced according to the codec.
 
 ---
 
-## SVG element bounds
-
-`runtime.svg.getRect(realmId, svgId, elementId)` returns the geometric bounds of an SVG
-element or `undefined` if it cannot be found. The result is expressed in the SVG viewport's
-coordinates (top-left origin, Y down), before the entity transform. `viewportWidth` and
-`viewportHeight` describe that coordinate space. Bounds are cached and refreshed after SVG
-edits, font changes, re-creation, and native attribute animations.
-
 ## Pointer interaction
 
-Run `bun host:demo interaction` to try direct 2D, SVG, and 3D interaction in a window.
-Run `bun host:demo text-input` to try multiple SVG text fields and Tab/Shift+Tab focus.
+Run `bun host:demo interaction` to try direct 2D and 3D interaction in a window.
+Run `bun host:demo text-input` to try multiple text fields and Tab/Shift+Tab focus.
 To test characters outside the bundled font, pass `--font /path/to/font.ttf` (TTF, OTF, or TTC).
 The demo draws the keyboard caret and selection for single-line text; positions inside a ligature
 are estimated because the current layout API does not expose ligature caret positions.
@@ -233,7 +217,7 @@ For a bounded headless smoke test, use `bun host:demo interaction --headless --f
 The host tutorial is available as `bun host:demo tutorial`, with the same headless option.
 Use `bun host:demo help` to list the available demos.
 
-For an entity with a `Collider2D` or `Collider3D`, or for an SVG element in a 2D realm:
+For an entity with a `Collider2D` or `Collider3D`:
 
 ```ts
 const listener = runtime.interactive(realmId, { type: 'collider', entityId });
@@ -243,7 +227,7 @@ unsubscribe();
 listener.dispose();
 ```
 
-Use `{ type: 'svg', svgId, elementId }` for an SVG element. The supported event types are
+The supported event types are
 `hover`, `leave`, `move`, `down`, `up`, `click`, `cancel`, `pressmove`, and `pressup`.
 `pressmove` and `pressup` go to the target originally pressed even when the pointer is no
 longer over it, as long as the platform continues delivering pointer events; `cancel` ends

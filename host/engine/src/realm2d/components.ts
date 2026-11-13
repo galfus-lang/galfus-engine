@@ -10,7 +10,6 @@ import type {
   ParticleEmitter2DDesc,
   Shape2DDesc,
   Sprite2DDesc,
-  Svg2DDesc,
   UiCommandDesc
 } from '@galfus/transport-types';
 import type { Component } from '../ecs/component';
@@ -215,22 +214,6 @@ export function createCamera2D(cameraId: number, desc: Camera2DDesc): Camera2DCo
   return {
     type: 'Camera2D',
     cameraId,
-    desc,
-    isDirty: true
-  };
-}
-
-export interface Svg2DComponent extends Component {
-  readonly type: 'Svg2D';
-  readonly svgId: number;
-  desc: Svg2DDesc;
-  isDirty: boolean;
-}
-
-export function createSvg2D(svgId: number, desc: Svg2DDesc): Svg2DComponent {
-  return {
-    type: 'Svg2D',
-    svgId,
     desc,
     isDirty: true
   };

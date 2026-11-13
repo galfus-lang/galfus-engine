@@ -120,11 +120,6 @@ pub fn apply_target_value(
         | AnimationTarget::Particle2DTransform { .. }
         | AnimationTarget::Particle2DColorStart { .. }
         | AnimationTarget::Particle2DColorEnd { .. }
-        | AnimationTarget::SvgTransform2D { .. }
-        | AnimationTarget::SvgOpacity { .. }
-        | AnimationTarget::SvgAttributeColor { .. }
-        | AnimationTarget::SvgAttributeScalar { .. }
-        | AnimationTarget::SvgAttributeVec2 { .. }
         | AnimationTarget::UiElementBackgroundColor { .. }
         | AnimationTarget::UiElementBorderColor { .. }
         | AnimationTarget::UiElementBorderSideColor { .. }

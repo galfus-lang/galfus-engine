@@ -247,11 +247,14 @@ pub struct PhysicsContactEvent {
     pub sensor: bool,
 }
 
+/// Logical ID, position, and rotation of a simulated 3D body.
+pub type PhysicsPose3D = (u32, f32, f32, f32, f32, f32, f32, f32);
+
 /// Simulation result payload returned to host after 3D fixed physics tick.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PhysicsStepResult3D {
-    pub poses: Vec<(u32, f32, f32, f32, f32, f32, f32, f32)>,
+    pub poses: Vec<PhysicsPose3D>,
     pub events: Vec<PhysicsContactEvent>,
 }
 

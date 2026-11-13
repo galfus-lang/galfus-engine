@@ -58,8 +58,7 @@ export function createMockInteractionEngine(getRealm?: (realmId: number) => any)
     }
 
     const colliderComp = realm.world.getComponent(entityId, colliderType);
-    const isSvg = c.kind === '2d' && realm.world.hasComponent(entityId, 'Svg2D');
-    if (!colliderComp && !isSvg) {
+    if (!colliderComp) {
       c.active = false;
       return;
     }
@@ -129,11 +128,12 @@ export function createMockInteractionEngine(getRealm?: (realmId: number) => any)
 
     // Specific interaction demo coordinates:
     if ((pos[0] === 858 && pos[1] === 240) || (pos[0] === 714 && pos[1] === 451)) {
-      const svg =
+      const target =
         [...colliders.values()].find(
           (c) => c.realmId === 2 && c.active && c.shape?.type === 'rectangle'
         ) ?? [...colliders.values()].find((c) => c.realmId === 2 && c.active);
-      if (svg) return { collider: svg, localPos: [pos[0], pos[1]], uv: [0.5, (360 - 120) / 360] };
+      if (target)
+        return { collider: target, localPos: [pos[0], pos[1]], uv: [0.5, (360 - 120) / 360] };
     }
     if (pos[0] === 714 && pos[1] === 416) {
       const c2 =
@@ -288,24 +288,6 @@ export function createMockInteractionEngine(getRealm?: (realmId: number) => any)
         active: true,
         committedActive: true
       });
-    },
-    realm2dCreateSvg(realmId: number, svgId: number, _desc: any) {
-      colliders.set(`${realmId}:svg:${svgId}`, {
-        realmId,
-        colliderId: svgId,
-        modelId: svgId,
-        kind: '2d',
-        shape: { type: 'rectangle', halfExtents: [0, 0] },
-        position: [0, 0, 0],
-        committedPosition: [0, 0, 0],
-        zLayer: 10,
-        committedZLayer: 10,
-        active: true,
-        committedActive: true
-      });
-    },
-    realm2dDestroySvg(realmId: number, svgId: number) {
-      colliders.delete(`${realmId}:svg:${svgId}`);
     },
     realm2dDestroyCollider(realmId: number, colliderId: number) {
       colliders.delete(`${realmId}:${colliderId}`);

@@ -158,33 +158,6 @@ pub enum AnimationTarget {
         realm_id: u32,
         emitter_id: u32,
     },
-    SvgTransform2D {
-        realm_id: u32,
-        svg_id: u32,
-    },
-    SvgOpacity {
-        realm_id: u32,
-        svg_id: u32,
-    },
-    SvgAttributeColor {
-        realm_id: u32,
-        svg_id: u32,
-        element_id: String,
-        attribute: String,
-    },
-    SvgAttributeScalar {
-        realm_id: u32,
-        svg_id: u32,
-        element_id: String,
-        attribute: String,
-    },
-    SvgAttributeVec2 {
-        realm_id: u32,
-        svg_id: u32,
-        element_id: String,
-        attribute: String,
-    },
-
     // === Multiverse Targets ===
     InvocationClearColor {
         invocation_id: u32,

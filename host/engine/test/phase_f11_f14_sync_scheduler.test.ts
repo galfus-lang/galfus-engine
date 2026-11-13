@@ -142,13 +142,7 @@ function createMockEngine(calls: string[]): GalfusEngine {
     realm2dDestroyLight: (r: number, l: number) => calls.push(`2dDestroyLight:${r}:${l}`),
     realm2dGetSpriteTransform: () => ({ position: [0, 0] }),
     realm2dGetCameraTransform: () => ({ position: [0, 0] }),
-    realm2dCreateSvg: () => {},
-    realm2dSetSvgSource: () => {},
-    realm2dSetSvgAttribute: () => {},
-    realm2dRemoveSvgAttribute: () => {},
-    realm2dSetSvgText: () => {},
-    realm2dSetSvgTransform: () => {},
-    realm2dDestroySvg: () => {},
+
     realm2dLoadFontData: () => ''
   } as any as GalfusEngine;
 }

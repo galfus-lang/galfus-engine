@@ -1,7 +1,7 @@
 {
   "name": "@galfus/ui",
   "version": "0.0.0",
-  "description": "SVG UI, Focus, and Text Input System for Galfus Engine",
+  "description": "Native UI, Focus, and Text Input System for Galfus Engine",
   "author": "Renato Rodrigues (morbden) <renato@vulppi.dev>",
   "license": "Apache-2.0",
   "repository": {
@@ -17,7 +17,6 @@
     "galfus",
     "game-engine",
     "ui",
-    "svg",
     "focus",
     "text-input",
     "ime"

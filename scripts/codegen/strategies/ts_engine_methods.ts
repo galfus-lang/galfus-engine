@@ -137,6 +137,25 @@ export function engineMethodLines(
     );
     lines.push(`    }`);
 
+    if (
+      fn.methodName === 'platformGetWindowSizeRaw' ||
+      fn.methodName === 'multiverseGetTargetSizeRaw'
+    ) {
+      const id = fn.methodName === 'platformGetWindowSizeRaw' ? 'windowId' : 'targetId';
+      lines.push(`    const [width, height] = this._addon.${fn.methodName}(${id});`);
+      lines.push('    outWidth[0] = width; outHeight[0] = height;');
+      lines.push('  }');
+      continue;
+    }
+    if (fn.methodName === 'realm3dGetModelAabbRaw') {
+      lines.push('    const result = this._addon.realm3dGetModelAabbRaw(realmId, modelId);');
+      lines.push(
+        '    for (let i = 0; i < 3; i++) { outMin[i] = result[i]; outMax[i] = result[i + 3]; }'
+      );
+      lines.push('  }');
+      continue;
+    }
+
     // Prepare call args, parsing JSON strings to objects if passed as string
     const callArgs = fn.params
       .filter((p) => !p.out)

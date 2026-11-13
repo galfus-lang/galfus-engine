@@ -12,11 +12,7 @@ function createMockRuntime() {
       realm2dCreateUi: () => 0,
       realm2dSetUiContent: () => 0,
       realm2dSetUiTransform: () => 0,
-      realm2dDestroyUi: () => 0,
-      realm2dCreateSvg: () => 0,
-      realm2dSetSvgSource: () => 0,
-      realm2dSetSvgAttribute: () => 0,
-      realm2dGetSvgElementRect: () => ({ rect: undefined })
+      realm2dDestroyUi: () => 0
     },
     { get: (target, key) => (key in target ? target[key as keyof typeof target] : () => 0) }
   ) as unknown as GalfusEngine;

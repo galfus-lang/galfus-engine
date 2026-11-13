@@ -111,27 +111,22 @@ pub fn coalesce_platform_events(events: Vec<PlatformEvent>) -> Vec<PlatformEvent
                 pressure,
             }) => {
                 let mut merged = false;
-                for prev in input_events.iter_mut().rev() {
-                    if let PlatformEvent::Pointer(prev_ptr) = prev
-                        && prev_ptr.window_id() == window_id
-                        && prev_ptr.pointer_id() == pointer_id
-                    {
-                        if let PointerEvent::Move {
-                            pointer_type: prev_type,
-                            position: prev_pos,
-                            delta: prev_delta,
-                            pressure: prev_pressure,
-                            ..
-                        } = prev_ptr
-                        {
-                            *prev_type = pointer_type;
-                            *prev_pos = position;
-                            *prev_delta += delta;
-                            *prev_pressure = pressure;
-                            merged = true;
-                        }
-                        break;
-                    }
+                if let Some(PlatformEvent::Pointer(PointerEvent::Move {
+                    window_id: prev_window,
+                    pointer_id: prev_pointer,
+                    pointer_type: prev_type,
+                    position: prev_pos,
+                    delta: prev_delta,
+                    pressure: prev_pressure,
+                })) = input_events.last_mut()
+                    && *prev_window == window_id
+                    && *prev_pointer == pointer_id
+                {
+                    *prev_type = pointer_type;
+                    *prev_pos = position;
+                    *prev_delta += delta;
+                    *prev_pressure = pressure;
+                    merged = true;
                 }
                 if !merged {
                     input_events.push(PlatformEvent::Pointer(PointerEvent::Move {
@@ -152,34 +147,24 @@ pub fn coalesce_platform_events(events: Vec<PlatformEvent>) -> Vec<PlatformEvent
                 delta,
             }) => {
                 let mut merged = false;
-                for prev in input_events.iter_mut().rev() {
-                    if let PlatformEvent::Pointer(prev_ptr) = prev
-                        && prev_ptr.window_id() == window_id
-                        && prev_ptr.pointer_id() == pointer_id
-                    {
-                        match prev_ptr {
-                            PointerEvent::Scroll {
-                                position: prev_pos,
-                                delta: prev_delta,
-                                ..
-                            } => match (prev_delta, delta) {
-                                (ScrollDelta::Lines(acc), ScrollDelta::Lines(d)) => {
-                                    *prev_pos = position;
-                                    *acc += d;
-                                    merged = true;
-                                    break;
-                                }
-                                (ScrollDelta::Pixels(acc), ScrollDelta::Pixels(d)) => {
-                                    *prev_pos = position;
-                                    *acc += d;
-                                    merged = true;
-                                    break;
-                                }
-                                _ => break,
-                            },
-                            PointerEvent::Move { .. } => continue,
-                            _ => break,
+                if let Some(PlatformEvent::Pointer(PointerEvent::Scroll {
+                    window_id: prev_window,
+                    pointer_id: prev_pointer,
+                    position: prev_pos,
+                    delta: prev_delta,
+                    ..
+                })) = input_events.last_mut()
+                    && *prev_window == window_id
+                    && *prev_pointer == pointer_id
+                {
+                    match (prev_delta, delta) {
+                        (ScrollDelta::Lines(acc), ScrollDelta::Lines(d))
+                        | (ScrollDelta::Pixels(acc), ScrollDelta::Pixels(d)) => {
+                            *prev_pos = position;
+                            *acc += d;
+                            merged = true;
                         }
+                        _ => {}
                     }
                 }
                 if !merged {
@@ -395,5 +380,27 @@ mod tests {
                 delta: ScrollDelta::Lines(Vec2::new(0.0, 3.0)),
             })
         );
+    }
+    #[test]
+    fn coalescing_preserves_order_across_windows() {
+        let move_event = |window_id| {
+            PlatformEvent::Pointer(PointerEvent::Move {
+                window_id,
+                pointer_id: 1,
+                pointer_type: PointerType::Mouse,
+                position: Vec2::ZERO,
+                delta: Vec2::ZERO,
+                pressure: 0.0,
+            })
+        };
+        let events = coalesce_platform_events(vec![move_event(43), move_event(42), move_event(43)]);
+        let ids: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                PlatformEvent::Pointer(pointer) => Some(pointer.window_id()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ids, [43, 42, 43]);
     }
 }

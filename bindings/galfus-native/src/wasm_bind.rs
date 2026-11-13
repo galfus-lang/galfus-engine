@@ -35,6 +35,21 @@ fn check_ffi_res(code: i32) -> Result<()> {
     }
 }
 
+fn ffi_string_result(ptr: *mut std::os::raw::c_char) -> Result<String> {
+    if ptr.is_null() {
+        check_ffi_res(-1)?;
+        return Err(Error::from_reason(
+            Status::GenericFailure,
+            "Native call returned null",
+        ));
+    }
+    let value = unsafe { std::ffi::CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned();
+    unsafe { crate::ffi::galfus_string_free(ptr) };
+    Ok(value)
+}
+
 #[path = "wasm_platform.rs"]
 mod wasm_platform;
 pub use wasm_platform::*;
@@ -54,3 +69,11 @@ pub use wasm_realm_3d::*;
 #[path = "wasm_realm_2d.rs"]
 mod wasm_realm_2d;
 pub use wasm_realm_2d::*;
+
+#[path = "wasm_hierarchy_physics.rs"]
+mod wasm_hierarchy_physics;
+pub use wasm_hierarchy_physics::*;
+
+#[path = "wasm_realm_extra.rs"]
+mod wasm_realm_extra;
+pub use wasm_realm_extra::*;

@@ -13,7 +13,7 @@ import {
 import { DebugLatencyTracker } from '../debug/latency-tracker';
 import type { Component } from '../ecs/component';
 import type { MultiverseCoordinator } from '../multiverse/coordinator';
-import type { Model2DComponent, Model2DUIComponent, Svg2DComponent } from '../realm2d/components';
+import type { Model2DComponent, Model2DUIComponent } from '../realm2d/components';
 import { Realm2D } from '../realm2d/realm';
 import type { Model3DComponent } from '../realm3d/components';
 import { Realm3D } from '../realm3d/realm';
@@ -168,17 +168,6 @@ export class InteractiveSystem {
       if (input.colliderId !== undefined && !matches)
         throw new Error('Interactive collider does not exist.');
       component = collider;
-    } else if (input.type === 'svg') {
-      if (!(realm instanceof Realm2D)) throw new Error('Interactive SVG requires a Realm2D.');
-      for (const id of realm.world.query('Svg2D')) {
-        const svg = realm.world.getComponent<Svg2DComponent>(id, 'Svg2D');
-        if (svg?.svgId === input.svgId) {
-          entityId = id;
-          component = svg;
-          break;
-        }
-      }
-      if (entityId === undefined || !component) throw new Error('Interactive SVG does not exist.');
     } else if (input.type === 'ui') {
       if (!(realm instanceof Realm2D)) throw new Error('Interactive UI requires a Realm2D.');
       for (const id of realm.world.query('Model2DUI')) {
@@ -355,21 +344,6 @@ export class InteractiveSystem {
             matches =
               record.listener.target.colliderId === undefined ||
               record.listener.target.colliderId === ev.colliderId;
-          } else if (record.listener.target.type === 'svg') {
-            const target = record.listener.target;
-            const r2d = record.realm as any;
-            const rect = r2d.getSvgElementRect?.(target.svgId, target.elementId);
-            if (rect && rect.viewportWidth > 0 && rect.viewportHeight > 0) {
-              const svgX = ev.uv[0] * rect.viewportWidth;
-              const svgY = ev.uv[1] * rect.viewportHeight;
-              matches =
-                svgX >= rect.x &&
-                svgX <= rect.x + rect.width &&
-                svgY >= rect.y &&
-                svgY <= rect.y + rect.height;
-            } else {
-              matches = true;
-            }
           } else if (record.listener.target.type === 'ui') {
             const target = record.listener.target;
             const targetNumeric =

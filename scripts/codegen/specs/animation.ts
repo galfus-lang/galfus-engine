@@ -203,47 +203,6 @@ export const animationDescriptors: DescSpec[] = [
       },
       {
         inline: {
-          kind: { type: { literal: 'svgTransform2D' } },
-          realmId: { type: 'number' },
-          svgId: { type: 'number' }
-        }
-      },
-      {
-        inline: {
-          kind: { type: { literal: 'svgOpacity' } },
-          realmId: { type: 'number' },
-          svgId: { type: 'number' }
-        }
-      },
-      {
-        inline: {
-          kind: { type: { literal: 'svgAttributeColor' } },
-          realmId: { type: 'number' },
-          svgId: { type: 'number' },
-          elementId: { type: 'string' },
-          attribute: { type: 'string' }
-        }
-      },
-      {
-        inline: {
-          kind: { type: { literal: 'svgAttributeScalar' } },
-          realmId: { type: 'number' },
-          svgId: { type: 'number' },
-          elementId: { type: 'string' },
-          attribute: { type: 'string' }
-        }
-      },
-      {
-        inline: {
-          kind: { type: { literal: 'svgAttributeVec2' } },
-          realmId: { type: 'number' },
-          svgId: { type: 'number' },
-          elementId: { type: 'string' },
-          attribute: { type: 'string' }
-        }
-      },
-      {
-        inline: {
           kind: { type: { literal: 'invocationClearColor' } },
           invocationId: { type: 'number' }
         }
@@ -337,7 +296,7 @@ export const animationDescriptors: DescSpec[] = [
   {
     kind: 'union',
     name: 'PathCommand',
-    doc: 'Declarative SVG-like path motion commands with individual duration and easing.',
+    doc: 'Declarative path motion commands with individual duration and easing.',
     variants: [
       {
         inline: {

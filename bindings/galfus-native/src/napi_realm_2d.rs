@@ -2,30 +2,6 @@
 
 use super::*;
 
-#[napi(js_name = "realm2dGetSvgTextLayout")]
-pub fn realm_2d_get_svg_text_layout(
-    env: Env,
-    realm_id: u32,
-    svg_id: u32,
-    element_id: String,
-) -> Result<JsUnknown> {
-    let value = crate::ffi_realm_2d_svg::svg_text_layout(realm_id, svg_id, &element_id)
-        .map_err(|error| Error::new(Status::GenericFailure, error))?;
-    env.to_js_value(&value)
-}
-
-#[napi(js_name = "realm2dGetSvgElementRect")]
-pub fn realm_2d_get_svg_element_rect(
-    env: Env,
-    realm_id: u32,
-    svg_id: u32,
-    element_id: String,
-) -> Result<JsUnknown> {
-    let value = crate::ffi_realm_2d_svg::svg_element_rect(realm_id, svg_id, &element_id)
-        .map_err(|error| Error::new(Status::GenericFailure, error))?;
-    env.to_js_value(&value)
-}
-
 // Realm 2D
 #[napi(js_name = "realm2dCreate")]
 pub fn realm_2d_create(realm_id: u32) -> Result<()> {
@@ -111,53 +87,6 @@ pub fn realm_2d_set_light_transform(
     })
 }
 
-#[napi(js_name = "realm2dCreateSvg")]
-pub fn realm_2d_create_svg(
-    env: Env,
-    realm_id: u32,
-    svg_id: u32,
-    svg_val: JsUnknown,
-    transform_val: Option<JsUnknown>,
-) -> Result<()> {
-    let c_svg = js_to_c_string(&env, Some(svg_val))?
-        .ok_or_else(|| Error::new(Status::InvalidArg, "svg cannot be null"))?;
-    let c_tf = js_to_c_string(&env, transform_val)?;
-    check_ffi_res(unsafe {
-        crate::ffi_realm_2d_svg::galfus_realm_2d_create_svg(
-            realm_id,
-            svg_id,
-            c_svg.as_ptr(),
-            c_tf.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
-        )
-    })
-}
-
-#[napi(js_name = "realm2dSetSvgSource")]
-pub fn realm_2d_set_svg_source(realm_id: u32, svg_id: u32, source: String) -> Result<()> {
-    let c_source = std::ffi::CString::new(source)
-        .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
-    check_ffi_res(unsafe {
-        crate::ffi_realm_2d_svg::galfus_realm_2d_set_svg_source(realm_id, svg_id, c_source.as_ptr())
-    })
-}
-
-#[napi(js_name = "realm2dSetSvgTransform")]
-pub fn realm_2d_set_svg_transform(
-    env: Env,
-    realm_id: u32,
-    svg_id: u32,
-    transform_val: JsUnknown,
-) -> Result<()> {
-    let _desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
-    check_ffi_res(unsafe {
-        crate::ffi_realm_2d_svg::galfus_realm_2d_set_svg_transform(
-            realm_id,
-            svg_id,
-            std::ptr::null(),
-        )
-    })
-}
-
 #[napi(js_name = "realm3dDestroyCamera")]
 pub fn realm_3d_destroy_camera(realm_id: u32, camera_id: u32) -> Result<()> {
     check_ffi_res(crate::ffi_realm_destroy::galfus_realm_3d_destroy_camera(
@@ -223,11 +152,6 @@ pub fn realm_2d_destroy_light(realm_id: u32, light_id: u32) -> Result<()> {
     check_ffi_res(crate::ffi_realm_destroy::galfus_realm_2d_destroy_light(
         realm_id, light_id,
     ))
-}
-
-#[napi(js_name = "realm2dDestroySvg")]
-pub fn realm_2d_destroy_svg(realm_id: u32, svg_id: u32) -> Result<()> {
-    check_ffi_res(unsafe { crate::ffi_realm_2d_svg::galfus_realm_2d_destroy_svg(realm_id, svg_id) })
 }
 
 #[napi(js_name = "realm2dCreateCollider")]

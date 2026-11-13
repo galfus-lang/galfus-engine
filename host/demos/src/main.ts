@@ -63,7 +63,7 @@ async function runInteractiveBrowser(initialCategory?: string): Promise<DemoDesc
         {
           value: '__fuzzy__',
           label: 'Fuzzy Search All Demos',
-          hint: 'Type keywords, IDs, or tags (e.g. particles, physics, svg, portal)'
+          hint: 'Type keywords, IDs, or tags (e.g. particles, physics, ui, portal)'
         },
         ...DEMO_CATEGORIES.map((cat) => ({
           value: cat,

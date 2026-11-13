@@ -195,7 +195,7 @@ impl AnimationContext {
 
     // === Path Follow Operations ===
 
-    /// Registers a new path follower traversing a declarative SVG-like path command sequence.
+    /// Registers a new path follower traversing a declarative path command sequence.
     pub fn create_path_follow(
         &mut self,
         id: u32,

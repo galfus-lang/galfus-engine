@@ -1,28 +1,8 @@
 import type { DescSpec, FunctionSpec } from './types';
-import { svgTextDescriptors } from './realm_2d_text';
 import { realm2dUiDescriptors, realm2dUiFunctions } from './realm_2d_ui';
 
 export const realm2dDescriptors: DescSpec[] = [
-  ...svgTextDescriptors,
   ...realm2dUiDescriptors,
-  {
-    kind: 'object',
-    name: 'SvgElementRect',
-    doc: 'Geometric bounds in SVG viewport coordinates.',
-    fields: {
-      x: { type: 'number' },
-      y: { type: 'number' },
-      width: { type: 'number' },
-      height: { type: 'number' },
-      viewportWidth: { type: 'number' },
-      viewportHeight: { type: 'number' }
-    }
-  },
-  {
-    kind: 'object',
-    name: 'SvgElementRectResult',
-    fields: { rect: { type: { ref: 'SvgElementRect' }, optional: true } }
-  },
   {
     kind: 'object',
     name: 'Transform2DDesc',
@@ -174,25 +154,6 @@ export const realm2dDescriptors: DescSpec[] = [
       castShadow: { type: 'boolean', optional: true },
       receiveShadow: { type: 'boolean', optional: true },
       active: { type: 'boolean', optional: true }
-    }
-  },
-  {
-    kind: 'object',
-    name: 'Svg2DDesc',
-    doc: '2D SVG vector entity with mutable DOM and GPU rasterization synchronization.',
-    fields: {
-      label: { type: 'string', optional: true },
-      source: { type: 'string' },
-      dimensions: { type: { tuple: ['number', 'number'] }, optional: true },
-      scaleFactor: { type: 'number', optional: true },
-      materialId: { type: 'number', optional: true },
-      castShadow: { type: 'boolean', optional: true },
-      receiveShadow: { type: 'boolean', optional: true },
-      shadowHeight: { type: 'number', optional: true },
-      shadowLayerMask: { type: 'number', optional: true },
-      heightRange: { type: { tuple: ['number', 'number'] }, optional: true },
-      occluderOnly: { type: 'boolean', optional: true },
-      drawOrder: { type: 'number', optional: true }
     }
   }
 ];
@@ -448,125 +409,6 @@ export const realm2dFunctions: FunctionSpec[] = [
         doc: 'Output transform.',
         out: true
       }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_2d_create_svg',
-    methodName: 'realm2dCreateSvg',
-    doc: 'Creates or updates a 2D SVG vector entity with an initial transform.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
-      { name: 'svg', type: { json: 'Svg2DDesc' }, doc: 'SVG entity descriptor.' },
-      { name: 'transform', type: { json: 'Transform2DDesc' }, doc: 'Initial transform.' }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_2d_get_svg_element_rect',
-    methodName: 'realm2dGetSvgElementRect',
-    doc: 'Reads the geometric bounds of an SVG element.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
-      { name: 'elementId', type: 'string', doc: 'Target SVG element ID.' }
-    ],
-    returnType: { json: 'SvgElementRectResult' }
-  },
-  {
-    cName: 'galfus_realm_2d_get_svg_text_layout',
-    methodName: 'realm2dGetSvgTextLayout',
-    doc: 'Reads the shaped text clusters of an SVG text element.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
-      { name: 'elementId', type: 'string', doc: 'Target SVG text element ID.' }
-    ],
-    returnType: { json: 'SvgTextLayoutResult' }
-  },
-  {
-    cName: 'galfus_realm_2d_set_svg_source',
-    methodName: 'realm2dSetSvgSource',
-    doc: 'Replaces the complete source XML markup string of an existing SVG entity.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
-      { name: 'source', type: 'string', doc: 'New SVG XML markup string.' }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_2d_set_svg_attribute',
-    methodName: 'realm2dSetSvgAttribute',
-    doc: 'Sets or overwrites an XML attribute on the matching element ID in the SVG.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
-      { name: 'elementId', type: 'string', doc: 'Target element ID in the SVG DOM.' },
-      { name: 'name', type: 'string', doc: 'Attribute name (e.g. href, fill, width).' },
-      { name: 'value', type: 'string', doc: 'Attribute value.' }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_2d_remove_svg_attribute',
-    methodName: 'realm2dRemoveSvgAttribute',
-    doc: 'Removes an XML attribute from the matching element ID in the SVG.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
-      { name: 'elementId', type: 'string', doc: 'Target element ID in the SVG DOM.' },
-      { name: 'name', type: 'string', doc: 'Attribute name to remove.' }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_2d_set_svg_text',
-    methodName: 'realm2dSetSvgText',
-    doc: 'Updates the inner text content of the matching element ID in the SVG.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
-      { name: 'elementId', type: 'string', doc: 'Target element ID in the SVG DOM.' },
-      { name: 'text', type: 'string', doc: 'New inner text content.' }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_2d_set_svg_transform',
-    methodName: 'realm2dSetSvgTransform',
-    doc: 'Updates the spatial transform of an existing SVG entity.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
-      { name: 'transform', type: { nativeStruct: 'Transform2D' }, doc: 'New transform.' }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_2d_get_svg_transform',
-    methodName: 'realm2dGetSvgTransform',
-    doc: 'Reads the transform of an existing SVG entity.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' },
-      {
-        name: 'outTransform',
-        type: { nativeStruct: 'Transform2D' },
-        doc: 'Output transform.',
-        out: true
-      }
-    ],
-    returnType: 'i32'
-  },
-  {
-    cName: 'galfus_realm_2d_destroy_svg',
-    methodName: 'realm2dDestroySvg',
-    doc: 'Destroys an existing 2D SVG entity.',
-    params: [
-      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
-      { name: 'svgId', type: 'u32', doc: 'Logical ID of the SVG entity.' }
     ],
     returnType: 'i32'
   },

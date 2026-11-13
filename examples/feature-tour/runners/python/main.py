@@ -115,7 +115,7 @@ def main(max_frames: Any = None) -> None:
         },
     )
 
-    # 3b. 2D Ambient Light for bright SVG rendering
+    # 3b. 2D Ambient Light for bright 2D rendering
     galfus.realm2d_create_light(
         REALM_2D,
         1,

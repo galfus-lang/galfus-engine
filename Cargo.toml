@@ -3,12 +3,8 @@ members = [
     "engine/*",
     "bindings/*",
 ]
-exclude = ["third_party/usvg"]
 default-members = ["bindings/galfus-native"]
 resolver = "3"
-
-[patch.crates-io]
-usvg = { path = "third_party/usvg" }
 
 [workspace.package]
 version = "0.0.0"
@@ -30,8 +26,6 @@ rhai = { version = "1.27.0", default-features = false, features = ["std", "f32_f
 rapier2d = { version = "0.36", features = ["serde-serialize"] }
 rapier3d = { version = "0.36", features = ["serde-serialize"] }
 pollster = "0.4"
-resvg = "0.48"
-xmltree = "0.12"
 lyon_tessellation = "1.0"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
@@ -51,7 +45,6 @@ galfus-realm-3d = { path = "engine/galfus-realm-3d" }
 galfus-realm-2d-resources = { path = "engine/galfus-realm-2d-resources" }
 galfus-realm-3d-resources = { path = "engine/galfus-realm-3d-resources" }
 galfus-animation = { path = "engine/galfus-animation" }
-galfus-svg-realm = { path = "engine/galfus-svg-realm" }
 
 [profile.dev]
 opt-level = 1

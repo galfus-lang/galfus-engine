@@ -19,8 +19,8 @@ describe('DebugLatencyTracker', () => {
       pressure: 0
     });
     DebugLatencyTracker.recordHover(10, {
-      type: 'svg',
-      svgId: 1,
+      type: 'ui',
+      uiId: 1,
       elementId: 'btn-play'
     });
 
@@ -49,8 +49,8 @@ describe('DebugLatencyTracker', () => {
       pressure: 0
     });
     DebugLatencyTracker.recordHover(20, {
-      type: 'svg',
-      svgId: 1,
+      type: 'ui',
+      uiId: 1,
       elementId: 'btn-settings'
     });
 

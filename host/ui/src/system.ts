@@ -71,7 +71,7 @@ export class UiSystem {
     return this._focus.getFocused(windowId);
   }
 
-  /** Binds editable text to a focus target (native UI or SVG element). */
+  /** Binds editable text to a focus target (native UI or collider). */
   textInput(
     realmId: number,
     options: TextInputOptions & { target?: InteractiveTarget; entityId?: number }
@@ -80,15 +80,12 @@ export class UiSystem {
     const realm = this.runtime.multiverse.getRealm(realmId);
     if (!(realm instanceof Realm2D) || realm.isDisposed)
       throw new Error(`Text input realm ${realmId} is not a registered Realm2D.`);
-    const target: InteractiveTarget =
+    const target =
       options.target ??
       (options.entityId !== undefined
-        ? { type: 'collider', entityId: options.entityId }
-        : {
-            type: 'svg',
-            svgId: options.svgId ?? 0,
-            elementId: options.hitAreaId ?? options.elementId ?? ''
-          });
+        ? { type: 'collider' as const, entityId: options.entityId }
+        : undefined);
+    if (!target) throw new Error('Text input requires an interactive target or entityId.');
     const focusable = this.focusable(realmId, target, { tabIndex: options.tabIndex });
     try {
       const input = new TextInput(

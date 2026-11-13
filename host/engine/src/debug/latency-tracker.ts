@@ -80,7 +80,7 @@ export class DebugLatencyTracker {
     if (!this.enabled) return;
     const now = performance.now();
     const key =
-      target.type === 'svg' || target.type === 'ui'
+      target.type === 'ui'
         ? String(target.elementId)
         : `entity-${(target as { entityId: number }).entityId}`;
     this.hoverRecords.set(key, {
@@ -95,7 +95,7 @@ export class DebugLatencyTracker {
 
   static recordStyleUpdate(
     frameId: number,
-    svgId: number,
+    modelId: number,
     elementId: string,
     attr: string,
     value: string
@@ -129,7 +129,7 @@ export class DebugLatencyTracker {
       });
     } else {
       console.log(
-        `[DEBUG-STYLE] frame=${frameId} svg=${svgId} el="${elementId}" attr="${attr}=${value}" (no hover correlation)`
+        `[DEBUG-STYLE] frame=${frameId} model=${modelId} el="${elementId}" attr="${attr}=${value}" (no hover correlation)`
       );
     }
   }

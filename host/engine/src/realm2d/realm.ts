@@ -317,13 +317,6 @@ export class Realm2D implements RealmConnector {
     return { entityId, cameraId };
   }
 
-  /** @deprecated SVG has been decoupled from Realm2D into galfus-svg-realm. Use createUi instead. */
-  createSvg(_desc: unknown, _transform?: Transform2DProps): { entityId: EntityId; svgId: number } {
-    throw new Error(
-      'SVG has been decoupled from Realm2D into galfus-svg-realm. Use createUi instead.'
-    );
-  }
-
   createUi(
     desc: Model2DUIDesc,
     transform?: Transform2DProps

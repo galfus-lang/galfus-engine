@@ -5,7 +5,7 @@ import { createDemoSession, type HostDemoOptions } from '../common/options';
 
 export async function runDemoAnim1(options: HostDemoOptions = {}): Promise<void> {
   const { runtime, targetId, windowId, maxFrames } = createDemoSession(
-    'Galfus Host Demo: Anim-1 Transitions, Easing & Reactive SVG',
+    'Galfus Host Demo: Anim-1 Transitions, Easing & Reactive UI',
     options,
     [1024, 768]
   );

@@ -9,7 +9,7 @@ use crate::state::{with_animation, with_animation_mut};
 
 /// Creates a new path follow instance. Returns 0 on success, -1 on failure.
 ///
-/// Creates a new path follower traversing a declarative SVG-like path. Returns 0 on success, -1 on failure.
+/// Creates a new path follower traversing a declarative path. Returns 0 on success, -1 on failure.
 ///
 /// # Safety
 /// Pointers must be valid, null-terminated UTF-8 C string pointers.

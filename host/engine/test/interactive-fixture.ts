@@ -6,7 +6,6 @@ export function setup() {
   const events: PlatformEvent[] = [];
   const tabCapture: Array<[number, number]> = [];
   const ime: Array<[number, number]> = [];
-  const svgText: string[] = [];
   let fail = false;
   let runtimeRef: any;
   const mockInteractions = createMockInteractionEngine((id) => runtimeRef?.multiverse.getRealm(id));
@@ -32,16 +31,11 @@ export function setup() {
       platformPumpEvents: () => events.splice(0),
       windowSetTabCapture: (id: number, enabled: number) => tabCapture.push([id, enabled]),
       windowSetImeAllowed: (id: number, enabled: number) => ime.push([id, enabled]),
-      realm2dSetSvgText: (_realm: number, _svg: number, _element: string, value: string) =>
-        svgText.push(value),
       multiverseResolve: () => schedule,
       multiverseDispatch: () => {
         if (fail) throw new Error('dispatch failed');
         mockInteractions.multiverseDispatch();
-      },
-      realm2dGetSvgElementRect: () => ({
-        rect: { x: 25, y: 25, width: 50, height: 50, viewportWidth: 100, viewportHeight: 100 }
-      })
+      }
     },
     { get: (target, key) => (key in target ? target[key as keyof typeof target] : () => {}) }
   ) as unknown as GalfusEngine;
@@ -70,7 +64,6 @@ export function setup() {
     schedule,
     tabCapture,
     ime,
-    svgText,
     failDispatch: (value: boolean) => {
       fail = value;
     }

@@ -134,7 +134,7 @@ export async function runFeatureTour(options: TourRunnerOptions): Promise<void> 
     zIndex: 1
   });
 
-  // 3b. Bright 2D Ambient Light for illuminated SVG Vector Rendering
+  // 3b. Bright 2D Ambient Light for illuminated 2D rendering
   galfus.realm2dCreateLight(
     REALM_2D,
     1,

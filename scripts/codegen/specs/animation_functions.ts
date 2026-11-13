@@ -157,13 +157,13 @@ export const animationFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_animation_create_path_follow',
     methodName: 'animationCreatePathFollow',
-    doc: 'Creates a new path follower traversing a declarative SVG-like path.',
+    doc: 'Creates a new path follower traversing a declarative path.',
     params: [
       { name: 'pathId', type: 'u32', doc: 'Logical ID of the path follower' },
       {
         name: 'commands',
         type: { jsonArray: 'PathCommand' },
-        doc: 'List of SVG-like path motion commands'
+        doc: 'List of path motion commands'
       },
       {
         name: 'config',

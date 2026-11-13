@@ -199,13 +199,6 @@ pub(super) fn apply_target_value(
                 })?,
             )
             .map_err(realm_error),
-        AnimationTarget::SvgTransform2D { .. }
-        | AnimationTarget::SvgOpacity { .. }
-        | AnimationTarget::SvgAttributeColor { .. }
-        | AnimationTarget::SvgAttributeScalar { .. }
-        | AnimationTarget::SvgAttributeVec2 { .. } => Err(AnimationError::General(
-            "SVG animation targets are moved to galfus-svg-realm".into(),
-        )),
         AnimationTarget::UiElementBackgroundColor {
             realm_id,
             ui_id,

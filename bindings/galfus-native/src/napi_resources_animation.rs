@@ -187,7 +187,7 @@ pub fn animation_transition_to_scalar(
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
-#[napi]
+#[napi(js_name = "animationTransitionToTransform3d")]
 pub fn animation_transition_to_transform3d(
     transition_id: u32,
     floats: Float32Array,
@@ -220,7 +220,7 @@ pub fn animation_transition_to_transform3d(
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }
 
-#[napi]
+#[napi(js_name = "animationTransitionToTransform2d")]
 pub fn animation_transition_to_transform2d(
     transition_id: u32,
     floats: Float32Array,

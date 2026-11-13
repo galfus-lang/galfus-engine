@@ -41,13 +41,13 @@ pub(crate) fn sync_navigator_clipboard(clipboard: &Rc<RefCell<String>>) {
         return;
     };
     let clipboard_ref = Rc::clone(clipboard);
-    let on_resolve = Closure::once(move |val: JsValue| {
-        if let Some(s) = val.as_string() {
-            *clipboard_ref.borrow_mut() = s;
+    wasm_bindgen_futures::spawn_local(async move {
+        if let Ok(value) = wasm_bindgen_futures::JsFuture::from(promise).await
+            && let Some(text) = value.as_string()
+        {
+            *clipboard_ref.borrow_mut() = text;
         }
     });
-    let _ = promise.then(&on_resolve);
-    on_resolve.forget();
 }
 
 pub(crate) fn write_navigator_clipboard(text: &str) {

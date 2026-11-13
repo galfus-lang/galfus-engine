@@ -23,7 +23,6 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
 
   it('resolves demos by exact ID, alias, and fuzzy search query', () => {
     expect(findDemo('ui1')?.id).toBe('ui1');
-    expect(findDemo('svg-image')?.id).toBe('ui1');
     expect(findDemo('3d5')?.id).toBe('3d5');
     expect(findDemo('textured-particles-3d')?.id).toBe('3d5');
     expect(findDemo('phys3d2')?.id).toBe('phys3d2');

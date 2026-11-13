@@ -2,7 +2,7 @@
 //!
 //! Autonomous transition and property animation crate for Galfus Engine.
 //! Supports delay, smooth interruptible retargeting, 30+ easing curves,
-//! physical spring simulations, and binding across 3D, 2D, SVG DOM, Multiverse,
+//! physical spring simulations, and binding across 3D, 2D, Multiverse,
 //! and custom user channels.
 
 pub mod applier;
