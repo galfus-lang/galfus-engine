@@ -1,8 +1,7 @@
 //! Realm 2D context tests.
 
 use super::*;
-use crate::svg_manager::{SvgGeometry2D, SvgInstance2D, SvgManager2D};
-use galfus_realm_2d_resources::{Sprite2D, Svg2D};
+use galfus_realm_2d_resources::Sprite2D;
 
 #[test]
 fn test_strict_camera_resolution_no_fallback() {
@@ -50,31 +49,6 @@ fn test_strict_camera_resolution_no_fallback() {
 }
 
 #[test]
-fn test_svg_shadow_occluders_and_draw_order() {
-    let mut realm = Realm2DContext::new(1);
-
-    // Create SVG with cast_shadow = true
-    let svg = Svg2D {
-        dimensions: Some(Vec2::new(50.0, 50.0)),
-        cast_shadow: true,
-        shadow_height: 2.5,
-        shadow_layer_mask: 0x1,
-        ..Default::default()
-    };
-    let transform = Transform2D::from_translation(Vec2::new(10.0, 20.0)).with_draw_order(3);
-    assert!(realm.set_svg(10, svg, transform).is_ok());
-
-    // Verify world corners
-    let instance = realm.svg_manager.instances.get(&10).unwrap();
-    let corners = instance
-        .svg
-        .compute_world_corners(&instance.transform, Vec2::splat(50.0));
-    assert_eq!(corners[0], Vec2::new(-15.0, -5.0));
-    assert_eq!(corners[2], Vec2::new(35.0, 45.0));
-    assert_eq!(instance.transform.draw_order, 3);
-}
-
-#[test]
 fn test_realm2d_crud_and_not_found_errors() {
     let mut realm = Realm2DContext::new(1);
 
@@ -83,7 +57,6 @@ fn test_realm2d_crud_and_not_found_errors() {
     assert!(realm.destroy_shape(999).is_err());
     assert!(realm.destroy_light(999).is_err());
     assert!(realm.destroy_camera(999).is_err());
-    assert!(realm.destroy_svg(999).is_err());
     assert!(realm.destroy_material(999).is_err());
 
     // 2. Capacity scaling: 128 dynamic lights (exceeding initial 64)
@@ -97,57 +70,6 @@ fn test_realm2d_crud_and_not_found_errors() {
     assert!(realm.clear().is_ok());
     assert!(realm.lights.is_empty());
     assert!(realm.sprites.is_empty());
-}
-
-#[test]
-fn replacing_an_svg_reclaims_its_previous_geometry() {
-    let instance = wgpu::Instance::default();
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-        power_preference: wgpu::PowerPreference::LowPower,
-        compatible_surface: None,
-        force_fallback_adapter: false,
-    }));
-    let Ok(adapter) = adapter else {
-        return;
-    };
-    let Ok((device, _queue)) =
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
-    else {
-        return;
-    };
-
-    let mut manager = SvgManager2D::new();
-    let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("svg-replacement-test-vertex"),
-        size: 16,
-        usage: wgpu::BufferUsages::VERTEX,
-        mapped_at_creation: false,
-    });
-    let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("svg-replacement-test-index"),
-        size: 16,
-        usage: wgpu::BufferUsages::INDEX,
-        mapped_at_creation: false,
-    });
-    let handle = manager
-        .pool
-        .insert(SvgGeometry2D {
-            vertex_buffer,
-            index_buffer,
-            vertex_capacity: 16,
-            index_capacity: 16,
-            index_count: 0,
-            dimensions: Vec2::ONE,
-        })
-        .expect("the empty pool accepts the test geometry");
-    let mut inst = SvgInstance2D::new(Svg2D::default(), Transform2D::default());
-    inst.geometry_handle = Some(handle);
-    manager.instances.insert(7, inst);
-
-    manager.insert(7, Svg2D::default(), Transform2D::default());
-
-    assert!(manager.pool.is_empty());
-    assert!(!manager.pool.contains(handle));
 }
 
 #[test]

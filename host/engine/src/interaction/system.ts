@@ -13,14 +13,11 @@ import {
 import { DebugLatencyTracker } from '../debug/latency-tracker';
 import type { Component } from '../ecs/component';
 import type { MultiverseCoordinator } from '../multiverse/coordinator';
-import type { Model2DComponent, Svg2DComponent } from '../realm2d/components';
+import type { Model2DComponent, Model2DUIComponent, Svg2DComponent } from '../realm2d/components';
 import { Realm2D } from '../realm2d/realm';
 import type { Model3DComponent } from '../realm3d/components';
 import { Realm3D } from '../realm3d/realm';
 import { InteractiveListener } from './listener';
-import { captureCameras2D, TargetSnapshot2D } from './snapshot2d';
-import { captureCameras3D, TargetSnapshot3D } from './snapshot3d';
-import { SoftwarePicker } from './software_picker';
 import type { InteractiveEventType, InteractiveObserver, InteractiveTarget } from './types';
 import type { PointerState, RealmState, TargetRecord } from './types_internal';
 
@@ -78,18 +75,15 @@ function toCorePointerEvent(event: PointerEvent): object | null {
   }
 }
 
-/** Host-side pointer dispatch against the most recently submitted presentation. */
+/** Native pointer dispatch against the Multiverse interaction subsystem. */
 export class InteractiveSystem {
   private readonly records = new Map<InteractiveListener, TargetRecord>();
   private readonly modelRecords = new Map<string, Set<TargetRecord>>();
   private readonly realms = new Map<number, RealmState>();
   private readonly pointers = new Map<number, Map<number, PointerState>>();
   private readonly observers = new Set<InteractiveObserver>();
-  private readonly picker: SoftwarePicker;
 
-  constructor(private readonly multiverse: MultiverseCoordinator) {
-    this.picker = new SoftwarePicker(multiverse);
-  }
+  constructor(private readonly multiverse: MultiverseCoordinator) {}
 
   observe(observer: InteractiveObserver): () => void {
     this.observers.add(observer);
@@ -103,8 +97,7 @@ export class InteractiveSystem {
   presentationOrder(listener: InteractiveListener, windowId: number): number | undefined {
     const record = this.records.get(listener);
     const view = this.multiverse.presentationGraph.getWindow(windowId);
-    const state = this.realms.get(listener.realmId);
-    if (!record?.snapshot.valid || !view || !state || record.realm.isDisposed) return undefined;
+    if (!record || !view || record.realm.isDisposed) return undefined;
     if (
       record.realm.world.getComponent(record.entityId, record.model.type) !== record.model ||
       record.realm.world.getComponent(record.entityId, record.component.type) !== record.component
@@ -118,12 +111,7 @@ export class InteractiveSystem {
       for (const id of view.getInvocations(targetId)) {
         const invocation = view.getInvocation(id);
         if (invocation?.realmId === listener.realmId) {
-          const cameras = record.realm instanceof Realm2D ? state.cameras2D : state.cameras3D;
-          const slot = invocation.cameraSlot;
-          for (const camera of cameras) {
-            if (camera.slot === (slot ?? 0) || (slot !== undefined && camera.id === slot))
-              return order;
-          }
+          return order;
         }
         order++;
         if (depth < 3) {
@@ -180,7 +168,7 @@ export class InteractiveSystem {
       if (input.colliderId !== undefined && !matches)
         throw new Error('Interactive collider does not exist.');
       component = collider;
-    } else {
+    } else if (input.type === 'svg') {
       if (!(realm instanceof Realm2D)) throw new Error('Interactive SVG requires a Realm2D.');
       for (const id of realm.world.query('Svg2D')) {
         const svg = realm.world.getComponent<Svg2DComponent>(id, 'Svg2D');
@@ -191,6 +179,17 @@ export class InteractiveSystem {
         }
       }
       if (entityId === undefined || !component) throw new Error('Interactive SVG does not exist.');
+    } else if (input.type === 'ui') {
+      if (!(realm instanceof Realm2D)) throw new Error('Interactive UI requires a Realm2D.');
+      for (const id of realm.world.query('Model2DUI')) {
+        const ui = realm.world.getComponent<Model2DUIComponent>(id, 'Model2DUI');
+        if (ui?.uiId === input.uiId) {
+          entityId = id;
+          component = ui;
+          break;
+        }
+      }
+      if (entityId === undefined || !component) throw new Error('Interactive UI does not exist.');
     }
     const modelType = realm instanceof Realm2D ? 'Model2D' : 'Model3D';
     const model = realm.world.getComponent<Model2DComponent | Model3DComponent>(
@@ -213,8 +212,7 @@ export class InteractiveSystem {
       realm,
       entityId: entityId!,
       model,
-      component: component!,
-      snapshot: realm instanceof Realm2D ? new TargetSnapshot2D() : new TargetSnapshot3D()
+      component: component!
     };
     this.records.set(listener, record);
 
@@ -225,7 +223,7 @@ export class InteractiveSystem {
 
     let state = this.realms.get(realmId);
     if (!state) {
-      state = { realm, cameras2D: [], cameras3D: [], records: new Set() };
+      state = { realm, records: new Set() };
       this.realms.set(realmId, state);
     }
     state.records.add(record);
@@ -266,32 +264,26 @@ export class InteractiveSystem {
       return;
     }
     let removed: TargetRecord[] | undefined;
-    for (const state of this.realms.values()) {
-      if (!state.realm.isDisposed) {
-        if (state.realm instanceof Realm2D) captureCameras2D(state.realm, state.cameras2D);
-        else captureCameras3D(state.realm, state.cameras3D);
-      }
-    }
     for (const record of this.records.values()) {
-      const { realm, entityId, component, model, snapshot, listener } = record;
+      const { realm, entityId, component, model } = record;
       if (
         realm.isDisposed ||
         realm.world.getComponent(entityId, model.type) !== model ||
         realm.world.getComponent(entityId, component.type) !== component
       ) {
-        snapshot.valid = false;
         (removed ??= []).push(record);
         continue;
       }
-      if (snapshot instanceof TargetSnapshot2D && realm instanceof Realm2D)
-        snapshot.capture(realm, entityId, listener.target);
-      else if (
-        snapshot instanceof TargetSnapshot3D &&
-        realm instanceof Realm3D &&
-        listener.target.type === 'collider'
-      )
-        snapshot.capture(realm, entityId, listener.target.colliderId);
-      if (listener.target.type === 'collider' && !snapshot.exists) (removed ??= []).push(record);
+      if (record.listener.target.type === 'collider') {
+        const cid = record.listener.target.colliderId;
+        if (cid !== undefined) {
+          const entries = [...getColliderEntries(component as any)];
+          if (!entries.some((e: any) => e.colliderId === cid)) {
+            (removed ??= []).push(record);
+            continue;
+          }
+        }
+      }
     }
     if (removed) {
       for (const record of removed) {
@@ -305,22 +297,119 @@ export class InteractiveSystem {
               }
             }
             if (pressed) this.emit(record.listener, 'cancel', pointer);
+            if (pointer.hover === record.listener) {
+              pointer.hover = undefined;
+              this.emit(record.listener, 'leave', pointer);
+            }
+          }
+        }
+        record.listener.dispose();
+      }
+    }
+    for (const observer of this.observers) observer.onAfterDispatch?.();
+    const engine = this.multiverse.engine;
+    if (engine && 'multiversePollInteractionEvents' in engine) {
+      this.pollNativeEvents(engine);
+    }
+  }
+
+  private pollNativeEvents(engine: NonNullable<MultiverseCoordinator['engine']>): void {
+    const raw = engine.multiversePollInteractionEvents();
+    if (!raw) return;
+    const events = JSON.parse(raw) as InteractionEvent[];
+    for (const ev of events) {
+      const type: InteractiveEventType =
+        ev.interactionType === 'pressMove'
+          ? 'pressmove'
+          : ev.interactionType === 'pressUp'
+            ? 'pressup'
+            : (ev.interactionType as any);
+      let window = this.pointers.get(ev.windowId);
+      if (!window) this.pointers.set(ev.windowId, (window = new Map()));
+      let pointer = window.get(Number(ev.pointerId));
+      if (!pointer) {
+        window.set(
+          Number(ev.pointerId),
+          (pointer = {
+            event: {
+              kind: 'pointer',
+              type: 'move',
+              windowId: ev.windowId,
+              pointerId: Number(ev.pointerId),
+              pointerType: 'mouse',
+              position: ev.localPos,
+              delta: ev.delta,
+              pressure: 0
+            },
+            pressed: new Map(),
+            positions: new Map(),
+            uvs: new Map()
+          })
+        );
+      }
+      const records = this.modelRecords.get(`${ev.realmId}:${ev.modelId}`);
+      if (records) {
+        for (const record of records) {
+          let matches = false;
+          if (record.listener.target.type === 'collider') {
+            matches =
+              record.listener.target.colliderId === undefined ||
+              record.listener.target.colliderId === ev.colliderId;
+          } else if (record.listener.target.type === 'svg') {
+            const target = record.listener.target;
+            const r2d = record.realm as any;
+            const rect = r2d.getSvgElementRect?.(target.svgId, target.elementId);
+            if (rect && rect.viewportWidth > 0 && rect.viewportHeight > 0) {
+              const svgX = ev.uv[0] * rect.viewportWidth;
+              const svgY = ev.uv[1] * rect.viewportHeight;
+              matches =
+                svgX >= rect.x &&
+                svgX <= rect.x + rect.width &&
+                svgY >= rect.y &&
+                svgY <= rect.y + rect.height;
+            } else {
+              matches = true;
+            }
+          } else if (record.listener.target.type === 'ui') {
+            const target = record.listener.target;
+            const targetNumeric =
+              typeof target.elementId === 'number' ? target.elementId : Number(target.elementId);
+            matches =
+              (!isNaN(targetNumeric) && ev.elementId === targetNumeric) ||
+              (ev.elementId !== undefined && String(ev.elementId) === String(target.elementId));
+          }
+          if (matches) {
+            pointer.positions.set(record.listener, ev.localPos);
+            pointer.uvs.set(record.listener, ev.uv);
+            if (type === 'hover') {
+              pointer.hover = record.listener;
+              DebugLatencyTracker.recordHover(
+                DebugLatencyTracker.currentFrameId,
+                record.listener.target
+              );
+            } else if (type === 'leave') {
+              if (pointer.hover === record.listener) pointer.hover = undefined;
+            } else if (type === 'down') {
+              pointer.pressed.set(ev.button ?? 0, record.listener);
+            } else if (type === 'pressup' || type === 'cancel') {
+              pointer.pressed.delete(ev.button ?? 0);
+            }
+            const scrollDelta: ScrollDelta | undefined = ev.scrollDelta
+              ? { pixels: [ev.scrollDelta[0], ev.scrollDelta[1]] }
+              : undefined;
+            this.emit(record.listener, type, pointer, scrollDelta, ev.elementId);
           }
         }
       }
     }
-    for (const pointers of this.pointers.values()) {
-      for (const pointer of pointers.values()) this.updateHover(pointer);
-    }
-    if (removed) for (const record of removed) record.listener.dispose();
-    for (const observer of this.observers) observer.onAfterDispatch?.();
   }
 
   private emit(
     listener: InteractiveListener | undefined,
     type: InteractiveEventType,
     pointer: PointerState,
-    scrollDelta?: ScrollDelta
+    scrollDelta?: ScrollDelta,
+    elementId?: number
   ): void {
     if (listener?.hasListeners(type)) {
       const localPos = pointer.positions.get(listener);
@@ -336,37 +425,9 @@ export class InteractiveSystem {
         target: listener.target,
         pointer: p,
         uv: uv ? [uv[0], uv[1]] : undefined,
+        elementId,
         scrollDelta
       });
-    }
-  }
-
-  private prunePointerCache(pointer: PointerState, listener: InteractiveListener): void {
-    for (const pressed of pointer.pressed.values()) {
-      if (pressed === listener) return;
-    }
-    pointer.positions.delete(listener);
-    pointer.uvs.delete(listener);
-  }
-
-  private updateHover(pointer: PointerState): void {
-    const hit = this.picker.pick(pointer.event, this.realms);
-    const next = hit?.listener;
-    if (hit) {
-      pointer.uvs.set(hit.listener, hit.uv);
-      if (hit.localPos) pointer.positions.set(hit.listener, hit.localPos);
-      else pointer.positions.delete(hit.listener);
-    }
-    if (next === pointer.hover) return;
-    const previous = pointer.hover;
-    pointer.hover = next;
-    if (previous) {
-      this.emit(previous, 'leave', pointer);
-      this.prunePointerCache(pointer, previous);
-    }
-    if (next && pointer.hover === next) {
-      DebugLatencyTracker.recordHover(DebugLatencyTracker.currentFrameId, next.target);
-      this.emit(next, 'hover', pointer);
     }
   }
 
@@ -384,7 +445,7 @@ export class InteractiveSystem {
       this.handleNativePointer(event, engine);
       return;
     }
-    this.handleSoftwarePointer(event);
+    for (const observer of this.observers) observer.onPointerEvent?.(event);
   }
 
   private handleNativePointer(
@@ -405,44 +466,7 @@ export class InteractiveSystem {
     const coreInput = toCorePointerEvent(event);
     if (coreInput) {
       engine.multiverseHandlePointerEvent(JSON.stringify(coreInput));
-      const raw = engine.multiversePollInteractionEvents();
-      if (raw) {
-        const events = JSON.parse(raw) as InteractionEvent[];
-        for (const ev of events) {
-          const type: InteractiveEventType =
-            ev.interactionType === 'pressMove' ? 'pressmove' : (ev.interactionType as any);
-          const records = this.modelRecords.get(`${ev.realmId}:${ev.modelId}`);
-          if (records) {
-            for (const record of records) {
-              if (
-                record.listener.target.type === 'collider' &&
-                (record.listener.target.colliderId === undefined ||
-                  record.listener.target.colliderId === ev.colliderId)
-              ) {
-                pointer.positions.set(record.listener, ev.localPos);
-                pointer.uvs.set(record.listener, ev.uv);
-                if (type === 'hover') {
-                  pointer.hover = record.listener;
-                  DebugLatencyTracker.recordHover(
-                    DebugLatencyTracker.currentFrameId,
-                    record.listener.target
-                  );
-                } else if (type === 'leave') {
-                  if (pointer.hover === record.listener) pointer.hover = undefined;
-                } else if (type === 'down') {
-                  pointer.pressed.set(ev.button ?? 0, record.listener);
-                } else if (type === 'up') {
-                  pointer.pressed.delete(ev.button ?? 0);
-                }
-                const scrollDelta: ScrollDelta | undefined = ev.scrollDelta
-                  ? { pixels: [ev.scrollDelta[0], ev.scrollDelta[1]] }
-                  : undefined;
-                this.emit(record.listener, type, pointer, scrollDelta);
-              }
-            }
-          }
-        }
-      }
+      this.pollNativeEvents(engine);
     }
 
     if (event.type === 'leave' || event.type === 'cancel') {
@@ -451,48 +475,6 @@ export class InteractiveSystem {
       if (!window.size) this.pointers.delete(event.windowId);
     }
 
-    for (const observer of this.observers) observer.onPointerEvent?.(event);
-  }
-
-  private handleSoftwarePointer(event: PointerEvent): void {
-    if (this.records.size) {
-      let window = this.pointers.get(event.windowId);
-      if (!window) this.pointers.set(event.windowId, (window = new Map()));
-      let pointer = window.get(event.pointerId);
-      if (!pointer) {
-        window.set(
-          event.pointerId,
-          (pointer = { event, pressed: new Map(), positions: new Map(), uvs: new Map() })
-        );
-      }
-      pointer.event = event;
-      if (event.type === 'leave' || event.type === 'cancel') {
-        this.cancel(pointer);
-        window.delete(event.pointerId);
-        if (!window.size) this.pointers.delete(event.windowId);
-      } else {
-        this.updateHover(pointer);
-        if (event.type === 'move') {
-          this.emit(pointer.hover, 'move', pointer);
-          this.emitPressed(pointer, 'pressmove');
-        } else if (event.type === 'scroll') {
-          this.emit(pointer.hover, 'scroll', pointer, event.delta);
-        } else if (event.type === 'button') {
-          const button = typeof event.button === 'string' ? event.button : event.button.other;
-          if (event.state === 'pressed') {
-            if (pointer.hover) pointer.pressed.set(button, pointer.hover);
-            this.emit(pointer.hover, 'down', pointer);
-          } else {
-            const pressed = pointer.pressed.get(button);
-            pointer.pressed.delete(button);
-            this.emit(pointer.hover, 'up', pointer);
-            this.emit(pressed, 'pressup', pointer);
-            if (pressed && pressed === pointer.hover) this.emit(pressed, 'click', pointer);
-            if (pressed && pressed !== pointer.hover) this.prunePointerCache(pointer, pressed);
-          }
-        }
-      }
-    }
     for (const observer of this.observers) observer.onPointerEvent?.(event);
   }
 

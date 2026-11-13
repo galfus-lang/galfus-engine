@@ -11,7 +11,7 @@ sys.path.append(os.path.join(root_dir, "sdk/python"))
 
 import galfus
 from procedural import build_room_scene, make_sound, compute_bone_palette
-from panel_svg import render_companion_panel_svg
+from panel_ui import render_companion_panel_ui
 
 TARGET_WINDOW = 1
 REALM_3D = 10
@@ -20,7 +20,7 @@ INVOCATION_3D = 100
 INVOCATION_2D = 101
 CAMERA_3D_ID = 1
 CAMERA_2D_ID = 1
-SVG_HUD_ID = 1
+UI_HUD_ID = 1
 PATH_CAMERA_POS_ID = 401
 PATH_CAMERA_LOOK_ID = 402
 SOUND_ID = 501
@@ -174,12 +174,10 @@ def main(max_frames: Any = None) -> None:
     except Exception as err:
         print("[Audio] Sound load skipped or failed:", err)
 
-    # 8. Companion SVG panel
+    # 8. Companion UI panel
     initial_room = tour["rooms"][0]
-    initial_svg = render_companion_panel_svg(tour, initial_room, 0.0, False, active_binding)
-    galfus.realm2d_create_svg(
-        REALM_2D, SVG_HUD_ID, {"source": initial_svg}, {"position": [0, 0], "scale": [1, 1]}
-    )
+    initial_ui = render_companion_panel_ui(tour, initial_room, 0.0, False, active_binding)
+    galfus.realm2d_create_ui(REALM_2D, UI_HUD_ID, initial_ui, {"position": [0, 0], "scale": [1, 1]})
 
     # 9. Path followers setup
     def rotate_path_commands(
@@ -252,10 +250,10 @@ def main(max_frames: Any = None) -> None:
 
     def update_hud() -> None:
         active_room = tour["rooms"][current_room_index]
-        updated_svg = render_companion_panel_svg(
+        updated_ui = render_companion_panel_ui(
             tour, active_room, tour_clock, is_paused, active_binding
         )
-        galfus.realm2d_set_svg_source(REALM_2D, SVG_HUD_ID, updated_svg)
+        galfus.realm2d_set_ui_content(REALM_2D, UI_HUD_ID, updated_ui)
 
     def apply_room_state(room_idx: int) -> None:
         nonlocal current_room_index

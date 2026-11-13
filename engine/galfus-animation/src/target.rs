@@ -199,6 +199,49 @@ pub enum AnimationTarget {
         invocation_id: u32,
     },
 
+    // === UI Targets ===
+    UiElementBackgroundColor {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+    UiElementBorderColor {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+    UiElementBorderSideColor {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+        side: u8,
+    },
+    UiElementBorderWidth {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+    UiElementBorderRadius {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+    UiElementOpacity {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+    UiElementPosition {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+    UiElementSize {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+
     // === Custom Channels ===
     CustomChannel {
         channel_id: u32,

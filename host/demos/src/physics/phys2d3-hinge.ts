@@ -1,16 +1,8 @@
 import { type EntityId, isKey, presetsAnchor } from '@galfus/engine';
 import { attachPhysics2D } from '@galfus/physics-2d';
+import { UiRoot } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
-
-const SVG_HINGE_HUD = `
-<svg width="380" height="90" viewBox="0 0 380 90" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2" y="2" width="376" height="86" rx="10" fill="#0f172a" fill-opacity="0.9" stroke="#38bdf8" stroke-width="2"/>
-  <text x="16" y="26" font-family="monospace" font-size="13" font-weight="bold" fill="#f8fafc">PHYS2D-3: 2D HINGE JOINTS &amp; LIMITS</text>
-  <text id="gate-info" x="16" y="48" font-family="monospace" font-size="11" fill="#38bdf8">LEFT GATE: 0.0° | RIGHT GATE: 0.0°</text>
-  <text x="16" y="70" font-family="monospace" font-size="10" fill="#94a3b8">[SPACE]: DROP BALLS | [F]: IMPULSE | [ESC]: EXIT</text>
-</svg>
-`;
 
 export async function runDemoPhys2d3(options: HostDemoOptions = {}): Promise<void> {
   const { runtime, targetId, windowId, maxFrames } = createDemoSession(
@@ -193,11 +185,43 @@ export async function runDemoPhys2d3(options: HostDemoOptions = {}): Promise<voi
       spawnBall((Math.random() - 0.5) * 4.0, 7.0 + i * 1.2);
     }
 
-    // Telemetry SVG HUD
-    const hudSvg = realm2d.createSvg(
-      { source: SVG_HINGE_HUD, dimensions: [7.6, 1.8] },
-      { position: [0, 7.8], zLayer: 10 }
-    );
+    // Telemetry UI HUD
+    const uiRoot = new UiRoot(runtime, realm2d, {
+      width: 380,
+      height: 90,
+      position: [0, 7.8],
+      scale: [7.6 / 380, 1.8 / 90],
+      zLayer: 10
+    });
+    uiRoot.rootPanel
+      .setBackgroundColor([0.06, 0.09, 0.16, 0.9])
+      .setBorderColor([0.22, 0.74, 0.97, 1.0])
+      .setBorderWidth(2)
+      .setBorderRadius(10);
+
+    uiRoot.addText({
+      text: 'PHYS2D-3: 2D HINGE JOINTS & LIMITS',
+      fontSize: 13,
+      color: [0.97, 0.98, 0.99, 1.0],
+      x: 16,
+      y: 18
+    });
+
+    const gateText = uiRoot.addText({
+      text: 'LEFT ω: 0.00 rad/s | RIGHT ω: 0.00 rad/s',
+      fontSize: 11,
+      color: [0.22, 0.74, 0.97, 1.0],
+      x: 16,
+      y: 40
+    });
+
+    uiRoot.addText({
+      text: '[SPACE]: DROP BALLS | [F]: IMPULSE | [ESC]: EXIT',
+      fontSize: 10,
+      color: [0.58, 0.64, 0.72, 1.0],
+      x: 16,
+      y: 64
+    });
 
     runtime.on('keyboard', (ev) => {
       if (ev.type !== 'input' || ev.state !== 'pressed') return;
@@ -218,11 +242,7 @@ export async function runDemoPhys2d3(options: HostDemoOptions = {}): Promise<voi
       if (frame % 6 === 0) {
         const wLeft = physics.getAngularVelocity(gateLeft) ?? 0;
         const wRight = physics.getAngularVelocity(gateRight) ?? 0;
-        realm2d.setSvgText(
-          hudSvg,
-          'gate-info',
-          `LEFT ω: ${wLeft.toFixed(2)} rad/s | RIGHT ω: ${wRight.toFixed(2)} rad/s`
-        );
+        gateText.setText(`LEFT ω: ${wLeft.toFixed(2)} rad/s | RIGHT ω: ${wRight.toFixed(2)} rad/s`);
       }
     });
 

@@ -81,11 +81,11 @@ describe('Phases F21 & F22 — API Safety, Error Isolation, EcsWorld Reset & Ful
       'Cannot resolve ParticleEmitter3D ID: entity does not have a ParticleEmitter3DComponent.'
     );
 
-    // 3. 2D Svg setSource on entity without Svg2DComponent throws error
+    // 3. 2D UI applyUiCommands on entity without Model2DUIComponent throws error
     const plainEntity2D = realm2d.world.createEntity();
     expect(() => {
-      realm2d.setSvgSource({ entityId: plainEntity2D }, '<svg></svg>');
-    }).toThrow('Cannot resolve Svg2D ID: entity does not have a Svg2DComponent.');
+      realm2d.applyUiCommands({ entityId: plainEntity2D, uiId: 10 }, []);
+    }).toThrow('UI model does not exist.');
 
     // 4. 2D Particle Emitter burst on entity without ParticleEmitter2DComponent throws error
     expect(() => {

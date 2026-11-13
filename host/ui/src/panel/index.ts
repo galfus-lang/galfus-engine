@@ -8,3 +8,7 @@ export { ScrollPanel } from './scroll-panel';
 export type { ScrollPanelOptions } from './scroll-panel';
 export { SplitGroup } from './split-group';
 export type { SplitGroupOptions } from './split-group';
+export { SpritePanel } from './sprite-panel';
+export type { SpriteFit, SpritePanelOptions, SpriteSampler } from './sprite-panel';
+export { UiText } from './ui-text';
+export type { UiTextOptions } from './ui-text';

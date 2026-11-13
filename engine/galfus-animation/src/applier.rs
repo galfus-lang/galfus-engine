@@ -124,7 +124,15 @@ pub fn apply_target_value(
         | AnimationTarget::SvgOpacity { .. }
         | AnimationTarget::SvgAttributeColor { .. }
         | AnimationTarget::SvgAttributeScalar { .. }
-        | AnimationTarget::SvgAttributeVec2 { .. } => {
+        | AnimationTarget::SvgAttributeVec2 { .. }
+        | AnimationTarget::UiElementBackgroundColor { .. }
+        | AnimationTarget::UiElementBorderColor { .. }
+        | AnimationTarget::UiElementBorderSideColor { .. }
+        | AnimationTarget::UiElementBorderWidth { .. }
+        | AnimationTarget::UiElementBorderRadius { .. }
+        | AnimationTarget::UiElementOpacity { .. }
+        | AnimationTarget::UiElementPosition { .. }
+        | AnimationTarget::UiElementSize { .. } => {
             applier_2d::apply_target_value(target, value, multiverse)
         }
     }

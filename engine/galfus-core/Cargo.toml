@@ -6,3 +6,5 @@ license.workspace = true
 
 [dependencies]
 thiserror.workspace = true
+glam.workspace = true
+serde.workspace = true

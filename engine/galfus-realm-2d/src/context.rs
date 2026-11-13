@@ -3,7 +3,7 @@ use crate::gpu::GpuResources2D;
 use crate::pipeline::{PipelineKey2D, PipelineManager2D};
 use crate::shadow::ShadowManager2D;
 use crate::types::{
-    BatchKey2D, Camera2D, Item2DInstanceRaw, Light2D, Material2D, Material2DUniform,
+    BatchKey2D, Camera2D, Item2DInstanceRaw, Light2D, Material2D, Material2DUniform, Model2DUI,
     ParticleEmitter2D, ParticleEmitterState2D, Shape2D, Sprite2D, Transform2D,
 };
 use bytemuck::cast_slice;
@@ -22,7 +22,9 @@ pub struct Realm2DContext {
     pub materials: HashMap<u32, Material2D>,
     pub lights: HashMap<u32, Light2D>,
     pub emitters: HashMap<u32, (ParticleEmitter2D, Transform2D, ParticleEmitterState2D)>,
-    pub svg_manager: crate::svg_manager::SvgManager2D,
+    pub ui_manager: crate::context_ui::UiManager2D,
+    pub(crate) ui_fonts: crate::ui_fonts::UiFontLibrary,
+    pub uis: HashMap<u32, (Model2DUI, Transform2D)>,
     pub colliders: HashMap<u32, galfus_realm_core::Collider2D>,
     pub model_transforms: HashMap<u32, Transform2D>,
     pub dirty: bool,
@@ -49,7 +51,9 @@ impl Realm2DContext {
             materials: HashMap::new(),
             lights: HashMap::new(),
             emitters: HashMap::new(),
-            svg_manager: crate::svg_manager::SvgManager2D::new(),
+            ui_manager: crate::context_ui::UiManager2D::new(),
+            ui_fonts: crate::ui_fonts::UiFontLibrary::default(),
+            uis: HashMap::new(),
             colliders: HashMap::new(),
             model_transforms: HashMap::new(),
             dirty: true,
@@ -63,6 +67,14 @@ impl Realm2DContext {
             material_uniform_buffers: HashMap::new(),
             material_texture_slots: HashMap::new(),
         }
+    }
+
+    pub fn font_db(&self) -> &fontdb::Database {
+        &self.ui_fonts.database
+    }
+
+    pub fn default_font_family(&self) -> &str {
+        &self.ui_fonts.default_family
     }
 
     fn ensure_gpu_resources(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
@@ -108,10 +120,13 @@ impl Realm for Realm2DContext {
         self.cameras.clear();
         self.sprites.clear();
         self.shapes.clear();
+        self.colliders.clear();
+        self.model_transforms.clear();
+        self.uis.clear();
+        self.ui_manager.clear();
         self.materials.clear();
         self.lights.clear();
         self.emitters.clear();
-        self.svg_manager.clear();
         self.material_bind_groups.clear();
         self.material_uniform_buffers.clear();
         self.material_texture_slots.clear();
@@ -175,8 +190,29 @@ impl Realm for Realm2DContext {
             }
         }
 
-        // Sync SVGs
-        self.svg_manager.sync_gpu(
+        // Pre-solve UI layout before syncing GPU vector geometry
+        for (ui, _) in self.uis.values_mut() {
+            let layout_flags = galfus_realm_2d_resources::ui::UiDirtyFlags::LAYOUT
+                | galfus_realm_2d_resources::ui::UiDirtyFlags::TEXT_MEASURE
+                | galfus_realm_2d_resources::ui::UiDirtyFlags::HIERARCHY
+                | galfus_realm_2d_resources::ui::UiDirtyFlags::CLIP_TRANSFORM;
+            if ui.root_id.is_some()
+                && (ui.computed.is_empty()
+                    || ui.dirty_flags.values().any(|f| f.0 & layout_flags != 0))
+            {
+                let (w, h) = crate::context_ui::compute_ui_dimensions(ui);
+                crate::ui_layout::solve_ui_layout(
+                    ui,
+                    &self.ui_fonts.database,
+                    &self.ui_fonts.default_family,
+                    w,
+                    h,
+                );
+            }
+        }
+
+        // Sync UIs
+        self.ui_manager.sync_gpu(
             device,
             queue,
             &pipeline_manager.material_bind_group_layout,
@@ -184,10 +220,16 @@ impl Realm for Realm2DContext {
             &gpu_res.fallback_texture_view,
             &gpu_res.fallback_normal_view,
             &gpu_res.fallback_black_view,
-            &gpu_res.fallback_material_buffer,
             ctx.textures,
+            &self.uis,
             &mut self.material_bind_groups,
+            &self.ui_fonts,
         );
+        for (ui, _) in self.uis.values_mut() {
+            for flags in ui.dirty_flags.values_mut() {
+                flags.remove(galfus_realm_2d_resources::ui::UiDirtyFlags::PAINT);
+            }
+        }
 
         self.prepare_shadows(device, queue);
 
@@ -304,8 +346,8 @@ impl Realm for Realm2DContext {
             }
         }
 
-        self.svg_manager
-            .push_batches(&mut self.batch_builder, &self.materials);
+        self.ui_manager
+            .push_batches(&self.uis, &mut self.batch_builder);
 
         self.batch_builder.build();
         self.dirty = false;
@@ -408,8 +450,7 @@ impl Realm for Realm2DContext {
                     if current_geo_id == 0 {
                         rpass.set_vertex_buffer(0, quad_vbo.slice(..));
                         rpass.set_index_buffer(quad_ibo.slice(..), wgpu::IndexFormat::Uint16);
-                    } else if let Some(mesh) = self.svg_manager.get_geometry_by_u64(current_geo_id)
-                    {
+                    } else if let Some(mesh) = self.ui_manager.get_geometry_by_u64(current_geo_id) {
                         rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                         rpass.set_index_buffer(
                             mesh.index_buffer.slice(..),
@@ -437,7 +478,7 @@ impl Realm for Realm2DContext {
 
                 if current_geo_id == 0 {
                     rpass.draw_indexed(0..6, 0, range.start..(range.start + range.count));
-                } else if let Some(mesh) = self.svg_manager.get_geometry_by_u64(current_geo_id) {
+                } else if let Some(mesh) = self.ui_manager.get_geometry_by_u64(current_geo_id) {
                     rpass.draw_indexed(
                         0..mesh.index_count,
                         0,
@@ -452,22 +493,7 @@ impl Realm for Realm2DContext {
     }
 
     fn referenced_texture_ids(&self) -> Vec<u32> {
-        let mut ids = Vec::new();
-        for mat in self.materials.values() {
-            for slot in mat.resolved_texture_slots() {
-                if let Some(id) = slot
-                    && id != 0
-                {
-                    ids.push(id);
-                }
-            }
-        }
-        for tex_id in self.svg_manager.referenced_texture_ids() {
-            if !ids.contains(&tex_id) {
-                ids.push(tex_id);
-            }
-        }
-        ids
+        self.collect_referenced_texture_ids()
     }
 
     fn pick_2d(
@@ -476,6 +502,69 @@ impl Realm for Realm2DContext {
         world_pos: glam::Vec2,
     ) -> Option<galfus_realm_core::HitResult2D> {
         self.perform_pick_2d(camera_slot, world_pos)
+    }
+
+    fn viewport_point_2d(
+        &self,
+        camera_slot: Option<u32>,
+        position: Vec2,
+        size: Vec2,
+    ) -> Option<Vec2> {
+        if size.x <= 0.0 || size.y <= 0.0 {
+            return None;
+        }
+        let (ortho_scale, cam_pos, cam_rot) = if let Some(slot) = camera_slot {
+            self.cameras
+                .iter()
+                .find(|(id, (c, _))| c.active && (c.camera_slot == slot || **id == slot))
+                .map(|(_, (c, tf))| (c.ortho_scale, tf.position, tf.rotation))?
+        } else {
+            self.cameras
+                .values()
+                .find(|(c, _)| c.active && c.camera_slot == 0)
+                .map(|(c, tf)| (c.ortho_scale, tf.position, tf.rotation))
+                .unwrap_or((size.y, Vec2::ZERO, 0.0))
+        };
+
+        let local = Vec2::new(
+            (position.x / size.x - 0.5) * ortho_scale * size.x / size.y,
+            (0.5 - position.y / size.y) * ortho_scale,
+        );
+        Some(cam_pos + glam::Mat2::from_angle(cam_rot) * local)
+    }
+
+    fn has_interactive_collider(&self, model_id: u32, collider_id: u32) -> bool {
+        self.colliders
+            .get(&collider_id)
+            .is_some_and(|c| c.model_id == model_id && c.active)
+    }
+
+    fn has_interactive_element(&self, model_id: u32, element_id: u32) -> bool {
+        self.uis
+            .get(&model_id)
+            .is_some_and(|(ui, _)| ui.is_interactive_panel(element_id))
+    }
+
+    fn scroll_ui_element(&mut self, model_id: u32, element_id: u32, delta: [f32; 2]) {
+        if let Some((ui, _)) = self.uis.get_mut(&model_id)
+            && crate::ui_scroll::scroll_element(ui, element_id, delta)
+        {
+            self.dirty = true;
+        }
+    }
+
+    fn has_collider(&self, model_id: u32, collider_id: u32) -> bool {
+        self.colliders
+            .get(&collider_id)
+            .is_some_and(|c| c.model_id == model_id)
+    }
+
+    fn supports_interaction_surface(&self, model_id: u32, collider_id: u32) -> bool {
+        self.has_collider(model_id, collider_id)
+    }
+
+    fn snapshot_interaction(&self) -> Option<Box<dyn Realm>> {
+        self.build_interaction_snapshot()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

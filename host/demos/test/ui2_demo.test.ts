@@ -10,19 +10,11 @@ describe('ui2 demo (Panels, SplitGroup, ScrollPanel & Layout Solver)', () => {
     expect(findDemo('split-group')?.id).toBe('ui2');
 
     let nextTexId = 10;
-    const attrUpdates: Array<{ id: string; name: string; value: string }> = [];
     const engine = new Proxy(
       {
         resourceCreateTexture: () => nextTexId++,
-        realm2dSetSvgAttribute: (
-          _r: number,
-          _s: number,
-          id: string,
-          name: string,
-          value: string
-        ) => {
-          attrUpdates.push({ id, name, value });
-        }
+        realm2dCreateUi: () => {},
+        realm2dSetUiContent: () => {}
       },
       { get: (target, key) => (key in target ? target[key as keyof typeof target] : () => {}) }
     ) as unknown as GalfusEngine;
@@ -43,23 +35,28 @@ describe('ui2 demo (Panels, SplitGroup, ScrollPanel & Layout Solver)', () => {
     const scene = createUi2Scene(runtime, targetId, windowId, [1120, 700]);
 
     try {
-      const xml = scene.root.toSvgString();
-      expect(xml).toContain('viewBox="0 0 1120 700"');
-      expect(xml).toContain('id="hierarchy-scroll-clip"');
-      expect(xml).toContain('id="main-split-sash-0"');
-      expect(xml).toContain('id="center-split-sash-0"');
+      const compiled = scene.root.compileUi();
+      console.log(
+        'HierarchyScroll rect:',
+        scene.hierarchyScroll.rect,
+        'viewportRect:',
+        scene.hierarchyScroll.viewportRect
+      );
+      const row16Quad = compiled.quads.find((q) => q.rect[1] > 600);
+      console.log('Found row quad past 600:', row16Quad);
+      const textPast600 = compiled.texts.find((t) => t.position[1] > 600);
+      console.log('Found text past 600:', textPast600);
+      expect(compiled.quads.length).toBeGreaterThan(10);
+      expect(compiled.texts.length).toBeGreaterThan(5);
       expect(scene.hierarchyScroll.maxScrollY).toBeGreaterThan(0);
 
-      // Programmatic sash move and scroll update attributes without rebuilding XML
+      // Programmatic sash move and scroll update layout cleanly
       const initialLeftW = scene.hierarchyScroll.rect.width;
       scene.mainSplit.moveSash(0, 45);
       expect(scene.hierarchyScroll.rect.width).toBeCloseTo(initialLeftW + 45, 3);
 
       scene.hierarchyScroll.scrollBy(0, 80);
       expect(scene.hierarchyScroll.scrollY).toBe(80);
-      expect(
-        attrUpdates.some((u) => u.id === 'hierarchy-scroll-content' && u.name === 'transform')
-      ).toBe(true);
 
       // Resize root viewport
       scene.resize(1280, 800);

@@ -15,9 +15,9 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 wgpu.workspace = true
-resvg.workspace = true
-xmltree.workspace = true
 lyon_tessellation.workspace = true
+ttf-parser = "0.25"
+fontdb = "0.24"
 
 [dev-dependencies]
 pollster.workspace = true

@@ -7,14 +7,13 @@ import type {
   GalfusEngine,
   Light2DDesc,
   Material2DDesc,
+  Model2DUIDesc,
   ParticleEmitter2DDesc,
   Shadow2DConfigDesc,
   Shape2DDesc,
   Sprite2DDesc,
-  Svg2DDesc,
-  SvgElementRect,
-  SvgTextLayout,
-  TransitionConfig
+  TransitionConfig,
+  UiCommandDesc
 } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
 import type { Transform2DProps } from '../anchors/component';
@@ -28,47 +27,19 @@ import type { SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
 import type { RealmConnector, RealmId, RealmKind } from '../multiverse/realm';
 import type { TransitionId } from '../types';
-import { DebugLatencyTracker } from '../debug/latency-tracker';
+
 import {
   createCamera2D,
   createLight2D,
   createModel2D,
+  createModel2DUI,
   createParticleEmitter2D,
   createShape2D,
   createSprite2D,
-  createSvg2D,
-  type ParticleEmitter2DComponent,
-  type Svg2DComponent
+  type Model2DUIComponent,
+  type ParticleEmitter2DComponent
 } from './components';
 import { Realm2DSyncSystem } from './sync';
-
-const NON_GEOMETRIC_SVG_ATTRIBUTES = new Set([
-  'fill',
-  'fill-rule',
-  'fill-opacity',
-  'stroke',
-  'stroke-width',
-  'stroke-linecap',
-  'stroke-linejoin',
-  'stroke-miterlimit',
-  'stroke-dasharray',
-  'stroke-dashoffset',
-  'stroke-opacity',
-  'opacity',
-  'color',
-  'visibility',
-  'display',
-  'stop-color',
-  'stop-opacity',
-  'cursor',
-  'pointer-events',
-  'image-rendering',
-  'shape-rendering',
-  'text-rendering',
-  'clip-path',
-  'mask',
-  'filter'
-]);
 
 export class Realm2D implements RealmConnector {
   readonly realmKind: RealmKind = '2d';
@@ -83,21 +54,12 @@ export class Realm2D implements RealmConnector {
   private _preRenderSteppedFrame = -1;
   private _disposed = false;
   private readonly _materials = new Map<number, Material2DDesc>();
-  private readonly _svgCache = new Map<
-    number,
-    {
-      rects: Map<string, Readonly<SvgElementRect> | null>;
-      layouts: Map<string, Readonly<SvgTextLayout> | null>;
-    }
-  >();
 
   constructor(realmId: RealmId | number) {
     this.realmId = realmId as RealmId;
     assertValidLogicalId(this.realmId, 'RealmId');
     this.hierarchy = new HierarchyCoordinator(this.world, '2d');
-    this.syncSystem = new Realm2DSyncSystem(this.realmId, this.solver.cache, (id) => {
-      this.invalidateSvgCache(id);
-    });
+    this.syncSystem = new Realm2DSyncSystem(this.realmId, this.solver.cache);
     this._registerInternalSystems();
   }
 
@@ -155,7 +117,6 @@ export class Realm2D implements RealmConnector {
     this.world.reset();
     this.solver.cache.clear();
     this._materials.clear();
-    this._svgCache.clear();
     this._preRenderSteppedFrame = -1;
     this._registerInternalSystems();
     if (this._engine) {
@@ -176,7 +137,6 @@ export class Realm2D implements RealmConnector {
     this.world.reset();
     this.solver.cache.clear();
     this._materials.clear();
-    this._svgCache.clear();
   }
 
   /** Adds a collider to an entity with a matching Model component. */
@@ -297,172 +257,52 @@ export class Realm2D implements RealmConnector {
     return { entityId, cameraId };
   }
 
-  createSvg(desc: Svg2DDesc, transform?: Transform2DProps): { entityId: EntityId; svgId: number } {
-    const entityId = this.world.createEntity();
-    const svgId = this.allocateResourceId();
+  /** @deprecated SVG has been decoupled from Realm2D into galfus-svg-realm. Use createUi instead. */
+  createSvg(_desc: unknown, _transform?: Transform2DProps): { entityId: EntityId; svgId: number } {
+    throw new Error(
+      'SVG has been decoupled from Realm2D into galfus-svg-realm. Use createUi instead.'
+    );
+  }
 
-    const model = createModel2D(svgId);
+  createUi(
+    desc: Model2DUIDesc,
+    transform?: Transform2DProps
+  ): { entityId: EntityId; uiId: number } {
+    const entityId = this.world.createEntity();
+    const uiId = this.allocateResourceId();
+
+    const model = createModel2D(uiId);
     if (transform) {
       model.setTRS(transform.position, transform.rotation, transform.scale);
       model.zLayer = transform.zLayer ?? 0;
       model.drawOrder = transform.drawOrder ?? 0;
     }
     this.world.attachComponent(entityId, model);
-    this.world.attachComponent(entityId, createSvg2D(svgId, desc));
-    return { entityId, svgId };
+    this.world.attachComponent(entityId, createModel2DUI(uiId, desc));
+    return { entityId, uiId };
   }
 
-  // ---------------------------------------------------------------------------
-  // SVG Dynamic Manipulation
-  // ---------------------------------------------------------------------------
-  /** Returns element bounds in the SVG viewport coordinate system. */
-  getSvgElementRect(svgId: number, elementId: string): Readonly<SvgElementRect> | undefined {
-    if (this._disposed || !this._engine) return undefined;
-    if (!this.syncSystem.isSvgSynced(svgId)) this.flush();
-    if (!this.syncSystem.isSvgSynced(svgId)) return undefined;
-    const entries = this._svgCacheEntry(svgId).rects;
-    if (!entries.has(elementId)) {
-      const rect = this._engine.realm2dGetSvgElementRect(this.realmId, svgId, elementId).rect;
-      entries.set(elementId, rect ? Object.freeze(rect) : null);
-    }
-    return entries.get(elementId) ?? undefined;
-  }
-
-  /** Returns cached raw shaping metrics in SVG viewport coordinates. */
-  getSvgTextLayout(svgId: number, elementId: string): Readonly<SvgTextLayout> | undefined {
-    if (this._disposed || !this._engine) return undefined;
-    if (!this.syncSystem.isSvgSynced(svgId)) this.flush();
-    if (!this.syncSystem.isSvgSynced(svgId)) return undefined;
-    const entries = this._svgCacheEntry(svgId).layouts;
-    if (!entries.has(elementId)) {
-      const layout = this._engine.realm2dGetSvgTextLayout(this.realmId, svgId, elementId).layout;
-      if (layout) {
-        for (const cluster of layout.clusters) {
-          Object.freeze(cluster.transform);
-          Object.freeze(cluster);
-        }
-        Object.freeze(layout.clusters);
-        Object.freeze(layout.chunks);
-        Object.freeze(layout);
-      }
-      entries.set(elementId, layout ?? null);
-    }
-    return entries.get(elementId) ?? undefined;
-  }
-
-  /** @internal Invalidates cached SVG geometry after native animation updates. */
-  invalidateSvgCache(svgId: number): void {
-    this._svgCache.delete(svgId);
-  }
-
-  private _svgCacheEntry(svgId: number) {
-    let entry = this._svgCache.get(svgId);
-    if (!entry) {
-      entry = { rects: new Map(), layouts: new Map() };
-      this._svgCache.set(svgId, entry);
-    }
-    return entry;
-  }
-
-  private _resolveSvgId(svg: number | { svgId?: number; entityId?: EntityId }): number {
-    if (typeof svg === 'number') {
-      return this.world.getComponent<Svg2DComponent>(svg as EntityId, 'Svg2D')?.svgId ?? svg;
-    }
-    const resolved =
-      svg.svgId ??
-      (svg.entityId
-        ? this.world.getComponent<Svg2DComponent>(svg.entityId, 'Svg2D')?.svgId
-        : undefined);
-    if (resolved === undefined) {
-      throw new Error('Cannot resolve Svg2D ID: entity does not have a Svg2DComponent.');
-    }
-    return resolved;
-  }
-
-  setSvgSource(svg: number | { svgId?: number; entityId?: EntityId }, source: string): void {
-    const svgId = this._resolveSvgId(svg);
-    this.invalidateSvgCache(svgId);
-    if (this._engine) {
-      if (!this.syncSystem.isSvgSynced(svgId)) {
-        this.flush();
-      }
-      this._engine.realm2dSetSvgSource(this.realmId, svgId, source);
+  setUiContent(handle: { entityId: EntityId; uiId: number }, desc: Model2DUIDesc): void {
+    const comp = this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI');
+    if (comp) {
+      comp.desc = desc;
+      comp.isDirty = true;
+      comp.pendingCommands.length = 0;
     }
   }
 
-  setSvgAttribute(
-    svg: number | { svgId?: number; entityId?: EntityId },
-    elementId: string,
-    name: string,
-    value: string
+  /** Queues an atomic batch of mutations against the core-owned UI tree. */
+  applyUiCommands(
+    handle: { entityId: EntityId; uiId: number },
+    commands: readonly UiCommandDesc[]
   ): void {
-    const svgId = this._resolveSvgId(svg);
-    DebugLatencyTracker.recordStyleUpdate(
-      DebugLatencyTracker.currentFrameId,
-      svgId,
-      elementId,
-      name,
-      value
-    );
-    const lowerName = name.toLowerCase();
-    if (lowerName === 'viewbox' || elementId === '') {
-      this.invalidateSvgCache(svgId);
-    } else if (!NON_GEOMETRIC_SVG_ATTRIBUTES.has(lowerName)) {
-      const entry = this._svgCache.get(svgId);
-      if (entry) {
-        entry.rects.delete(elementId);
-        entry.layouts.delete(elementId);
-      }
-    }
-    if (this._engine) {
-      if (!this.syncSystem.isSvgSynced(svgId)) {
-        this.flush();
-      }
-      this._engine.realm2dSetSvgAttribute(this.realmId, svgId, elementId, name, value);
-    }
+    const comp = this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI');
+    if (!comp || comp.uiId !== handle.uiId) throw new Error('UI model does not exist.');
+    if (commands.length > 0) comp.pendingCommands.push(structuredClone([...commands]));
   }
 
-  removeSvgAttribute(
-    svg: number | { svgId?: number; entityId?: EntityId },
-    elementId: string,
-    name: string
-  ): void {
-    const svgId = this._resolveSvgId(svg);
-    const lowerName = name.toLowerCase();
-    if (lowerName === 'viewbox' || elementId === '') {
-      this.invalidateSvgCache(svgId);
-    } else if (!NON_GEOMETRIC_SVG_ATTRIBUTES.has(lowerName)) {
-      const entry = this._svgCache.get(svgId);
-      if (entry) {
-        entry.rects.delete(elementId);
-        entry.layouts.delete(elementId);
-      }
-    }
-    if (this._engine) {
-      if (!this.syncSystem.isSvgSynced(svgId)) {
-        this.flush();
-      }
-      this._engine.realm2dRemoveSvgAttribute(this.realmId, svgId, elementId, name);
-    }
-  }
-
-  setSvgText(
-    svg: number | { svgId?: number; entityId?: EntityId },
-    elementId: string,
-    text: string
-  ): void {
-    const svgId = this._resolveSvgId(svg);
-    const entry = this._svgCache.get(svgId);
-    if (entry) {
-      entry.rects.delete(elementId);
-      entry.layouts.delete(elementId);
-    }
-    if (this._engine) {
-      if (!this.syncSystem.isSvgSynced(svgId)) {
-        this.flush();
-      }
-      this._engine.realm2dSetSvgText(this.realmId, svgId, elementId, text);
-    }
+  destroyUi(handle: { entityId: EntityId; uiId: number }): void {
+    this.world.destroyEntity(handle.entityId);
   }
 
   // ---------------------------------------------------------------------------
@@ -478,9 +318,7 @@ export class Realm2D implements RealmConnector {
     if (!this._engine) {
       throw new Error('Cannot load font: Realm2D is not bound to an engine instance.');
     }
-    const family = this._engine.realm2dLoadFontData(this.realmId, data, data.byteLength);
-    this._svgCache.clear();
-    return family;
+    return this._engine.realm2dLoadFontData(this.realmId, data, data.byteLength);
   }
 
   /** Registers a material for upload during the next sync or flush. */
@@ -555,26 +393,5 @@ export class Realm2D implements RealmConnector {
     animation: AnimationCoordinator
   ): TransitionId | undefined {
     return animation.animateEcsProperty(this.world, entityId, 'transform2d', targetValue, config);
-  }
-
-  /**
-   * Helper to animate SVG opacity directly without manual target ID construction.
-   */
-  animateSvgOpacity(
-    entityId: EntityId,
-    initialOpacity: number,
-    targetOpacity: number,
-    duration: number,
-    animation: AnimationCoordinator
-  ): TransitionId | undefined {
-    const svg = this.world.getComponent<Svg2DComponent>(entityId, 'Svg2D');
-    if (!svg) return undefined;
-    const transId = animation.createScalarTransition(initialOpacity, duration, 0, 0, {
-      kind: 'svgOpacity',
-      realmId: this.realmId,
-      svgId: svg.svgId
-    });
-    animation.transitionToScalar(transId, targetOpacity, duration);
-    return transId;
   }
 }

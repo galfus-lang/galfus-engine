@@ -199,80 +199,230 @@ pub(super) fn apply_target_value(
                 })?,
             )
             .map_err(realm_error),
-        AnimationTarget::SvgTransform2D { realm_id, svg_id } => realm(multiverse, *realm_id)?
-            .set_svg_transform(*svg_id, value.to_transform2d()?)
-            .map_err(realm_error),
-        AnimationTarget::SvgOpacity { realm_id, svg_id } => realm(multiverse, *realm_id)?
-            .set_svg_attribute(
-                *svg_id,
-                "root",
-                "opacity",
-                &format!(
-                    "{:.4}",
-                    value.as_scalar().ok_or_else(|| {
-                        AnimationError::InvalidValue("Expected Scalar for SvgOpacity".into())
-                    })?
-                ),
-            )
-            .map_err(realm_error),
-        AnimationTarget::SvgAttributeColor {
+        AnimationTarget::SvgTransform2D { .. }
+        | AnimationTarget::SvgOpacity { .. }
+        | AnimationTarget::SvgAttributeColor { .. }
+        | AnimationTarget::SvgAttributeScalar { .. }
+        | AnimationTarget::SvgAttributeVec2 { .. } => Err(AnimationError::General(
+            "SVG animation targets are moved to galfus-svg-realm".into(),
+        )),
+        AnimationTarget::UiElementBackgroundColor {
             realm_id,
-            svg_id,
+            ui_id,
             element_id,
-            attribute,
+        } => {
+            let realm = realm(multiverse, *realm_id)?;
+            let (ui, _) = realm.uis.get_mut(ui_id).ok_or_else(|| {
+                AnimationError::General(format!("UI #{ui_id} not found in realm #{realm_id}"))
+            })?;
+            let color = value.as_vec4().ok_or_else(|| {
+                AnimationError::InvalidValue("Expected Vec4 for UiElementBackgroundColor".into())
+            })?;
+            let node = ui.nodes.get_mut(element_id).ok_or_else(|| {
+                AnimationError::General(format!("UI node #{element_id} not found in UI #{ui_id}"))
+            })?;
+            if let Some(panel) = node.kind.as_panel_mut()
+                && panel.background_color != color.to_array()
+            {
+                panel.background_color = color.to_array();
+                ui.mark_dirty(
+                    *element_id,
+                    galfus_realm_2d_resources::ui::UiDirtyFlags::PAINT,
+                );
+                realm.dirty = true;
+            }
+            Ok(())
+        }
+        AnimationTarget::UiElementBorderColor {
+            realm_id,
+            ui_id,
+            element_id,
+        } => {
+            let realm = realm(multiverse, *realm_id)?;
+            let (ui, _) = realm.uis.get_mut(ui_id).ok_or_else(|| {
+                AnimationError::General(format!("UI #{ui_id} not found in realm #{realm_id}"))
+            })?;
+            let color = value.as_vec4().ok_or_else(|| {
+                AnimationError::InvalidValue("Expected Vec4 for UiElementBorderColor".into())
+            })?;
+            let node = ui.nodes.get_mut(element_id).ok_or_else(|| {
+                AnimationError::General(format!("UI node #{element_id} not found in UI #{ui_id}"))
+            })?;
+            if let Some(panel) = node.kind.as_panel_mut()
+                && (panel.border_color != color.to_array() || panel.border_colors.is_some())
+            {
+                panel.border_color = color.to_array();
+                panel.border_colors = None;
+                ui.mark_dirty(
+                    *element_id,
+                    galfus_realm_2d_resources::ui::UiDirtyFlags::PAINT,
+                );
+                realm.dirty = true;
+            }
+            Ok(())
+        }
+        AnimationTarget::UiElementBorderSideColor {
+            realm_id,
+            ui_id,
+            element_id,
+            side,
         } => {
             let color = value.as_vec4().ok_or_else(|| {
-                AnimationError::InvalidValue("Expected Vec4 for SvgAttributeColor".into())
+                AnimationError::InvalidValue("Expected Vec4 for UiElementBorderSideColor".into())
             })?;
-            let red = (color.x.clamp(0.0, 1.0) * 255.0).round() as u8;
-            let green = (color.y.clamp(0.0, 1.0) * 255.0).round() as u8;
-            let blue = (color.z.clamp(0.0, 1.0) * 255.0).round() as u8;
-            let value = if color.w >= 1.0 {
-                format!("#{red:02x}{green:02x}{blue:02x}")
-            } else {
-                format!("rgba({red},{green},{blue},{:.3})", color.w.clamp(0.0, 1.0))
-            };
-            realm(multiverse, *realm_id)?
-                .set_svg_attribute(*svg_id, element_id, attribute, &value)
-                .map_err(realm_error)
+            if *side >= 4 {
+                return Err(AnimationError::InvalidValue(
+                    "Border side must be 0..3".into(),
+                ));
+            }
+            let realm = realm(multiverse, *realm_id)?;
+            let (ui, _) = realm.uis.get_mut(ui_id).ok_or_else(|| {
+                AnimationError::General(format!("UI #{ui_id} not found in realm #{realm_id}"))
+            })?;
+            let node = ui.nodes.get_mut(element_id).ok_or_else(|| {
+                AnimationError::General(format!("UI node #{element_id} not found in UI #{ui_id}"))
+            })?;
+            let panel = node.kind.as_panel_mut().ok_or_else(|| {
+                AnimationError::InvalidValue("Border animation requires a panel".into())
+            })?;
+            let mut colors = panel.border_colors.unwrap_or([panel.border_color; 4]);
+            if colors[*side as usize] != color.to_array() {
+                colors[*side as usize] = color.to_array();
+                panel.border_colors = Some(colors);
+                ui.mark_dirty(
+                    *element_id,
+                    galfus_realm_2d_resources::ui::UiDirtyFlags::PAINT,
+                );
+                realm.dirty = true;
+            }
+            Ok(())
         }
-        AnimationTarget::SvgAttributeScalar {
+        AnimationTarget::UiElementBorderWidth {
             realm_id,
-            svg_id,
+            ui_id,
             element_id,
-            attribute,
-        } => realm(multiverse, *realm_id)?
-            .set_svg_attribute(
-                *svg_id,
-                element_id,
-                attribute,
-                &format!(
-                    "{:.4}",
-                    value.as_scalar().ok_or_else(|| {
-                        AnimationError::InvalidValue(
-                            "Expected Scalar for SvgAttributeScalar".into(),
-                        )
-                    })?
-                ),
-            )
-            .map_err(realm_error),
-        AnimationTarget::SvgAttributeVec2 {
+        }
+        | AnimationTarget::UiElementBorderRadius {
             realm_id,
-            svg_id,
+            ui_id,
             element_id,
-            attribute,
         } => {
-            let vector = value.as_vec2().ok_or_else(|| {
-                AnimationError::InvalidValue("Expected Vec2 for SvgAttributeVec2".into())
+            let values = value.as_vec4().ok_or_else(|| {
+                AnimationError::InvalidValue("Expected Vec4 for UI border geometry".into())
             })?;
-            realm(multiverse, *realm_id)?
-                .set_svg_attribute(
-                    *svg_id,
-                    element_id,
-                    attribute,
-                    &format!("{:.4} {:.4}", vector.x, vector.y),
-                )
-                .map_err(realm_error)
+            if !values.is_finite() {
+                return Err(AnimationError::InvalidValue(
+                    "UI border values must be finite".into(),
+                ));
+            }
+            let realm = realm(multiverse, *realm_id)?;
+            let (ui, _) = realm.uis.get_mut(ui_id).ok_or_else(|| {
+                AnimationError::General(format!("UI #{ui_id} not found in realm #{realm_id}"))
+            })?;
+            let node = ui.nodes.get_mut(element_id).ok_or_else(|| {
+                AnimationError::General(format!("UI node #{element_id} not found in UI #{ui_id}"))
+            })?;
+            let panel = node.kind.as_panel_mut().ok_or_else(|| {
+                AnimationError::InvalidValue("Border animation requires a panel".into())
+            })?;
+            let field = if matches!(target, AnimationTarget::UiElementBorderWidth { .. }) {
+                &mut panel.border_width
+            } else {
+                &mut panel.border_radius
+            };
+            let values = values.max(glam::Vec4::ZERO).to_array();
+            if *field != values {
+                *field = values;
+                ui.mark_dirty(
+                    *element_id,
+                    galfus_realm_2d_resources::ui::UiDirtyFlags::PAINT,
+                );
+                realm.dirty = true;
+            }
+            Ok(())
+        }
+        AnimationTarget::UiElementOpacity {
+            realm_id,
+            ui_id,
+            element_id,
+        } => {
+            let realm = realm(multiverse, *realm_id)?;
+            let (ui, _) = realm.uis.get_mut(ui_id).ok_or_else(|| {
+                AnimationError::General(format!("UI #{ui_id} not found in realm #{realm_id}"))
+            })?;
+            let opacity = value.as_scalar().ok_or_else(|| {
+                AnimationError::InvalidValue("Expected Scalar for UiElementOpacity".into())
+            })?;
+            let node = ui.nodes.get_mut(element_id).ok_or_else(|| {
+                AnimationError::General(format!("UI node #{element_id} not found in UI #{ui_id}"))
+            })?;
+            if let Some(panel) = node.kind.as_panel_mut() {
+                let opacity = opacity.clamp(0.0, 1.0);
+                if panel.opacity != opacity {
+                    panel.opacity = opacity;
+                    ui.mark_dirty(
+                        *element_id,
+                        galfus_realm_2d_resources::ui::UiDirtyFlags::PAINT
+                            | galfus_realm_2d_resources::ui::UiDirtyFlags::CLIP_TRANSFORM,
+                    );
+                    realm.dirty = true;
+                }
+            }
+            Ok(())
+        }
+        AnimationTarget::UiElementPosition {
+            realm_id,
+            ui_id,
+            element_id,
+        } => {
+            let realm = realm(multiverse, *realm_id)?;
+            let (ui, _) = realm.uis.get_mut(ui_id).ok_or_else(|| {
+                AnimationError::General(format!("UI #{ui_id} not found in realm #{realm_id}"))
+            })?;
+            let pos = value.as_vec2().ok_or_else(|| {
+                AnimationError::InvalidValue("Expected Vec2 for UiElementPosition".into())
+            })?;
+            let node = ui.nodes.get_mut(element_id).ok_or_else(|| {
+                AnimationError::General(format!("UI node #{element_id} not found in UI #{ui_id}"))
+            })?;
+            let position = Some([pos.x, pos.y]);
+            if node.layout.position_offset != position {
+                node.layout.position_offset = position;
+                ui.mark_dirty(
+                    *element_id,
+                    galfus_realm_2d_resources::ui::UiDirtyFlags::LAYOUT,
+                );
+                realm.dirty = true;
+            }
+            Ok(())
+        }
+        AnimationTarget::UiElementSize {
+            realm_id,
+            ui_id,
+            element_id,
+        } => {
+            let realm = realm(multiverse, *realm_id)?;
+            let (ui, _) = realm.uis.get_mut(ui_id).ok_or_else(|| {
+                AnimationError::General(format!("UI #{ui_id} not found in realm #{realm_id}"))
+            })?;
+            let size = value.as_vec2().ok_or_else(|| {
+                AnimationError::InvalidValue("Expected Vec2 for UiElementSize".into())
+            })?;
+            let node = ui.nodes.get_mut(element_id).ok_or_else(|| {
+                AnimationError::General(format!("UI node #{element_id} not found in UI #{ui_id}"))
+            })?;
+            let width = galfus_realm_2d_resources::ui::UiDimension::Exact(size.x);
+            let height = galfus_realm_2d_resources::ui::UiDimension::Exact(size.y);
+            if node.layout.width != width || node.layout.height != height {
+                node.layout.width = width;
+                node.layout.height = height;
+                ui.mark_dirty(
+                    *element_id,
+                    galfus_realm_2d_resources::ui::UiDirtyFlags::LAYOUT,
+                );
+                realm.dirty = true;
+            }
+            Ok(())
         }
         _ => unreachable!("Realm 2D dispatcher received a non-2D target"),
     }

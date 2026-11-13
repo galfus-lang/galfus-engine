@@ -4,6 +4,7 @@ import { createRuntime } from '@galfus/engine';
 import { createUi } from '../src/index';
 import { advanceFrame } from '../../engine/test/controlled-transport';
 import { button, move, setup, tab } from '../../engine/test/interactive-fixture';
+import { createMockInteractionEngine } from '../../engine/test/mock-core-interaction';
 
 describe('UI focus management and Tab navigation', () => {
   it('moves focus by Tab and Shift+Tab using priority and submitted visibility', () => {
@@ -295,13 +296,20 @@ describe('UI focus management and Tab navigation', () => {
       ],
       softCutEdges: [] as Array<[number, number]>
     };
+    let runtimeRef: any;
+    const mockInteractions = createMockInteractionEngine((id) =>
+      runtimeRef?.multiverse.getRealm(id)
+    );
     const engine = new Proxy(
       {
+        ...mockInteractions,
         platformPumpEvents: () => events.splice(0),
         windowSetTabCapture: () => {},
         windowSetImeAllowed: () => {},
         multiverseResolve: () => schedule,
-        multiverseDispatch: () => {}
+        multiverseDispatch: () => {
+          mockInteractions.multiverseDispatch();
+        }
       },
       { get: (target, key) => (key in target ? target[key as keyof typeof target] : () => {}) }
     ) as unknown as GalfusEngine;
@@ -316,6 +324,7 @@ describe('UI focus management and Tab navigation', () => {
     } as unknown as GalfusTransport;
 
     const runtime = createRuntime(transport);
+    runtimeRef = runtime;
     const ui = createUi(runtime);
     try {
       const windowId = runtime.platform.window.create();

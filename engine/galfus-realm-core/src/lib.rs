@@ -14,7 +14,6 @@ pub mod types;
 
 pub use collision::{
     Collider2D, Collider3D, ColliderShape2D, ColliderShape3D, HitResult2D, HitResult3D, Ray3D,
-    point_in_circle, point_in_rectangle, ray_intersects_box, ray_intersects_sphere,
 };
 pub use color_realm::ColorRealm;
 pub use error::{RealmError, RealmResult};

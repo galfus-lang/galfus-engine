@@ -3,10 +3,13 @@ import type { GalfusEngine, GalfusTransport, PlatformEvent } from '@galfus/trans
 import { createRuntime, type Model2DComponent, type Model3DComponent } from '@galfus/engine';
 import { createTransRealmScene } from '../src/host/trans-realm';
 import { advanceFrame, button, move, tab } from './test-helpers';
+import { createMockInteractionEngine } from '../../engine/test/mock-core-interaction';
 
 function setupDemoFixture() {
   const events: PlatformEvent[] = [];
   const tabCapture: Array<[number, number]> = [];
+  let runtimeRef: any;
+  const mockInteractions = createMockInteractionEngine((id) => runtimeRef?.multiverse.getRealm(id));
 
   const schedule = {
     targetBlocks: [
@@ -52,11 +55,14 @@ function setupDemoFixture() {
 
   const engine = new Proxy(
     {
+      ...mockInteractions,
       platformPumpEvents: () => events.splice(0),
       windowSetTabCapture: (id: number, enabled: number) => tabCapture.push([id, enabled]),
       windowSetImeAllowed: () => {},
       multiverseResolve: () => schedule,
-      multiverseDispatch: () => {}
+      multiverseDispatch: () => {
+        mockInteractions.multiverseDispatch();
+      }
     },
     { get: (target, key) => (key in target ? target[key as keyof typeof target] : () => {}) }
   ) as unknown as GalfusEngine;
@@ -72,6 +78,7 @@ function setupDemoFixture() {
   } as unknown as GalfusTransport;
 
   const runtime = createRuntime(transport);
+  runtimeRef = runtime;
   const windowId = runtime.platform.window.create();
   const rootTargetId = runtime.multiverse.createTarget(10, {
     kind: { type: 'window', windowId }

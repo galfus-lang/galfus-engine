@@ -1,8 +1,10 @@
 import type { DescSpec, FunctionSpec } from './types';
 import { svgTextDescriptors } from './realm_2d_text';
+import { realm2dUiDescriptors, realm2dUiFunctions } from './realm_2d_ui';
 
 export const realm2dDescriptors: DescSpec[] = [
   ...svgTextDescriptors,
+  ...realm2dUiDescriptors,
   {
     kind: 'object',
     name: 'SvgElementRect',
@@ -578,5 +580,6 @@ export const realm2dFunctions: FunctionSpec[] = [
       { name: 'dataLen', type: 'u64', doc: 'Length of the font binary buffer in bytes.' }
     ],
     returnType: 'string'
-  }
+  },
+  ...realm2dUiFunctions
 ];

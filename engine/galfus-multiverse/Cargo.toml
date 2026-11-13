@@ -16,3 +16,9 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 wgpu.workspace = true
+
+[dev-dependencies]
+galfus-realm-2d.workspace = true
+galfus-realm-2d-resources.workspace = true
+galfus-realm-3d.workspace = true
+galfus-realm-3d-resources.workspace = true

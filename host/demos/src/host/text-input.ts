@@ -1,4 +1,4 @@
-/** SVG text input demo using the host focus and IME systems. */
+/** Native UI text input demo using the host focus and IME systems. */
 import {
   type Camera2DComponent,
   createRuntime,
@@ -7,29 +7,19 @@ import {
   type WindowId
 } from '@galfus/engine';
 import { createBunTransport } from '@galfus/transport-bun';
-import { createUi, SvgTextDecorations, textInputGeometry } from '@galfus/ui';
+import { createUi, type TextInput, UiRoot, UiText } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { type HostDemoOptions, resolveDemoOptions } from '../common/options';
 
-const PANEL = `<svg xmlns="http://www.w3.org/2000/svg" width="760" height="560" viewBox="0 0 760 560">
-  <rect width="760" height="560" rx="16" fill="#101d2d"/>
-  <text x="40" y="49" fill="#f0f7ff" font-family="sans-serif" font-size="25" font-weight="bold">TEXT INPUT LAB</text>
-  <text x="40" y="76" fill="#a9bfd3" font-family="sans-serif" font-size="14">Click a field or use Tab / Shift+Tab to change focus</text>
-  <text x="40" y="116" fill="#72d9e9" font-family="sans-serif" font-size="14">NAME</text>
-  <rect id="name-hit" x="40" y="128" width="680" height="52" rx="7" fill="#1b3045" stroke="#476078" stroke-width="2"/>
-  <g id="name-field"><path id="name-selection" display="none"/><text id="name-text" x="56" y="161" fill="#ffffff" font-family="sans-serif" font-size="19" xml:space="preserve"> </text><rect id="name-cursor" display="none"/></g>
-  <text x="40" y="213" fill="#72d9e9" font-family="sans-serif" font-size="14">PROJECT</text>
-  <rect id="project-hit" x="40" y="225" width="680" height="52" rx="7" fill="#1b3045" stroke="#476078" stroke-width="2"/>
-  <g id="project-field"><path id="project-selection" display="none"/><text id="project-text" x="56" y="258" fill="#ffffff" font-family="sans-serif" font-size="19" xml:space="preserve"> </text><rect id="project-cursor" display="none"/></g>
-  <text x="40" y="310" fill="#72d9e9" font-family="sans-serif" font-size="14">NOTE</text>
-  <rect id="note-hit" x="40" y="322" width="680" height="52" rx="7" fill="#1b3045" stroke="#476078" stroke-width="2"/>
-  <g id="note-field"><path id="note-selection" display="none"/><text id="note-text" x="56" y="355" fill="#ffffff" font-family="sans-serif" font-size="19" xml:space="preserve"> </text><rect id="note-cursor" display="none"/></g>
-  <text id="status" x="40" y="420" fill="#dceafa" font-family="sans-serif" font-size="14">No field focused</text>
-  <text id="selection" x="40" y="446" fill="#9cb6cf" font-family="sans-serif" font-size="13">Selection: -</text>
-  <text x="40" y="493" fill="#a9bfd3" font-family="sans-serif" font-size="12">Arrows, Shift/Ctrl + arrows, Ctrl + Backspace/Delete, Home / End, Ctrl + A.</text>
-  <text x="40" y="515" fill="#a9bfd3" font-family="sans-serif" font-size="12">The caret and selection follow the keyboard. Escape exits.</text>
-  <text x="40" y="537" fill="#a9bfd3" font-family="sans-serif" font-size="12">For additional glyphs, launch with --font and a compatible font file.</text>
-</svg>`;
+export interface FieldUiState {
+  readonly id: string;
+  readonly name: string;
+  readonly input: TextInput;
+  readonly fieldPanel: ReturnType<UiRoot['addPanel']>;
+  readonly textNode: UiText;
+  readonly cursorPanel: ReturnType<UiRoot['addPanel']>;
+  readonly selectionPanel: ReturnType<UiRoot['addPanel']>;
+}
 
 /** Builds a reusable scene; focus requires a successfully presented window target. */
 export function createTextInputScene(
@@ -63,89 +53,206 @@ export function createTextInputScene(
     });
   realm.setShadowConfig({ ambient: 1 });
   if (fontData) realm.loadFontData(fontData);
-  const svg = realm.createSvg({ source: PANEL, castShadow: false, receiveShadow: false });
+
+  const uiRoot = new UiRoot(runtime, realm, {
+    width: 760,
+    height: 560,
+    position: [0, 0]
+  });
+  uiRoot.rootPanel.setBackgroundColor([16 / 255, 29 / 255, 45 / 255, 1.0]).setBorderRadius(16);
+
+  uiRoot.addText({
+    text: 'TEXT INPUT LAB',
+    fontSize: 25,
+    color: [240 / 255, 247 / 255, 1.0, 1.0],
+    x: 40,
+    y: 20
+  });
+  uiRoot.addText({
+    text: 'Click a field or use Tab / Shift+Tab to change focus',
+    fontSize: 14,
+    color: [169 / 255, 191 / 255, 211 / 255, 1.0],
+    x: 40,
+    y: 54
+  });
+
   const definitions = [
-    { name: 'Name', id: 'name', value: 'Ada', baseline: 161 },
-    { name: 'Project', id: 'project', value: 'Galfus', baseline: 258 },
-    { name: 'Note', id: 'note', value: '', baseline: 355 }
+    { name: 'Name', id: 'name', value: 'Ada', y: 128 },
+    { name: 'Project', id: 'project', value: 'Galfus', y: 225 },
+    { name: 'Note', id: 'note', value: '', y: 322 }
   ] as const;
-  let dirty = true;
-  const decorations = definitions.map(
-    ({ id }) =>
-      new SvgTextDecorations(realm, svg.svgId, {
-        cursorId: `${id}-cursor`,
-        selectionPathId: `${id}-selection`,
-        cursorColor: '#ffffff',
-        selectionColor: '#477bb6'
+
+  const statusText = uiRoot.addText({
+    text: 'No field focused',
+    fontSize: 14,
+    color: [220 / 255, 234 / 255, 250 / 255, 1.0],
+    x: 40,
+    y: 400
+  });
+
+  const selectionText = uiRoot.addText({
+    text: 'Selection: -',
+    fontSize: 13,
+    color: [156 / 255, 182 / 255, 207 / 255, 1.0],
+    x: 40,
+    y: 426
+  });
+
+  uiRoot.addText({
+    text: 'Arrows, Shift/Ctrl + arrows, Ctrl + Backspace/Delete, Home / End, Ctrl + A.',
+    fontSize: 12,
+    color: [169 / 255, 191 / 255, 211 / 255, 1.0],
+    x: 40,
+    y: 470
+  });
+  uiRoot.addText({
+    text: 'The caret and selection follow the keyboard. Escape exits.',
+    fontSize: 12,
+    color: [169 / 255, 191 / 255, 211 / 255, 1.0],
+    x: 40,
+    y: 492
+  });
+  uiRoot.addText({
+    text: 'For additional glyphs, launch with --font and a compatible font file.',
+    fontSize: 12,
+    color: [169 / 255, 191 / 255, 211 / 255, 1.0],
+    x: 40,
+    y: 514
+  });
+
+  const fieldStates: FieldUiState[] = [];
+  const fields: TextInput[] = [];
+
+  for (let i = 0; i < definitions.length; i++) {
+    const { name, id, value, y } = definitions[i]!;
+
+    uiRoot.addText({
+      text: name.toUpperCase(),
+      fontSize: 14,
+      color: [114 / 255, 217 / 255, 233 / 255, 1.0],
+      x: 40,
+      y: y - 22
+    });
+
+    const fieldPanel = uiRoot.addPanel({
+      id: `${id}-hit`,
+      x: 40,
+      y,
+      width: 680,
+      height: 52,
+      borderRadius: 7,
+      backgroundColor: [27 / 255, 48 / 255, 69 / 255, 1.0],
+      borderColor: [71 / 255, 96 / 255, 120 / 255, 1.0],
+      borderWidth: 2
+    });
+
+    const selectionPanel = fieldPanel.addPanel({
+      id: `${id}-selection`,
+      x: 16,
+      y: 10,
+      width: 0,
+      height: 32,
+      borderRadius: 3,
+      backgroundColor: [71 / 255, 123 / 255, 182 / 255, 0.6]
+    });
+
+    const cursorPanel = fieldPanel.addPanel({
+      id: `${id}-cursor`,
+      x: 16,
+      y: 10,
+      width: 2,
+      height: 32,
+      minWidth: 0,
+      backgroundColor: [1.0, 1.0, 1.0, 0.0]
+    });
+
+    const textNode = fieldPanel.addText(
+      new UiText({
+        text: value || ' ',
+        fontSize: 19,
+        color: [1.0, 1.0, 1.0, 1.0],
+        x: 16,
+        y: 14
       })
-  );
-  const fields = definitions.map(({ name, id, value }) => {
-    const input = ui.textInput(realm.realmId, {
-      svgId: svg.svgId,
-      elementId: `${id}-text`,
-      hitAreaId: `${id}-hit`,
-      value
-    });
-    const updateSelection = () => {
-      const { anchor, focus } = input.selection;
-      realm.setSvgText(svg, 'selection', `Selection (UTF-16): ${anchor} → ${focus}`);
-    };
-    input.on('focus', () => {
-      dirty = true;
-      realm.setSvgAttribute(svg, `${id}-hit`, 'stroke', '#72d9e9');
-      realm.setSvgText(svg, 'status', `Focused: ${name}`);
-      updateSelection();
-    });
-    input.on('blur', () => {
-      dirty = true;
-      realm.setSvgAttribute(svg, `${id}-hit`, 'stroke', '#476078');
-      realm.setSvgText(svg, 'status', 'No field focused');
-      realm.setSvgText(svg, 'selection', 'Selection: -');
-    });
-    input.on('change', () => {
-      dirty = true;
-    });
-    input.on('selection', () => {
-      dirty = true;
-      updateSelection();
-    });
-    input.on('composition', () => {
-      dirty = true;
-      realm.setSvgText(
-        svg,
-        'status',
-        input.composition ? `Composing: ${name}` : `Focused: ${name}`
-      );
-    });
-    return input;
-  });
-  let lastFocused = -1;
-  const cachedValues: Array<string | undefined> = [];
-  const cachedLayouts: Array<ReturnType<typeof realm.getSvgTextLayout>> = [];
-  runtime.on('tick', () => {
-    if (!dirty) return;
-    dirty = false;
-    const focus = windowId === undefined ? undefined : ui.getFocused(windowId);
-    const index = fields.findIndex((field) => field.focusable === focus);
-    if (lastFocused >= 0 && lastFocused !== index) decorations[lastFocused]!.update(undefined, []);
-    lastFocused = index;
-    if (index < 0) return;
-    const field = fields[index]!;
-    const value = field.displayValue;
-    if (cachedValues[index] !== value) {
-      cachedValues[index] = value;
-      cachedLayouts[index] = value ? realm.getSvgTextLayout(svg.svgId, field.elementId) : undefined;
-    }
-    const geometry = textInputGeometry(
-      cachedLayouts[index],
-      value,
-      field.selection,
-      field.composition,
-      definitions[index]!.baseline
     );
-    decorations[index]!.update(geometry?.cursor, geometry?.selections ?? []);
-  });
-  return { realm, svg, fields, ui };
+
+    const input = ui.textInput(realm.realmId, {
+      entityId: uiRoot.entityId,
+      value,
+      tabIndex: i,
+      onRender: (val) => textNode.setText(val || ' ')
+    });
+
+    const updateDecorations = () => {
+      const { anchor, focus } = input.selection;
+      const start = Math.min(anchor, focus);
+      const end = Math.max(anchor, focus);
+      const charWidth = 10.5;
+      const cursorX = 16 + focus * charWidth;
+      cursorPanel.setPosition(cursorX, 10);
+      cursorPanel.setBackgroundColor([1.0, 1.0, 1.0, 1.0]);
+
+      if (start !== end) {
+        selectionPanel.setPosition(16 + start * charWidth, 10);
+        selectionPanel.setSize(Math.max(0, (end - start) * charWidth), 32);
+      } else {
+        selectionPanel.setSize(0, 32);
+      }
+    };
+
+    const updateSelectionText = () => {
+      const { anchor, focus } = input.selection;
+      selectionText.setText(`Selection (UTF-16): ${anchor} → ${focus}`);
+    };
+
+    input.on('focus', () => {
+      fieldPanel.setBorderColor([114 / 255, 217 / 255, 233 / 255, 1.0]);
+      statusText.setText(`Focused: ${name}`);
+      updateDecorations();
+      updateSelectionText();
+    });
+
+    input.on('blur', () => {
+      fieldPanel.setBorderColor([71 / 255, 96 / 255, 120 / 255, 1.0]);
+      cursorPanel.setBackgroundColor([1.0, 1.0, 1.0, 0.0]);
+      selectionPanel.setSize(0, 32);
+      statusText.setText('No field focused');
+      selectionText.setText('Selection: -');
+    });
+
+    input.on('change', () => {
+      textNode.setText(input.displayValue || ' ');
+      updateDecorations();
+    });
+
+    input.on('selection', () => {
+      updateDecorations();
+      updateSelectionText();
+    });
+
+    input.on('composition', () => {
+      textNode.setText(input.displayValue || ' ');
+      statusText.setText(input.composition ? `Composing: ${name}` : `Focused: ${name}`);
+      updateDecorations();
+    });
+
+    fieldPanel.on('click', () => {
+      input.requestFocus(windowId);
+    });
+
+    fieldStates.push({
+      id,
+      name,
+      input,
+      fieldPanel,
+      textNode,
+      cursorPanel,
+      selectionPanel
+    });
+    fields.push(input);
+  }
+
+  return { realm, uiRoot, ui, fields, fieldStates, statusText, selectionText };
 }
 
 export interface TextInputDemoOptions extends HostDemoOptions {
@@ -187,4 +294,8 @@ export async function runTextInputDemo(options: TextInputDemoOptions = {}): Prom
   } finally {
     runtime.dispose();
   }
+}
+
+if (import.meta.main) {
+  await runTextInputDemo();
 }

@@ -1,16 +1,8 @@
 import { type EntityId, isKey, presetsAnchor } from '@galfus/engine';
 import { attachPhysics2D } from '@galfus/physics-2d';
+import { UiRoot } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
-
-const SVG_TELEMETRY_HUD = `
-<svg width="360" height="90" viewBox="0 0 360 90" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2" y="2" width="356" height="86" rx="10" fill="#0f172a" fill-opacity="0.88" stroke="#38bdf8" stroke-width="2"/>
-  <text x="16" y="28" font-family="monospace" font-size="14" font-weight="bold" fill="#f8fafc">PHYS2D-2: CHAINS, ROPES &amp; SPRINGS</text>
-  <text id="vel-text" x="16" y="52" font-family="monospace" font-size="12" fill="#38bdf8">TIP SPEED: 0.00 m/s</text>
-  <text x="16" y="74" font-family="monospace" font-size="11" fill="#94a3b8">[SPACE]: IMPULSE BURST | [ESC]: QUIT</text>
-</svg>
-`;
 
 export async function runDemoPhys2d2(options: HostDemoOptions = {}): Promise<void> {
   const { runtime, targetId, windowId, maxFrames } = createDemoSession(
@@ -128,10 +120,42 @@ export async function runDemoPhys2d2(options: HostDemoOptions = {}): Promise<voi
       presetsAnchor.spring({ restLength: 2.5, stiffness: 48, damping: 2.8 })
     );
 
-    const hudSvg = realm2d.createSvg(
-      { source: SVG_TELEMETRY_HUD, dimensions: [7.2, 1.8] },
-      { position: [0, -6.8], zLayer: 10 }
-    );
+    const uiRoot = new UiRoot(runtime, realm2d, {
+      width: 360,
+      height: 90,
+      position: [0, -6.8],
+      scale: [7.2 / 360, 1.8 / 90],
+      zLayer: 10
+    });
+    uiRoot.rootPanel
+      .setBackgroundColor([0.06, 0.09, 0.16, 0.9])
+      .setBorderColor([0.22, 0.74, 0.97, 1.0])
+      .setBorderWidth(2)
+      .setBorderRadius(10);
+
+    uiRoot.addText({
+      text: 'PHYS2D-2: CHAINS, ROPES & SPRINGS',
+      fontSize: 14,
+      color: [0.97, 0.98, 0.99, 1.0],
+      x: 16,
+      y: 18
+    });
+
+    const velText = uiRoot.addText({
+      text: 'TIP SPEED: 0.00 m/s',
+      fontSize: 12,
+      color: [0.22, 0.74, 0.97, 1.0],
+      x: 16,
+      y: 42
+    });
+
+    uiRoot.addText({
+      text: '[SPACE]: IMPULSE BURST | [ESC]: QUIT',
+      fontSize: 11,
+      color: [0.58, 0.64, 0.72, 1.0],
+      x: 16,
+      y: 66
+    });
 
     runtime.multiverse.createInvocation({
       realmId: realm2d.realmId,
@@ -155,7 +179,7 @@ export async function runDemoPhys2d2(options: HostDemoOptions = {}): Promise<voi
       if (frame % 4 === 0) {
         const v = physics.getLinearVelocity(chainTip) ?? [0, 0];
         const speed = Math.hypot(v[0], v[1]);
-        realm2d.setSvgText(hudSvg, 'vel-text', `TIP SPEED: ${speed.toFixed(2)} m/s`);
+        velText.setText(`TIP SPEED: ${speed.toFixed(2)} m/s`);
       }
     });
 

@@ -5,10 +5,11 @@ import { TextEditor, type TextSelection } from './editor';
 import { applyTextKeyboardEvent } from './keyboard';
 
 export interface TextInputOptions {
-  readonly svgId: number;
-  readonly elementId: string;
+  readonly svgId?: number;
+  readonly elementId?: string;
   /** SVG element used for hit testing; defaults to elementId. */
   readonly hitAreaId?: string;
+  readonly onRender?: (displayValue: string) => void;
   readonly value?: string;
   readonly tabIndex?: number;
 }
@@ -56,10 +57,10 @@ export class TextInput {
     return this.editor.value;
   }
   get svgId(): number {
-    return this.options.svgId;
+    return this.options.svgId ?? 0;
   }
   get elementId(): string {
-    return this.options.elementId;
+    return this.options.elementId ?? '';
   }
   get displayValue(): string {
     return this.editor.displayValue;
@@ -138,11 +139,20 @@ export class TextInput {
   }
 
   private render(): void {
-    this.realm.setSvgText(
-      { svgId: this.options.svgId },
-      this.options.elementId,
-      this.editor.displayValue
-    );
+    if (this.options.onRender) {
+      this.options.onRender(this.editor.displayValue);
+    }
+    if (this.options.svgId !== undefined && this.options.elementId !== undefined) {
+      try {
+        (this.realm as any).setSvgText?.(
+          { svgId: this.options.svgId },
+          this.options.elementId,
+          this.editor.displayValue
+        );
+      } catch {
+        // SVG decoupled
+      }
+    }
   }
 
   private emit(type: TextInputEventType, windowId?: number): void {

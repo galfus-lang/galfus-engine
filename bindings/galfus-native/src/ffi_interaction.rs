@@ -18,6 +18,12 @@ enum ColliderInput2D {
         shape: ColliderShape2D,
         #[serde(default)]
         offset: Option<[f32; 2]>,
+        #[serde(default, rename = "localMatrix")]
+        local_matrix: Option<[f32; 6]>,
+        #[serde(default)]
+        active: Option<bool>,
+        #[serde(default)]
+        sensor: Option<bool>,
         #[serde(default)]
         layer: Option<u32>,
         #[serde(default)]
@@ -33,6 +39,12 @@ enum ColliderInput3D {
         shape: ColliderShape3D,
         #[serde(default)]
         offset: Option<[f32; 3]>,
+        #[serde(default, rename = "localMatrix")]
+        local_matrix: Option<[f32; 16]>,
+        #[serde(default)]
+        active: Option<bool>,
+        #[serde(default)]
+        sensor: Option<bool>,
         #[serde(default)]
         layer: Option<u32>,
         #[serde(default)]
@@ -68,19 +80,25 @@ pub unsafe extern "C" fn galfus_realm_2d_create_collider(
         }
     };
 
-    let (shape, offset, layer, mask) = match input {
+    let (shape, offset, local_matrix, active, sensor, layer, mask) = match input {
         ColliderInput2D::Full {
             shape,
             offset,
+            local_matrix,
+            active,
+            sensor,
             layer,
             mask,
         } => (
             shape,
             offset.unwrap_or([0.0, 0.0]),
+            local_matrix,
+            active.unwrap_or(true),
+            sensor.unwrap_or(false),
             layer.unwrap_or(1),
             mask.unwrap_or(u32::MAX),
         ),
-        ColliderInput2D::ShapeOnly(shape) => (shape, [0.0, 0.0], 1, u32::MAX),
+        ColliderInput2D::ShapeOnly(shape) => (shape, [0.0, 0.0], None, true, false, 1, u32::MAX),
     };
 
     let collider = Collider2D {
@@ -88,6 +106,9 @@ pub unsafe extern "C" fn galfus_realm_2d_create_collider(
         model_id,
         shape,
         offset,
+        local_matrix,
+        active,
+        sensor,
         layer,
         mask,
     };
@@ -154,19 +175,27 @@ pub unsafe extern "C" fn galfus_realm_3d_create_collider(
         }
     };
 
-    let (shape, offset, layer, mask) = match input {
+    let (shape, offset, local_matrix, active, sensor, layer, mask) = match input {
         ColliderInput3D::Full {
             shape,
             offset,
+            local_matrix,
+            active,
+            sensor,
             layer,
             mask,
         } => (
             shape,
             offset.unwrap_or([0.0, 0.0, 0.0]),
+            local_matrix,
+            active.unwrap_or(true),
+            sensor.unwrap_or(false),
             layer.unwrap_or(1),
             mask.unwrap_or(u32::MAX),
         ),
-        ColliderInput3D::ShapeOnly(shape) => (shape, [0.0, 0.0, 0.0], 1, u32::MAX),
+        ColliderInput3D::ShapeOnly(shape) => {
+            (shape, [0.0, 0.0, 0.0], None, true, false, 1, u32::MAX)
+        }
     };
 
     let collider = Collider3D {
@@ -174,6 +203,9 @@ pub unsafe extern "C" fn galfus_realm_3d_create_collider(
         model_id,
         shape,
         offset,
+        local_matrix,
+        active,
+        sensor,
         layer,
         mask,
     };
@@ -237,6 +269,22 @@ pub unsafe extern "C" fn galfus_multiverse_handle_pointer_event(event_json: *con
 
     match with_multiverse_mut(|mv| {
         mv.handle_pointer_event(&event);
+        Ok(())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Publishes a presented frame snapshot for the given window so interaction picking can resolve hits.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_multiverse_publish_interaction_frame(window_id: u32) -> i32 {
+    match with_multiverse_mut(|mv| {
+        let _ = mv.resolve();
+        mv.publish_interaction_frame(&[window_id]);
         Ok(())
     }) {
         Ok(()) => 0,

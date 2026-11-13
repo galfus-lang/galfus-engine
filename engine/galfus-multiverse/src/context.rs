@@ -60,6 +60,7 @@ pub struct MultiverseContext {
 
     /// Multiverse-level interaction and picking engine.
     pub interaction: crate::interaction::MultiverseInteractionSystem,
+    pub(crate) interaction_frames: HashMap<u32, Arc<crate::context_interaction::InteractionFrame>>,
 
     /// Cached resolved schedule.
     pub(crate) cached_schedule: Option<MultiverseSchedule>,
@@ -93,6 +94,7 @@ impl MultiverseContext {
             taa_history: HashMap::new(),
             post_processor: None,
             interaction: crate::interaction::MultiverseInteractionSystem::new(),
+            interaction_frames: HashMap::new(),
             cached_schedule: None,
             dirty: true,
         }
@@ -211,6 +213,8 @@ impl MultiverseContext {
         let detached_size = self.window_sizes.remove(&window_id).is_some();
         let detached = detached_surface || detached_size;
         if detached {
+            self.interaction.cancel_window(window_id);
+            self.interaction_frames.remove(&window_id);
             self.dirty = true;
         }
         Ok(detached)
@@ -494,6 +498,7 @@ impl MultiverseContext {
     pub fn unbind_target_texture(&mut self, realm_id: u32, slot: &str) -> MultiverseResult<()> {
         self.bindings
             .retain(|b| !(b.realm_id == realm_id && b.slot == slot));
+        self.interaction.disconnect_slot(realm_id, slot);
         self.dirty = true;
         Ok(())
     }
@@ -530,7 +535,11 @@ impl MultiverseContext {
             // Validate that if any realm references a Target ID as texture, a TargetTextureBinding exists
             for (&realm_id, realm) in &self.realms {
                 for tex_id in realm.referenced_texture_ids() {
-                    if self.targets.contains_key(&tex_id) {
+                    let is_explicit_texture = self
+                        .gpu_manager
+                        .as_ref()
+                        .is_some_and(|g| g.textures.get_logical_view(tex_id).is_ok());
+                    if self.targets.contains_key(&tex_id) && !is_explicit_texture {
                         let has_binding = self
                             .bindings
                             .iter()
@@ -564,7 +573,9 @@ impl MultiverseContext {
 
     /// Dispatches a frame by preparing realms and rendering active invocations and connectors in scheduled order.
     pub fn dispatch(&mut self, frame_id: u64, delta_time: f32) -> MultiverseResult<()> {
-        crate::executor::execute_frame(self, frame_id, delta_time)
+        let presented_windows = crate::executor::execute_frame(self, frame_id, delta_time)?;
+        self.publish_interaction_frame(&presented_windows);
+        Ok(())
     }
 
     /// Sets the global Anti-Aliasing mode for the Multiverse.

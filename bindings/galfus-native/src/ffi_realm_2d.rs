@@ -3,7 +3,7 @@
 use std::ffi::c_char;
 
 use galfus_realm_2d::Realm2DContext;
-use galfus_realm_2d_resources::{Light2D, Transform2D};
+use galfus_realm_2d_resources::Light2D;
 
 use crate::ffi::{from_c_str, set_last_error};
 use crate::ffi_native_structs::GalfusTransform2D;
@@ -32,18 +32,6 @@ pub extern "C" fn galfus_realm_2d_destroy(realm_id: u32) -> i32 {
             set_last_error(&e);
             -1
         }
-    }
-}
-
-unsafe fn parse_transform_2d(transform_json: *const c_char) -> Result<Transform2D, String> {
-    match unsafe { crate::ffi::from_c_str_optional(transform_json) } {
-        Ok(Some(s)) => {
-            let d: Transform2DDesc =
-                serde_json::from_str(s).map_err(|e| format!("Invalid Transform2DDesc: {e}"))?;
-            Ok(d.into())
-        }
-        Ok(None) => Ok(Transform2D::default()),
-        Err(e) => Err(e),
     }
 }
 

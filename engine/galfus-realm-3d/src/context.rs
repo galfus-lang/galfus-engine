@@ -60,6 +60,7 @@ pub struct Realm3DContext {
     pub emitters: BTreeMap<u32, (ParticleEmitter3D, Transform3D, ParticleEmitterState3D)>,
     pub portals: BTreeMap<u32, galfus_realm_3d_resources::portal::Portal3D>,
     pub colliders: BTreeMap<u32, galfus_realm_core::Collider3D>,
+    pub model_transforms: BTreeMap<u32, Transform3D>,
     pub(crate) particle_renderer: Option<crate::particle::ParticleRenderer3D>,
     pub(crate) particle_alpha_instances: Vec<Particle3DInstance>,
     pub(crate) particle_additive_instances: Vec<Particle3DInstance>,
@@ -91,6 +92,7 @@ impl Realm3DContext {
             lights: BTreeMap::new(),
             environment: EnvironmentRealm3D::default(),
             colliders: BTreeMap::new(),
+            model_transforms: BTreeMap::new(),
             pipeline: None,
             shadow_pipeline: None,
             shadow_map: None,
@@ -125,6 +127,8 @@ impl Realm3DContext {
         self.materials.clear();
         self.geometries.clear();
         self.models.clear();
+        self.colliders.clear();
+        self.model_transforms.clear();
         self.instanced_models.clear();
         self.lights.clear();
         self.emitters.clear();

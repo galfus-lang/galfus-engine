@@ -119,6 +119,99 @@ impl Realm for Realm3DContext {
         self.perform_pick_3d(camera_slot, ray)
     }
 
+    fn pick_3d_with_limit(
+        &self,
+        _camera_slot: Option<u32>,
+        ray: galfus_realm_core::Ray3D,
+        max_distance: f32,
+    ) -> Option<galfus_realm_core::HitResult3D> {
+        self.raycast_colliders_3d(ray, max_distance, u32::MAX)
+            .into_iter()
+            .next()
+    }
+
+    fn viewport_ray_3d(
+        &self,
+        camera_slot: Option<u32>,
+        position: glam::Vec2,
+        size: glam::Vec2,
+    ) -> Option<(galfus_realm_core::Ray3D, f32)> {
+        if size.x <= 0.0 || size.y <= 0.0 {
+            return None;
+        }
+        let (camera, transform) = if let Some(slot) = camera_slot {
+            self.cameras
+                .iter()
+                .find(|(id, (c, _))| c.active && (c.camera_slot == slot || **id == slot))
+                .map(|(_, pair)| pair)
+        } else {
+            self.cameras
+                .values()
+                .find(|(c, _)| c.active && c.camera_slot == 0)
+        }?;
+        let matrix = camera
+            .build_uniform(transform, size.x / size.y)
+            .view_projection;
+        let det = matrix.determinant();
+        if !det.is_finite() || det == 0.0 {
+            return None;
+        }
+        let inverse = matrix.inverse();
+        let ndc = glam::Vec2::new(
+            position.x / size.x * 2.0 - 1.0,
+            1.0 - position.y / size.y * 2.0,
+        );
+        let near = inverse.project_point3(glam::Vec3::new(ndc.x, ndc.y, 1.0));
+        let far = inverse.project_point3(glam::Vec3::new(ndc.x, ndc.y, 0.0));
+        let direction = far - near;
+        let distance = direction.length();
+        if !near.is_finite() || !distance.is_finite() || distance <= 0.0 {
+            return None;
+        }
+        Some((galfus_realm_core::Ray3D::new(near, direction), distance))
+    }
+
+    fn has_interactive_collider(&self, model_id: u32, collider_id: u32) -> bool {
+        self.colliders
+            .get(&collider_id)
+            .is_some_and(|c| c.model_id == model_id && c.active)
+    }
+
+    fn has_collider(&self, model_id: u32, collider_id: u32) -> bool {
+        self.colliders
+            .get(&collider_id)
+            .is_some_and(|c| c.model_id == model_id)
+    }
+
+    fn supports_interaction_surface(&self, model_id: u32, collider_id: u32) -> bool {
+        self.colliders.get(&collider_id).is_some_and(|collider| {
+            collider.model_id == model_id
+                && matches!(
+                    collider.shape,
+                    galfus_realm_core::ColliderShape3D::Rectangle { .. }
+                        | galfus_realm_core::ColliderShape3D::Box { .. }
+                )
+        })
+    }
+
+    fn snapshot_interaction(&self) -> Option<Box<dyn Realm>> {
+        let mut snapshot = Self::new(self.id);
+        snapshot.cameras = self.cameras.clone();
+        snapshot.colliders = self.colliders.clone();
+        for collider in self.colliders.values() {
+            let model_id = collider.model_id;
+            if let Some(transform) = self
+                .model_transforms
+                .get(&model_id)
+                .copied()
+                .or_else(|| self.models.get(&model_id).map(|model| model.1))
+            {
+                snapshot.model_transforms.insert(model_id, transform);
+            }
+        }
+        Some(Box::new(snapshot))
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

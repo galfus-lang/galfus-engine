@@ -1,6 +1,8 @@
+import type { UiQuad2DDesc, UiText2DDesc } from '@galfus/transport-types';
+import { parseColorToRgba } from '../layout/quad';
 import { clampSize } from '../layout/solver';
 import type { UiRect, UiSizeConstraints } from '../layout/types';
-import { fmtNum, type UiHost, type UiNode } from './node';
+import type { UiHitTarget, UiHost, UiNode } from './node';
 import { _registerSplitGroupFactory, nextUiId, Panel, type PanelOptions } from './panel';
 import { ScrollPanel, type ScrollPanelOptions } from './scroll-panel';
 
@@ -16,12 +18,14 @@ export interface SplitGroupOptions extends UiSizeConstraints {
 export class SplitGroup implements UiNode {
   readonly id: string;
   readonly constraints: UiSizeConstraints;
+  parent?: UiNode;
   readonly orientation: 'horizontal' | 'vertical';
   private _rect: UiRect = { x: 0, y: 0, width: 300, height: 200 };
   private _host: UiHost | undefined;
   private readonly _panels: Panel[] = [];
   private readonly _weights: number[] = [];
   private _ratios: number[] = [];
+  private readonly _boundSashes = new Set<number>();
   private readonly _handleSize: number;
   private readonly _sashColor: string;
   private readonly _sashHoverColor: string;
@@ -69,14 +73,29 @@ export class SplitGroup implements UiNode {
 
   private insertPanel<T extends Panel>(panel: T, weight = 1): T {
     const w = Math.max(0.05, weight);
+    panel.parent = this;
     this._panels.push(panel);
     this._weights.push(w);
     const totalWeight = this._weights.reduce((a, b) => a + b, 0);
     this._ratios = this._weights.map((item) => item / totalWeight);
     panel.attachHost(this._host);
+    if (this._host) {
+      panel.bindInteractions(this._host);
+      this.bindInteractions(this._host);
+    }
     this.applyRect(this._rect);
     this._host?.markStructureDirty();
     return panel;
+  }
+
+  findNode(id: string): UiNode | undefined {
+    if (this.id === id) return this;
+    for (const panel of this._panels) {
+      if (panel.id === id) return panel;
+      const found = panel.findNode?.(id);
+      if (found) return found;
+    }
+    return undefined;
   }
 
   private normalizeRatios(): void {
@@ -120,48 +139,37 @@ export class SplitGroup implements UiNode {
       this._weights[i] = r * totalWeight;
     }
     this.applyRect(this._rect, this._host);
+    this._host?.markStructureDirty();
   }
 
   attachHost(host: UiHost | undefined): void {
     this._host = host;
-    for (const panel of this._panels) panel.attachHost(host);
-  }
-
-  collectDefs(defs: string[]): void {
-    for (const panel of this._panels) panel.collectDefs(defs);
-  }
-
-  renderSvg(): string {
-    const parts: string[] = [`<g id="${this.id}">`];
     for (const panel of this._panels) {
-      parts.push(panel.renderSvg());
+      panel.attachHost(host);
+      if (host) {
+        panel.bindInteractions(host);
+      }
     }
-    const sashes = this.computeSashRects();
-    for (let i = 0; i < sashes.length; i++) {
-      const s = sashes[i]!;
-      parts.push(
-        `<rect id="${this.id}-sash-${i}" x="${fmtNum(s.x)}" y="${fmtNum(s.y)}" width="${fmtNum(s.width)}" height="${fmtNum(s.height)}" rx="2" fill="${this._sashColor}"/>`
-      );
+    if (host) {
+      this.bindInteractions(host);
     }
-    parts.push('</g>');
-    return parts.join('');
   }
 
   bindInteractions(host: UiHost): void {
     const isHoriz = this.orientation === 'horizontal';
     for (let i = 0; i < this._panels.length - 1; i++) {
+      if (this._boundSashes.has(i)) continue;
+      this._boundSashes.add(i);
       const sashId = `${this.id}-sash-${i}`;
       let lastMain: number | undefined;
       const listener = host.listen(sashId);
-      listener.on('hover', () => host.setAttr(sashId, 'fill', this._sashHoverColor));
-      listener.on('leave', () => host.setAttr(sashId, 'fill', this._sashColor));
       listener.on('down', ({ pointer }) => {
-        if (pointer.type === 'button' && pointer.button === 'primary') {
+        if (pointer) {
           lastMain = isHoriz ? pointer.position[0] : pointer.position[1];
         }
       });
       listener.on('pressmove', ({ pointer }) => {
-        if (lastMain === undefined) return;
+        if (lastMain === undefined || !pointer) return;
         const curr = isHoriz ? pointer.position[0] : pointer.position[1];
         const delta = curr - lastMain;
         lastMain = curr;
@@ -171,6 +179,57 @@ export class SplitGroup implements UiNode {
       listener.on('cancel', () => (lastMain = undefined));
     }
     for (const panel of this._panels) panel.bindInteractions(host);
+  }
+
+  hitTest(x: number, y: number): UiHitTarget | undefined {
+    if (
+      x < this._rect.x ||
+      x > this._rect.x + this._rect.width ||
+      y < this._rect.y ||
+      y > this._rect.y + this._rect.height
+    ) {
+      return undefined;
+    }
+
+    const isHoriz = this.orientation === 'horizontal';
+    const sashes = this.computeSashRects();
+    for (let i = 0; i < sashes.length; i++) {
+      const s = sashes[i]!;
+      const hitMargin = 4;
+      const x0 = isHoriz ? s.x - hitMargin : s.x;
+      const x1 = isHoriz ? s.x + s.width + hitMargin : s.x + s.width;
+      const y0 = isHoriz ? s.y : s.y - hitMargin;
+      const y1 = isHoriz ? s.y + s.height : s.y + s.height + hitMargin;
+
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) {
+        return { id: `${this.id}-sash-${i}`, type: 'sash' };
+      }
+    }
+
+    for (let i = this._panels.length - 1; i >= 0; i--) {
+      const hit = this._panels[i]!.hitTest?.(x, y);
+      if (hit) return hit;
+    }
+
+    return undefined;
+  }
+
+  hitTestScroll(x: number, y: number): UiHitTarget | undefined {
+    if (
+      x < this._rect.x ||
+      x > this._rect.x + this._rect.width ||
+      y < this._rect.y ||
+      y > this._rect.y + this._rect.height
+    ) {
+      return undefined;
+    }
+
+    for (let i = this._panels.length - 1; i >= 0; i--) {
+      const hit = this._panels[i]!.hitTestScroll?.(x, y);
+      if (hit) return hit;
+    }
+
+    return undefined;
   }
 
   applyRect(rect: UiRect, host?: UiHost): void {
@@ -189,16 +248,6 @@ export class SplitGroup implements UiNode {
       this._panels[i]!.applyRect(panelRect, host);
       cursor += sz;
       if (i < this._panels.length - 1) {
-        if (host) {
-          const sashX = isHoriz ? cursor : rect.x;
-          const sashY = isHoriz ? rect.y : cursor;
-          const sashW = isHoriz ? this._handleSize : rect.width;
-          const sashH = isHoriz ? rect.height : this._handleSize;
-          host.setAttr(`${this.id}-sash-${i}`, 'x', fmtNum(sashX));
-          host.setAttr(`${this.id}-sash-${i}`, 'y', fmtNum(sashY));
-          host.setAttr(`${this.id}-sash-${i}`, 'width', fmtNum(sashW));
-          host.setAttr(`${this.id}-sash-${i}`, 'height', fmtNum(sashH));
-        }
         cursor += this._handleSize;
       }
     }
@@ -247,6 +296,24 @@ export class SplitGroup implements UiNode {
       cursor += this._handleSize;
     }
     return sashes;
+  }
+
+  compileUi(
+    outQuads: UiQuad2DDesc[],
+    outTexts: UiText2DDesc[],
+    clipRect?: [number, number, number, number]
+  ): void {
+    for (const panel of this._panels) {
+      panel.compileUi(outQuads, outTexts, clipRect);
+    }
+    const sashCol = parseColorToRgba(this._sashColor, [0.11, 0.19, 0.29, 1]);
+    for (const sash of this.computeSashRects()) {
+      outQuads.push({
+        rect: [sash.x, sash.y, sash.width, sash.height],
+        backgroundColor: sashCol,
+        clipRect
+      });
+    }
   }
 }
 

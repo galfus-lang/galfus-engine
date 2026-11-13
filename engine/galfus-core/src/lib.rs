@@ -8,9 +8,11 @@
 //! - **Deterministic Content IDs**: Collision-checked 64-bit content hashes ([`id::ContentId`]).
 //! - **Core Errors**: Unified, domain-agnostic error primitives ([`error::CoreError`]).
 
+pub mod collision;
 pub mod error;
 pub mod handle;
 pub mod id;
+pub mod interaction;
 pub mod shader_effects;
 
 pub use error::{CoreError, CoreResult};

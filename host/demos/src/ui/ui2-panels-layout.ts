@@ -2,10 +2,13 @@
  * Demo UI2: Reactive Panels, SplitGroup, ScrollPanel & Layout Solver
  *
  * Showcases:
- * - `UiRoot` auto-generating `<svg width height viewBox>` and syncing surgical attribute updates
+ * - Native `Model2DUI` hardware-accelerated quads and text runs
  * - `SplitGroup` (horizontal + nested vertical) with draggable sash dividers
- * - `ScrollPanel` with `<clipPath>` viewport, wheel scrolling, and draggable scrollbar thumbs
- * - `Panel` with `horizontal`, `vertical`, `grid`, `flex`, and `free` (draggable + resizable) layouts
+ * - `ScrollPanel` with scissor clipping, mouse wheel scrolling, and draggable scrollbars
+ * - `SpritePanel` with textured quads, UV mapping, and 9-slice rendering
+ * - `StackLayout` relative layering (background sprite + interactive panels/buttons)
+ * - `UiText` inline and multiline layout variants
+ * - Direct property setters, interaction events (`onHover`, `onClick`, `onDrag`), and smooth property animations
  */
 import {
   type Camera2DComponent,
@@ -21,8 +24,10 @@ import {
   type Panel,
   type ScrollPanel,
   type SplitGroup,
+  type SpritePanel,
   type UiRoot,
-  type UiSystem
+  type UiSystem,
+  type UiText
 } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { type HostDemoOptions, resolveDemoOptions } from '../common/options';
@@ -77,7 +82,12 @@ export function createUi2Scene(
     height: winH,
     padding: 12,
     layout: { type: 'vertical', gap: 10 },
-    style: { fill: '#070e17', stroke: '#1b314b', strokeWidth: 1.5, radius: 12 }
+    style: {
+      fill: [0.03, 0.06, 0.09, 1],
+      stroke: [0.11, 0.19, 0.29, 1],
+      strokeWidth: 1.5,
+      radius: 12
+    }
   });
 
   let mainSplit!: SplitGroup;
@@ -92,29 +102,26 @@ export function createUi2Scene(
       height: 46,
       padding: { top: 6, right: 12, bottom: 6, left: 12 },
       layout: { type: 'horizontal', gap: 12, align: 'center' },
-      style: { fill: '#0f1e30', stroke: '#244263', radius: 8 }
+      style: { fill: [0.06, 0.12, 0.19, 1], stroke: [0.14, 0.26, 0.39, 1], radius: 8 }
     });
-    header.addContent({
+
+    const badge = header.addPanel({
       id: 'brand-badge',
       width: 290,
       height: 32,
-      label: 'UI2 — PANELS, SPLITTERS & SCROLL',
-      textureId: texStar,
-      fill: '#162d47',
-      stroke: '#38bdf8',
-      textColor: '#f0f7ff',
-      fontSize: 13
+      padding: { left: 8, right: 8 },
+      layout: { type: 'horizontal', gap: 8, align: 'center' },
+      style: { fill: [0.09, 0.18, 0.28, 1], stroke: [0.22, 0.74, 0.97, 1], radius: 6 }
     });
-    const statusItem = header.addContent({
+    badge.addSpritePanel({ width: 22, height: 22, textureId: texStar, fit: 'contain' });
+    badge.addText({ text: 'UI2 — MODEL2DUI NATIVE', fontSize: 13, color: '#f0f7ff' });
+
+    const statusText = header.addText({
       id: 'status-bar',
-      flex: 1,
-      height: 32,
-      label:
-        'Drag SplitGroup sashes, scroll lists with mouse wheel, or drag/resize the floating tool card',
-      fill: '#0b1624',
-      stroke: '#1e3854',
-      textColor: '#8babc7',
-      fontSize: 12
+      text: 'Drag SplitGroup sashes, scroll lists with mouse wheel, or drag/resize the floating tool card',
+      fontSize: 12,
+      color: '#8babc7',
+      flex: 1
     });
 
     mainSplit = root.addSplitGroup({
@@ -134,20 +141,24 @@ export function createUi2Scene(
     });
     for (let i = 1; i <= 16; i++) {
       const isEven = i % 2 === 0;
-      const item = hierarchyScroll.addContent({
+      const row = hierarchyScroll.addPanel({
         id: `node-item-${i}`,
-        height: 38,
-        label: `Entity #${100 + i} — ${isEven ? 'Mesh3D' : 'Light2D'}`,
-        textureId: isEven ? texChecker : texStar,
-        fill: '#13263b',
-        stroke: '#234264',
-        radius: 6
+        height: 36,
+        padding: { left: 8, right: 8 },
+        layout: { type: 'horizontal', gap: 8, align: 'center' },
+        style: { fill: [0.07, 0.15, 0.23, 1], stroke: [0.14, 0.26, 0.39, 1], radius: 6 }
       });
-      const listener = root.listen(item.id);
-      listener.on('hover', () => item.setFill('#1c3a59'));
-      listener.on('leave', () => item.setFill('#13263b'));
-      listener.on('click', () => {
-        statusItem.setLabel(`Selected Entity #${100 + i} from ScrollPanel`);
+      row.addSpritePanel({
+        width: 18,
+        height: 18,
+        textureId: isEven ? texChecker : texStar,
+        fit: 'contain'
+      });
+      row.addText({ text: `Entity #${100 + i} — ${isEven ? 'Mesh3D' : 'Light2D'}`, fontSize: 12 });
+      row.onHover(() => row.animate('backgroundColor', [0.12, 0.24, 0.37, 1], { duration: 100 }));
+      row.onLeave(() => row.animate('backgroundColor', [0.07, 0.15, 0.23, 1], { duration: 100 }));
+      row.onClick(() => {
+        statusText.setText(`Selected Entity #${100 + i} from native ScrollPanel`);
       });
     }
 
@@ -157,7 +168,7 @@ export function createUi2Scene(
       minWidth: 280,
       padding: 0,
       layout: { type: 'vertical' },
-      style: { fill: 'none', stroke: undefined, radius: 0 }
+      style: { fill: [0, 0, 0, 0], radius: 0 }
     });
     centerSplit = centerWrapper.addSplitGroup({
       id: 'center-split',
@@ -169,29 +180,33 @@ export function createUi2Scene(
     const gridPanel = centerSplit.addPanel({
       id: 'asset-grid',
       title: 'Asset Browser (Grid Layout — 3fr Columns)',
-      flex: 1.3,
-      minHeight: 160,
-      padding: 10,
+      flex: 1.4,
+      minHeight: 200,
+      padding: 12,
       layout: {
         type: 'grid',
         columns: ['1fr', '1fr', '1fr'],
-        rowHeight: 58,
+        rowHeight: 74,
         gapX: 10,
         gapY: 10
       }
     });
     for (let i = 1; i <= 9; i++) {
-      const card = gridPanel.addContent({
+      const card = gridPanel.addPanel({
         id: `asset-card-${i}`,
-        label: `Asset 0${i}`,
-        textureId: i % 2 === 0 ? texStar : texChecker,
-        fill: '#14273d',
-        stroke: '#294c70',
-        radius: 8
+        padding: { top: 8, bottom: 8, left: 6, right: 6 },
+        layout: { type: 'vertical', gap: 6, align: 'center' },
+        style: { fill: [0.08, 0.15, 0.24, 1], stroke: [0.16, 0.3, 0.44, 1], radius: 8 }
       });
-      const listener = root.listen(card.id);
-      listener.on('hover', () => card.setFill('#1e3d5e'));
-      listener.on('leave', () => card.setFill('#14273d'));
+      card.addSpritePanel({
+        width: 26,
+        height: 26,
+        textureId: i % 2 === 0 ? texStar : texChecker,
+        fit: 'contain'
+      });
+      card.addText({ text: `Asset 0${i}`, fontSize: 11 });
+      card.onHover(() => card.animate('backgroundColor', [0.13, 0.26, 0.4, 1], { duration: 100 }));
+      card.onLeave(() => card.animate('backgroundColor', [0.08, 0.15, 0.24, 1], { duration: 100 }));
     }
 
     logScroll = centerSplit.addScrollPanel({
@@ -203,20 +218,23 @@ export function createUi2Scene(
       layout: { type: 'vertical', gap: 6 }
     });
     for (let i = 1; i <= 12; i++) {
-      logScroll.addContent({
+      const logRow = logScroll.addPanel({
         id: `log-row-${i}`,
         height: 28,
-        label: `[00:0${i < 10 ? '0' + i : i}] Layout pass & SVG clipPath synced cleanly`,
-        fill: '#0c1826',
-        stroke: '#19304a',
-        textColor: '#9ec5e6',
-        fontSize: 11
+        padding: { left: 8, right: 8 },
+        layout: { type: 'horizontal', gap: 6, align: 'center' },
+        style: { fill: [0.05, 0.09, 0.15, 1], stroke: [0.1, 0.19, 0.29, 1], radius: 4 }
+      });
+      logRow.addText({
+        text: `[00:0${i < 10 ? '0' + i : i}] Native Model2DUI quads & texts compiled to GPU`,
+        fontSize: 11,
+        color: '#9ec5e6'
       });
     }
 
     const workspaceFree = mainSplit.addPanel({
       id: 'free-dock',
-      title: 'Floating Inspector Sandbox (Drag Header / Resize Corner)',
+      title: 'Inspector Sandbox (Drag / Resize)',
       flex: 1.1,
       minWidth: 240,
       padding: 12,
@@ -228,39 +246,66 @@ export function createUi2Scene(
       title: 'Floating Tool (Drag / Resize)',
       x: 16,
       y: 16,
-      width: 240,
-      height: 220,
-      minWidth: 160,
-      minHeight: 130,
+      width: 250,
+      height: 230,
+      minWidth: 180,
+      minHeight: 140,
       draggable: true,
       resizable: true,
       padding: 10,
       layout: { type: 'vertical', gap: 8 },
       style: {
-        fill: '#13263b',
-        stroke: '#38bdf8',
+        fill: [0.07, 0.15, 0.23, 1],
+        stroke: [0.22, 0.74, 0.97, 1],
         strokeWidth: 1.5,
-        headerFill: '#1d3b5c',
+        headerFill: [0.11, 0.23, 0.36, 1],
         radius: 8
       }
     });
-    const sizeReadout = floating.addContent({
+
+    const sizeReadout = floating.addText({
       id: 'floating-size',
-      height: 36,
-      label: 'Size: 240 x 220',
-      fill: '#0c1826',
-      stroke: '#244263'
+      text: 'Size: 250 x 230',
+      fontSize: 12,
+      color: '#f0f7ff'
     });
-    floating.addContent({
-      id: 'floating-preview',
+
+    // Demonstrate Stack Layout (Relative Layering: Background SpritePanel + overlay Panel with Text)
+    const stackCard = floating.addPanel({
+      id: 'stack-preview',
       flex: 1,
-      label: 'Live Flex Child',
-      textureId: texStar,
-      fill: '#0e1d2f',
-      stroke: '#244263'
+      layout: { type: 'stack' },
+      style: { radius: 6 }
     });
+    stackCard.addSpritePanel({
+      id: 'stack-bg',
+      textureId: texChecker,
+      fit: 'nineSlice',
+      slice: [4, 4, 4, 4],
+      tintColor: [0.15, 0.35, 0.55, 0.8]
+    });
+    const overlay = stackCard.addPanel({
+      id: 'stack-overlay',
+      padding: 10,
+      layout: { type: 'vertical', gap: 6, align: 'center' },
+      style: { fill: [0, 0, 0, 0] }
+    });
+    overlay.addText({ text: 'StackLayout: Sprite BG', fontSize: 12, color: '#f0f7ff' });
+    const btn = overlay.addPanel({
+      id: 'stack-btn',
+      width: 130,
+      height: 28,
+      padding: { left: 8, right: 8 },
+      layout: { type: 'horizontal', justify: 'center', align: 'center' },
+      style: { fill: [0.14, 0.3, 0.46, 1], stroke: [0.22, 0.74, 0.97, 1], radius: 4 }
+    });
+    btn.addText({ text: 'Interactive Btn', fontSize: 11, align: 'center', color: '#ffffff' });
+    btn.onHover(() => btn.animate('backgroundColor', [0.2, 0.45, 0.7, 1], { duration: 100 }));
+    btn.onLeave(() => btn.animate('backgroundColor', [0.14, 0.3, 0.46, 1], { duration: 100 }));
+    btn.onClick(() => statusText.setText('Stack overlay button clicked!'));
+
     floating.onResize((r) => {
-      sizeReadout.setLabel(`Size: ${Math.round(r.width)} x ${Math.round(r.height)}`);
+      sizeReadout.setText(`Size: ${Math.round(r.width)} x ${Math.round(r.height)}`);
     });
   });
 

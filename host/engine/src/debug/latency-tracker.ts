@@ -79,7 +79,10 @@ export class DebugLatencyTracker {
   static recordHover(frameId: number, target: InteractiveTarget): void {
     if (!this.enabled) return;
     const now = performance.now();
-    const key = target.type === 'svg' ? target.elementId : `entity-${target.entityId}`;
+    const key =
+      target.type === 'svg' || target.type === 'ui'
+        ? String(target.elementId)
+        : `entity-${(target as { entityId: number }).entityId}`;
     this.hoverRecords.set(key, {
       frameId,
       time: now,

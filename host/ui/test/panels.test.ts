@@ -1,37 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { createRuntime } from '@galfus/engine';
 import type { GalfusEngine, GalfusTransport, PlatformEvent } from '@galfus/transport-types';
-import { advanceFrame } from '../../engine/test/controlled-transport';
-import { button, move } from '../../engine/test/interactive-fixture';
 import { createUi } from '../src/index';
 
 function createPanelTestEnv(width = 800, height = 600) {
   const events: PlatformEvent[] = [];
-  const attrUpdates: Array<{ elementId: string; name: string; value: string }> = [];
-  const rects = new Map<string, { x: number; y: number; width: number; height: number }>();
-  let latestSource = '';
-  let viewportW = width;
-  let viewportH = height;
-
-  const parseSvgRects = (xml: string) => {
-    const svgMatch = xml.match(/<svg[^>]*width="([^"]+)"[^>]*height="([^"]+)"/);
-    if (svgMatch) {
-      viewportW = Number(svgMatch[1]);
-      viewportH = Number(svgMatch[2]);
-    }
-    const re = /<rect\s+[^>]*id="([^"]+)"[^>]*>/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(xml)) !== null) {
-      const tag = m[0];
-      const id = m[1]!;
-      const x = Number(tag.match(/\bx="([^"]+)"/)?.[1] ?? 0);
-      const y = Number(tag.match(/\by="([^"]+)"/)?.[1] ?? 0);
-      const w = Number(tag.match(/\bwidth="([^"]+)"/)?.[1] ?? 0);
-      const h = Number(tag.match(/\bheight="([^"]+)"/)?.[1] ?? 0);
-      rects.set(id, { x, y, width: w, height: h });
-    }
-  };
-
   const schedule = {
     targetBlocks: [
       {
@@ -54,32 +27,8 @@ function createPanelTestEnv(width = 800, height = 600) {
       platformPumpEvents: () => events.splice(0),
       multiverseResolve: () => schedule,
       multiverseDispatch: () => {},
-      realm2dCreateSvg: (_r: number, _id: number, desc: { source: string }) => {
-        latestSource = desc.source;
-        parseSvgRects(desc.source);
-      },
-      realm2dSetSvgSource: (_r: number, _id: number, source: string) => {
-        latestSource = source;
-        parseSvgRects(source);
-      },
-      realm2dSetSvgAttribute: (_r: number, _id: number, el: string, name: string, val: string) => {
-        attrUpdates.push({ elementId: el, name, value: val });
-        const cur = rects.get(el);
-        if (cur && (name === 'x' || name === 'y' || name === 'width' || name === 'height')) {
-          cur[name] = Number(val);
-        }
-      },
-      realm2dGetSvgElementRect: (_r: number, _id: number, elementId: string) => {
-        const found = rects.get(elementId);
-        if (!found) return { rect: undefined };
-        return {
-          rect: {
-            ...found,
-            viewportWidth: viewportW,
-            viewportHeight: viewportH
-          }
-        };
-      }
+      realm2dCreateUi: () => {},
+      realm2dSetUiContent: () => {}
     },
     { get: (target, key) => (key in target ? target[key as keyof typeof target] : () => {}) }
   ) as unknown as GalfusEngine;
@@ -95,29 +44,20 @@ function createPanelTestEnv(width = 800, height = 600) {
   } as unknown as GalfusTransport;
 
   const runtime = createRuntime(transport);
-  const windowId = runtime.platform.window.create();
   const realm = runtime.createRealm2D(1);
   realm.createCamera({ orthoScale: height });
-  const targetId = runtime.multiverse.createTarget({ kind: { type: 'window', windowId } });
-  runtime.multiverse.createInvocation({ realmId: 1, targetId });
   const ui = createUi(runtime);
 
   return {
     runtime,
-    transport,
     realm,
-    ui,
-    windowId,
-    events,
-    attrUpdates,
-    rects,
-    getLatestSource: () => latestSource
+    ui
   };
 }
 
 describe('UI Panels, SplitGroup, and ScrollPanel', () => {
-  test('UiRoot generates valid SVG XML with nested panels, clipPaths, and images', () => {
-    const { runtime, realm, ui, getLatestSource } = createPanelTestEnv(800, 600);
+  test('UiRoot compiles native Model2DUI quads and texts with nested hierarchy', () => {
+    const { runtime, realm, ui } = createPanelTestEnv(800, 600);
     try {
       const root = ui.createRoot(realm, {
         id: 'main-ui',
@@ -128,35 +68,35 @@ describe('UI Panels, SplitGroup, and ScrollPanel', () => {
       });
 
       const left = root.addPanel({ id: 'sidebar', title: 'Explorer', width: 220 });
-      left.addContent({
-        id: 'thumb-1',
-        height: 48,
-        label: 'Preview Asset',
-        textureId: 42
-      });
+      left.addText({ text: 'Preview Asset', fontSize: 13 });
+      left.addSpritePanel({ width: 32, height: 32, textureId: 42 });
 
       const right = root.addPanel({ id: 'editor', title: 'Viewport', flex: 1 });
-      const xml = root.toSvgString();
+      right.addText({ text: 'Editor Viewport', fontSize: 14 });
 
-      expect(xml).toContain('width="800" height="600" viewBox="0 0 800 600"');
-      expect(xml).toContain('<clipPath id="sidebar-clip">');
-      expect(xml).toContain('<image id="thumb-1-img"');
-      expect(xml).toContain('textureId="42"');
+      const compiled = root.compileUi();
+      expect(compiled.quads.length).toBeGreaterThan(0);
+      expect(compiled.texts.length).toBeGreaterThan(0);
       expect(left.rect.width).toBe(220);
       expect(right.rect.width).toBe(800 - 20 - 10 - 220);
-      expect(getLatestSource()).toBe(xml);
 
+      // Verify text descriptions
+      const assetTxt = compiled.texts.find((t) => t.text === 'Preview Asset');
+      expect(assetTxt).toBeDefined();
+      expect(assetTxt?.fontSize).toBe(13);
+
+      // Resizing viewport updates layout cleanly
       root.resizeViewport(1000, 700);
       expect(right.rect.width).toBe(1000 - 20 - 10 - 220);
-      expect(root.toSvgString()).toContain('viewBox="0 0 1000 700"');
+      const recompiled = root.compileUi();
+      expect(recompiled.quads.length).toBeGreaterThan(0);
     } finally {
       runtime.dispose();
     }
   });
 
-  test('SplitGroup divides panels and resizes via sash dragging without regenerating XML', () => {
-    const { runtime, transport, realm, ui, windowId, events, attrUpdates, rects } =
-      createPanelTestEnv(600, 400);
+  test('SplitGroup divides panels and resizes proportions', () => {
+    const { runtime, realm, ui } = createPanelTestEnv(600, 400);
     try {
       const root = ui.createRoot(realm, {
         width: 600,
@@ -176,33 +116,20 @@ describe('UI Panels, SplitGroup, and ScrollPanel', () => {
       expect(left.rect.width).toBeCloseTo(297, 3);
       expect(right.rect.width).toBeCloseTo(297, 3);
 
-      advanceFrame(runtime, transport);
-      attrUpdates.length = 0;
-
-      const sashRect = rects.get('split-h-sash-0')!;
-      expect(sashRect).toBeDefined();
-      const startX = sashRect.x + sashRect.width * 0.5;
-      const startY = sashRect.y + sashRect.height * 0.5;
-
-      events.push(
-        move(windowId, startX, startY),
-        button(windowId, startX, startY, 'pressed'),
-        move(windowId, startX + 50, startY),
-        button(windowId, startX + 50, startY, 'released')
-      );
-      advanceFrame(runtime, transport);
-
+      // Move sash by 50px
+      split.moveSash(0, 50);
       expect(left.rect.width).toBeCloseTo(347, 3);
       expect(right.rect.width).toBeCloseTo(247, 3);
-      expect(attrUpdates.some((u) => u.elementId === 'left-p-bg' && u.name === 'width')).toBe(true);
+
+      const compiled = root.compileUi();
+      expect(compiled.quads.length).toBeGreaterThanOrEqual(2);
     } finally {
       runtime.dispose();
     }
   });
 
-  test('ScrollPanel clips overflow and scrolls via wheel events and scrollbar thumb drag', () => {
-    const { runtime, transport, realm, ui, windowId, events, attrUpdates, rects } =
-      createPanelTestEnv(400, 300);
+  test('ScrollPanel calculates scroll limits and clips children with scissor quads', () => {
+    const { runtime, realm, ui } = createPanelTestEnv(400, 300);
     try {
       const root = ui.createRoot(realm, {
         width: 400,
@@ -219,57 +146,30 @@ describe('UI Panels, SplitGroup, and ScrollPanel', () => {
       });
 
       for (let i = 0; i < 10; i++) {
-        scroll.addContent({ id: `row-${i}`, height: 48, label: `Item ${i}` });
+        scroll.addText({ id: `row-${i}`, height: 48, text: `Item ${i}` });
       }
 
       expect(scroll.contentHeight).toBeGreaterThan(scroll.viewportRect.height);
       expect(scroll.maxScrollY).toBeGreaterThan(0);
 
-      advanceFrame(runtime, transport);
-      attrUpdates.length = 0;
-
-      // Wheel scroll inside the viewport
-      events.push(move(windowId, 120, 150), {
-        kind: 'pointer',
-        type: 'scroll',
-        windowId,
-        pointerId: 0,
-        pointerType: 'mouse',
-        position: [120, 150],
-        delta: { pixels: [0, -60] }
-      });
-      advanceFrame(runtime, transport);
-
+      scroll.scrollTo(0, 60);
       expect(scroll.scrollY).toBeCloseTo(60, 3);
-      expect(
-        attrUpdates.some(
-          (u) =>
-            u.elementId === 'list-scroll-content' &&
-            u.name === 'transform' &&
-            u.value === 'translate(0 -60)'
-        )
-      ).toBe(true);
 
-      // Drag the vertical scrollbar thumb downward
-      const thumb = rects.get('list-scroll-vthumb')!;
-      expect(thumb).toBeDefined();
-      const tx = thumb.x + thumb.width * 0.5;
-      const ty = thumb.y + thumb.height * 0.5;
-      events.push(
-        move(windowId, tx, ty),
-        button(windowId, tx, ty, 'pressed'),
-        move(windowId, tx, ty + 40),
-        button(windowId, tx, ty + 40, 'released')
-      );
-      advanceFrame(runtime, transport);
-      expect(scroll.scrollY).toBeGreaterThan(60);
+      const compiled = root.compileUi();
+      expect(compiled.quads.length).toBeGreaterThan(0);
+      // Items should receive the scissor clip rect of the viewport
+      const itemTexts = compiled.texts.filter((t) => t.text?.startsWith('Item '));
+      expect(itemTexts.length).toBe(10);
+      for (const t of itemTexts) {
+        expect(t.clipRect).toBeDefined();
+      }
     } finally {
       runtime.dispose();
     }
   });
 
-  test('Floating Panel supports header dragging and corner resizing', () => {
-    const { runtime, transport, realm, ui, windowId, events, rects } = createPanelTestEnv(800, 600);
+  test('Floating Panel supports direct dragging and sizing constraints', () => {
+    const { runtime, realm, ui } = createPanelTestEnv(800, 600);
     try {
       const root = ui.createRoot(realm, {
         width: 800,
@@ -288,108 +188,313 @@ describe('UI Panels, SplitGroup, and ScrollPanel', () => {
         resizable: true
       });
 
-      advanceFrame(runtime, transport);
+      expect(floating.rect.x).toBe(100);
+      expect(floating.rect.y).toBe(80);
 
-      // Drag header by (+30, +20)
-      const hdr = rects.get('float-win-header')!;
-      const hx = hdr.x + 40;
-      const hy = hdr.y + 10;
-      events.push(
-        move(windowId, hx, hy),
-        button(windowId, hx, hy, 'pressed'),
-        move(windowId, hx + 30, hy + 20),
-        button(windowId, hx + 30, hy + 20, 'released')
-      );
-      advanceFrame(runtime, transport);
+      // Move by (+30, +20)
+      floating.moveBy(30, 20);
       expect(floating.rect.x).toBe(130);
       expect(floating.rect.y).toBe(100);
 
-      // Resize corner handle by (+40, +30)
-      const corner = rects.get('float-win-res-c')!;
-      const cx = corner.x + corner.width * 0.5;
-      const cy = corner.y + corner.height * 0.5;
-      events.push(
-        move(windowId, cx, cy),
-        button(windowId, cx, cy, 'pressed'),
-        move(windowId, cx + 40, cy + 30),
-        button(windowId, cx + 40, cy + 30, 'released')
-      );
-      advanceFrame(runtime, transport);
-      expect(floating.rect.x).toBe(130);
-      expect(floating.rect.y).toBe(100);
+      // Resize
+      floating.setSize(280, 210);
       expect(floating.rect.width).toBe(280);
       expect(floating.rect.height).toBe(210);
+
+      const compiled = root.compileUi();
+      expect(compiled.quads.length).toBeGreaterThan(0);
     } finally {
       runtime.dispose();
     }
   });
 
-  test('Nested floating Panel inside a SplitGroup keeps local coordinates across drag and resize', () => {
-    const { runtime, transport, realm, ui, windowId, events, rects } = createPanelTestEnv(900, 600);
+  test('UiRoot routes pointer interactions to SplitGroup sash, ScrollPanel, and Panel callbacks', () => {
+    const { runtime, realm, ui } = createPanelTestEnv(800, 600);
     try {
       const root = ui.createRoot(realm, {
-        width: 900,
+        id: 'interactive-root',
+        width: 800,
         height: 600,
         padding: 0,
         layout: { type: 'horizontal' }
       });
-      const split = root.addSplitGroup({ orientation: 'horizontal', handleSize: 6 });
-      split.addPanel({ id: 'left-dock', flex: 1 });
-      const rightDock = split.addPanel({
-        id: 'right-dock',
-        title: 'Right Dock',
-        flex: 1,
-        padding: 10,
-        layout: { type: 'free' }
+
+      const split = root.addSplitGroup({
+        id: 'test-split',
+        orientation: 'horizontal',
+        handleSize: 6
       });
-      const floating = rightDock.addPanel({
-        id: 'nested-float',
-        title: 'Tool',
-        x: 15,
+
+      const left = split.addScrollPanel({
+        id: 'left-scroll',
+        title: 'Scrollable Left',
+        minWidth: 100,
+        padding: 4,
+        layout: { type: 'vertical', gap: 4 }
+      });
+      for (let i = 0; i < 20; i++) {
+        left.addText({ text: `Item ${i}`, height: 40 });
+      }
+
+      const right = split.addPanel({
+        id: 'right-panel',
+        minWidth: 100
+      });
+
+      let clicked = false;
+      let draggedDx = 0;
+      let draggedDy = 0;
+      right.onClick(() => {
+        clicked = true;
+      });
+      right.onDrag((dx, dy) => {
+        draggedDx += dx;
+        draggedDy += dy;
+      });
+
+      const initialLeftWidth = left.rect.width; // 397
+      const initialScrollY = left.scrollY; // 0
+
+      // Get the root interactive listener
+      const rootListener = root.interactiveListener!;
+
+      // 1. Drag SplitGroup sash
+      // Sash 0 is located at x = initialLeftWidth (397), y = 0..600, width = 6.
+      // In local coordinates: localX = uiX - 400. At uiX = 398, localX = -2.
+      // LocalY: uiY = 300, localY = 0.
+      rootListener.emit({
+        type: 'down',
+        realmId: realm.realmId,
+        target: { type: 'collider', entityId: root.entityId },
+        pointer: {
+          kind: 'pointer',
+          type: 'button',
+          windowId: 1,
+          pointerId: 0,
+          pointerType: 'mouse',
+          position: [-2, 0],
+          button: 'primary',
+          state: 'down'
+        } as any
+      });
+
+      // Drag 40px to the right: uiX = 438 -> localX = 38
+      rootListener.emit({
+        type: 'pressmove',
+        realmId: realm.realmId,
+        target: { type: 'collider', entityId: root.entityId },
+        pointer: {
+          kind: 'pointer',
+          type: 'move',
+          windowId: 1,
+          pointerId: 0,
+          pointerType: 'mouse',
+          position: [38, 0]
+        } as any
+      });
+
+      rootListener.emit({
+        type: 'pressup',
+        realmId: realm.realmId,
+        target: { type: 'collider', entityId: root.entityId },
+        pointer: {
+          kind: 'pointer',
+          type: 'button',
+          windowId: 1,
+          pointerId: 0,
+          pointerType: 'mouse',
+          position: [38, 0]
+        } as any
+      });
+
+      expect(left.rect.width).toBeCloseTo(initialLeftWidth + 40, 1);
+
+      // 2. Scroll wheel over ScrollPanel
+      // Left scroll panel is at x = 0..437, y = 0..600.
+      // Point at uiX = 100, uiY = 200 -> localX = 100 - 400 = -300, localY = 300 - 200 = 100.
+      rootListener.emit({
+        type: 'scroll',
+        realmId: realm.realmId,
+        target: { type: 'collider', entityId: root.entityId },
+        pointer: {
+          kind: 'pointer',
+          type: 'scroll',
+          windowId: 1,
+          pointerId: 0,
+          pointerType: 'mouse',
+          position: [-300, 100],
+          delta: { lines: [0, -2] }
+        } as any,
+        scrollDelta: { lines: [0, -2] }
+      });
+
+      expect(left.scrollY).toBeGreaterThan(initialScrollY);
+
+      // 2b. Scroll using normalized UV coordinates (e.g. from Multiverse picking)
+      const prevScrollY = left.scrollY;
+      // UV [0.1, 0.8]: x = 0.1 * 800 = 80px (over left panel), y = (1.0 - 0.8) * 600 = 120px (over left panel)
+      rootListener.emit({
+        type: 'scroll',
+        realmId: realm.realmId,
+        target: { type: 'collider', entityId: root.entityId },
+        uv: [0.1, 0.8],
+        pointer: {
+          kind: 'pointer',
+          type: 'scroll',
+          windowId: 1,
+          pointerId: 0,
+          pointerType: 'mouse',
+          position: [0, 0]
+        } as any,
+        scrollDelta: { lines: [0, -3] }
+      });
+      expect(left.scrollY).toBeGreaterThan(prevScrollY);
+
+      // 3. Click and Drag on Right Panel
+      // Right panel is at x = 443..800, y = 0..600.
+      // Point at uiX = 600, uiY = 300 -> localX = 600 - 400 = 200, localY = 300 - 300 = 0.
+      rootListener.emit({
+        type: 'down',
+        realmId: realm.realmId,
+        target: { type: 'collider', entityId: root.entityId },
+        pointer: {
+          kind: 'pointer',
+          type: 'button',
+          windowId: 1,
+          pointerId: 0,
+          pointerType: 'mouse',
+          position: [200, 0],
+          button: 'primary',
+          state: 'down'
+        } as any
+      });
+
+      rootListener.emit({
+        type: 'pressmove',
+        realmId: realm.realmId,
+        target: { type: 'collider', entityId: root.entityId },
+        pointer: {
+          kind: 'pointer',
+          type: 'move',
+          windowId: 1,
+          pointerId: 0,
+          pointerType: 'mouse',
+          position: [225, -15] // uiX = 625 (+25), uiY = 315 (+15)
+        } as any
+      });
+
+      rootListener.emit({
+        type: 'pressup',
+        realmId: realm.realmId,
+        target: { type: 'collider', entityId: root.entityId },
+        pointer: {
+          kind: 'pointer',
+          type: 'button',
+          windowId: 1,
+          pointerId: 0,
+          pointerType: 'mouse',
+          position: [225, -15]
+        } as any
+      });
+
+      expect(clicked).toBe(true);
+      expect(draggedDx).toBe(25);
+      expect(draggedDy).toBe(15);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  test('events bubble up from frontmost child panels to parent container', () => {
+    const { runtime, realm, ui } = createPanelTestEnv(800, 600);
+    try {
+      const root = ui.createRoot(realm, { width: 800, height: 600 });
+
+      // Parent container
+      const container = root.addPanel({
+        id: 'container',
+        x: 50,
+        y: 50,
+        width: 300,
+        height: 200
+      });
+
+      // Child sprite panel in front
+      const childSprite = container.addSpritePanel({
+        id: 'child-sprite',
+        x: 20,
         y: 20,
-        width: 180,
-        height: 140,
-        draggable: true,
-        resizable: true
+        width: 100,
+        height: 100
       });
 
-      const startX = floating.rect.x;
-      const startY = floating.rect.y;
-      expect(startX).toBeGreaterThan(400);
+      let parentPressed = false;
+      let parentDraggedDx = 0;
+      let parentScrolledDy = 0;
+      let parentClicked = false;
 
-      advanceFrame(runtime, transport);
+      container.on('press', () => (parentPressed = true));
+      container.on('drag', (dx) => (parentDraggedDx += dx));
+      container.on('scroll', (_dx, dy) => (parentScrolledDy += dy));
+      container.on('click', () => (parentClicked = true));
 
-      // 1. Drag header by (+25, +15)
-      const hdr = rects.get('nested-float-header')!;
-      const hx = hdr.x + 30;
-      const hy = hdr.y + 10;
-      events.push(
-        move(windowId, hx, hy),
-        button(windowId, hx, hy, 'pressed'),
-        move(windowId, hx + 25, hy + 15),
-        button(windowId, hx + 25, hy + 15, 'released')
-      );
-      advanceFrame(runtime, transport);
-      expect(floating.rect.x).toBeCloseTo(startX + 25, 3);
-      expect(floating.rect.y).toBeCloseTo(startY + 15, 3);
-      expect(floating.constraints.x).toBeCloseTo(40, 3);
-      expect(floating.constraints.y).toBeCloseTo(35, 3);
+      const rootListener = root.interactiveListener!;
 
-      // 2. Resize corner by (+20, +20) — must not jump or teleport outside rightDock!
-      const corner = rects.get('nested-float-res-c')!;
-      const cx = corner.x + corner.width * 0.5;
-      const cy = corner.y + corner.height * 0.5;
-      events.push(
-        move(windowId, cx, cy),
-        button(windowId, cx, cy, 'pressed'),
-        move(windowId, cx + 20, cy + 20),
-        button(windowId, cx + 20, cy + 20, 'released')
-      );
-      advanceFrame(runtime, transport);
-      expect(floating.rect.x).toBeCloseTo(startX + 25, 3);
-      expect(floating.rect.y).toBeCloseTo(startY + 15, 3);
-      expect(floating.rect.width).toBeCloseTo(200, 3);
-      expect(floating.rect.height).toBeCloseTo(160, 3);
+      // Click on childSprite: uiX = 50 + 20 + 10 = 80, uiY = 50 + 20 + 10 = 80
+      // localX = 80 - 400 = -320, localY = 300 - 80 = 220
+      rootListener.emit({
+        type: 'down',
+        realmId: realm.realmId,
+        target: { type: 'collider', entityId: root.entityId },
+        pointer: {
+          kind: 'pointer',
+          type: 'button',
+          position: [-320, 220],
+          button: 'primary'
+        } as any
+      });
+
+      expect(parentPressed).toBe(true);
+
+      rootListener.emit({
+        type: 'pressmove',
+        realmId: realm.realmId,
+        target: { type: 'collider', entityId: root.entityId },
+        pointer: {
+          kind: 'pointer',
+          type: 'move',
+          position: [-310, 220] // dx = +10
+        } as any
+      });
+
+      expect(parentDraggedDx).toBe(10);
+
+      rootListener.emit({
+        type: 'scroll',
+        realmId: realm.realmId,
+        target: { type: 'collider', entityId: root.entityId },
+        pointer: {
+          kind: 'pointer',
+          type: 'wheel',
+          position: [-310, 220]
+        } as any,
+        scrollDelta: { lines: [0, 5] }
+      });
+
+      expect(parentScrolledDy).toBe(5);
+
+      rootListener.emit({
+        type: 'pressup',
+        realmId: realm.realmId,
+        target: { type: 'collider', entityId: root.entityId },
+        pointer: {
+          kind: 'pointer',
+          type: 'button',
+          position: [-310, 220]
+        } as any
+      });
+
+      expect(parentClicked).toBe(true);
     } finally {
       runtime.dispose();
     }

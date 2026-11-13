@@ -13,6 +13,15 @@ pub mod context_interaction;
 pub mod error;
 pub(crate) mod executor;
 pub mod interaction;
+#[cfg(test)]
+mod interaction_frame_tests;
+#[cfg(test)]
+mod interaction_mock_tests;
+#[cfg(test)]
+mod interaction_realms_tests;
+mod interaction_routing;
+#[cfg(test)]
+mod interaction_ui_tests;
 pub(crate) mod postprocess;
 pub mod resolver;
 pub mod schedule;
@@ -24,8 +33,8 @@ pub mod types;
 pub use context::MultiverseContext;
 pub use error::{MultiverseError, MultiverseResult};
 pub use interaction::{
-    InteractionButtonState, InteractionEvent, InteractionPointerEvent, InteractionType,
-    MultiverseInteractionSystem,
+    InteractionButtonState, InteractionEvent, InteractionPointerEvent, InteractionSurface,
+    InteractionType, MultiverseInteractionSystem,
 };
 pub use schedule::{MultiverseSchedule, ResolvedInvocationStep, TargetExecutionBlock};
 pub use screen_effect::{

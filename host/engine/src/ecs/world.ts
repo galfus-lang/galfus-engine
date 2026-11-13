@@ -65,6 +65,8 @@ export class EcsWorld implements IntentFlusher {
       component.type === 'Collider2D' ||
       component.type === 'Sprite2D' ||
       component.type === 'Shape2D' ||
+      component.type === 'Model2DUI' ||
+      component.type === 'ParticleEmitter2D' ||
       component.type === 'Svg2D'
     ) {
       if (!this.components.has(entityId, 'Model2D')) {

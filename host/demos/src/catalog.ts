@@ -20,7 +20,6 @@ import { runDemoPhys3d4 } from './physics/phys3d4-forces';
 import { runDemoAnim1 } from './realm2d/anim1-transitions';
 import { runDemo2d1 } from './realm2d/d2d1-shadows';
 import { runDemo2d2 } from './realm2d/d2d2-effects-particles';
-import { runDemo2d3 } from './realm2d/d2d3-svg';
 import { runDemo3d1 } from './realm3d/d3d1-orbit';
 import { runDemo3d2 } from './realm3d/d3d2-bones';
 import { runDemo3d3 } from './realm3d/d3d3-ssao-shadows';
@@ -87,9 +86,9 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
   {
     id: 'text-input',
     aliases: ['text', 'caret', 'selection'],
-    title: 'Interactive SVG Text Input & Shaping',
+    title: 'Interactive Native Text Input & Shaping',
     category: 'Host & Interaction',
-    tags: ['host', 'text', 'svg', 'input', 'clipboard', 'ime', 'font'],
+    tags: ['host', 'text', 'ui', 'input', 'clipboard', 'ime', 'font'],
     description:
       'Single-line and multi-line editable text fields with grapheme cluster shaping, selection, and clipboard.',
     run: runTextInputDemo
@@ -108,12 +107,12 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
   // 2. UI (2 demos)
   {
     id: 'ui1',
-    aliases: ['ui-events', 'svg-image', 'wheel'],
-    title: 'SVG Pointer, Wheel & Engine Texture <image> Lab',
+    aliases: ['ui-events', 'sprite-image', 'svg-image', 'wheel'],
+    title: 'Native SpritePanel, Wheel & Engine Texture Lab',
     category: 'UI',
-    tags: ['ui', 'svg', 'pointer', 'wheel', 'scroll', 'image', 'textureId', 'clipPath'],
+    tags: ['ui', 'sprite', 'pointer', 'wheel', 'scroll', 'image', 'textureId'],
     description:
-      'Interactive SVG UI receiving pointer and wheel scroll events, zooming/panning engine textures inside <image textureId="..."> and <clipPath>.',
+      'Interactive Model2DUI SpritePanel receiving pointer and wheel scroll events, zooming/panning engine textures with nearest/linear sampling and 9-slice.',
     run: runDemoUi1
   },
   {
@@ -121,9 +120,9 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     aliases: ['panels', 'split-group', 'scroll-panel', 'layout'],
     title: 'Panels, SplitGroup, ScrollPanel & Layout Solver',
     category: 'UI',
-    tags: ['ui', 'panel', 'split', 'sash', 'scroll', 'scrollbar', 'grid', 'flex', 'layout', 'svg'],
+    tags: ['ui', 'panel', 'split', 'sash', 'scroll', 'scrollbar', 'grid', 'flex', 'layout'],
     description:
-      'Auto-generated SVG panel hierarchy with horizontal/vertical SplitGroup sashes, ScrollPanel wheel/thumb scrolling, grid/flex layouts, and floating resizable panels.',
+      'Responsive Model2DUI panel hierarchy with horizontal/vertical SplitGroup sashes, ScrollPanel wheel/thumb scrolling, grid/flex layouts, and floating resizable panels.',
     run: runDemoUi2
   },
 
@@ -193,9 +192,9 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     aliases: ['joints-2d', 'chains-2d'],
     title: '2D Physical Chains, Ropes, Springs & Telemetry HUD',
     category: 'Physics & Anchors',
-    tags: ['physics', '2d', 'joints', 'chain', 'rope', 'spring', 'svg'],
+    tags: ['physics', '2d', 'joints', 'chain', 'rope', 'spring', 'ui'],
     description:
-      '2D physical pendulum chain, rope tether, and spring oscillator with live velocity telemetry in a reactive SVG HUD.',
+      '2D physical pendulum chain, rope tether, and spring oscillator with live velocity telemetry in a reactive UI HUD.',
     run: runDemoPhys2d2
   },
   {
@@ -395,23 +394,13 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     run: runDemo2d2
   },
   {
-    id: '2d3',
-    aliases: ['svg', 'vector-hud'],
-    title: 'Reactive 2D Vector SVG & Live DOM Mutations',
-    category: 'Realm 2D & Animation',
-    tags: ['2d', 'svg', 'vector', 'hud', 'typography'],
-    description:
-      'Real-time GPU-rasterized SVG cards with live attribute/text mutation, theme switching, and 4-corner text alignment.',
-    run: runDemo2d3
-  },
-  {
     id: 'anim1',
     aliases: ['transitions', 'easing'],
-    title: 'Native Transitions, Easing Curves & Reactive SVG',
+    title: 'Native Transitions, Easing Curves & Reactive UI HUD',
     category: 'Realm 2D & Animation',
-    tags: ['animation', 'transitions', 'easing', 'retarget', 'svg'],
+    tags: ['animation', 'transitions', 'easing', 'retarget', 'ui'],
     description:
-      'Demonstrates Bounce, Elastic, Cubic, and Back easing curves across 3D transforms and 2D SVG attributes with mid-flight retargeting.',
+      'Demonstrates Bounce, Elastic, Cubic, and Back easing curves across 3D transforms and 2D UI progress HUD with mid-flight retargeting.',
     run: runDemoAnim1
   }
 ];

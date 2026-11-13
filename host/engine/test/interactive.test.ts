@@ -5,6 +5,38 @@ import { advanceFrame } from './controlled-transport';
 import { button, move, setup } from './interactive-fixture';
 
 describe('pointer interaction in direct realms', () => {
+  it('routes UI events only to the matching panel', () => {
+    const { runtime, realm, windowId } = setup();
+    try {
+      const ui = realm.createUi({});
+      const first = runtime.interactive(1, { type: 'ui', uiId: ui.uiId, elementId: 1 });
+      const second = runtime.interactive(1, { type: 'ui', uiId: ui.uiId, elementId: 2 });
+      const hits: number[] = [];
+      first.on('move', () => hits.push(1));
+      second.on('move', () => hits.push(2));
+      const event = {
+        interactionType: 'move',
+        windowId,
+        pointerId: 0,
+        realmId: 1,
+        modelId: ui.uiId,
+        colliderId: 1,
+        localPos: [0, 0],
+        uv: [0, 0],
+        delta: [0, 0]
+      };
+      const deliver = (value: object) =>
+        (runtime.interaction as any).pollNativeEvents({
+          multiversePollInteractionEvents: () => JSON.stringify([value])
+        });
+      deliver(event);
+      expect(hits).toEqual([]);
+      deliver({ ...event, elementId: 2 });
+      expect(hits).toEqual([2]);
+    } finally {
+      runtime.dispose();
+    }
+  });
   it('delivers movement and release to the pressed target outside its hit area', () => {
     const { runtime, transport, realm, events, windowId } = setup();
     try {
@@ -71,14 +103,15 @@ describe('pointer interaction in direct realms', () => {
     }
   });
 
-  it('hits SVG bounds, picks the top layer, and cancels on window close', () => {
+  it('picks the top layer, and cancels on window close', () => {
     const { runtime, transport, realm, events, windowId } = setup();
     try {
-      const entity = realm.createSpatialNode();
-      realm.addCollider(entity, { type: 'rectangle', halfExtents: [3, 3] });
-      const back = runtime.interactive(1, { type: 'collider', entityId: entity });
-      const svg = realm.createSvg({ source: '<svg/>', dimensions: [4, 4] }, { zLayer: 2 });
-      const front = runtime.interactive(1, { type: 'svg', svgId: svg.svgId, elementId: 'button' });
+      const backEntity = realm.createSpatialNode();
+      realm.addCollider(backEntity, { type: 'rectangle', halfExtents: [3, 3] });
+      const back = runtime.interactive(1, { type: 'collider', entityId: backEntity });
+      const frontEntity = realm.createSpatialNode({ zLayer: 2 });
+      realm.addCollider(frontEntity, { type: 'rectangle', halfExtents: [2, 2] });
+      const front = runtime.interactive(1, { type: 'collider', entityId: frontEntity });
       const received: string[] = [];
       back.on('hover', () => received.push('back'));
       front.on('hover', () => received.push('front'));

@@ -6,20 +6,27 @@
 pub mod api;
 mod api_animation;
 pub mod batch;
+pub mod collision_geometry;
 pub mod context;
 mod context_collision;
 mod context_shadows;
+pub mod context_ui;
+mod context_ui_resources;
 pub mod gpu;
 pub mod pipeline;
 pub mod shader;
 pub mod shadow;
 pub mod surface_effect;
-pub mod svg_clip;
-pub mod svg_manager;
-pub mod svg_tessellator;
-pub mod svg_text_cache;
-pub mod svg_text_layout;
 pub mod types;
+mod ui_borders;
+mod ui_clip;
+mod ui_flex;
+mod ui_fonts;
+mod ui_grid;
+pub mod ui_layout;
+mod ui_scroll;
+pub mod ui_text;
+pub mod vector_geometry;
 
 pub use batch::{BatchBuilder2D, PreparedItem2D};
 pub use context::Realm2DContext;
@@ -31,3 +38,17 @@ pub use types::*;
 
 #[cfg(test)]
 mod transparency_tests;
+#[cfg(test)]
+mod ui_tests;
+
+#[cfg(test)]
+mod ui_layout_tests;
+
+#[cfg(test)]
+mod ui_interaction_tests;
+
+#[cfg(test)]
+mod ui_render_tests;
+
+#[cfg(test)]
+mod ui_batch_tests;

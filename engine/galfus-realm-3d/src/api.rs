@@ -197,6 +197,9 @@ impl Realm3DContext {
             .unwrap_or_default();
         self.models
             .insert(id, (model, transform, aabb, None, None, None));
+        if let Some(spatial) = self.model_transforms.get_mut(&id) {
+            *spatial = transform;
+        }
         self.bones_dirty |= self.model_bones.contains_key(&id);
         self.dirty = true;
         Ok(())
@@ -290,6 +293,9 @@ impl Realm3DContext {
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "Model", id))?;
         entry.1 = transform;
+        if let Some(spatial) = self.model_transforms.get_mut(&id) {
+            *spatial = transform;
+        }
         self.dirty = true;
         Ok(())
     }
@@ -409,10 +415,12 @@ impl Realm3DContext {
         self.bones_dirty |= self.model_bones.remove(&id).is_some();
         self.models
             .remove(&id)
-            .map(|_| {
-                self.dirty = true;
-            })
-            .ok_or_else(|| not_found(self.id, "Model", id))
+            .ok_or_else(|| not_found(self.id, "Model", id))?;
+        if !self.model_transforms.contains_key(&id) {
+            self.destroy_colliders_by_model_3d(id);
+        }
+        self.dirty = true;
+        Ok(())
     }
 
     /// Destroys an existing `InstancedModel3D`.

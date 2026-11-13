@@ -87,4 +87,13 @@ describe('Layout Solver', () => {
     ]);
     expect(res.rects[0]).toEqual({ x: 25, y: 45, width: 180, height: 45 });
   });
+
+  test('solves stack layout with expand and custom offsets', () => {
+    const res = solveLayout({ x: 10, y: 10, width: 200, height: 150 }, 10, { type: 'stack' }, [
+      {}, // expand by default -> inner 180x130
+      { width: 50, height: 40, x: 5, y: 10 }
+    ]);
+    expect(res.rects[0]).toEqual({ x: 20, y: 20, width: 180, height: 130 });
+    expect(res.rects[1]).toEqual({ x: 25, y: 30, width: 50, height: 40 });
+  });
 });

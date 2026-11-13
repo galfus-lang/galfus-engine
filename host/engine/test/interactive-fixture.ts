@@ -1,5 +1,6 @@
 import type { GalfusEngine, GalfusTransport, PlatformEvent } from '@galfus/transport-types';
 import { createRuntime } from '../src/runtime';
+import { createMockInteractionEngine } from './mock-core-interaction';
 
 export function setup() {
   const events: PlatformEvent[] = [];
@@ -7,6 +8,8 @@ export function setup() {
   const ime: Array<[number, number]> = [];
   const svgText: string[] = [];
   let fail = false;
+  let runtimeRef: any;
+  const mockInteractions = createMockInteractionEngine((id) => runtimeRef?.multiverse.getRealm(id));
   const schedule = {
     targetBlocks: [
       {
@@ -25,6 +28,7 @@ export function setup() {
   };
   const engine = new Proxy(
     {
+      ...mockInteractions,
       platformPumpEvents: () => events.splice(0),
       windowSetTabCapture: (id: number, enabled: number) => tabCapture.push([id, enabled]),
       windowSetImeAllowed: (id: number, enabled: number) => ime.push([id, enabled]),
@@ -33,6 +37,7 @@ export function setup() {
       multiverseResolve: () => schedule,
       multiverseDispatch: () => {
         if (fail) throw new Error('dispatch failed');
+        mockInteractions.multiverseDispatch();
       },
       realm2dGetSvgElementRect: () => ({
         rect: { x: 25, y: 25, width: 50, height: 50, viewportWidth: 100, viewportHeight: 100 }
@@ -50,6 +55,7 @@ export function setup() {
     dispose: () => {}
   } as unknown as GalfusTransport;
   const runtime = createRuntime(transport);
+  runtimeRef = runtime;
   const windowId = runtime.platform.window.create();
   const realm = runtime.createRealm2D(1);
   realm.createCamera({ orthoScale: 10 });

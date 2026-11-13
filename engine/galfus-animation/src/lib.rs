@@ -29,6 +29,9 @@ pub use transition::{
 pub use value::AnimValue;
 
 #[cfg(test)]
+mod ui_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use galfus_realm_2d::Realm2DContext;

@@ -69,7 +69,18 @@ export const interactionDescriptors: DescSpec[] = [
     kind: 'enum',
     name: 'InteractionType',
     doc: 'Category of model interaction event emitted by the Core picking engine.',
-    values: ['hover', 'leave', 'down', 'up', 'click', 'move', 'pressMove', 'cancel', 'scroll']
+    values: [
+      'hover',
+      'leave',
+      'down',
+      'up',
+      'click',
+      'move',
+      'pressMove',
+      'pressUp',
+      'cancel',
+      'scroll'
+    ]
   },
   {
     kind: 'object',
@@ -82,6 +93,7 @@ export const interactionDescriptors: DescSpec[] = [
       realmId: { type: 'number' },
       modelId: { type: 'number' },
       colliderId: { type: 'number' },
+      elementId: { type: 'number', optional: true },
       button: { type: 'number', optional: true },
       localPos: { type: { tuple: ['number', 'number'] } },
       uv: { type: { tuple: ['number', 'number'] } },

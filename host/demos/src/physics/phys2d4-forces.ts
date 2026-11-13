@@ -1,17 +1,8 @@
 import { isKey, mat2d, type Model2DComponent, vec2 } from '@galfus/engine';
 import { attachPhysics2D } from '@galfus/physics-2d';
+import { UiRoot } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
-
-const SVG_FORCES_HUD = `
-<svg width="400" height="95" viewBox="0 0 400 95" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2" y="2" width="396" height="91" rx="10" fill="#0f172a" fill-opacity="0.92" stroke="#38bdf8" stroke-width="2"/>
-  <text x="16" y="25" font-family="monospace" font-size="13" font-weight="bold" fill="#f8fafc">PHYS2D-4: FORCES, TORQUES &amp; POINT IMPULSES</text>
-  <text id="spinner-info" x="16" y="47" font-family="monospace" font-size="11" fill="#38bdf8">ROTOR ω: 0.00 rad/s | THRUSTER: OFF</text>
-  <text id="crate-info" x="16" y="66" font-family="monospace" font-size="11" fill="#a78bfa">CRATE V: [0.00, 0.00] m/s</text>
-  <text x="16" y="84" font-family="monospace" font-size="10" fill="#94a3b8">[T]: TORQUE | [F]: THRUSTER | [SPACE]: IMPULSE | [R]: RESET</text>
-</svg>
-`;
 
 export async function runDemoPhys2d4(options: HostDemoOptions = {}): Promise<void> {
   const { runtime, targetId, windowId, maxFrames } = createDemoSession(
@@ -144,11 +135,51 @@ export async function runDemoPhys2d4(options: HostDemoOptions = {}): Promise<voi
       { position: [0, 4.0], zLayer: 2 }
     );
 
-    // Telemetry SVG HUD
-    const hudSvg = realm2d.createSvg(
-      { source: SVG_FORCES_HUD, dimensions: [8.0, 1.9] },
-      { position: [0, 8.0], zLayer: 10 }
-    );
+    // Telemetry UI HUD
+    const uiRoot = new UiRoot(runtime, realm2d, {
+      width: 400,
+      height: 95,
+      position: [0, 8.0],
+      scale: [8.0 / 400, 1.9 / 95],
+      zLayer: 10
+    });
+    uiRoot.rootPanel
+      .setBackgroundColor([0.06, 0.09, 0.16, 0.92])
+      .setBorderColor([0.22, 0.74, 0.97, 1.0])
+      .setBorderWidth(2)
+      .setBorderRadius(10);
+
+    uiRoot.addText({
+      text: 'PHYS2D-4: FORCES, TORQUES & POINT IMPULSES',
+      fontSize: 13,
+      color: [0.97, 0.98, 0.99, 1.0],
+      x: 16,
+      y: 18
+    });
+
+    const spinnerInfoText = uiRoot.addText({
+      text: 'ROTOR ω: 0.00 rad/s | THRUSTER: OFF',
+      fontSize: 11,
+      color: [0.22, 0.74, 0.97, 1.0],
+      x: 16,
+      y: 38
+    });
+
+    const crateInfoText = uiRoot.addText({
+      text: 'CRATE V: [0.00, 0.00] m/s | TORQUE: ON [T]',
+      fontSize: 11,
+      color: [0.65, 0.55, 0.98, 1.0],
+      x: 16,
+      y: 56
+    });
+
+    uiRoot.addText({
+      text: '[T]: TORQUE | [F]: THRUSTER | [SPACE]: IMPULSE | [R]: RESET',
+      fontSize: 10,
+      color: [0.58, 0.64, 0.72, 1.0],
+      x: 16,
+      y: 76
+    });
 
     let continuousTorque = true;
     let thrusterActive = false;
@@ -216,14 +247,10 @@ export async function runDemoPhys2d4(options: HostDemoOptions = {}): Promise<voi
       if (frame % 6 === 0) {
         const w = physics.getAngularVelocity(rotorBlade) ?? 0;
         const vCrate = physics.getLinearVelocity(crate) ?? [0, 0];
-        realm2d.setSvgText(
-          hudSvg,
-          'spinner-info',
+        spinnerInfoText.setText(
           `ROTOR ω: ${w.toFixed(2)} rad/s | THRUSTER: ${thrusterActive ? 'ACTIVE [F]' : 'OFF [F]'}`
         );
-        realm2d.setSvgText(
-          hudSvg,
-          'crate-info',
+        crateInfoText.setText(
           `CRATE V: [${vCrate[0].toFixed(2)}, ${vCrate[1].toFixed(2)}] m/s | TORQUE: ${continuousTorque ? 'ON [T]' : 'OFF [T]'}`
         );
       }

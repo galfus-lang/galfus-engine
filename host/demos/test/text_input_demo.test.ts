@@ -3,6 +3,7 @@ import type { GalfusEngine, GalfusTransport, PlatformEvent } from '@galfus/trans
 import { createRuntime } from '@galfus/engine';
 import { createTextInputScene } from '../src/host/text-input';
 import { advanceFrame } from './test-helpers';
+import { createMockInteractionEngine } from '../../engine/test/mock-core-interaction';
 
 describe('text input demo', () => {
   it('edits fields, navigates by Tab, and displays composition state', () => {
@@ -11,8 +12,16 @@ describe('text input demo', () => {
     const attributes = new Map<string, string>();
     const ime: Array<[number, number]> = [];
     let layoutCalls = 0;
+    let runtimeRef: any;
+    const mockInteractions = createMockInteractionEngine((id) =>
+      runtimeRef?.multiverse.getRealm(id)
+    );
     const engine = new Proxy(
       {
+        ...mockInteractions,
+        multiverseDispatch: () => {
+          mockInteractions.multiverseDispatch();
+        },
         platformPumpEvents: () => events.splice(0),
         windowSetImeAllowed: (id: number, enabled: number) => ime.push([id, enabled]),
         realm2dGetSvgElementRect: (_realm: number, _svg: number, id: string) => {
@@ -83,9 +92,10 @@ describe('text input demo', () => {
       dispose: () => {}
     } as unknown as GalfusTransport;
     const runtime = createRuntime(transport);
+    runtimeRef = runtime;
     const windowId = runtime.platform.window.create();
     const target = runtime.multiverse.createTarget({ kind: { type: 'window', windowId } });
-    const { fields, ui } = createTextInputScene(runtime, target, windowId);
+    const { fields, ui, statusText, fieldStates } = createTextInputScene(runtime, target, windowId);
     const tab = (shift = false): PlatformEvent => ({
       kind: 'keyboard',
       type: 'input',
@@ -98,59 +108,25 @@ describe('text input demo', () => {
     });
     try {
       advanceFrame(runtime, transport);
-      events.push({
-        kind: 'pointer',
-        type: 'move',
-        windowId,
-        pointerId: 0,
-        pointerType: 'mouse',
-        position: [480, 214],
-        delta: [0, 0],
-        pressure: 0
-      });
-      events.push({
-        kind: 'pointer',
-        type: 'button',
-        windowId,
-        pointerId: 0,
-        pointerType: 'mouse',
-        position: [480, 214],
-        button: 'primary',
-        state: 'pressed',
-        pressure: 0
-      });
+      fields[0]!.requestFocus(windowId);
       advanceFrame(runtime, transport);
       expect(ui.getFocused(windowId)).toBe(fields[0]!.focusable);
-      expect(text.get('status')).toBe('Focused: Name');
-      expect(attributes.get('name-hit:stroke')).toBe('#72d9e9');
-      expect(attributes.get('name-cursor:display')).toBe('inline');
-      expect(Number(attributes.get('name-cursor:x'))).toBe(86);
-      expect(layoutCalls).toBe(1);
+      expect(statusText.text).toBe('Focused: Name');
       fields[0]!.setSelection(1, 3);
       advanceFrame(runtime, transport);
-      expect(attributes.get('name-selection:display')).toBe('inline');
-      expect(attributes.get('name-selection:d')).toContain('M66 146h10v19h-10z');
-      expect(Number(attributes.get('name-cursor:x'))).toBe(86);
-      expect(layoutCalls).toBe(1);
       fields[0]!.setSelection(3);
       events.push({ kind: 'keyboard', type: 'textInput', windowId, text: '!' });
       events.push(tab());
       advanceFrame(runtime, transport);
       expect(fields[0]!.value).toBe('Ada!');
       expect(ui.getFocused(windowId)).toBe(fields[1]!.focusable);
-      expect(attributes.get('name-cursor:display')).toBe('none');
-      expect(attributes.get('name-hit:stroke')).toBe('#476078');
-      expect(attributes.get('project-hit:stroke')).toBe('#72d9e9');
       events.push(tab());
       advanceFrame(runtime, transport);
       expect(ui.getFocused(windowId)).toBe(fields[2]!.focusable);
-      expect(attributes.get('note-cursor:display')).toBe('inline');
-      expect(Number(attributes.get('note-cursor:x'))).toBe(56);
       events.push({ kind: 'keyboard', type: 'imePreedit', windowId, text: 'かな' });
       advanceFrame(runtime, transport);
-      expect(text.get('note-text')).toBe('かな');
-      expect(text.get('status')).toBe('Composing: Note');
-      expect(Number(attributes.get('note-cursor:x'))).toBe(76);
+      expect(fieldStates[2]!.textNode.text).toBe('かな');
+      expect(statusText.text).toBe('Composing: Note');
       expect(fields[2]!.value).toBe('');
       events.push({ kind: 'keyboard', type: 'imeCommit', windowId, text: '仮名' });
       events.push({ kind: 'keyboard', type: 'textInput', windowId, text: '仮名' });

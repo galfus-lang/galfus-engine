@@ -1,17 +1,7 @@
 import { isKey, utils3D } from '@galfus/engine';
+import { UiRoot } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
-
-const SVG_HUD = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 120" width="500" height="120">
-  <rect x="0" y="0" width="500" height="120" rx="10" fill="#111827" fill-opacity="0.85" stroke="#374151" stroke-width="2"/>
-  <text x="20" y="32" font-family="sans-serif" font-size="16" font-weight="bold" fill="#F9FAFB">Galfus Animation System</text>
-  <text x="20" y="55" font-family="sans-serif" font-size="12" fill="#9CA3AF">[Space]: Retarget Position  |  [R]: Reset  |  [Esc]: Exit</text>
-  <rect x="20" y="75" width="460" height="20" rx="4" fill="#1F2937"/>
-  <rect id="progressBar" x="20" y="75" width="50" height="20" rx="4" fill="#3B82F6"/>
-  <text id="progressText" x="250" y="90" font-family="sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle">0%</text>
-</svg>
-`;
 
 export async function runDemoAnim1(options: HostDemoOptions = {}): Promise<void> {
   const { runtime, targetId, windowId, maxFrames } = createDemoSession(
@@ -80,7 +70,60 @@ export async function runDemoAnim1(options: HostDemoOptions = {}): Promise<void>
     const cube3 = realm3d.createCube(1.5, matGreen, { position: [3.5, 0, 0] }).entityId;
 
     realm2d.createCamera({ orthoScale: 768, cameraSlot: 0 }, { position: [0, 0] });
-    const hudSvg = realm2d.createSvg({ source: SVG_HUD }, { position: [0, 270] });
+    const uiRoot = new UiRoot(runtime, realm2d, {
+      width: 500,
+      height: 120,
+      position: [0, 270],
+      zLayer: 10
+    });
+    uiRoot.rootPanel
+      .setBackgroundColor([0.07, 0.09, 0.15, 0.9])
+      .setBorderColor([0.22, 0.25, 0.32, 1.0])
+      .setBorderWidth(2)
+      .setBorderRadius(10);
+
+    uiRoot.addText({
+      text: 'Galfus Animation System',
+      fontSize: 16,
+      color: [0.98, 0.98, 0.98, 1.0],
+      x: 20,
+      y: 20
+    });
+
+    uiRoot.addText({
+      text: '[Space]: Retarget Position  |  [R]: Reset  |  [Esc]: Exit',
+      fontSize: 12,
+      color: [0.61, 0.64, 0.69, 1.0],
+      x: 20,
+      y: 44
+    });
+
+    const progressTrack = uiRoot.addPanel({
+      x: 20,
+      y: 72,
+      width: 460,
+      height: 22,
+      borderRadius: 4,
+      backgroundColor: [0.12, 0.16, 0.22, 1.0]
+    });
+
+    const progressFill = progressTrack.addPanel({
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 22,
+      minWidth: 0,
+      borderRadius: 4,
+      backgroundColor: [0.23, 0.51, 0.96, 1.0]
+    });
+
+    const progressText = uiRoot.addText({
+      text: '0%',
+      fontSize: 11,
+      color: [1.0, 1.0, 1.0, 1.0],
+      x: 240,
+      y: 75
+    });
 
     runtime.multiverse.createInvocation({
       realmId: realm3d.realmId,
@@ -127,27 +170,13 @@ export async function runDemoAnim1(options: HostDemoOptions = {}): Promise<void>
     };
     const barWidthTransition = runtime.animation.createTransition(
       { type: 'scalar', value: 50 },
-      barConfig,
-      {
-        kind: 'svgAttributeScalar',
-        realmId: realm2d.realmId,
-        svgId: hudSvg.svgId,
-        elementId: 'progressBar',
-        attribute: 'width'
-      }
+      barConfig
     );
     runtime.animation.transitionTo(barWidthTransition, { type: 'scalar', value: 460 }, barConfig);
 
     const barColorTransition = runtime.animation.createTransition(
       { type: 'vec4', value: [0.2, 0.5, 1.0, 1.0] },
-      barConfig,
-      {
-        kind: 'svgAttributeColor',
-        realmId: realm2d.realmId,
-        svgId: hudSvg.svgId,
-        elementId: 'progressBar',
-        attribute: 'fill'
-      }
+      barConfig
     );
     runtime.animation.transitionTo(
       barColorTransition,
@@ -188,9 +217,15 @@ export async function runDemoAnim1(options: HostDemoOptions = {}): Promise<void>
 
     runtime.on('tick', () => {
       const barVal = runtime.animation.getValue(barWidthTransition);
+      const colVal = runtime.animation.getValue(barColorTransition);
       if (barVal && barVal.type === 'scalar') {
-        const pct = Math.round(((barVal.value - 50) / (460 - 50)) * 100);
-        realm2d.setSvgText(hudSvg, 'progressText', `${pct}%`);
+        const curW = barVal.value;
+        const pct = Math.round(((curW - 50) / (460 - 50)) * 100);
+        progressFill.setSize(curW, 22);
+        if (colVal && colVal.type === 'vec4') {
+          progressFill.setBackgroundColor(colVal.value);
+        }
+        progressText.setText(`${pct}%`);
       }
     });
 

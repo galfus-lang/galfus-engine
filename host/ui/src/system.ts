@@ -6,12 +6,14 @@ import {
 } from '@galfus/engine';
 import { type Focusable, FocusManager } from './focus';
 import { UiRoot, type UiRootOptions } from './panel/root';
+import { NativeUiModel, type NativeUiOptions } from './native';
 import { TextInput, type TextInputOptions } from './text/input';
 
-/** Coordinates UI focus, Tab navigation, SVG text inputs, and panel hierarchies on top of a `MultiverseRuntime`. */
+/** Coordinates UI focus, Tab navigation, interactive inputs, and panel hierarchies on top of a `MultiverseRuntime`. */
 export class UiSystem {
   private readonly _textInputs = new Map<Focusable, TextInput>();
   private readonly _roots = new Set<UiRoot>();
+  private readonly _nativeRoots = new Set<NativeUiModel>();
   private readonly _focus: FocusManager;
   private readonly _unobserve: () => void;
   private _disposed = false;
@@ -69,39 +71,25 @@ export class UiSystem {
     return this._focus.getFocused(windowId);
   }
 
-  /** Binds editable text to an SVG element and its interactive hit area. */
-  textInput(realmId: number, options: TextInputOptions): TextInput {
+  /** Binds editable text to a focus target (native UI or SVG element). */
+  textInput(
+    realmId: number,
+    options: TextInputOptions & { target?: InteractiveTarget; entityId?: number }
+  ): TextInput {
     if (this._disposed) throw new Error('UiSystem is disposed.');
-    if (!options.elementId || options.hitAreaId === '')
-      throw new Error('SVG element IDs must not be empty.');
     const realm = this.runtime.multiverse.getRealm(realmId);
     if (!(realm instanceof Realm2D) || realm.isDisposed)
       throw new Error(`Text input realm ${realmId} is not a registered Realm2D.`);
-    for (const input of this._textInputs.values()) {
-      const target = input.focusable.listener.target;
-      if (
-        input.focusable.realmId === realmId &&
-        input.svgId === options.svgId &&
-        input.elementId === options.elementId
-      )
-        throw new Error('An input is already registered for this SVG text element.');
-      if (
-        input.focusable.realmId === realmId &&
-        target.type === 'svg' &&
-        target.svgId === options.svgId &&
-        target.elementId === (options.hitAreaId ?? options.elementId)
-      )
-        throw new Error('An input is already registered for this SVG hit area.');
-    }
-    const focusable = this.focusable(
-      realmId,
-      {
-        type: 'svg',
-        svgId: options.svgId,
-        elementId: options.hitAreaId ?? options.elementId
-      },
-      { tabIndex: options.tabIndex }
-    );
+    const target: InteractiveTarget =
+      options.target ??
+      (options.entityId !== undefined
+        ? { type: 'collider', entityId: options.entityId }
+        : {
+            type: 'svg',
+            svgId: options.svgId ?? 0,
+            elementId: options.hitAreaId ?? options.elementId ?? ''
+          });
+    const focusable = this.focusable(realmId, target, { tabIndex: options.tabIndex });
     try {
       const input = new TextInput(
         realm,
@@ -118,7 +106,7 @@ export class UiSystem {
     }
   }
 
-  /** Creates a `UiRoot` that auto-generates and manages an `Svg2D` panel hierarchy in `realm`. */
+  /** Creates a `UiRoot` that compiles and manages a native `Model2DUI` panel hierarchy in `realm`. */
   createRoot(realm: Realm2D, options: UiRootOptions = {}): UiRoot {
     if (this._disposed) throw new Error('UiSystem is disposed.');
     const root = new UiRoot(this.runtime, realm, options);
@@ -126,8 +114,18 @@ export class UiSystem {
     return root;
   }
 
+  /** Creates a command-only facade for a UI tree owned by the core. */
+  createNativeRoot(realm: Realm2D, options: NativeUiOptions): NativeUiModel {
+    if (this._disposed) throw new Error('UiSystem is disposed.');
+    const root = new NativeUiModel(this.runtime, realm, options);
+    this._nativeRoots.add(root);
+    return root;
+  }
+
   /** Clears all registered focusables, text inputs, and UI roots while remaining attached to the runtime. */
   reset(): void {
+    for (const root of this._nativeRoots) root.dispose();
+    this._nativeRoots.clear();
     for (const root of [...this._roots]) root.dispose();
     this._roots.clear();
     for (const input of [...this._textInputs.values()]) input.dispose();

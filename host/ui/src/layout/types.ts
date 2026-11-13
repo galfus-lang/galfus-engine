@@ -1,4 +1,4 @@
-/** Axis-aligned rectangle in SVG viewport coordinates. */
+/** Axis-aligned rectangle in 2D UI viewport coordinates. */
 export interface UiRect {
   readonly x: number;
   readonly y: number;
@@ -66,18 +66,37 @@ export interface FreeLayoutConfig {
   readonly type: 'free';
 }
 
+export interface StackLayoutConfig {
+  readonly type: 'stack' | 'relative';
+  readonly fit?: 'expand' | 'passthrough';
+}
+
 export type LayoutConfig =
-  LinearLayoutConfig | FlexLayoutConfig | GridLayoutConfig | FreeLayoutConfig;
+  LinearLayoutConfig | FlexLayoutConfig | GridLayoutConfig | FreeLayoutConfig | StackLayoutConfig;
+
+/** Quad value specification: 1 value (all), 2 values (vertical, horizontal), 3 values (top, horizontal, bottom), or 4 values (top, right, bottom, left). */
+export type QuadSpec<T> = T | readonly [T, T] | readonly [T, T, T] | readonly [T, T, T, T];
+export type UiQuadSpec<T> = QuadSpec<T>;
+
+export type UiBorderRadius = QuadSpec<number>;
+export type UiBorderWidth = QuadSpec<number>;
+export type UiColor = [number, number, number, number] | string;
+export type UiBorderColor = QuadSpec<UiColor>;
 
 /** Visual styling for a Panel and its optional header bar. */
 export interface PanelStyle {
-  readonly fill?: string;
-  readonly stroke?: string;
-  readonly strokeWidth?: number;
-  readonly radius?: number;
+  readonly fill?: UiColor;
+  readonly stroke?: UiBorderColor;
+  readonly strokeWidth?: UiBorderWidth;
+  readonly radius?: UiBorderRadius;
   readonly opacity?: number;
-  readonly headerFill?: string;
+  readonly headerFill?: UiColor;
   readonly headerHeight?: number;
-  readonly titleColor?: string;
+  readonly titleColor?: UiColor;
   readonly titleFontSize?: number;
+}
+
+export interface PanelResizeOptions {
+  readonly edges?: readonly ('right' | 'bottom' | 'corner')[];
+  readonly handleSize?: number;
 }

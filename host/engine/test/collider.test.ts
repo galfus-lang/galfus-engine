@@ -8,6 +8,51 @@ import { createModel2D, type Model2DComponent } from '../src/realm2d/components'
 import { Realm3D } from '../src/realm3d/realm';
 
 describe('host collider components and spatial queries', () => {
+  it('synchronizes collider updates, deactivation and reactivation in both realms', () => {
+    const calls: { name: string; args: unknown[] }[] = [];
+    const engine = new Proxy(
+      {},
+      {
+        get:
+          (_target, name) =>
+          (...args: unknown[]) => {
+            calls.push({ name: String(name), args: structuredClone(args) });
+            return 0;
+          }
+      }
+    ) as GalfusEngine;
+    for (const dimension of [2, 3] as const) {
+      const realm = dimension === 2 ? new Realm2D(10) : new Realm3D(11);
+      realm.bindEngine(engine);
+      const entity = realm.createSpatialNode();
+      const id =
+        dimension === 2
+          ? (realm as Realm2D).addCollider(entity, { type: 'circle', radius: 1 })
+          : (realm as Realm3D).addCollider(entity, { type: 'sphere', radius: 1 });
+      const type = `Collider${dimension}D`;
+      const component = realm.world.getComponent<Collider2DComponent | Collider3DComponent>(
+        entity,
+        type
+      )!;
+      const update = (radius: number, active: boolean) => {
+        if (component instanceof Collider2DComponent)
+          component.set(id, { type: 'circle', radius }, { active });
+        else component.set(id, { type: 'sphere', radius }, { active });
+        realm.flush();
+      };
+      realm.flush();
+      realm.flush();
+      update(2, true);
+      update(2, false);
+      update(3, true);
+      const creates = calls.filter((call) => call.name === `realm${dimension}dCreateCollider`);
+      const destroys = calls.filter((call) => call.name === `realm${dimension}dDestroyCollider`);
+      expect(creates).toHaveLength(3);
+      expect(destroys).toHaveLength(1);
+      expect((creates[1]!.args[3] as { shape: { radius: number } }).shape.radius).toBe(2);
+      realm.dispose();
+    }
+  });
   it('queries colliders without cloning their shapes and protects public snapshots', () => {
     const realm2d = new Realm2D(1);
     const entity2d = realm2d.createSpatialNode();

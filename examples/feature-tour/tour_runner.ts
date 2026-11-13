@@ -1,7 +1,7 @@
 import type { RoomMarker, TourConfig } from './types.ts';
 import tourJsonData from './tour.json';
 import { buildRoomScene, makeTexture, makeSound, computeBonePalette } from './procedural.ts';
-import { renderCompanionPanelSvg } from './panel_svg.ts';
+import { renderCompanionPanelUi } from './panel_ui.ts';
 
 function extractKey(input: { physicalKey: string; logicalKey: any }): string {
   if (typeof input.logicalKey === 'object' && input.logicalKey !== null) {
@@ -25,7 +25,7 @@ const INVOCATION_3D = 100;
 const INVOCATION_2D = 101;
 const CAMERA_3D_ID = 1;
 const CAMERA_2D_ID = 1;
-const SVG_HUD_ID = 1;
+const UI_HUD_ID = 1;
 const PATH_CAMERA_POS_ID = 401;
 const PATH_CAMERA_LOOK_ID = 402;
 const SOUND_ID = 501;
@@ -213,15 +213,10 @@ export async function runFeatureTour(options: TourRunnerOptions): Promise<void> 
     console.warn('[Audio] Audio initialization skipped or not supported:', err);
   }
 
-  // 8. Companion SVG panel in Realm2D
+  // 8. Companion UI panel in Realm2D
   const initialRoom = tour.rooms[0]!;
-  const initialSvg = renderCompanionPanelSvg(tour, initialRoom, 0.0, false, activeBinding);
-  galfus.realm2dCreateSvg(
-    REALM_2D,
-    SVG_HUD_ID,
-    { source: initialSvg },
-    { position: [0, 0], scale: [1, 1] }
-  );
+  const initialUi = renderCompanionPanelUi(tour, initialRoom, 0.0, false, activeBinding);
+  galfus.realm2dCreateUi(REALM_2D, UI_HUD_ID, initialUi, { position: [0, 0], scale: [1, 1] });
 
   // 9. Path followers setup function
   const rotatePathCommands = (
@@ -303,14 +298,8 @@ export async function runFeatureTour(options: TourRunnerOptions): Promise<void> 
 
   const updateHud = () => {
     const activeRoom = tour.rooms[currentRoomIndex] ?? tour.rooms[0]!;
-    const updatedSvg = renderCompanionPanelSvg(
-      tour,
-      activeRoom,
-      tourClock,
-      isPaused,
-      activeBinding
-    );
-    galfus.realm2dSetSvgSource(REALM_2D, SVG_HUD_ID, updatedSvg);
+    const updatedUi = renderCompanionPanelUi(tour, activeRoom, tourClock, isPaused, activeBinding);
+    galfus.realm2dSetUiContent(REALM_2D, UI_HUD_ID, updatedUi);
   };
 
   const applyRoomState = (roomIndex: number) => {

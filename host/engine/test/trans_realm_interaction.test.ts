@@ -3,10 +3,13 @@ import type { GalfusEngine, GalfusTransport, PlatformEvent } from '@galfus/trans
 import { createRuntime } from '../src/runtime';
 import { advanceFrame } from './controlled-transport';
 import { button, move } from './interactive-fixture';
+import { createMockInteractionEngine } from './mock-core-interaction';
 
 function setupMultiRealm() {
   const events: PlatformEvent[] = [];
   const tabCapture: Array<[number, number]> = [];
+  let runtimeRef: any;
+  const mockInteractions = createMockInteractionEngine((id) => runtimeRef?.multiverse.getRealm(id));
   const schedule = {
     targetBlocks: [
       {
@@ -51,11 +54,14 @@ function setupMultiRealm() {
 
   const engine = new Proxy(
     {
+      ...mockInteractions,
       platformPumpEvents: () => events.splice(0),
       windowSetTabCapture: (id: number, enabled: number) => tabCapture.push([id, enabled]),
       windowSetImeAllowed: () => {},
       multiverseResolve: () => schedule,
-      multiverseDispatch: () => {}
+      multiverseDispatch: () => {
+        mockInteractions.multiverseDispatch();
+      }
     },
     { get: (target, key) => (key in target ? target[key as keyof typeof target] : () => {}) }
   ) as unknown as GalfusEngine;
@@ -71,6 +77,7 @@ function setupMultiRealm() {
   } as unknown as GalfusTransport;
 
   const runtime = createRuntime(transport);
+  runtimeRef = runtime;
   const windowId = runtime.platform.window.create();
 
   // Realm 1 (Window Target 10)

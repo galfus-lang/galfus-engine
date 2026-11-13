@@ -65,8 +65,9 @@ pub fn realm_2d_set_camera_transform(
 ) -> Result<()> {
     let env = Env;
     let desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
-    let native_tf: crate::ffi_native_structs::GalfusTransform2D =
-        galfus_realm_2d_resources::Transform2D::from(desc).into();
+    let native_tf = crate::ffi_native_structs::GalfusTransform2D::from(
+        galfus_realm_2d_resources::Transform2D::from(desc),
+    );
     check_ffi_res(unsafe {
         crate::ffi_realm_2d::galfus_realm_2d_set_camera_transform(realm_id, camera_id, &native_tf)
     })
@@ -101,8 +102,9 @@ pub fn realm_2d_set_light_transform(
 ) -> Result<()> {
     let env = Env;
     let desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
-    let native_tf: crate::ffi_native_structs::GalfusTransform2D =
-        galfus_realm_2d_resources::Transform2D::from(desc).into();
+    let native_tf = crate::ffi_native_structs::GalfusTransform2D::from(
+        galfus_realm_2d_resources::Transform2D::from(desc),
+    );
     check_ffi_res(unsafe {
         crate::ffi_realm_2d::galfus_realm_2d_set_light_transform(realm_id, light_id, &native_tf)
     })
@@ -145,11 +147,13 @@ pub fn realm_2d_set_svg_transform(
     transform_val: JsUnknown,
 ) -> Result<()> {
     let env = Env;
-    let desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
-    let native_tf: crate::ffi_native_structs::GalfusTransform2D =
-        galfus_realm_2d_resources::Transform2D::from(desc).into();
+    let _desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
     check_ffi_res(unsafe {
-        crate::ffi_realm_2d_svg::galfus_realm_2d_set_svg_transform(realm_id, svg_id, &native_tf)
+        crate::ffi_realm_2d_svg::galfus_realm_2d_set_svg_transform(
+            realm_id,
+            svg_id,
+            std::ptr::null(),
+        )
     })
 }
 
@@ -222,9 +226,7 @@ pub fn realm_2d_destroy_light(realm_id: u32, light_id: u32) -> Result<()> {
 
 #[wasm_bindgen(js_name = "realm2dDestroySvg")]
 pub fn realm_2d_destroy_svg(realm_id: u32, svg_id: u32) -> Result<()> {
-    check_ffi_res(crate::ffi_realm_2d_svg::galfus_realm_2d_destroy_svg(
-        realm_id, svg_id,
-    ))
+    check_ffi_res(unsafe { crate::ffi_realm_2d_svg::galfus_realm_2d_destroy_svg(realm_id, svg_id) })
 }
 
 #[wasm_bindgen(js_name = "realm2dCreateCollider")]
@@ -252,5 +254,88 @@ pub fn realm_2d_destroy_collider(realm_id: u32, collider_id: u32) -> Result<()> 
     check_ffi_res(crate::ffi_interaction::galfus_realm_2d_destroy_collider(
         realm_id,
         collider_id,
+    ))
+}
+
+#[wasm_bindgen(js_name = "realm2dCreateUi")]
+pub fn realm_2d_create_ui(
+    realm_id: u32,
+    ui_id: u32,
+    desc_val: JsUnknown,
+    transform_val: Option<JsUnknown>,
+) -> Result<()> {
+    let env = Env;
+    let c_desc = js_to_c_string(&env, Some(desc_val))?
+        .ok_or_else(|| Error::from_reason(Status::InvalidArg, "desc cannot be null"))?;
+    let c_tf = js_to_c_string(&env, transform_val)?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_ui::galfus_realm_2d_create_ui(
+            realm_id,
+            ui_id,
+            c_desc.as_ptr(),
+            c_tf.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        )
+    })
+}
+
+#[wasm_bindgen(js_name = "realm2dSetUiContent")]
+pub fn realm_2d_set_ui_content(realm_id: u32, ui_id: u32, desc_val: JsUnknown) -> Result<()> {
+    let env = Env;
+    let c_desc = js_to_c_string(&env, Some(desc_val))?
+        .ok_or_else(|| Error::from_reason(Status::InvalidArg, "desc cannot be null"))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_ui::galfus_realm_2d_set_ui_content(realm_id, ui_id, c_desc.as_ptr())
+    })
+}
+
+#[wasm_bindgen(js_name = "realm2dApplyUiCommands")]
+pub fn realm_2d_apply_ui_commands(
+    realm_id: u32,
+    ui_id: u32,
+    commands_val: JsUnknown,
+) -> Result<()> {
+    let env = Env;
+    let commands = js_to_c_string(&env, Some(commands_val))?
+        .ok_or_else(|| Error::from_reason(Status::InvalidArg, "commands cannot be null"))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_ui::galfus_realm_2d_apply_ui_commands(
+            realm_id,
+            ui_id,
+            commands.as_ptr(),
+        )
+    })
+}
+
+#[wasm_bindgen(js_name = "realm2dSetUiTransform")]
+pub fn realm_2d_set_ui_transform(
+    realm_id: u32,
+    ui_id: u32,
+    transform_val: JsUnknown,
+) -> Result<()> {
+    let env = Env;
+    let desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
+    let native_tf = crate::ffi_native_structs::GalfusTransform2D::from(
+        galfus_realm_2d_resources::Transform2D::from(desc),
+    );
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_ui::galfus_realm_2d_set_ui_transform(realm_id, ui_id, &native_tf)
+    })
+}
+
+#[wasm_bindgen(js_name = "realm2dGetUiTransform")]
+pub fn realm_2d_get_ui_transform(realm_id: u32, ui_id: u32) -> Result<JsUnknown> {
+    let env = Env;
+    let mut native_tf = crate::ffi_native_structs::GalfusTransform2D::default();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_ui::galfus_realm_2d_get_ui_transform(realm_id, ui_id, &mut native_tf)
+    })?;
+    let tf: galfus_realm_2d_resources::Transform2D = native_tf.into();
+    env.to_js_value(&tf)
+}
+
+#[wasm_bindgen(js_name = "realm2dDestroyUi")]
+pub fn realm_2d_destroy_ui(realm_id: u32, ui_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_2d_ui::galfus_realm_2d_destroy_ui(
+        realm_id, ui_id,
     ))
 }

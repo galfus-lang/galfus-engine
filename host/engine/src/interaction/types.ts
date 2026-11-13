@@ -7,7 +7,8 @@ import type {
 
 export type InteractiveTarget =
   | { type: 'collider'; entityId: number; colliderId?: number }
-  | { type: 'svg'; svgId: number; elementId: string };
+  | { type: 'svg'; svgId: number; elementId: string }
+  | { type: 'ui'; uiId: number; elementId: string | number };
 
 export type InteractiveEventType =
   | 'hover'
@@ -30,6 +31,8 @@ export interface InteractiveEvent {
   readonly pointer: PointerEvent;
   /** Normalized `[u, v]` coordinates (`0..1`) within the target surface or SVG element bounds. */
   readonly uv?: [number, number];
+  /** Sub-element numeric ID if targeted (e.g. UI Panel). */
+  readonly elementId?: number;
   /** Wheel / scroll delta when `type === 'scroll'`. */
   readonly scrollDelta?: ScrollDelta;
 }

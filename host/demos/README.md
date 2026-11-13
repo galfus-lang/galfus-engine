@@ -26,4 +26,4 @@ bun demo phys3d2 --headless --frames 10
 2. **Physics & Anchors (`anchor1`, `phys3d1`, `phys3d2`, `phys2d1`, `phys2d2`)**
 3. **Multiverse (`mv1`, `mv2`, `mv3`, `mv4`)**
 4. **Realm 3D (`3d1` .. `3d10`)**
-5. **Realm 2D & Animation (`2d1`, `2d2`, `2d3`, `anim1`)**
+5. **Realm 2D & Animation (`2d1`, `2d2`, `anim1`)**

@@ -55,13 +55,11 @@ export class MultiverseRuntime {
   readonly textEncoding: TextEncoding;
   readonly interaction = new InteractiveSystem(this.multiverse);
   readonly svg = {
-    getRect: (realmId: number, svgId: number, elementId: string) => {
-      const realm = this.multiverse.getRealm(realmId);
-      return realm instanceof Realm2D ? realm.getSvgElementRect(svgId, elementId) : undefined;
+    getRect: (_realmId: number, _svgId: number, _elementId: string) => {
+      return undefined;
     },
-    getTextLayout: (realmId: number, svgId: number, elementId: string) => {
-      const realm = this.multiverse.getRealm(realmId);
-      return realm instanceof Realm2D ? realm.getSvgTextLayout(svgId, elementId) : undefined;
+    getTextLayout: (_realmId: number, _svgId: number, _elementId: string) => {
+      return undefined;
     }
   };
   private readonly _realmIdAllocator = new IdAllocator<RealmId>(1);
@@ -70,9 +68,7 @@ export class MultiverseRuntime {
   private readonly _refreshAnimatedTarget = (target: AnimationTarget): void => {
     if (!('realmId' in target)) return;
     const realm = this.multiverse.getRealm(target.realmId);
-    if (realm instanceof Realm2D && 'svgId' in target) {
-      realm.invalidateSvgCache(target.svgId);
-    } else if (
+    if (
       realm instanceof Realm3D &&
       target.kind === 'camera3DLookAt' &&
       this.interaction.usesRealm(realm.realmId)

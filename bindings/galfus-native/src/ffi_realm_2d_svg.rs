@@ -2,413 +2,147 @@
 
 use std::ffi::c_char;
 
-use galfus_realm_2d::Realm2DContext;
-use galfus_realm_2d_resources::svg::Svg2DDesc;
-use galfus_realm_2d_resources::transform::Transform2D;
-
-use crate::ffi::{from_c_str, set_last_error, to_c_string};
+use crate::ffi::set_last_error;
 use crate::ffi_native_structs::GalfusTransform2D;
-use crate::ffi_realm_2d_desc::Transform2DDesc;
-use crate::state::{with_multiverse, with_multiverse_mut};
 
+const DECOUPLED_MSG: &str = "SVG has been decoupled from Realm2D into galfus-svg-realm";
+
+#[allow(dead_code)]
 pub(crate) fn svg_element_rect(
-    realm_id: u32,
-    svg_id: u32,
-    element_id: &str,
+    _realm_id: u32,
+    _svg_id: u32,
+    _element_id: &str,
 ) -> Result<serde_json::Value, String> {
-    with_multiverse(|mv| {
-        let realm = mv
-            .get_realm::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        let rect = realm.svg_manager.element_rect(svg_id, element_id)?;
-        Ok(match rect {
-            Some(rect) => serde_json::json!({ "rect": rect }),
-            None => serde_json::json!({}),
-        })
-    })
+    Err(DECOUPLED_MSG.to_string())
 }
 
+#[allow(dead_code)]
 pub(crate) fn svg_text_layout(
-    realm_id: u32,
-    svg_id: u32,
-    element_id: &str,
+    _realm_id: u32,
+    _svg_id: u32,
+    _element_id: &str,
 ) -> Result<serde_json::Value, String> {
-    with_multiverse(|mv| {
-        let realm = mv
-            .get_realm::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        let layout = realm.svg_manager.text_layout(svg_id, element_id)?;
-        Ok(match layout {
-            Some(layout) => serde_json::json!({ "layout": layout }),
-            None => serde_json::json!({}),
-        })
-    })
+    Err(DECOUPLED_MSG.to_string())
 }
 
 /// Returns raw shaped text cluster metrics as JSON.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_get_svg_text_layout(
-    realm_id: u32,
-    svg_id: u32,
-    element_id: *const c_char,
+    _realm_id: u32,
+    _svg_id: u32,
+    _element_id: *const c_char,
 ) -> *mut c_char {
-    let result = unsafe { from_c_str(element_id) }
-        .and_then(|id| svg_text_layout(realm_id, svg_id, id))
-        .and_then(|value| serde_json::to_string(&value).map_err(|e| e.to_string()));
-    match result {
-        Ok(json) => to_c_string(&json),
-        Err(error) => {
-            set_last_error(&error);
-            std::ptr::null_mut()
-        }
-    }
+    set_last_error(DECOUPLED_MSG);
+    std::ptr::null_mut()
 }
 
 /// Returns the SVG element bounds as JSON in viewport coordinates.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_get_svg_element_rect(
-    realm_id: u32,
-    svg_id: u32,
-    element_id: *const c_char,
+    _realm_id: u32,
+    _svg_id: u32,
+    _element_id: *const c_char,
 ) -> *mut c_char {
-    let result = unsafe { from_c_str(element_id) }
-        .and_then(|id| svg_element_rect(realm_id, svg_id, id))
-        .and_then(|value| serde_json::to_string(&value).map_err(|e| e.to_string()));
-    match result {
-        Ok(json) => to_c_string(&json),
-        Err(error) => {
-            set_last_error(&error);
-            std::ptr::null_mut()
-        }
-    }
-}
-
-unsafe fn parse_transform_2d(transform_json: *const c_char) -> Result<Transform2D, String> {
-    match unsafe { crate::ffi::from_c_str_optional(transform_json) } {
-        Ok(Some(s)) => {
-            let d: Transform2DDesc =
-                serde_json::from_str(s).map_err(|e| format!("Invalid Transform2DDesc: {e}"))?;
-            Ok(d.into())
-        }
-        Ok(None) => Ok(Transform2D::default()),
-        Err(e) => Err(e),
-    }
+    set_last_error(DECOUPLED_MSG);
+    std::ptr::null_mut()
 }
 
 /// Creates or updates a 2D SVG vector entity with an initial transform.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_create_svg(
-    realm_id: u32,
-    svg_id: u32,
-    svg_json: *const c_char,
-    transform_json: *const c_char,
+    _realm_id: u32,
+    _svg_id: u32,
+    _svg_json: *const c_char,
+    _transform_json: *const c_char,
 ) -> i32 {
-    let svg_desc: Svg2DDesc = match serde_json::from_str(match unsafe { from_c_str(svg_json) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    }) {
-        Ok(d) => d,
-        Err(e) => {
-            set_last_error(&format!("Invalid Svg2DDesc: {e}"));
-            return -1;
-        }
-    };
-    let trans = match unsafe { parse_transform_2d(transform_json) } {
-        Ok(t) => t,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm
-            .set_svg(svg_id, svg_desc.into(), trans)
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
+    set_last_error(DECOUPLED_MSG);
+    -1
 }
 
 /// Replaces the source XML markup string of an existing SVG entity.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_svg_source(
-    realm_id: u32,
-    svg_id: u32,
-    svg_xml: *const c_char,
+    _realm_id: u32,
+    _svg_id: u32,
+    _svg_xml: *const c_char,
 ) -> i32 {
-    let xml = match unsafe { from_c_str(svg_xml) } {
-        Ok(s) => s.to_string(),
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm
-            .set_svg_source(svg_id, xml)
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
+    set_last_error(DECOUPLED_MSG);
+    -1
 }
 
 /// Sets or overwrites an XML attribute on the matching element ID in the SVG.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_svg_attribute(
-    realm_id: u32,
-    svg_id: u32,
-    element_id: *const c_char,
-    attr_name: *const c_char,
-    attr_value: *const c_char,
+    _realm_id: u32,
+    _svg_id: u32,
+    _element_id: *const c_char,
+    _attr_name: *const c_char,
+    _attr_value: *const c_char,
 ) -> i32 {
-    let elem_id = match unsafe { from_c_str(element_id) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-    let name = match unsafe { from_c_str(attr_name) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-    let val = match unsafe { from_c_str(attr_value) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm
-            .set_svg_attribute(svg_id, elem_id, name, val)
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
+    set_last_error(DECOUPLED_MSG);
+    -1
 }
 
 /// Removes an XML attribute from the matching element ID in the SVG.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_remove_svg_attribute(
-    realm_id: u32,
-    svg_id: u32,
-    element_id: *const c_char,
-    attr_name: *const c_char,
+    _realm_id: u32,
+    _svg_id: u32,
+    _element_id: *const c_char,
+    _attr_name: *const c_char,
 ) -> i32 {
-    let elem_id = match unsafe { from_c_str(element_id) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-    let name = match unsafe { from_c_str(attr_name) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm
-            .remove_svg_attribute(svg_id, elem_id, name)
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
+    set_last_error(DECOUPLED_MSG);
+    -1
 }
 
 /// Updates the inner text content of the matching element ID in the SVG.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_svg_text(
-    realm_id: u32,
-    svg_id: u32,
-    element_id: *const c_char,
-    text_content: *const c_char,
+    _realm_id: u32,
+    _svg_id: u32,
+    _element_id: *const c_char,
+    _text: *const c_char,
 ) -> i32 {
-    let elem_id = match unsafe { from_c_str(element_id) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-    let text = match unsafe { from_c_str(text_content) } {
-        Ok(s) => s,
-        Err(e) => {
-            set_last_error(&e);
-            return -1;
-        }
-    };
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm
-            .set_svg_text(svg_id, elem_id, text)
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
+    set_last_error(DECOUPLED_MSG);
+    -1
 }
 
 /// Updates the transform of an existing SVG entity via JSON descriptor.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_svg_transform(
-    realm_id: u32,
-    svg_id: u32,
-    transform: *const GalfusTransform2D,
+    _realm_id: u32,
+    _svg_id: u32,
+    _transform_json: *const c_char,
 ) -> i32 {
-    if transform.is_null() {
-        set_last_error("Null pointer passed to set_svg_transform");
-        return -1;
-    }
-    // SAFETY: The pointer was checked above and copied before this function returns.
-    let trans = unsafe { (*transform).into() };
+    set_last_error(DECOUPLED_MSG);
+    -1
+}
 
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm
-            .set_svg_transform(svg_id, trans)
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
+/// Updates the transform of an existing SVG entity via direct float pointer [x, y, rotation, scale_x, scale_y, z_layer, draw_order].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_2d_set_svg_transform_fast(
+    _realm_id: u32,
+    _svg_id: u32,
+    _ptr: *const f32,
+) -> i32 {
+    set_last_error(DECOUPLED_MSG);
+    -1
 }
 
 /// Reads the transform of a 2D SVG entity into a caller-owned fixed-layout value.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_get_svg_transform(
-    realm_id: u32,
-    svg_id: u32,
-    out_transform: *mut GalfusTransform2D,
+    _realm_id: u32,
+    _svg_id: u32,
+    _out: *mut GalfusTransform2D,
 ) -> i32 {
-    if out_transform.is_null() {
-        set_last_error("Null pointer passed to get_svg_transform");
-        return -1;
-    }
-    match with_multiverse(|mv| {
-        let realm = mv
-            .get_realm::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        let t = realm
-            .get_svg_transform(svg_id)
-            .ok_or_else(|| format!("SVG #{svg_id} not found in Realm2D #{realm_id}"))?;
-        // SAFETY: The pointer was checked above and points to one caller-owned output struct.
-        unsafe { *out_transform = t.into() };
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
+    set_last_error(DECOUPLED_MSG);
+    -1
 }
 
-/// Destroys an existing 2D SVG entity.
+/// Destroys a 2D SVG entity and frees its associated generational pool geometry.
 #[unsafe(no_mangle)]
-pub extern "C" fn galfus_realm_2d_destroy_svg(realm_id: u32, svg_id: u32) -> i32 {
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        realm.destroy_svg(svg_id).map_err(|e| e.to_string())?;
-        Ok(())
-    }) {
-        Ok(()) => 0,
-        Err(e) => {
-            set_last_error(&e);
-            -1
-        }
-    }
-}
-
-/// Registers raw TTF/OTF font binary data from memory (zero filesystem access).
-///
-/// Accepts raw font buffer pointer and length, returning the detected font family name as a C string.
-///
-/// # Safety
-/// `data_ptr` must be valid for reads of `data_len` bytes.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn galfus_realm_2d_load_font_data(
-    realm_id: u32,
-    data_ptr: *const u8,
-    data_len: usize,
-) -> *mut c_char {
-    if data_ptr.is_null() || data_len == 0 {
-        set_last_error("Null or empty font buffer");
-        return std::ptr::null_mut();
-    }
-    let bytes = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
-
-    match with_multiverse_mut(|mv| {
-        let realm = mv
-            .get_realm_mut::<Realm2DContext>(realm_id)
-            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
-        let family = realm.load_font_data(bytes).map_err(|e| e.to_string())?;
-        Ok(family)
-    }) {
-        Ok(family) => to_c_string(&family),
-        Err(e) => {
-            set_last_error(&e);
-            std::ptr::null_mut()
-        }
-    }
+pub unsafe extern "C" fn galfus_realm_2d_destroy_svg(_realm_id: u32, _svg_id: u32) -> i32 {
+    set_last_error(DECOUPLED_MSG);
+    -1
 }

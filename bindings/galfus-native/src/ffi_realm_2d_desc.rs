@@ -416,3 +416,17 @@ impl From<ParticleEmitter2DDesc> for ParticleEmitter2D {
         }
     }
 }
+
+pub(crate) unsafe fn parse_transform_2d(
+    transform_json: *const std::ffi::c_char,
+) -> Result<Transform2D, String> {
+    match unsafe { crate::ffi::from_c_str_optional(transform_json) } {
+        Ok(Some(s)) => {
+            let d: Transform2DDesc =
+                serde_json::from_str(s).map_err(|e| format!("Invalid Transform2DDesc: {e}"))?;
+            Ok(d.into())
+        }
+        Ok(None) => Ok(Transform2D::default()),
+        Err(e) => Err(e),
+    }
+}

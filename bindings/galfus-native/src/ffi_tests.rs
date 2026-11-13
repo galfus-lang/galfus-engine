@@ -124,6 +124,59 @@ fn test_ffi_interaction_and_collision() {
     // 2. Create Realm 2D
     assert_eq!(galfus_realm_2d_create(10), 0);
 
+    let ui_desc = CString::new("{}").unwrap();
+    assert_eq!(
+        unsafe {
+            crate::ffi_realm_2d_ui::galfus_realm_2d_create_ui(
+                10,
+                77,
+                ui_desc.as_ptr(),
+                std::ptr::null(),
+            )
+        },
+        0
+    );
+    let commands = CString::new(r#"[{"type":"create","id":1,"kind":{"type":"panel"}}]"#).unwrap();
+    assert_eq!(
+        unsafe {
+            crate::ffi_realm_2d_ui::galfus_realm_2d_apply_ui_commands(10, 77, commands.as_ptr())
+        },
+        0
+    );
+    let invalid =
+        CString::new(r#"[{"type":"setVisible","id":1,"visible":false},{"type":"remove","id":2}]"#)
+            .unwrap();
+    assert_eq!(
+        unsafe {
+            crate::ffi_realm_2d_ui::galfus_realm_2d_apply_ui_commands(10, 77, invalid.as_ptr())
+        },
+        -1
+    );
+    crate::state::with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<galfus_realm_2d::context::Realm2DContext>(10)
+            .unwrap();
+        assert!(realm.uis[&77].0.nodes[&1].visible);
+        Ok(())
+    })
+    .unwrap();
+
+    let cam_json = CString::new(r#"{"cameraSlot":0,"active":true,"orthoScale":1.0}"#).unwrap();
+    let cam_res =
+        unsafe { galfus_realm_2d_create_camera(10, 100, cam_json.as_ptr(), std::ptr::null()) };
+    if cam_res != 0 {
+        let err = unsafe { from_c_str(galfus_get_last_error()) }.unwrap();
+        panic!("create_camera failed: {err}");
+    }
+
+    let sprite_json = CString::new(r#"{"dimensions":[100.0,50.0]}"#).unwrap();
+    let sprite_res =
+        unsafe { galfus_realm_2d_create_sprite(10, 42, sprite_json.as_ptr(), std::ptr::null()) };
+    if sprite_res != 0 {
+        let err = unsafe { from_c_str(galfus_get_last_error()) }.unwrap();
+        panic!("create_sprite failed: {err}");
+    }
+
     // 3. Create Collider on Model 42
     let collider_json =
         CString::new(r#"{"shape":{"type":"rectangle","halfExtents":[50.0,25.0]}}"#).unwrap();
@@ -141,6 +194,7 @@ fn test_ffi_interaction_and_collision() {
         unsafe { galfus_multiverse_create_invocation(1000, inv_json.as_ptr()) },
         0
     );
+    assert_eq!(galfus_multiverse_publish_interaction_frame(100), 0);
 
     // 5. Send Pointer Move at center of screen (400, 300) -> should hit model 42 at (0, 0)
     let move_json = CString::new(r#"{"type":"move","windowId":100,"pointerId":1,"position":[400.0,300.0],"delta":[0.0,0.0]}"#).unwrap();

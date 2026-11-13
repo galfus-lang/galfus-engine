@@ -7,6 +7,7 @@ pub mod api;
 mod api_animation;
 pub mod bloom;
 pub mod collector;
+pub mod collision_geometry;
 pub mod context;
 mod context_collision;
 pub mod gizmo;

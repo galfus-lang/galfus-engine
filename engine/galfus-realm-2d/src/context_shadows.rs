@@ -1,6 +1,5 @@
 use bytemuck::cast_slice;
 use galfus_realm_2d_resources::{Light2DUniform, Occluder2D, OccluderSilhouette2D};
-use glam::Vec2;
 
 use crate::context::Realm2DContext;
 use crate::gpu::GpuResources2D;
@@ -92,32 +91,6 @@ impl Realm2DContext {
                         shadow_height: shape.shadow_height,
                         height_range: shape.height_range,
                     });
-                });
-            }
-        }
-
-        for (&id, instance) in &self.svg_manager.instances {
-            if instance.svg.cast_shadow {
-                let fallback_size = instance
-                    .geometry_handle
-                    .and_then(|handle| {
-                        self.svg_manager
-                            .pool
-                            .get(handle)
-                            .ok()
-                            .map(|geometry| geometry.dimensions)
-                    })
-                    .unwrap_or(Vec2::splat(100.0));
-                self.shadow_data.occluders.push(Occluder2D {
-                    entity_id: id,
-                    silhouette: OccluderSilhouette2D::from_quad(
-                        instance
-                            .svg
-                            .compute_world_corners(&instance.transform, fallback_size),
-                    ),
-                    shadow_layer_mask: instance.svg.shadow_layer_mask,
-                    shadow_height: instance.svg.shadow_height,
-                    height_range: instance.svg.height_range,
                 });
             }
         }

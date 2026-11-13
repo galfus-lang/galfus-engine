@@ -8,12 +8,12 @@ import {
 } from '../src/catalog';
 
 describe('@galfus/demos catalog & headless smoke suite', () => {
-  it('registers all 34 demos across 6 categories with unique IDs', () => {
-    expect(DEMO_CATALOG.length).toBe(34);
+  it('registers all 33 demos across 6 categories with unique IDs', () => {
+    expect(DEMO_CATALOG.length).toBe(33);
     expect(DEMO_CATEGORIES.length).toBe(6);
 
     const ids = new Set(DEMO_CATALOG.map((d) => d.id));
-    expect(ids.size).toBe(34);
+    expect(ids.size).toBe(33);
 
     for (const cat of DEMO_CATEGORIES) {
       const entries = filterDemosByCategory(cat);
@@ -82,7 +82,7 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
   }, 45000);
 
   it('runs all Realm 2D feature and animation demos headlessly', async () => {
-    const r2dIds = ['2d1', '2d3', 'anim1'];
+    const r2dIds = ['2d1', 'anim1'];
     for (const id of r2dIds) {
       const demo = findDemo(id);
       expect(demo).toBeDefined();

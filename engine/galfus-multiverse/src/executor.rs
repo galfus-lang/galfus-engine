@@ -19,7 +19,7 @@ pub(crate) fn execute_frame(
     ctx: &mut MultiverseContext,
     frame_id: u64,
     delta_time: f32,
-) -> MultiverseResult<()> {
+) -> MultiverseResult<Vec<u32>> {
     let schedule = ctx.resolve()?.clone();
 
     ctx.ensure_gpu_manager()?;
@@ -84,6 +84,9 @@ pub(crate) fn execute_frame(
     let target_textures = &ctx.target_textures;
     let target_history_textures = &ctx.target_history_textures;
     let tex_resolver = |id: u32| {
+        if let Ok(view) = gpu.textures.get_logical_view(id) {
+            return Some(view.raw());
+        }
         // In the prepare phase before rendering any targets, return the N-1 historical texture
         // if this target is an unresolved dependency in a soft cut.
         if let Some((_, view_h, _)) = target_history_textures.get(&id)
@@ -96,7 +99,7 @@ pub(crate) fn execute_frame(
         {
             return Some(view.raw());
         }
-        gpu.textures.get_logical_view(id).ok().map(|v| v.raw())
+        None
     };
 
     // 1. Prepare all active realms once
@@ -582,9 +585,11 @@ pub(crate) fn execute_frame(
     }
 
     // Present all active window swapchains
-    for (_, surface_tex) in surface_textures {
+    let mut presented_windows = Vec::with_capacity(surface_textures.len());
+    for (window_id, surface_tex) in surface_textures {
         surface_tex.present();
+        presented_windows.push(window_id);
     }
 
-    Ok(())
+    Ok(presented_windows)
 }

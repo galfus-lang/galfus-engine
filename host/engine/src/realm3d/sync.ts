@@ -9,7 +9,12 @@ import type {
   Transform3D
 } from '@galfus/transport-types';
 import type { AnchorMatrixCache } from '../anchors/cache';
-import { type Collider3DComponent, getColliderEntries } from '../collision/components';
+import {
+  type Collider3DComponent,
+  type ColliderEntry,
+  getColliderEntries,
+  type ColliderShape3D as HostColliderShape3D
+} from '../collision/components';
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';
 import { mat4, quat, vec3 } from '../math/index';
@@ -45,7 +50,10 @@ export class Realm3DSyncSystem {
   private readonly _syncedEmitters = new Set<number>();
   private readonly _syncedPortals = new Set<number>();
   private readonly _syncedInstancedModels = new Set<number>();
-  private readonly _syncedColliders = new Set<number>();
+  private readonly _syncedColliders = new Map<
+    number,
+    { modelId: number; entry: ColliderEntry<HostColliderShape3D> }
+  >();
   private readonly _transformCache = new Map<EntityId, Transform3D>();
 
   constructor(
@@ -414,8 +422,10 @@ export class Realm3DSyncSystem {
 
       for (const entry of getColliderEntries(colliderComp)) {
         if (!entry.active) continue;
+        const previous = this._syncedColliders.get(entry.colliderId);
+        if (entry.shape.type !== 'box' && entry.shape.type !== 'sphere') continue;
         currentColliders.add(entry.colliderId);
-        if (!this._syncedColliders.has(entry.colliderId)) {
+        if (!previous || previous.modelId !== model.modelId || previous.entry !== entry) {
           let offset: [number, number, number] | undefined;
           if (
             entry.matrix &&
@@ -437,11 +447,11 @@ export class Realm3DSyncSystem {
             layer: entry.layer,
             mask: entry.mask
           });
-          this._syncedColliders.add(entry.colliderId);
+          this._syncedColliders.set(entry.colliderId, { modelId: model.modelId, entry });
         }
       }
     }
-    for (const colliderId of this._syncedColliders) {
+    for (const colliderId of this._syncedColliders.keys()) {
       if (!currentColliders.has(colliderId)) {
         engine.realm3dDestroyCollider(this.realmId, colliderId);
         this._syncedColliders.delete(colliderId);
@@ -479,7 +489,11 @@ export class Realm3DSyncSystem {
       for (const id of this._syncedPortals) engine.realm3dDestroyPortal(this.realmId, id);
       for (const id of this._syncedInstancedModels)
         engine.realm3dDestroyInstancedModel(this.realmId, id);
-      for (const id of this._syncedColliders) engine.realm3dDestroyCollider(this.realmId, id);
+      for (const id of this._syncedColliders.keys()) {
+        try {
+          engine.realm3dDestroyCollider(this.realmId, id);
+        } catch {}
+      }
     }
     this._syncedModels.clear();
     this._syncedLights.clear();

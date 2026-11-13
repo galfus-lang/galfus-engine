@@ -434,6 +434,38 @@ export function solveLayout(
     case 'grid':
       inner = solveGrid(layout, innerX, innerY, innerW, innerH, items);
       break;
+    case 'stack':
+    case 'relative': {
+      const rects: UiRect[] = [];
+      let maxX = 0;
+      let maxY = 0;
+      const fit = layout.fit ?? 'expand';
+      for (const item of items) {
+        const defaultW = fit === 'expand' ? innerW : 0;
+        const defaultH = fit === 'expand' ? innerH : 0;
+        const wSpec =
+          item.width !== undefined ? parseSpec(item.width, innerW, innerW).value : defaultW;
+        const hSpec =
+          item.height !== undefined ? parseSpec(item.height, innerH, innerH).value : defaultH;
+        const maxW =
+          innerW > 0
+            ? Math.min(item.maxWidth ?? Infinity, Math.max(item.minWidth ?? 0, innerW))
+            : item.maxWidth;
+        const maxH =
+          innerH > 0
+            ? Math.min(item.maxHeight ?? Infinity, Math.max(item.minHeight ?? 0, innerH))
+            : item.maxHeight;
+        const w = clampSize(wSpec, item.minWidth, maxW);
+        const h = clampSize(hSpec, item.minHeight, maxH);
+        const ox = item.x ?? 0;
+        const oy = item.y ?? 0;
+        rects.push({ x: innerX + ox, y: innerY + oy, width: w, height: h });
+        maxX = Math.max(maxX, ox + w);
+        maxY = Math.max(maxY, oy + h);
+      }
+      inner = { rects, contentWidth: maxX, contentHeight: maxY };
+      break;
+    }
     case 'free': {
       const rects: UiRect[] = [];
       let maxX = 0;
