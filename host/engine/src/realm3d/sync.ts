@@ -423,7 +423,13 @@ export class Realm3DSyncSystem {
       for (const entry of getColliderEntries(colliderComp)) {
         if (!entry.active) continue;
         const previous = this._syncedColliders.get(entry.colliderId);
-        if (entry.shape.type !== 'box' && entry.shape.type !== 'sphere') continue;
+        if (
+          entry.shape.type !== 'box' &&
+          entry.shape.type !== 'sphere' &&
+          entry.shape.type !== 'cylinder' &&
+          entry.shape.type !== 'capsule'
+        )
+          continue;
         currentColliders.add(entry.colliderId);
         if (!previous || previous.modelId !== model.modelId || previous.entry !== entry) {
           let offset: [number, number, number] | undefined;
@@ -438,12 +444,27 @@ export class Realm3DSyncSystem {
             shapeDesc = { type: 'box', halfExtents: entry.shape.halfExtents, offset };
           } else if (entry.shape.type === 'sphere') {
             shapeDesc = { type: 'sphere', radius: entry.shape.radius, offset };
+          } else if (entry.shape.type === 'cylinder') {
+            shapeDesc = {
+              type: 'cylinder',
+              radius: entry.shape.radius,
+              halfHeight: entry.shape.halfHeight,
+              offset
+            };
+          } else if (entry.shape.type === 'capsule') {
+            shapeDesc = {
+              type: 'capsule',
+              radius: entry.shape.radius,
+              halfHeight: entry.shape.halfHeight,
+              offset
+            };
           } else {
             continue;
           }
           engine.realm3dCreateCollider(this.realmId, entry.colliderId, model.modelId, {
             shape: shapeDesc,
             offset,
+            sensor: entry.sensor ?? false,
             layer: entry.layer,
             mask: entry.mask
           });

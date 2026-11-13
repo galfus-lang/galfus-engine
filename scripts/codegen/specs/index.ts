@@ -1,4 +1,5 @@
 import { animationDescriptors, animationFunctions } from './animation';
+import { hierarchyPhysicsDescriptors, hierarchyPhysicsFunctions } from './hierarchy_physics';
 import { interactionDescriptors, interactionFunctions } from './interaction';
 import { multiverseDescriptors, multiverseFunctions } from './multiverse';
 import { platformDescriptors, platformFunctions } from './platform';
@@ -8,6 +9,7 @@ import { resourceDescriptors, resourceFunctions } from './resources';
 import type { DescSpec, FunctionSpec } from './types';
 
 export { animationDescriptors, animationFunctions } from './animation';
+export { hierarchyPhysicsDescriptors, hierarchyPhysicsFunctions } from './hierarchy_physics';
 export { interactionDescriptors, interactionFunctions } from './interaction';
 export { multiverseDescriptors, multiverseFunctions } from './multiverse';
 export { platformDescriptors, platformFunctions } from './platform';
@@ -26,7 +28,8 @@ export const API_FUNCTIONS: FunctionSpec[] = [
   ...realm3dFunctions,
   ...realm2dFunctions,
   ...animationFunctions,
-  ...interactionFunctions
+  ...interactionFunctions,
+  ...hierarchyPhysicsFunctions
 ];
 
 /**
@@ -44,7 +47,8 @@ export const API_DESCRIPTORS: DescSpec[] = [
   ...realm3dDescriptors,
   ...realm2dDescriptors,
   ...animationDescriptors,
-  ...interactionDescriptors
+  ...interactionDescriptors,
+  ...hierarchyPhysicsDescriptors
 ];
 
 /**

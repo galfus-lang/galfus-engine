@@ -194,11 +194,11 @@ describe('host collider components and spatial queries', () => {
       { type: 'rectangle', halfExtents: [1, 2] },
       { matrix: [1, 0, 0, 1, 4, 0], layer: 4 }
     );
-    expect(realm.queryPoint([12, 2]).map((h) => h.colliderId)).toEqual([circle]);
+    expect(realm.queryPoint([12, 2]).map((h: any) => h.colliderId)).toEqual([circle]);
     expect(realm.queryPoint([16, 2], 2)).toEqual([]);
     expect(realm.queryPoint([16, 2], 4)[0]?.colliderId).toBe(rect);
     const hits = realm.raycast([8, 2], [1, 0], 20);
-    expect(hits.map((h) => h.colliderId)).toEqual([circle, rect]);
+    expect(hits.map((h: any) => h.colliderId)).toEqual([circle, rect]);
     expect(hits[0]?.distance).toBeCloseTo(3);
     expect(hits[0]?.normal[0]).toBeCloseTo(-1);
     expect(hits[0]?.sensor).toBe(true);
@@ -217,10 +217,14 @@ describe('host collider components and spatial queries', () => {
       { matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 2, 1] }
     );
     const hits3d = realm3d.raycast([0, 0, 0], [0, 0, 1], 10);
-    expect(hits3d.map((h) => h.colliderId)).toEqual([sphere, plane]);
+    expect(hits3d.map((h: any) => h.colliderId)).toEqual([sphere, plane]);
     expect(hits3d[0]?.distance).toBeCloseTo(2);
     expect(hits3d[1]?.distance).toBeCloseTo(5);
-    const originalNormal: [number, number, number] = [...hits3d[0]!.normal];
+    const originalNormal: [number, number, number] = [
+      hits3d[0]!.normal[0],
+      hits3d[0]!.normal[1],
+      hits3d[0]!.normal[2]
+    ];
     realm3d.raycast([0, 0, 8], [0, 0, -1], 10);
     expect(hits3d[0]!.normal).toEqual(originalNormal);
     realm3d.reset();

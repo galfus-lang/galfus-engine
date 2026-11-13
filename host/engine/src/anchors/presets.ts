@@ -102,7 +102,7 @@ export interface AngularSpringAnchorOptions {
 
 /**
  * Ergonomic factory functions for configuring 2D and 3D Anchor relationships.
- * Works both kinematically (via `AnchorSolveSystem`) and physically (via `@galfus/physics-2d` / `3d`).
+ * Works both kinematically (via `AnchorSolveSystem`) and physically via native Rapier physics.
  */
 export const presetsAnchor = {
   static(offset?: readonly number[]): AnchorPresetDescriptor {

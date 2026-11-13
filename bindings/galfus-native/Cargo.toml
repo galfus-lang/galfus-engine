@@ -20,6 +20,7 @@ serde.workspace = true
 serde_json.workspace = true
 glam.workspace = true
 galfus-realm-core.workspace = true
+galfus-physics.workspace = true
 galfus-realm-3d.workspace = true
 galfus-realm-3d-resources.workspace = true
 galfus-realm-2d.workspace = true

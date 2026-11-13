@@ -64,9 +64,10 @@ mod tests {
 
     #[test]
     fn test_frustum_culling_center_object() {
-        let view = Mat4::look_at_rh(Vec3::new(0.0, 0.0, 10.0), Vec3::ZERO, Vec3::Y);
+        let view =
+            glam::camera::rh::view::look_at_mat4(Vec3::new(0.0, 0.0, 10.0), Vec3::ZERO, Vec3::Y);
         // Reverse-Z perspective: near at 0.1 maps to 1.0, far at 100.0 maps to 0.0
-        let proj = Mat4::perspective_infinite_reverse_rh(1.0, 1.0, 0.1);
+        let proj = glam::camera::rh::proj::directx::perspective_infinite_reverse(1.0, 1.0, 0.1);
         let frustum = Frustum::from_view_projection(proj * view);
 
         // An object centered at origin [ -1..1 ] should be inside

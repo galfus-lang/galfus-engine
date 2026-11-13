@@ -59,8 +59,6 @@ describe('@galfus/engine CLI (galfus-engine init & build)', () => {
       {
         '@galfus/engine': '^1.0.0',
         '@galfus/transport-node': '^1.0.0',
-        '@galfus/physics-3d': '^1.0.0',
-        '@galfus/physics-types': '^1.0.0',
         '@types/bun': '^1.0.0',
         typescript: '^5.0.0'
       }
@@ -69,8 +67,6 @@ describe('@galfus/engine CLI (galfus-engine init & build)', () => {
     const parsed = JSON.parse(pkgJson);
     expect(parsed.dependencies['@galfus/engine']).toBe('^1.0.0');
     expect(parsed.dependencies['@galfus/transport-node']).toBe('^1.0.0');
-    expect(parsed.dependencies['@galfus/physics-3d']).toBe('^1.0.0');
-    expect(parsed.dependencies['@galfus/physics-types']).toBe('^1.0.0');
     expect(parsed.devDependencies['typescript']).toBe('^5.0.0');
   });
 

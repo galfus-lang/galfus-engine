@@ -43,7 +43,6 @@ export async function resolveProjectVersions(
   const pkgs = [
     '@galfus/engine',
     config.transport === 'bun' ? '@galfus/transport-bun' : '@galfus/transport-node',
-    ...(config.template === 'physics' ? ['@galfus/physics-3d', '@galfus/physics-types'] : []),
     '@types/bun',
     'typescript'
   ];
@@ -80,14 +79,6 @@ export async function createPackageJson(
     [transportName]: versions[transportName] ?? 'latest'
   };
 
-  const physicsDeps =
-    config.template === 'physics'
-      ? {
-          '@galfus/physics-3d': versions['@galfus/physics-3d'] ?? 'latest',
-          '@galfus/physics-types': versions['@galfus/physics-types'] ?? 'latest'
-        }
-      : {};
-
   const pkg = {
     name: config.name,
     version: '0.1.0',
@@ -100,8 +91,7 @@ export async function createPackageJson(
     },
     dependencies: {
       '@galfus/engine': versions['@galfus/engine'] ?? 'latest',
-      ...transportDep,
-      ...physicsDeps
+      ...transportDep
     },
     devDependencies: {
       '@types/bun': versions['@types/bun'] ?? 'latest',
@@ -305,8 +295,7 @@ main().catch(console.error);
 
   // Physics template
   return `${transportImport}
-import { createRuntime, utils3D } from '@galfus/engine';
-import { attachPhysics3D } from '@galfus/physics-3d';
+import { attachPhysics3D, createRuntime, utils3D } from '@galfus/engine';
 
 async function main() {
   const transport = ${transportInstantiation};

@@ -111,8 +111,8 @@ export interface AnchorComponent extends Component {
   /** Whether this anchor is currently active. */
   active: boolean;
   /**
-   * When true, a physics package (@galfus/physics-2d or @galfus/physics-3d) manages this
-   * anchor as a physical Joint during `fixedTick`, and `AnchorSolveSystem` skips matrix multiplication.
+   * When true, native physics manages this anchor as a physical Joint,
+   * and `AnchorSolveSystem` skips matrix multiplication.
    */
   managedByPhysics?: boolean;
 }

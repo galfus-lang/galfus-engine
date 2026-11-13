@@ -1,6 +1,6 @@
 # `@galfus/demos`
 
-Unified interactive catalog of **27 Galfus Engine demonstrations** built on `@galfus/engine`, `@galfus/physics-3d`, and `@galfus/physics-2d`.
+Unified interactive catalog of **27 Galfus Engine demonstrations** built on `@galfus/engine`.
 
 ## Quick Start
 

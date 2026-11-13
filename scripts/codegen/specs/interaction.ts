@@ -19,6 +19,12 @@ export const interactionDescriptors: DescSpec[] = [
           radius: { type: 'number' },
           offset: { type: { tuple: ['number', 'number'] }, optional: true }
         }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'polygon' } },
+          vertices: { type: { array: { tuple: ['number', 'number'] } } }
+        }
       }
     ]
   },
@@ -29,6 +35,7 @@ export const interactionDescriptors: DescSpec[] = [
     fields: {
       shape: { type: { ref: 'ColliderShape2D' } },
       offset: { type: { tuple: ['number', 'number'] }, optional: true },
+      sensor: { type: 'boolean', optional: true },
       layer: { type: 'number', optional: true },
       mask: { type: 'number', optional: true }
     }
@@ -51,6 +58,22 @@ export const interactionDescriptors: DescSpec[] = [
           radius: { type: 'number' },
           offset: { type: { tuple: ['number', 'number', 'number'] }, optional: true }
         }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'cylinder' } },
+          radius: { type: 'number' },
+          halfHeight: { type: 'number' },
+          offset: { type: { tuple: ['number', 'number', 'number'] }, optional: true }
+        }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'capsule' } },
+          radius: { type: 'number' },
+          halfHeight: { type: 'number' },
+          offset: { type: { tuple: ['number', 'number', 'number'] }, optional: true }
+        }
       }
     ]
   },
@@ -61,6 +84,7 @@ export const interactionDescriptors: DescSpec[] = [
     fields: {
       shape: { type: { ref: 'ColliderShape3D' } },
       offset: { type: { tuple: ['number', 'number', 'number'] }, optional: true },
+      sensor: { type: 'boolean', optional: true },
       layer: { type: 'number', optional: true },
       mask: { type: 'number', optional: true }
     }

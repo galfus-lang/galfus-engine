@@ -128,12 +128,14 @@ impl Light3D {
                 } else {
                     Vec3::Y
                 };
-                let view = Mat4::look_to_rh(pos, dir, up);
+                let view = glam::camera::rh::view::look_to_mat4(pos, dir, up);
                 // Reverse-Z shadow projection (size: 50.0, far: 100.0, near: -100.0)
                 let size = 50.0;
                 let near = -100.0;
                 let far = 100.0;
-                let proj = Mat4::orthographic_rh(-size, size, -size, size, far, near);
+                let proj = glam::camera::rh::proj::directx::orthographic(
+                    -size, size, -size, size, far, near,
+                );
                 proj * view
             }
             LightKind3D::Spot => {
@@ -142,10 +144,10 @@ impl Light3D {
                 } else {
                     Vec3::Y
                 };
-                let view = Mat4::look_to_rh(pos, dir, up);
+                let view = glam::camera::rh::view::look_to_mat4(pos, dir, up);
                 let fov =
                     (self.spot_inner_outer.y.acos() * 2.0).clamp(0.1, std::f32::consts::PI - 0.1);
-                let proj = Mat4::perspective_rh(fov, 1.0, self.range, 0.1);
+                let proj = glam::camera::rh::proj::directx::perspective(fov, 1.0, self.range, 0.1);
                 proj * view
             }
             LightKind3D::Point => {
@@ -154,9 +156,9 @@ impl Light3D {
                 } else {
                     Vec3::Y
                 };
-                let view = Mat4::look_to_rh(pos, dir, up);
+                let view = glam::camera::rh::view::look_to_mat4(pos, dir, up);
                 let fov = 120.0f32.to_radians();
-                let proj = Mat4::perspective_rh(fov, 1.0, self.range, 0.1);
+                let proj = glam::camera::rh::proj::directx::perspective(fov, 1.0, self.range, 0.1);
                 proj * view
             }
             _ => Mat4::IDENTITY,

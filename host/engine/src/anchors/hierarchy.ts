@@ -17,6 +17,8 @@ import {
   createAnchor
 } from './component';
 import { presetsAnchor } from './presets';
+import { serializeConstraint } from './serialize';
+
 import type { AnchorConstraintCallback2D, AnchorConstraintCallback3D } from './strategy';
 
 export type EntityLike = EntityId | { entityId: EntityId };
@@ -51,11 +53,27 @@ export function resolveEntityId(entity: EntityLike): EntityId {
 
 export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
   private readonly _dependentsByTarget = new Map<EntityId, Set<EntityId>>();
+  private readonly _physicsBodies = new Set<EntityId>();
+  private _engine: any = null;
+  private _realmId: number | null = null;
 
   constructor(
     private readonly _world: EcsWorld,
     private readonly _dimension: Kind
   ) {}
+
+  /**
+   * Binds the coordinator to the underlying transport engine and realm ID.
+   */
+  bindEngine(engine: any, realmId: number): void {
+    this._engine = engine;
+    this._realmId = realmId;
+  }
+
+  setPhysicsBody(entityId: EntityId, enabled: boolean): void {
+    if (enabled) this._physicsBodies.add(entityId);
+    else this._physicsBodies.delete(entityId);
+  }
 
   /**
    * Attaches an origin entity to a target reference entity with an optional constraint.
@@ -165,7 +183,20 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
         strategy,
         params,
         callback2d,
-        callback3d
+        callback3d,
+        managedByPhysics:
+          this._physicsBodies.has(originId) &&
+          this._physicsBodies.has(targetId) &&
+          [
+            'static',
+            'fixed',
+            'hinge',
+            'revolute',
+            'angularSpring',
+            'chain',
+            'rope',
+            'spring'
+          ].includes(strategy)
       })
     );
 
@@ -179,6 +210,40 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
 
     // Invalidate origin spatial state immediately
     this._invalidateOrigin(originId);
+
+    const anchor = this._world.getComponent<AnchorComponent>(originId, 'Anchor');
+    if (this._engine && this._realmId !== null && anchor?.managedByPhysics) {
+      const originModel = this._world.getComponent<Model2DComponent | Model3DComponent>(
+        originId,
+        this._dimension === '3d' ? 'Model3D' : 'Model2D'
+      );
+      const targetModel = this._world.getComponent<Model2DComponent | Model3DComponent>(
+        targetId,
+        this._dimension === '3d' ? 'Model3D' : 'Model2D'
+      );
+      if (!originModel || !targetModel)
+        throw new Error('Physical anchors require models on both entities.');
+      const serialized = serializeConstraint(constraint, this._dimension);
+      if (this._dimension === '3d') {
+        if (typeof this._engine.realm3dAttach === 'function') {
+          this._engine.realm3dAttach(
+            this._realmId,
+            originModel.modelId,
+            targetModel.modelId,
+            serialized
+          );
+        }
+      } else {
+        if (typeof this._engine.realm2dAttach === 'function') {
+          this._engine.realm2dAttach(
+            this._realmId,
+            originModel.modelId,
+            targetModel.modelId,
+            serialized
+          );
+        }
+      }
+    }
   }
 
   /**
@@ -209,7 +274,24 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
       }
     }
 
+    const anchor = this._world.getComponent<AnchorComponent>(originId, 'Anchor');
+    const model = this._world.getComponent<Model2DComponent | Model3DComponent>(
+      originId,
+      this._dimension === '3d' ? 'Model3D' : 'Model2D'
+    );
     this._world.detachComponent(originId, 'Anchor');
+
+    if (this._engine && this._realmId !== null && anchor?.managedByPhysics && model) {
+      if (this._dimension === '3d') {
+        if (typeof this._engine.realm3dDetach === 'function') {
+          this._engine.realm3dDetach(this._realmId, model.modelId);
+        }
+      } else {
+        if (typeof this._engine.realm2dDetach === 'function') {
+          this._engine.realm2dDetach(this._realmId, model.modelId);
+        }
+      }
+    }
   }
 
   /**

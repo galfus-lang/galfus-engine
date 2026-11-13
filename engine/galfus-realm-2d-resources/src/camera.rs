@@ -53,7 +53,7 @@ impl Camera2D {
         let half_height = self.ortho_scale / 2.0;
         let half_width = half_height * aspect_ratio;
         // Reverse-Z: near and far planes are swapped for reverse depth [1.0 -> 0.0]
-        Mat4::orthographic_rh(
+        glam::camera::rh::proj::directx::orthographic(
             -half_width,
             half_width,
             -half_height,
@@ -70,7 +70,7 @@ impl Camera2D {
         let cos_r = transform.rotation.cos();
         let sin_r = transform.rotation.sin();
         let up = Vec3::new(-sin_r, cos_r, 0.0);
-        Mat4::look_at_rh(eye, target, up)
+        glam::camera::rh::view::look_at_mat4(eye, target, up)
     }
 
     /// Builds the GPU-ready `Camera2DUniform` representation.

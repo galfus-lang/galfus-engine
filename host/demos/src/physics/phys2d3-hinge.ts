@@ -1,5 +1,4 @@
-import { type EntityId, isKey, presetsAnchor } from '@galfus/engine';
-import { attachPhysics2D } from '@galfus/physics-2d';
+import { attachPhysics2D, type EntityId, isKey, presetsAnchor } from '@galfus/engine';
 import { UiRoot } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
@@ -104,7 +103,7 @@ export async function runDemoPhys2d3(options: HostDemoOptions = {}): Promise<voi
     realm2d.hierarchy.attach(
       gateLeft,
       postLeft,
-      presetsAnchor.hinge({
+      presetsAnchor.angularSpring({
         limits: [-1.3, 0.5], // -75° to +28°
         targetAngle: 0,
         stiffness: 35,
@@ -131,7 +130,7 @@ export async function runDemoPhys2d3(options: HostDemoOptions = {}): Promise<voi
     realm2d.hierarchy.attach(
       gateRight,
       postRight,
-      presetsAnchor.hinge({
+      presetsAnchor.angularSpring({
         limits: [-0.5, 1.3], // -28° to +75°
         targetAngle: 0,
         stiffness: 35,
@@ -231,8 +230,8 @@ export async function runDemoPhys2d3(options: HostDemoOptions = {}): Promise<voi
         }
       } else if (isKey(ev, 'f')) {
         // Kick gates open with torque impulse
-        physics.applyTorqueImpulse(gateLeft, -15.0);
-        physics.applyTorqueImpulse(gateRight, 15.0);
+        physics.applyTorqueImpulse(gateLeft, 15.0);
+        physics.applyTorqueImpulse(gateRight, -15.0);
       }
     });
 

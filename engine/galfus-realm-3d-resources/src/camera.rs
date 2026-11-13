@@ -126,14 +126,16 @@ impl Camera3D {
         };
         match self.kind {
             CameraKind3D::Perspective => {
-                // Reverse-Z: swap near and far in perspective_rh
-                Mat4::perspective_rh(self.fov_y, aspect, self.far, self.near)
+                // Reverse-Z: swap near and far in perspective
+                glam::camera::rh::proj::directx::perspective(
+                    self.fov_y, aspect, self.far, self.near,
+                )
             }
             CameraKind3D::Orthographic => {
                 let half_height = self.ortho_scale / 2.0;
                 let half_width = half_height * aspect;
-                // Reverse-Z: swap near and far in orthographic_rh
-                Mat4::orthographic_rh(
+                // Reverse-Z: swap near and far in orthographic
+                glam::camera::rh::proj::directx::orthographic(
                     -half_width,
                     half_width,
                     -half_height,
@@ -150,7 +152,7 @@ impl Camera3D {
         let position = transform.position;
         let (direction, up) = self.view_vectors(transform);
 
-        let view = Mat4::look_to_rh(position, direction, up);
+        let view = glam::camera::rh::view::look_to_mat4(position, direction, up);
         let projection = self.projection_matrix(aspect_ratio);
         let view_projection = projection * view;
 

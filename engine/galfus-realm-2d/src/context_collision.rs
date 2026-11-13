@@ -29,6 +29,15 @@ impl Realm2DContext {
                 format!("Model2D {}", collider.model_id),
             ));
         }
+        let scale = self
+            .model_transform_for_collider(collider.model_id)
+            .map(|tf| [tf.scale.x, tf.scale.y])
+            .unwrap_or([1.0, 1.0]);
+        if let Some(physics) = self.physics.as_mut()
+            && physics.has_rigid_body(collider.model_id)
+        {
+            physics.sync_collider(collider.model_id, &collider, None, scale);
+        }
         self.colliders.insert(collider.id, collider);
         Ok(())
     }
@@ -36,6 +45,9 @@ impl Realm2DContext {
     /// Removes an existing 2D collider.
     pub fn destroy_collider_2d(&mut self, id: u32) -> RealmResult<()> {
         self.validate_id(id)?;
+        if let Some(physics) = self.physics.as_mut() {
+            physics.remove_collider(id);
+        }
         self.colliders.remove(&id).map(|_| ()).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("Collider2D {id}"))
         })
@@ -43,6 +55,11 @@ impl Realm2DContext {
 
     /// Removes all 2D colliders attached to a logical model.
     pub fn destroy_colliders_by_model_2d(&mut self, model_id: u32) {
+        if let Some(physics) = self.physics.as_mut() {
+            for collider in self.colliders.values().filter(|c| c.model_id == model_id) {
+                physics.remove_collider(collider.id);
+            }
+        }
         self.colliders.retain(|_, c| c.model_id != model_id);
     }
 
@@ -68,6 +85,19 @@ impl Realm2DContext {
             ));
         }
         self.model_transforms.insert(model_id, transform);
+        if let Some(physics) = self.physics.as_mut()
+            && physics.has_rigid_body(model_id)
+            && !physics.is_body_dynamic(model_id)
+        {
+            physics.set_rigid_body_pose(
+                model_id,
+                &galfus_realm_core::hierarchy::Pose2D {
+                    position: transform.position,
+                    rotation: transform.rotation,
+                    scale: transform.scale,
+                },
+            );
+        }
         if let Some((_, tf)) = self.sprites.get_mut(&model_id) {
             *tf = transform;
         }

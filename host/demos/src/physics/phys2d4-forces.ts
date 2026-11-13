@@ -1,5 +1,4 @@
-import { isKey, mat2d, type Model2DComponent, vec2 } from '@galfus/engine';
-import { attachPhysics2D } from '@galfus/physics-2d';
+import { attachPhysics2D, isKey, mat2d, type Model2DComponent, vec2 } from '@galfus/engine';
 import { UiRoot } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
@@ -203,14 +202,14 @@ export async function runDemoPhys2d4(options: HostDemoOptions = {}): Promise<voi
       } else if (isKey(ev, 'r', 'KeyR')) {
         // Reset positions and orientations
         const cModel = realm2d.world.getComponent<Model2DComponent>(crate, 'Model2D');
-        cModel?.setPosition(4.0, -7.0);
         cModel?.setRotation(0);
+        physics.setPosition(crate, [4.0, -7.0]);
         physics.setLinearVelocity(crate, [0, 0]);
         physics.setAngularVelocity(crate, 0);
 
         const bModel = realm2d.world.getComponent<Model2DComponent>(baton, 'Model2D');
-        bModel?.setPosition(4.0, 3.0);
         bModel?.setRotation(0);
+        physics.setPosition(baton, [4.0, 3.0]);
         physics.setLinearVelocity(baton, [0, 0]);
         physics.setAngularVelocity(baton, 0);
 

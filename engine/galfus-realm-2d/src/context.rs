@@ -27,6 +27,8 @@ pub struct Realm2DContext {
     pub uis: HashMap<u32, (Model2DUI, Transform2D)>,
     pub colliders: HashMap<u32, galfus_realm_core::Collider2D>,
     pub model_transforms: HashMap<u32, Transform2D>,
+    pub hierarchy: galfus_realm_core::hierarchy::HierarchyGraph2D,
+    pub physics: Option<galfus_physics::PhysicsWorld2D>,
     pub dirty: bool,
 
     pub pipeline_manager: Option<PipelineManager2D>,
@@ -56,6 +58,8 @@ impl Realm2DContext {
             uis: HashMap::new(),
             colliders: HashMap::new(),
             model_transforms: HashMap::new(),
+            hierarchy: galfus_realm_core::hierarchy::HierarchyGraph2D::new(),
+            physics: None,
             dirty: true,
             pipeline_manager: None,
             batch_builder: BatchBuilder2D::new(),
@@ -122,6 +126,10 @@ impl Realm for Realm2DContext {
         self.shapes.clear();
         self.colliders.clear();
         self.model_transforms.clear();
+        self.hierarchy.clear();
+        if let Some(p) = self.physics.as_mut() {
+            p.clear();
+        }
         self.uis.clear();
         self.ui_manager.clear();
         self.materials.clear();
@@ -145,6 +153,9 @@ impl Realm for Realm2DContext {
 
     fn prepare(&mut self, ctx: &RealmPrepareContext<'_>) -> RealmResult<()> {
         self.total_time += ctx.delta_time;
+        if !self.hierarchy.is_empty() {
+            self.solve_hierarchy(ctx.delta_time);
+        }
         for (cfg, transform, state) in self.emitters.values_mut() {
             state.update(ctx.delta_time, transform.position, cfg);
         }

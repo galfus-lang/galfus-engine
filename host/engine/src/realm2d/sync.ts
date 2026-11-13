@@ -274,7 +274,6 @@ export class Realm2DSyncSystem {
       for (const entry of getColliderEntries(colliderComp)) {
         if (!entry.active) continue;
         const previous = this._syncedColliders.get(entry.colliderId);
-        if (entry.shape.type !== 'rectangle' && entry.shape.type !== 'circle') continue;
         currentColliders.add(entry.colliderId);
         if (!previous || previous.modelId !== model.modelId || previous.entry !== entry) {
           let offset: [number, number] | undefined;
@@ -287,11 +286,12 @@ export class Realm2DSyncSystem {
           } else if (entry.shape.type === 'circle') {
             shapeDesc = { type: 'circle', radius: entry.shape.radius, offset };
           } else {
-            continue;
+            shapeDesc = { type: 'polygon', vertices: entry.shape.vertices };
           }
           engine.realm2dCreateCollider(this.realmId, entry.colliderId, model.modelId, {
             shape: shapeDesc,
             offset,
+            sensor: entry.sensor ?? false,
             layer: entry.layer,
             mask: entry.mask
           });

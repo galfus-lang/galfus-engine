@@ -31,6 +31,10 @@ impl Realm for Realm3DContext {
         let queue = ctx.queue;
         self.total_time += ctx.delta_time;
 
+        if !self.hierarchy.is_empty() {
+            self.solve_hierarchy(ctx.delta_time);
+        }
+
         for (emitter, transform, state) in self.emitters.values_mut() {
             state.update(
                 emitter,

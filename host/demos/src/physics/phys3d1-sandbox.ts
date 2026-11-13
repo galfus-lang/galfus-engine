@@ -1,11 +1,11 @@
 import {
+  attachPhysics3D,
   type EntityId,
   isKey,
   type Light3DComponent,
   type Model3DComponent,
   utils3D
 } from '@galfus/engine';
-import { attachPhysics3D } from '@galfus/physics-3d';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
 
@@ -219,6 +219,7 @@ export async function runDemoPhys3d1(options: HostDemoOptions = {}): Promise<voi
             realm3d.world
               .getComponent<Model3DComponent>(b.entityId, 'Model3D')
               ?.setTRS(b.initialPos, [0, 0, 0, 1], [1, 1, 1]);
+            physics.setPosition(b.entityId, b.initialPos);
             physics.setLinearVelocity(b.entityId, [0, 0, 0]);
             physics.setAngularVelocity(b.entityId, [0, 0, 0]);
           }

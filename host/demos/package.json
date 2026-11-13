@@ -25,9 +25,6 @@
   "dependencies": {
     "@clack/prompts": "^1.8.1",
     "@galfus/engine": "workspace:*",
-    "@galfus/physics-2d": "workspace:*",
-    "@galfus/physics-3d": "workspace:*",
-    "@galfus/physics-types": "workspace:*",
     "@galfus/transport-bun": "workspace:*",
     "@galfus/transport-types": "workspace:*",
     "@galfus/ui": "workspace:*",

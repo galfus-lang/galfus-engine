@@ -1,5 +1,10 @@
-import { type EntityId, isKey, type Light2DComponent, type Model2DComponent } from '@galfus/engine';
-import { attachPhysics2D } from '@galfus/physics-2d';
+import {
+  attachPhysics2D,
+  type EntityId,
+  isKey,
+  type Light2DComponent,
+  type Model2DComponent
+} from '@galfus/engine';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
 
@@ -232,6 +237,7 @@ export async function runDemoPhys2d1(options: HostDemoOptions = {}): Promise<voi
             realm2d.world
               .getComponent<Model2DComponent>(b.entityId, 'Model2D')
               ?.setTRS(b.initialPos, 0, [1, 1]);
+            physics.setPosition(b.entityId, b.initialPos);
             physics.setLinearVelocity(b.entityId, [0, 0]);
             physics.setAngularVelocity(b.entityId, 0);
           }

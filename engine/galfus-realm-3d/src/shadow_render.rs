@@ -176,7 +176,7 @@ pub fn render_shadow_depth_pass(
             let pos = light_trans.position;
             let range = light.range.max(0.1);
             let fov = 90.5f32.to_radians();
-            let proj = Mat4::perspective_rh(fov, 1.0, range, 0.1);
+            let proj = glam::camera::rh::proj::directx::perspective(fov, 1.0, range, 0.1);
             let targets = [
                 (pos + glam::Vec3::X, glam::Vec3::NEG_Y),     // +X: 0
                 (pos + glam::Vec3::NEG_X, glam::Vec3::NEG_Y), // -X: 1
@@ -186,7 +186,7 @@ pub fn render_shadow_depth_pass(
                 (pos + glam::Vec3::NEG_Z, glam::Vec3::NEG_Y), // -Z: 5
             ];
             for (face_i, (target, up)) in targets.iter().enumerate() {
-                let view = Mat4::look_at_rh(pos, *target, *up);
+                let view = glam::camera::rh::view::look_at_mat4(pos, *target, *up);
                 let vp = proj * view;
                 render_single_shadow_layer(
                     encoder,

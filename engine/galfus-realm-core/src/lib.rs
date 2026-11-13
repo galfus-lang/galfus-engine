@@ -9,6 +9,7 @@
 pub mod collision;
 pub mod color_realm;
 pub mod error;
+pub mod hierarchy;
 pub mod realm;
 pub mod types;
 

@@ -10,6 +10,7 @@ export * from './collision/index';
 export * from './debug/index';
 export * from './math/index';
 export * from './multiverse/index';
+export * from './physics/index';
 export * from './platform/index';
 export * from './realm2d/index';
 export * from './realm3d/index';

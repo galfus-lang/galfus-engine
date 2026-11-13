@@ -1,11 +1,11 @@
 import {
+  attachPhysics3D,
   type EntityId,
   isKey,
   type Model3DComponent,
   presetsAnchor,
   utils3D
 } from '@galfus/engine';
-import { attachPhysics3D } from '@galfus/physics-3d';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
 import { createParticleAtlasTexture } from '../common/textures';

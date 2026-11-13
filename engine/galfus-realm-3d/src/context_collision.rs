@@ -30,6 +30,21 @@ impl Realm3DContext {
                 format!("Model3D {}", collider.model_id),
             ));
         }
+        let scale = self
+            .model_transforms
+            .get(&collider.model_id)
+            .map(|tf| [tf.scale.x, tf.scale.y, tf.scale.z])
+            .or_else(|| {
+                self.models
+                    .get(&collider.model_id)
+                    .map(|m| [m.1.scale.x, m.1.scale.y, m.1.scale.z])
+            })
+            .unwrap_or([1.0, 1.0, 1.0]);
+        if let Some(physics) = self.physics.as_mut()
+            && physics.has_rigid_body(collider.model_id)
+        {
+            physics.sync_collider(collider.model_id, &collider, None, scale);
+        }
         self.colliders.insert(collider.id, collider);
         Ok(())
     }
@@ -37,6 +52,9 @@ impl Realm3DContext {
     /// Removes an existing 3D collider.
     pub fn destroy_collider_3d(&mut self, id: u32) -> RealmResult<()> {
         validate_id(id)?;
+        if let Some(physics) = self.physics.as_mut() {
+            physics.remove_collider(id);
+        }
         self.colliders.remove(&id).map(|_| ()).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("Collider3D {id}"))
         })
@@ -44,6 +62,11 @@ impl Realm3DContext {
 
     /// Removes all 3D colliders attached to a logical model.
     pub fn destroy_colliders_by_model_3d(&mut self, model_id: u32) {
+        if let Some(physics) = self.physics.as_mut() {
+            for collider in self.colliders.values().filter(|c| c.model_id == model_id) {
+                physics.remove_collider(collider.id);
+            }
+        }
         self.colliders.retain(|_, c| c.model_id != model_id);
     }
 

@@ -19,13 +19,16 @@ license = "MIT"
 # Shared external crates
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "ico"] }
 thiserror = "2.0"
-glam = { version = "0.30", features = ["serde", "bytemuck"] }
+glam = { version = "0.33", features = ["serde", "bytemuck"] }
 
 log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 bytemuck = { version = "1.25", features = ["derive"] }
 wgpu = "28.0"
+rhai = { version = "1.27.0", default-features = false, features = ["std", "f32_float", "sync"] }
+rapier2d = { version = "0.36", features = ["serde-serialize"] }
+rapier3d = { version = "0.36", features = ["serde-serialize"] }
 pollster = "0.4"
 resvg = "0.48"
 xmltree = "0.12"
@@ -39,6 +42,7 @@ web-sys = "0.3"
 galfus-core = { path = "engine/galfus-core" }
 galfus-multiverse = { path = "engine/galfus-multiverse" }
 galfus-realm-core = { path = "engine/galfus-realm-core" }
+galfus-physics = { path = "engine/galfus-physics" }
 galfus-platform = { path = "engine/galfus-platform", default-features = false }
 
 galfus-gpu-manager = { path = "engine/galfus-gpu-manager" }

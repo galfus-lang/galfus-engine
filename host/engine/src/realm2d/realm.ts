@@ -26,6 +26,7 @@ import type { EntityId } from '../ecs/entity';
 import type { SystemContext } from '../ecs/system';
 import { EcsWorld } from '../ecs/world';
 import type { RealmConnector, RealmId, RealmKind } from '../multiverse/realm';
+import { PhysicsWorld2D } from '../physics/index';
 import type { TransitionId } from '../types';
 
 import {
@@ -50,6 +51,7 @@ export class Realm2D implements RealmConnector {
   readonly hierarchy: HierarchyCoordinator<'2d'>;
 
   private _engine: GalfusEngine | null = null;
+  private _physics: PhysicsWorld2D | null = null;
   private _nextResourceLogicalId = 1;
   private _preRenderSteppedFrame = -1;
   private _disposed = false;
@@ -67,6 +69,24 @@ export class Realm2D implements RealmConnector {
     this.world.addSystem('preRender', this.solver.createSystem(), { kind: 'anchor' });
   }
 
+  get id(): number {
+    return this.realmId;
+  }
+
+  get transport(): GalfusEngine | null {
+    return this._engine;
+  }
+
+  get physics(): PhysicsWorld2D {
+    if (!this._physics) {
+      this._physics = new PhysicsWorld2D(this);
+    }
+    return this._physics;
+  }
+  set physics(val: PhysicsWorld2D) {
+    this._physics = val;
+  }
+
   get isDisposed(): boolean {
     return this._disposed;
   }
@@ -80,6 +100,7 @@ export class Realm2D implements RealmConnector {
   bindEngine(engine: GalfusEngine): void {
     if (this._disposed) return;
     this._engine = engine;
+    this.hierarchy.bindEngine(engine, this.realmId);
     engine.realm2dCreate(this.realmId);
   }
 
@@ -157,6 +178,21 @@ export class Realm2D implements RealmConnector {
 
   queryPoint(point: [number, number], mask = 0xffffffff) {
     if (this._disposed) throw new Error('Cannot query a disposed Realm2D.');
+    if (
+      this._engine &&
+      'realm2dQueryPoint' in this._engine &&
+      typeof this._engine.realm2dQueryPoint === 'function'
+    ) {
+      const res = this._engine.realm2dQueryPoint(this.realmId, point[0], point[1], mask);
+      if (typeof res === 'string') {
+        try {
+          return JSON.parse(res);
+        } catch {
+          return [];
+        }
+      }
+      if (Array.isArray(res)) return res;
+    }
     this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0 });
     return queryPoint2D(this.world, point, mask);
   }
@@ -167,6 +203,29 @@ export class Realm2D implements RealmConnector {
     mask = 0xffffffff
   ) {
     if (this._disposed) throw new Error('Cannot query a disposed Realm2D.');
+    if (
+      this._engine &&
+      'realm2dRaycast' in this._engine &&
+      typeof this._engine.realm2dRaycast === 'function'
+    ) {
+      const res = this._engine.realm2dRaycast(
+        this.realmId,
+        origin[0],
+        origin[1],
+        direction[0],
+        direction[1],
+        maxDistance,
+        mask
+      );
+      if (typeof res === 'string') {
+        try {
+          return JSON.parse(res);
+        } catch {
+          return [];
+        }
+      }
+      if (Array.isArray(res)) return res;
+    }
     this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0 });
     return raycast2D(this.world, origin, direction, maxDistance, mask);
   }
@@ -175,6 +234,7 @@ export class Realm2D implements RealmConnector {
     if (!this.world.isAlive(entityId)) return false;
     this.hierarchy.detach(entityId);
     this.hierarchy.handleTargetDestroyed(entityId);
+    this._physics?.removeRigidBody(entityId);
     this.solver.cache.remove(entityId);
     return this.world.destroyEntity(entityId);
   }

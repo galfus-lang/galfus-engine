@@ -1,5 +1,4 @@
-import { type EntityId, isKey, presetsAnchor } from '@galfus/engine';
-import { attachPhysics2D } from '@galfus/physics-2d';
+import { attachPhysics2D, type EntityId, isKey, presetsAnchor } from '@galfus/engine';
 import { UiRoot } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';

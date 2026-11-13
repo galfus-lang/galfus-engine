@@ -9,9 +9,6 @@
         "@galfus/engine": "workspace:*",
         "@galfus/gltf-loader": "workspace:*",
         "@galfus/model-loader-types": "workspace:*",
-        "@galfus/physics-2d": "workspace:*",
-        "@galfus/physics-3d": "workspace:*",
-        "@galfus/physics-types": "workspace:*",
         "@galfus/transport-browser": "workspace:*",
         "@galfus/transport-bun": "workspace:*",
         "@galfus/transport-node": "workspace:*",
@@ -32,9 +29,6 @@
       "dependencies": {
         "@clack/prompts": "^1.8.1",
         "@galfus/engine": "workspace:*",
-        "@galfus/physics-2d": "workspace:*",
-        "@galfus/physics-3d": "workspace:*",
-        "@galfus/physics-types": "workspace:*",
         "@galfus/transport-bun": "workspace:*",
         "@galfus/transport-types": "workspace:*",
         "@galfus/ui": "workspace:*",
@@ -70,31 +64,6 @@
     "host/model-loader-types": {
       "name": "@galfus/model-loader-types",
       "version": "0.0.0",
-    },
-    "host/physics-2d": {
-      "name": "@galfus/physics-2d",
-      "version": "0.0.0",
-      "dependencies": {
-        "@dimforge/rapier2d-compat": "^0.21.0",
-        "@galfus/engine": "workspace:*",
-        "@galfus/physics-types": "workspace:*",
-      },
-    },
-    "host/physics-3d": {
-      "name": "@galfus/physics-3d",
-      "version": "0.0.0",
-      "dependencies": {
-        "@dimforge/rapier3d-compat": "^0.21.0",
-        "@galfus/engine": "workspace:*",
-        "@galfus/physics-types": "workspace:*",
-      },
-    },
-    "host/physics-types": {
-      "name": "@galfus/physics-types",
-      "version": "0.0.0",
-      "dependencies": {
-        "@galfus/engine": "workspace:*",
-      },
     },
     "host/transport-browser": {
       "name": "@galfus/transport-browser",
@@ -136,10 +105,6 @@
 
     "@clack/prompts": ["@clack/prompts@1.8.1", "", { "dependencies": { "@clack/core": "1.5.1", "fast-string-width": "^3.0.2", "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-dlT1m5e/0yUL0kRNcQn7yGLVThkgbB0Ga/1AmfDDC/8ik6AIiSf2QLQO2zPYvefsHP0aFgxO93cVLCCfDp7kzQ=="],
 
-    "@dimforge/rapier2d-compat": ["@dimforge/rapier2d-compat@0.21.0", "", {}, "sha512-cMStLQZbY5D/ajAPjOwTwoYuAJAungTYB45MNFEa5B+LGaMiZfxLwjHsfpxH5B0sDa+gkmcQFJJKiHNKnlpMnA=="],
-
-    "@dimforge/rapier3d-compat": ["@dimforge/rapier3d-compat@0.21.0", "", {}, "sha512-tCl1HPGwOhn5aCQbgqWbOH+Nx/5fnr3IPAnzQuR7zIhC/raqi2yxC6LhvZqjdI2El5hQgY5RDAwDrAjAi2FdPA=="],
-
     "@galfus/demos": ["@galfus/demos@workspace:host/demos"],
 
     "@galfus/engine": ["@galfus/engine@workspace:host/engine"],
@@ -147,12 +112,6 @@
     "@galfus/gltf-loader": ["@galfus/gltf-loader@workspace:host/gltf-loader"],
 
     "@galfus/model-loader-types": ["@galfus/model-loader-types@workspace:host/model-loader-types"],
-
-    "@galfus/physics-2d": ["@galfus/physics-2d@workspace:host/physics-2d"],
-
-    "@galfus/physics-3d": ["@galfus/physics-3d@workspace:host/physics-3d"],
-
-    "@galfus/physics-types": ["@galfus/physics-types@workspace:host/physics-types"],
 
     "@galfus/transport-browser": ["@galfus/transport-browser@workspace:host/transport-browser"],
 

@@ -157,3 +157,122 @@ export function createCustomGeometry(
     m
   );
 }
+
+export function registerPrimitiveMethods(proto: any): void {
+  proto.createPrimitive = function (primitive: any, matId: any, t?: any, mesh?: any) {
+    return createPrimitiveModel(this, primitive, matId, t, mesh);
+  };
+  proto.createCube = function (size: any, mat: any, t?: any, m?: any) {
+    return createCube(this, size, mat, t, m);
+  };
+  proto.createPlane = function (w: any, d: any, mat: any, t?: any, m?: any) {
+    return createPlane(this, w, d, mat, t, m);
+  };
+  proto.createSphere = function (r: any, rg: any, s: any, mat: any, t?: any, m?: any) {
+    return createSphere(this, r, rg, s, mat, t, m);
+  };
+  proto.createCylinder = function (r: any, h: any, s: any, mat: any, t?: any, m?: any) {
+    return createCylinder(this, r, h, s, mat, t, m);
+  };
+  proto.createCapsule = function (r: any, ch: any, rg: any, s: any, mat: any, t?: any, m?: any) {
+    return createCapsule(this, r, ch, rg, s, mat, t, m);
+  };
+  proto.createPyramid = function (w: any, d: any, h: any, mat: any, t?: any, m?: any) {
+    return createPyramid(this, w, d, h, mat, t, m);
+  };
+  proto.createTorus = function (
+    majR: any,
+    minR: any,
+    majS: any,
+    minS: any,
+    mat: any,
+    t?: any,
+    m?: any
+  ) {
+    return createTorus(this, majR, minR, majS, minS, mat, t, m);
+  };
+  proto.createCustomGeometry = function (
+    top: any,
+    vData: any,
+    idx: any,
+    mat: any,
+    t?: any,
+    m?: any
+  ) {
+    return createCustomGeometry(this, top, vData, idx, mat, t, m);
+  };
+}
+
+declare module './realm' {
+  interface Realm3D {
+    createPrimitive(
+      primitive: Primitive3DKind,
+      matId: number,
+      t?: Transform3DProps,
+      mesh?: Partial<Model3DDesc>
+    ): { entityId: EntityId; geometryId: number; modelId: number };
+    createCube(
+      size: number,
+      mat: number,
+      t?: Transform3DProps,
+      m?: Partial<Model3DDesc>
+    ): { entityId: EntityId; geometryId: number; modelId: number };
+    createPlane(
+      w: number,
+      d: number,
+      mat: number,
+      t?: Transform3DProps,
+      m?: Partial<Model3DDesc>
+    ): { entityId: EntityId; geometryId: number; modelId: number };
+    createSphere(
+      r: number,
+      rg: number,
+      s: number,
+      mat: number,
+      t?: Transform3DProps,
+      m?: Partial<Model3DDesc>
+    ): { entityId: EntityId; geometryId: number; modelId: number };
+    createCylinder(
+      r: number,
+      h: number,
+      s: number,
+      mat: number,
+      t?: Transform3DProps,
+      m?: Partial<Model3DDesc>
+    ): { entityId: EntityId; geometryId: number; modelId: number };
+    createCapsule(
+      r: number,
+      ch: number,
+      rg: number,
+      s: number,
+      mat: number,
+      t?: Transform3DProps,
+      m?: Partial<Model3DDesc>
+    ): { entityId: EntityId; geometryId: number; modelId: number };
+    createPyramid(
+      w: number,
+      d: number,
+      h: number,
+      mat: number,
+      t?: Transform3DProps,
+      m?: Partial<Model3DDesc>
+    ): { entityId: EntityId; geometryId: number; modelId: number };
+    createTorus(
+      majR: number,
+      minR: number,
+      majS: number,
+      minS: number,
+      mat: number,
+      t?: Transform3DProps,
+      m?: Partial<Model3DDesc>
+    ): { entityId: EntityId; geometryId: number; modelId: number };
+    createCustomGeometry(
+      top: number,
+      vData: Uint8Array,
+      idx: Uint32Array,
+      mat: number,
+      t?: Transform3DProps,
+      m?: Partial<Model3DDesc>
+    ): { entityId: EntityId; geometryId: number; modelId: number };
+  }
+}

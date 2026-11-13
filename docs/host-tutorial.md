@@ -585,13 +585,12 @@ const rect = runtime.svg.getRect(realm2D.realmId, hudSvg.svgId, 'score');
 const layout = runtime.svg.getTextLayout(realm2D.realmId, hudSvg.svgId, 'score');
 ```
 
-### Anchor Presets (`rope`, `chain`, `spring`) & Physics Coupling (`@galfus/physics-2d` / `@galfus/physics-3d`)
+### Anchor Presets (`rope`, `chain`, `spring`) & Physics Coupling
 
-`presetsAnchor` provides built-in strategies (`static`, `translation`, `rope`, `chain`, `spring`) that work both kinematically in `@galfus/engine` and physically as Rapier WASM joints when `@galfus/physics-2d` or `@galfus/physics-3d` is attached:
+`presetsAnchor` provides built-in strategies (`static`, `translation`, `rope`, `chain`, `spring`) that work both kinematically in `@galfus/engine` and physically as native Rapier joints when physics is enabled:
 
 ```ts
-import { presetsAnchor } from '@galfus/engine';
-import { attachPhysics3D } from '@galfus/physics-3d';
+import { attachPhysics3D, presetsAnchor } from '@galfus/engine';
 
 // 1. Attach 3D Rapier physics world to runtime ('fixedTick') and realm3D
 const physics3D = await attachPhysics3D(runtime, realm3D, {
