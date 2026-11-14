@@ -163,7 +163,7 @@ fn test_ui_text_run_vertex_bounds() {
         lyon_tessellation::VertexBuffers::new();
 
     let text_node = TextNode {
-        text: "Hello World".to_string(),
+        text: "Hello World".into(),
         font_size: 20.0,
         color: [1.0, 1.0, 1.0, 1.0],
         ..Default::default()

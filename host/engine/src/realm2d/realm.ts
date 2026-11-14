@@ -43,6 +43,41 @@ import {
 } from './components';
 import { Realm2DSyncSystem } from './sync';
 
+/** Layout from the last frame in which the core solved the UI tree. */
+export interface UiComputedLayout {
+  readonly localRect: [number, number, number, number];
+  readonly absoluteRect: [number, number, number, number];
+  readonly clipRect: [number, number, number, number] | null;
+  readonly accumulatedOpacity: number;
+  readonly contentSize: [number, number];
+}
+
+/** One visually ordered shaped cluster in UI coordinates and logical UTF-16 offsets. */
+export interface UiTextCluster {
+  readonly start: number;
+  readonly end: number;
+  readonly rect: [number, number, number, number];
+  readonly rightToLeft: boolean;
+  /** Interior UTF-16 boundaries with positions supplied by the font, when available. */
+  readonly carets?: readonly {
+    readonly offset: number;
+    readonly x: number;
+    readonly approximate?: boolean;
+  }[];
+}
+
+/** A line's UTF-16 range excludes the line break; empty lines have equal endpoints. */
+export interface UiTextLineGeometry {
+  readonly start: number;
+  readonly end: number;
+  readonly rect: [number, number, number, number];
+}
+
+export interface UiTextGeometry {
+  readonly lines: UiTextLineGeometry[];
+  readonly clusters: UiTextCluster[];
+}
+
 export class Realm2D implements RealmConnector {
   readonly realmKind: RealmKind = '2d';
   readonly realmId: RealmId;
@@ -358,6 +393,78 @@ export class Realm2D implements RealmConnector {
     const comp = this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI');
     if (!comp || comp.uiId !== handle.uiId) throw new Error('UI model does not exist.');
     if (commands.length > 0) comp.pendingCommands.push(structuredClone([...commands]));
+  }
+
+  /** Reads a node's last computed layout in UI-local coordinates. */
+  getUiLayout(handle: { entityId: EntityId; uiId: number }, elementId: number): UiComputedLayout {
+    if (this._disposed) throw new Error('Cannot query a disposed Realm2D.');
+    const component = this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI');
+    if (!component || component.uiId !== handle.uiId) throw new Error('UI model does not exist.');
+    assertValidLogicalId(elementId, 'UI element ID');
+    if (!this._engine) throw new Error('Cannot query UI layout without a bound transport.');
+    return JSON.parse(
+      this._engine.realm2dGetUiLayout(this.realmId, handle.uiId, elementId)
+    ) as UiComputedLayout;
+  }
+
+  /** Reads advance rectangles for shaped RichText clusters after the core has laid out the UI. */
+  getRichTextClusters(
+    handle: { entityId: EntityId; uiId: number },
+    elementId: number
+  ): UiTextCluster[] {
+    if (this._disposed) throw new Error('Cannot query a disposed Realm2D.');
+    const component = this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI');
+    if (!component || component.uiId !== handle.uiId) throw new Error('UI model does not exist.');
+    assertValidLogicalId(elementId, 'UI element ID');
+    if (!this._engine) throw new Error('Cannot query UI text without a bound transport.');
+    if (component.isDirty || component.pendingCommands.length > 0) {
+      throw new Error(
+        'UI has pending changes; synchronize and present a frame before querying text.'
+      );
+    }
+    return JSON.parse(
+      this._engine.realm2dGetRichTextClusters(this.realmId, handle.uiId, elementId)
+    ) as UiTextCluster[];
+  }
+
+  /** Reads shaped clusters and line boxes, including empty lines, in UI-local coordinates. */
+  getRichTextGeometry(
+    handle: { entityId: EntityId; uiId: number },
+    elementId: number
+  ): UiTextGeometry {
+    if (this._disposed) throw new Error('Cannot query a disposed Realm2D.');
+    const component = this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI');
+    if (!component || component.uiId !== handle.uiId) throw new Error('UI model does not exist.');
+    assertValidLogicalId(elementId, 'UI element ID');
+    if (!this._engine) throw new Error('Cannot query UI text without a bound transport.');
+    if (component.isDirty || component.pendingCommands.length > 0) {
+      throw new Error(
+        'UI has pending changes; synchronize and present a frame before querying text.'
+      );
+    }
+    return JSON.parse(
+      this._engine.realm2dGetRichTextGeometry(this.realmId, handle.uiId, elementId)
+    ) as UiTextGeometry;
+  }
+
+  /** Reads the line and cluster geometry of a Text or RichText node. */
+  getUiTextGeometry(
+    handle: { entityId: EntityId; uiId: number },
+    elementId: number
+  ): UiTextGeometry {
+    if (this._disposed) throw new Error('Cannot query a disposed Realm2D.');
+    const component = this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI');
+    if (!component || component.uiId !== handle.uiId) throw new Error('UI model does not exist.');
+    assertValidLogicalId(elementId, 'UI element ID');
+    if (!this._engine) throw new Error('Cannot query UI text without a bound transport.');
+    if (component.isDirty || component.pendingCommands.length > 0) {
+      throw new Error(
+        'UI has pending changes; synchronize and present a frame before querying text.'
+      );
+    }
+    return JSON.parse(
+      this._engine.realm2dGetUiTextGeometry(this.realmId, handle.uiId, elementId)
+    ) as UiTextGeometry;
   }
 
   destroyUi(handle: { entityId: EntityId; uiId: number }): void {

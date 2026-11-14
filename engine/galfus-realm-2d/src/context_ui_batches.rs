@@ -224,7 +224,7 @@ impl UiManager2D {
                                     }
                                 }
                             }
-                            UiNodeKind::Text(_) => {}
+                            UiNodeKind::Text(_) | UiNodeKind::RichText(_) => {}
                         }
                     }
 

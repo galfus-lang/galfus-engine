@@ -131,6 +131,25 @@ pub(crate) fn resolve_node_layout(
             resolved_h = measurement.height;
         }
     }
+    if let UiNodeKind::RichText(ref text_node) = node.kind {
+        let limit = if resolved_w > 0.0 {
+            Some(resolved_w)
+        } else if text_node.multiline
+            && text_node.wrap == galfus_realm_2d_resources::ui::TextWrapMode::WordWrap
+            && avail_w > 0.0
+        {
+            Some(style.max_width.map_or(avail_w, |max| max.min(avail_w)))
+        } else {
+            style.max_width
+        };
+        let size = crate::ui_rich_text::measure(text_node, font_db, default_family, limit);
+        if matches!(style.width, UiDimension::Auto) && forced_size[0].is_none() {
+            resolved_w = size[0];
+        }
+        if matches!(style.height, UiDimension::Auto) && forced_size[1].is_none() {
+            resolved_h = size[1];
+        }
+    }
 
     // Apply constraints
     if let Some(min_w) = style.min_width {
@@ -166,7 +185,7 @@ pub(crate) fn resolve_node_layout(
         UiNodeKind::Panel(p) => p.clip,
         UiNodeKind::SpritePanel(s) => s.panel.clip,
         UiNodeKind::ScrollPanel(_) => true,
-        UiNodeKind::Text(_) => false,
+        UiNodeKind::Text(_) | UiNodeKind::RichText(_) => false,
     };
 
     let provisional_abs_rect = [abs_x, abs_y, resolved_w, resolved_h];
@@ -451,7 +470,7 @@ fn update_clips(ui: &mut Model2DUI, node_id: u32, parent_clip: Option<[f32; 4]>)
         UiNodeKind::Panel(panel) => panel.clip,
         UiNodeKind::SpritePanel(sprite) => sprite.panel.clip,
         UiNodeKind::ScrollPanel(_) => true,
-        UiNodeKind::Text(_) => false,
+        UiNodeKind::Text(_) | UiNodeKind::RichText(_) => false,
     };
     let children = node.children.clone();
     let Some(layout) = ui.computed.get_mut(&node_id) else {

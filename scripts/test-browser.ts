@@ -249,6 +249,15 @@ export { createUi, TextEditor } from '../../host/ui/src/index';
         galfus.windowSetImeCursorArea(windowId, 40, 50, 2, 20);
         const input = document.activeElement;
         if (!(input instanceof HTMLTextAreaElement)) throw new Error('IME input was not focused');
+        window.galfusImeTest = { pump: () => galfus.platformPumpEvents(), reset: () => { galfus.windowSetImeAllowed(windowId, 0); galfus.platformPumpEvents(); galfus.windowSetImeAllowed(windowId, 1); }, resume: null };
+        document.body.dataset.imeReady = 'true';
+        await new Promise((resolve) => { window.galfusImeTest.resume = resolve; });
+        const canvasBounds = canvas.getBoundingClientRect();
+        const expectedImeX = canvasBounds.left + 40 * canvasBounds.width / canvas.width;
+        const expectedImeY = canvasBounds.top + 50 * canvasBounds.height / canvas.height;
+        if (Math.abs(parseFloat(input.style.left) - expectedImeX) > 0.01 || Math.abs(parseFloat(input.style.top) - expectedImeY) > 0.01) {
+          throw new Error('IME candidate area did not follow canvas scaling');
+        }
         input.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
         input.dispatchEvent(new CompositionEvent('compositionupdate', { data: 'かな' }));
         input.dispatchEvent(new InputEvent('input', { inputType: 'insertCompositionText', data: 'かな', isComposing: true }));
@@ -258,6 +267,16 @@ export { createUi, TextEditor } from '../../host/ui/src/index';
         if (imeEvents.map((event) => event.type).join(',') !== 'imeEnabled,imePreedit,imePreedit,imeCommit,textInput' || imeEvents[1].text !== 'かな' || imeEvents[3].text !== '漢字' || imeEvents[4].text !== '漢字') {
           throw new Error('IME composition events were not delivered in order');
         }
+        input.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
+        input.value = '😀x';
+        input.setSelectionRange(2, 3);
+        input.dispatchEvent(new InputEvent('input', { inputType: 'insertCompositionText', data: '😀x', isComposing: true }));
+        const preeditSelection = galfus.platformPumpEvents().find((event) => event.type === 'imePreedit');
+        if (preeditSelection?.text !== '😀x' || preeditSelection.selection?.join(',') !== '2,3') {
+          throw new Error('IME preedit selection did not preserve UTF-16 offsets');
+        }
+        input.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
+        galfus.platformPumpEvents();
         galfus.windowSetTabCapture(windowId, 1);
         const imeTab = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', cancelable: true });
         input.dispatchEvent(imeTab);
@@ -346,6 +365,9 @@ export { createUi, TextEditor } from '../../host/ui/src/index';
         const textInput = ui.textInput(1, { entityId: first, value: 'a' });
         tick();
         if (!textInput.requestFocus(hostWindow) || document.activeElement !== input) throw new Error('Text input did not activate the browser IME');
+        window.galfusHostImeTest = { tick, snapshot: () => ({ value: textInput.value, displayValue: textInput.displayValue, composition: textInput.composition }), reset: () => textInput.setValue('a'), selectEmoji: () => { textInput.setValue('a😀b'); textInput.setSelection(1, 3); }, resume: null };
+        document.body.dataset.hostImeReady = 'true';
+        await new Promise((resolve) => { window.galfusHostImeTest.resume = resolve; });
         input.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
         input.dispatchEvent(new CompositionEvent('compositionupdate', { data: 'かな' }));
         tick();
@@ -410,7 +432,109 @@ export { createUi, TextEditor } from '../../host/ui/src/index';
   page.on('pageerror', (error) => pageErrors.push(error));
 
   try {
-    await page.goto(`http://127.0.0.1:${server.port}`);
+    await page.goto(`http://127.0.0.1:${server.port}`, { waitUntil: 'commit' });
+    await page.waitForFunction(
+      () => document.body.dataset.imeReady === 'true' || document.body.dataset.status === 'failed',
+      undefined,
+      { timeout: 30_000 }
+    );
+    const earlyFailure = await page.evaluate(() => document.body.dataset.error);
+    if (earlyFailure) throw new Error(earlyFailure);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.imeSetComposition', { text: '😀x', selectionStart: 2, selectionEnd: 3 });
+    const preedit = await page.evaluate(() => (window as any).galfusImeTest.pump());
+    if (!preedit.some((event: any) => event.type === 'imePreedit' && event.text === '😀x')) {
+      throw new Error(`Chromium IME preedit was not delivered: ${JSON.stringify(preedit)}`);
+    }
+    if (
+      !preedit.some(
+        (event: any) =>
+          event.type === 'imePreedit' &&
+          event.text === '😀x' &&
+          event.selection?.join(',') === '2,3'
+      )
+    ) {
+      throw new Error(
+        `Chromium IME UTF-16 selection was not delivered: ${JSON.stringify(preedit)}`
+      );
+    }
+    await cdp.send('Input.insertText', { text: '仮名' });
+    const commit = await page.evaluate(() => (window as any).galfusImeTest.pump());
+    const committed = commit.filter((event: any) => event.type === 'textInput');
+    if (
+      committed.length !== 1 ||
+      committed[0].text !== '仮名' ||
+      !commit.some((event: any) => event.type === 'imeCommit' && event.text === '仮名')
+    ) {
+      throw new Error(
+        `Chromium IME commit was not delivered exactly once: ${JSON.stringify(commit)}`
+      );
+    }
+    await page.evaluate(() => {
+      (window as any).galfusImeTest.reset();
+      (window as any).galfusImeTest.resume();
+    });
+    await page.waitForFunction(
+      () =>
+        document.body.dataset.hostImeReady === 'true' || document.body.dataset.status === 'failed',
+      undefined,
+      { timeout: 30_000 }
+    );
+    const hostFailure = await page.evaluate(() => document.body.dataset.error);
+    if (hostFailure) throw new Error(hostFailure);
+    await cdp.send('Input.imeSetComposition', { text: '😀x', selectionStart: 2, selectionEnd: 3 });
+    const preview = await page.evaluate(() => {
+      const test = (window as any).galfusHostImeTest;
+      test.tick();
+      return test.snapshot();
+    });
+    if (
+      preview.value !== 'a' ||
+      preview.displayValue !== 'a😀x' ||
+      preview.composition?.selection?.join(',') !== '2,3'
+    ) {
+      throw new Error(`Host IME preview or selection was incorrect: ${JSON.stringify(preview)}`);
+    }
+    await cdp.send('Input.insertText', { text: '仮名' });
+    const hostCommit = await page.evaluate(() => {
+      const test = (window as any).galfusHostImeTest;
+      test.tick();
+      return test.snapshot();
+    });
+    if (hostCommit.value !== 'a仮名' || hostCommit.composition)
+      throw new Error(`Host IME commit was incorrect: ${JSON.stringify(hostCommit)}`);
+    await page.evaluate(() => (window as any).galfusHostImeTest.selectEmoji());
+    await cdp.send('Input.imeSetComposition', { text: 'かな', selectionStart: 1, selectionEnd: 1 });
+    const selectedPreview = await page.evaluate(() => {
+      const test = (window as any).galfusHostImeTest;
+      test.tick();
+      return test.snapshot();
+    });
+    if (selectedPreview.value !== 'a😀b' || selectedPreview.displayValue !== 'aかなb')
+      throw new Error(`IME selection preview was incorrect: ${JSON.stringify(selectedPreview)}`);
+    await cdp.send('Input.imeSetComposition', { text: '', selectionStart: 0, selectionEnd: 0 });
+    const cancelled = await page.evaluate(() => {
+      const test = (window as any).galfusHostImeTest;
+      test.tick();
+      return test.snapshot();
+    });
+    if (cancelled.value !== 'a😀b' || cancelled.displayValue !== 'a😀b' || cancelled.composition)
+      throw new Error(`IME cancellation was incorrect: ${JSON.stringify(cancelled)}`);
+    await cdp.send('Input.imeSetComposition', { text: 'かな', selectionStart: 1, selectionEnd: 1 });
+    await cdp.send('Input.insertText', { text: '漢' });
+    const replacement = await page.evaluate(() => {
+      const test = (window as any).galfusHostImeTest;
+      test.tick();
+      return test.snapshot();
+    });
+    if (replacement.value !== 'a漢b')
+      throw new Error(`IME replacement was incorrect: ${JSON.stringify(replacement)}`);
+    await cdp.detach();
+    await page.evaluate(() => {
+      const test = (window as any).galfusHostImeTest;
+      test.reset();
+      test.resume();
+    });
     await page.waitForFunction(() => document.body.dataset.status !== undefined, undefined, {
       timeout: 30_000
     });

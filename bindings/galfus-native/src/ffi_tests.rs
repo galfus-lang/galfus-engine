@@ -136,7 +136,10 @@ fn test_ffi_interaction_and_collision() {
         },
         0
     );
-    let commands = CString::new(r#"[{"type":"create","id":1,"kind":{"type":"panel"}}]"#).unwrap();
+    let commands = CString::new(
+        r#"[{"type":"create","id":1,"kind":{"type":"panel"}},{"type":"create","id":3,"kind":{"type":"text","text":"a😀","fontSize":14}},{"type":"insert","parentId":1,"childId":3},{"type":"create","id":4,"kind":{"type":"richText","spans":[{"text":"😀","style":{"fontWeight":700,"italic":true,"underline":true,"strikethrough":true,"color":[1,0,0,1]}}]}},{"type":"insert","parentId":1,"childId":4}]"#,
+    )
+    .unwrap();
     assert_eq!(
         unsafe {
             crate::ffi_realm_2d_ui::galfus_realm_2d_apply_ui_commands(10, 77, commands.as_ptr())
@@ -152,14 +155,84 @@ fn test_ffi_interaction_and_collision() {
         },
         -1
     );
+    assert!(crate::ffi_realm_2d_ui::galfus_realm_2d_get_rich_text_clusters(10, 77, 4).is_null());
     crate::state::with_multiverse_mut(|mv| {
         let realm = mv
             .get_realm_mut::<galfus_realm_2d::context::Realm2DContext>(10)
             .unwrap();
         assert!(realm.uis[&77].0.nodes[&1].visible);
+        let galfus_realm_2d_resources::ui::UiNodeKind::Text(text) =
+            &realm.uis[&77].0.nodes[&3].kind
+        else {
+            panic!("expected text node");
+        };
+        assert_eq!(text.text.as_utf16(), &[0x61, 0xd83d, 0xde00]);
+        let galfus_realm_2d_resources::ui::UiNodeKind::RichText(rich) =
+            &realm.uis[&77].0.nodes[&4].kind
+        else {
+            panic!("expected rich text node");
+        };
+        assert_eq!(rich.spans[0].text.as_utf16(), &[0xd83d, 0xde00]);
+        assert_eq!(rich.spans[0].style.font_weight, 700);
+        assert!(
+            rich.spans[0].style.italic
+                && rich.spans[0].style.underline
+                && rich.spans[0].style.strikethrough
+        );
+        realm.uis.get_mut(&77).unwrap().0.computed.insert(
+            1,
+            galfus_realm_2d_resources::ui::UiComputedLayout {
+                absolute_rect: [1.0, 2.0, 30.0, 40.0],
+                ..Default::default()
+            },
+        );
+        realm.uis.get_mut(&77).unwrap().0.dirty_flags.clear();
+        realm.uis.get_mut(&77).unwrap().0.computed.insert(
+            4,
+            galfus_realm_2d_resources::ui::UiComputedLayout {
+                absolute_rect: [10.0, 20.0, 300.0, 100.0],
+                ..Default::default()
+            },
+        );
+        realm.uis.get_mut(&77).unwrap().0.computed.insert(
+            3,
+            galfus_realm_2d_resources::ui::UiComputedLayout {
+                absolute_rect: [10.0, 20.0, 300.0, 100.0],
+                ..Default::default()
+            },
+        );
         Ok(())
     })
     .unwrap();
+    let layout = crate::ffi_realm_2d_ui::galfus_realm_2d_get_ui_layout(10, 77, 1);
+    let layout_json = unsafe { from_c_str(layout) }.unwrap();
+    let layout_value: serde_json::Value = serde_json::from_str(layout_json).unwrap();
+    assert_eq!(
+        layout_value["absoluteRect"],
+        serde_json::json!([1.0, 2.0, 30.0, 40.0])
+    );
+    unsafe { galfus_string_free(layout) };
+    assert!(crate::ffi_realm_2d_ui::galfus_realm_2d_get_ui_layout(10, 77, 999).is_null());
+    let clusters = crate::ffi_realm_2d_ui::galfus_realm_2d_get_rich_text_clusters(10, 77, 4);
+    let cluster_json = unsafe { from_c_str(clusters) }.unwrap();
+    let cluster_value: serde_json::Value = serde_json::from_str(cluster_json).unwrap();
+    assert_eq!(cluster_value[0]["start"], 0);
+    assert_eq!(cluster_value[0]["end"], 2);
+    assert_eq!(cluster_value[0]["rect"][0], 10.0);
+    unsafe { galfus_string_free(clusters) };
+    let geometry = crate::ffi_realm_2d_ui::galfus_realm_2d_get_rich_text_geometry(10, 77, 4);
+    let geometry_value: serde_json::Value =
+        serde_json::from_str(unsafe { from_c_str(geometry) }.unwrap()).unwrap();
+    assert_eq!(geometry_value["lines"][0]["end"], 2);
+    assert_eq!(geometry_value["clusters"][0]["end"], 2);
+    unsafe { galfus_string_free(geometry) };
+    let simple = crate::ffi_realm_2d_ui::galfus_realm_2d_get_ui_text_geometry(10, 77, 3);
+    let simple_value: serde_json::Value =
+        serde_json::from_str(unsafe { from_c_str(simple) }.unwrap()).unwrap();
+    assert_eq!(simple_value["lines"][0]["end"], 3);
+    assert_eq!(simple_value["clusters"][1]["end"], 3);
+    unsafe { galfus_string_free(simple) };
+    assert!(crate::ffi_realm_2d_ui::galfus_realm_2d_get_rich_text_clusters(10, 77, 1).is_null());
 
     let cam_json = CString::new(r#"{"cameraSlot":0,"active":true,"orthoScale":1.0}"#).unwrap();
     let cam_res =

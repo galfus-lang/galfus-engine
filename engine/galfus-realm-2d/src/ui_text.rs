@@ -8,6 +8,7 @@ use lyon_tessellation::{
     StrokeOptions, StrokeTessellator, StrokeVertex, VertexBuffers,
 };
 
+use crate::ui_text_font::with_font_face_index;
 use crate::vector_geometry::VectorVertex;
 
 /// Measured line fragment of a text run.
@@ -15,6 +16,9 @@ use crate::vector_geometry::VectorVertex;
 pub struct UiTextLine {
     /// Text slice of this line.
     pub text: String,
+    /// Logical UTF-16 offsets, excluding a line break.
+    pub start: usize,
+    pub end: usize,
     /// Measured width of this line in pixels.
     pub width: f32,
     /// Y offset from the top of the text block to the baseline.
@@ -43,24 +47,9 @@ pub fn with_font_face<R>(
     default_family: &str,
     f: impl FnOnce(&ttf_parser::Face) -> R,
 ) -> Option<R> {
-    let query_family = family.unwrap_or(default_family);
-    let id = font_db
-        .query(&fontdb::Query {
-            families: &[fontdb::Family::Name(query_family)],
-            ..Default::default()
-        })
-        .or_else(|| {
-            font_db.query(&fontdb::Query {
-                families: &[fontdb::Family::Name(default_family)],
-                ..Default::default()
-            })
-        })
-        .or_else(|| font_db.faces().next().map(|face| face.id))?;
-
-    font_db.with_face_data(id, |data, index| {
-        let face = ttf_parser::Face::parse(data, index).ok()?;
-        Some(f(&face))
-    })?
+    with_font_face_index(font_db, family, default_family, 400, false, |face, _| {
+        f(face)
+    })
 }
 
 /// Measures text using actual font metrics and wraps lines to the specified max width constraint.
@@ -70,15 +59,23 @@ pub fn measure_text(
     node: &TextNode,
     max_width: Option<f32>,
 ) -> UiTextMeasurement {
-    if node.text.is_empty() || node.font_size <= 0.0 {
+    if node.font_size <= 0.0 {
         return UiTextMeasurement::default();
     }
+    let text = node.text.to_string();
+    let text = if node.multiline {
+        text
+    } else {
+        text.replace(['\r', '\n'], " ")
+    };
 
-    let result = with_font_face(
+    let result = with_font_face_index(
         font_db,
         node.font_family.as_deref(),
         default_family,
-        |face| {
+        node.font_weight,
+        node.italic,
+        |face, _face_index| {
             let units = face.units_per_em() as f32;
             let scale = node.font_size / units;
             let ascender = face.ascender() as f32 * scale;
@@ -97,84 +94,25 @@ pub fn measure_text(
             };
 
             let measure_word = |word: &str| -> f32 {
-                let mut advance = 0.0f32;
-                for c in word.chars() {
-                    advance += char_advance(c);
-                }
-                advance
+                let mut line_node = node.clone();
+                line_node.text = word.into();
+                crate::ui_text_fallback::shape(font_db, default_family, &line_node)
+                    .map(|runs| {
+                        runs.iter()
+                            .flat_map(|run| {
+                                run.glyphs
+                                    .iter()
+                                    .map(|glyph| glyph.x_advance as f32 * run.scale)
+                            })
+                            .sum()
+                    })
+                    .unwrap_or_else(|_| word.chars().map(char_advance).sum())
             };
 
-            let space_advance = char_advance(' ');
-            let mut lines = Vec::new();
-            let raw_paragraphs = if node.multiline || node.text.contains('\n') {
-                node.text.split('\n').collect::<Vec<_>>()
-            } else {
-                vec![node.text.as_str()]
-            };
-
-            let wrap = node.wrap == TextWrapMode::WordWrap;
-
-            for paragraph in raw_paragraphs {
-                if paragraph.is_empty() {
-                    lines.push(UiTextLine {
-                        text: String::new(),
-                        width: 0.0,
-                        baseline_y: 0.0,
-                        top_y: 0.0,
-                    });
-                    continue;
-                }
-
-                if !wrap || max_width.is_none() {
-                    let width = measure_word(paragraph);
-                    lines.push(UiTextLine {
-                        text: paragraph.to_string(),
-                        width,
-                        baseline_y: 0.0,
-                        top_y: 0.0,
-                    });
-                } else {
-                    let limit = max_width.unwrap_or(f32::INFINITY);
-                    let words: Vec<&str> = paragraph.split(' ').collect();
-                    let mut current_line = String::new();
-                    let mut current_w = 0.0f32;
-
-                    for (i, word) in words.iter().enumerate() {
-                        let word_w = measure_word(word);
-                        let added_w = if current_line.is_empty() {
-                            word_w
-                        } else {
-                            space_advance + word_w
-                        };
-
-                        if !current_line.is_empty() && current_w + added_w > limit {
-                            lines.push(UiTextLine {
-                                text: current_line,
-                                width: current_w,
-                                baseline_y: 0.0,
-                                top_y: 0.0,
-                            });
-                            current_line = word.to_string();
-                            current_w = word_w;
-                        } else {
-                            if !current_line.is_empty() {
-                                current_line.push(' ');
-                            }
-                            current_line.push_str(word);
-                            current_w += added_w;
-                        }
-
-                        if i == words.len() - 1 && !current_line.is_empty() {
-                            lines.push(UiTextLine {
-                                text: current_line.clone(),
-                                width: current_w,
-                                baseline_y: 0.0,
-                                top_y: 0.0,
-                            });
-                        }
-                    }
-                }
-            }
+            let limit = (node.wrap == TextWrapMode::WordWrap)
+                .then_some(max_width)
+                .flatten();
+            let mut lines = crate::ui_text_lines::lines(&text, node.multiline, limit, measure_word);
 
             let line_count = lines.len().max(1);
             let mut max_line_w = 0.0f32;
@@ -199,13 +137,15 @@ pub fn measure_text(
         // Fallback approximation if font database has no face
         let char_w = node.font_size * 0.6;
         let line_h = node.line_height.unwrap_or(node.font_size * 1.2);
-        let len = node.text.chars().count() as f32;
+        let len = text.chars().count() as f32;
         UiTextMeasurement {
             width: len * char_w,
             height: line_h,
             line_height: line_h,
             lines: vec![UiTextLine {
-                text: node.text.clone(),
+                text: text.clone(),
+                start: 0,
+                end: text.encode_utf16().count(),
                 width: len * char_w,
                 baseline_y: node.font_size * 0.8,
                 top_y: 0.0,
@@ -219,29 +159,30 @@ struct GlyphOutlineBuilder<'a> {
     scale: f32,
     offset_x: f32,
     offset_y: f32,
+    shear: f32,
 }
 
 impl<'a> ttf_parser::OutlineBuilder for GlyphOutlineBuilder<'a> {
     fn move_to(&mut self, x: f32, y: f32) {
         self.builder.begin(point(
-            self.offset_x + x * self.scale,
+            self.offset_x + (x + y * self.shear) * self.scale,
             self.offset_y + y * self.scale,
         ));
     }
     fn line_to(&mut self, x: f32, y: f32) {
         self.builder.line_to(point(
-            self.offset_x + x * self.scale,
+            self.offset_x + (x + y * self.shear) * self.scale,
             self.offset_y + y * self.scale,
         ));
     }
     fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
         self.builder.quadratic_bezier_to(
             point(
-                self.offset_x + x1 * self.scale,
+                self.offset_x + (x1 + y1 * self.shear) * self.scale,
                 self.offset_y + y1 * self.scale,
             ),
             point(
-                self.offset_x + x * self.scale,
+                self.offset_x + (x + y * self.shear) * self.scale,
                 self.offset_y + y * self.scale,
             ),
         );
@@ -249,15 +190,15 @@ impl<'a> ttf_parser::OutlineBuilder for GlyphOutlineBuilder<'a> {
     fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
         self.builder.cubic_bezier_to(
             point(
-                self.offset_x + x1 * self.scale,
+                self.offset_x + (x1 + y1 * self.shear) * self.scale,
                 self.offset_y + y1 * self.scale,
             ),
             point(
-                self.offset_x + x2 * self.scale,
+                self.offset_x + (x2 + y2 * self.shear) * self.scale,
                 self.offset_y + y2 * self.scale,
             ),
             point(
-                self.offset_x + x * self.scale,
+                self.offset_x + (x + y * self.shear) * self.scale,
                 self.offset_y + y * self.scale,
             ),
         );
@@ -471,62 +412,61 @@ pub fn tessellate_text_run(
 
     let measurement = measure_text(font_db, default_family, text_node, Some(qw));
     let geometry_start = buffers.indices.len();
-    let _ = with_font_face(
-        font_db,
-        text_node.font_family.as_deref(),
-        default_family,
-        |face| {
-            let units = face.units_per_em() as f32;
-            let scale = text_node.font_size / units;
-            let mut tessellator = FillTessellator::new();
-            let fill_opts = FillOptions::default()
-                .with_fill_rule(FillRule::NonZero)
-                .with_tolerance(0.05);
-            let mut stroke_tess = StrokeTessellator::new();
-            let fringe_opts = StrokeOptions::default()
-                .with_tolerance(0.05)
-                .with_line_width(1.2)
-                .with_line_cap(LineCap::Round)
-                .with_line_join(LineJoin::Round);
+    let mut tessellator = FillTessellator::new();
+    let fill_opts = FillOptions::default()
+        .with_fill_rule(FillRule::NonZero)
+        .with_tolerance(0.05);
+    let mut stroke_tess = StrokeTessellator::new();
+    let fringe_opts = StrokeOptions::default()
+        .with_tolerance(0.05)
+        .with_line_width(1.2)
+        .with_line_cap(LineCap::Round)
+        .with_line_join(LineJoin::Round);
 
-            for line in &measurement.lines {
-                if line.text.is_empty() {
-                    continue;
-                }
+    for line in &measurement.lines {
+        if line.text.is_empty() {
+            continue;
+        }
 
-                let align_offset = match text_node.align {
-                    TextAlign::Center => ((qw - line.width) * 0.5).max(0.0),
-                    TextAlign::Right => (qw - line.width).max(0.0),
-                    TextAlign::Left => 0.0,
+        let align_offset = match text_node.align {
+            TextAlign::Center => ((qw - line.width) * 0.5).max(0.0),
+            TextAlign::Right => (qw - line.width).max(0.0),
+            TextAlign::Left => 0.0,
+        };
+
+        let line_start_ui_x = qx + align_offset;
+        let line_base_ui_y = qy + line.baseline_y;
+
+        let local_base_x = line_start_ui_x - ui_width * 0.5;
+        let local_base_y = ui_height * 0.5 - line_base_ui_y;
+
+        let mut current_x = 0.0f32;
+
+        let mut line_node = text_node.clone();
+        line_node.text = line.text.as_str().into();
+        let Ok(runs) = crate::ui_text_fallback::shape(font_db, default_family, &line_node) else {
+            continue;
+        };
+        for run in runs {
+            let scale = run.scale;
+            let _ = font_db.with_face_data(run.font, |data, index| {
+                let Ok(face) = ttf_parser::Face::parse(data, index) else {
+                    return;
                 };
-
-                let line_start_ui_x = qx + align_offset;
-                let line_base_ui_y = qy + line.baseline_y;
-
-                let local_base_x = line_start_ui_x - ui_width * 0.5;
-                let local_base_y = ui_height * 0.5 - line_base_ui_y;
-
-                let mut current_x = 0.0f32;
-
-                for c in line.text.chars() {
-                    let gid = face.glyph_index(c).unwrap_or(ttf_parser::GlyphId(0));
-                    let adv = face.glyph_hor_advance(gid).unwrap_or(0) as f32 * scale;
-                    let advance = if c == ' ' || c == '\u{00A0}' {
-                        if adv > 0.0 {
-                            adv
-                        } else {
-                            text_node.font_size * 0.3
-                        }
-                    } else {
-                        adv
-                    };
+                for glyph in run.glyphs {
+                    let gid = ttf_parser::GlyphId(glyph.glyph_id as u16);
 
                     let mut path_builder = LyonPath::builder();
                     let mut glyph_builder = GlyphOutlineBuilder {
                         builder: &mut path_builder,
                         scale,
-                        offset_x: local_base_x + current_x,
-                        offset_y: local_base_y,
+                        offset_x: local_base_x + current_x + glyph.x_offset as f32 * scale,
+                        offset_y: local_base_y + glyph.y_offset as f32 * scale,
+                        shear: if text_node.italic && !face.is_italic() {
+                            0.2
+                        } else {
+                            0.0
+                        },
                     };
 
                     if face.outline_glyph(gid, &mut glyph_builder).is_some() {
@@ -550,6 +490,29 @@ pub fn tessellate_text_run(
                             }),
                         );
 
+                        if text_node.font_weight >= 600 && face.weight().to_number() < 600 {
+                            let bold_opts = StrokeOptions::default()
+                                .with_line_width(text_node.font_size * 0.035);
+                            let _ = stroke_tess.tessellate_path(
+                                &path,
+                                &bold_opts,
+                                &mut BuffersBuilder::new(buffers, |v: StrokeVertex| {
+                                    let p = v.position();
+                                    [
+                                        p.x,
+                                        p.y,
+                                        z_layer + 0.0002,
+                                        0.0,
+                                        0.0,
+                                        color[0],
+                                        color[1],
+                                        color[2],
+                                        color[3],
+                                    ]
+                                }),
+                            );
+                        }
+
                         // Glyph edge feathering via Lyon StrokeTessellator (smooth fringe model)
                         let _ = stroke_tess.tessellate_path(
                             &path,
@@ -570,10 +533,10 @@ pub fn tessellate_text_run(
                             }),
                         );
                     }
-                    current_x += advance;
+                    current_x += glyph.x_advance as f32 * scale;
                 }
-            }
-        },
-    );
+            });
+        }
+    }
     crate::ui_clip::clip_new_geometry(buffers, geometry_start, clip_rect, ui_width, ui_height);
 }

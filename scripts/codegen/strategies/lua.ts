@@ -88,7 +88,8 @@ export class LuaStrategy implements CodegenStrategy {
       '    typedef struct { uint32_t enabled; float target_x, target_y, target_z, up_x, up_y, up_z; } GalfusCameraLookAt3D;',
       '    typedef struct { float emitter_x, emitter_y, emitter_z, emitter_rotation_x, emitter_rotation_y, emitter_rotation_z, emitter_rotation_w, listener_x, listener_y, listener_z, listener_rotation_x, listener_rotation_y, listener_rotation_z, listener_rotation_w, volume, min_distance, max_distance, rolloff, speed; uint32_t looping; } GalfusSpatialAudio;',
       '    typedef struct { uint16_t kind, event_type; uint32_t flags, window_id, subject_id; uint64_t id; float values[5]; uint8_t text0_length, text1_length, text2_length, has_more; uint8_t text_bytes[80]; } GalfusPlatformEvent;',
-      '    void galfus_string_free(char* ptr);'
+      '    void galfus_string_free(char* ptr);',
+      '    const uint8_t* galfus_platform_event_text(uint32_t field, uint32_t* out_length);'
     ];
 
     for (const fn of context.functions) {
@@ -182,6 +183,15 @@ export class LuaStrategy implements CodegenStrategy {
       '        local text0 = t0_len > 0 and ffi.string(event.text_bytes, t0_len) or ""',
       '        local text1 = t1_len > 0 and ffi.string(event.text_bytes + t0_len, t1_len) or ""',
       '        local text2 = t2_len > 0 and ffi.string(event.text_bytes + t0_len + t1_len, t2_len) or ""',
+      '        if bit.band(flags, 512) ~= 0 then',
+      '            local function full_text(field)',
+      '                local length = ffi.new("uint32_t[1]")',
+      '                local pointer = clib.galfus_platform_event_text(field, length)',
+      '                if pointer == nil then error("Could not retrieve event text: " .. (M.get_last_error() or "unknown")) end',
+      '                return ffi.string(pointer, length[0])',
+      '            end',
+      '            text0, text1, text2 = full_text(0), full_text(1), full_text(2)',
+      '        end',
       '        local modifiers = { shift = bit.band(flags, 2) ~= 0, ctrl = bit.band(flags, 4) ~= 0, alt = bit.band(flags, 8) ~= 0, superKey = bit.band(flags, 16) ~= 0 }',
       '        local value',
       '        if event.kind == 1 then',

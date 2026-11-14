@@ -76,6 +76,9 @@ impl Model2DUI {
                     UiNodeKind::Text(text) => {
                         staged.create_text(*id, text.clone(), layout.clone())?
                     }
+                    UiNodeKind::RichText(text) => {
+                        staged.create_rich_text(*id, text.clone(), layout.clone())?
+                    }
                 },
                 UiCommand::SetRoot { id } => staged.set_root(*id)?,
                 UiCommand::Insert {

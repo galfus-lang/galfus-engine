@@ -73,7 +73,7 @@ impl UiManager2D {
                     && old.layout == *layout
                     && old.z_layer == node.z_layer
                     && old.dimensions == [dimensions.0, dimensions.1]
-                    && (!matches!(node.kind, UiNodeKind::Text(_))
+                    && (!matches!(node.kind, UiNodeKind::Text(_) | UiNodeKind::RichText(_))
                         || (Arc::ptr_eq(&old.fonts, &fonts.database)
                             && old.family == fonts.default_family))
             }) {
@@ -162,6 +162,16 @@ impl UiManager2D {
                         node.z_layer,
                         opacity,
                         None,
+                    ),
+                    UiNodeKind::RichText(text) => crate::ui_rich_text::tessellate(
+                        &mut back,
+                        text,
+                        &fonts.database,
+                        &fonts.default_family,
+                        [x, y, width, height],
+                        [dimensions.0, dimensions.1],
+                        node.z_layer,
+                        opacity,
                     ),
                 }
             }

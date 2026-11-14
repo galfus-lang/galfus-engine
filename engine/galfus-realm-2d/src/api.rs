@@ -273,6 +273,7 @@ impl Realm2DContext {
                 if matches!(
                     node.kind,
                     galfus_realm_2d_resources::ui::UiNodeKind::Text(_)
+                        | galfus_realm_2d_resources::ui::UiNodeKind::RichText(_)
                 ) {
                     ui.dirty_flags.entry(id).or_default().insert(
                         galfus_realm_2d_resources::ui::UiDirtyFlags::TEXT_MEASURE

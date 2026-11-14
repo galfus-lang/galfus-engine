@@ -163,10 +163,14 @@ impl Default for ScrollPanelNode {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextNode {
-    /// Raw text string.
-    pub text: String,
+    /// Unicode text stored as UTF-16; JSON transports encode it as a string.
+    pub text: super::UiText,
     /// Font size in pixels.
     pub font_size: f32,
+    #[serde(default = "default_font_weight")]
+    pub font_weight: u16,
+    #[serde(default)]
+    pub italic: bool,
     /// Optional line height in pixels (defaults to `font_size * 1.2` when `None`).
     #[serde(default)]
     pub line_height: Option<f32>,
@@ -190,8 +194,10 @@ pub struct TextNode {
 impl Default for TextNode {
     fn default() -> Self {
         Self {
-            text: String::new(),
+            text: super::UiText::default(),
             font_size: 14.0,
+            font_weight: default_font_weight(),
+            italic: false,
             line_height: None,
             color: default_white_vec4(),
             font_family: None,
@@ -214,6 +220,8 @@ pub enum UiNodeKind {
     ScrollPanel(ScrollPanelNode),
     /// Text layout and rendering node (non-interactive).
     Text(TextNode),
+    /// Formatted text is visual and does not receive pointer events.
+    RichText(super::RichText),
 }
 
 impl UiNodeKind {
@@ -231,7 +239,7 @@ impl UiNodeKind {
             UiNodeKind::Panel(p) => Some(p),
             UiNodeKind::SpritePanel(s) => Some(&s.panel),
             UiNodeKind::ScrollPanel(s) => Some(&s.panel),
-            UiNodeKind::Text(_) => None,
+            UiNodeKind::Text(_) | UiNodeKind::RichText(_) => None,
         }
     }
 
@@ -241,13 +249,17 @@ impl UiNodeKind {
             UiNodeKind::Panel(p) => Some(p),
             UiNodeKind::SpritePanel(s) => Some(&mut s.panel),
             UiNodeKind::ScrollPanel(s) => Some(&mut s.panel),
-            UiNodeKind::Text(_) => None,
+            UiNodeKind::Text(_) | UiNodeKind::RichText(_) => None,
         }
     }
 }
 
 pub(crate) fn default_zero_vec4() -> [f32; 4] {
     [0.0, 0.0, 0.0, 0.0]
+}
+
+fn default_font_weight() -> u16 {
+    400
 }
 
 pub(crate) fn default_white_vec4() -> [f32; 4] {

@@ -55,7 +55,13 @@ impl Default for GalfusPlatformEvent {
 }
 
 thread_local! {
-    static PENDING_EVENTS: RefCell<VecDeque<GalfusPlatformEvent>> = const { RefCell::new(VecDeque::new()) };
+    static PENDING_EVENTS: RefCell<VecDeque<QueuedEvent>> = const { RefCell::new(VecDeque::new()) };
+    static CURRENT_TEXT: RefCell<Option<[String; 3]>> = const { RefCell::new(None) };
+}
+
+struct QueuedEvent {
+    record: GalfusPlatformEvent,
+    full_text: Option<[String; 3]>,
 }
 
 const FLAG_TRUE: u32 = 1;
@@ -66,6 +72,39 @@ const FLAG_SUPER: u32 = 1 << 4;
 const FLAG_REPEAT: u32 = 1 << 5;
 const FLAG_SCROLL_PIXELS: u32 = 1 << 6;
 const FLAG_TEXT_PRESENT: u32 = 1 << 8;
+/// One or more inline text fields were shortened; retrieve all text fields before pumping again.
+pub const FLAG_TEXT_OVERFLOW: u32 = 1 << 9;
+
+fn full_text_fields(event: &PlatformEvent) -> [String; 3] {
+    let mut fields = [String::new(), String::new(), String::new()];
+    match event {
+        PlatformEvent::Keyboard(KeyboardEvent::Input {
+            physical_key,
+            logical_key,
+            text,
+            ..
+        }) => {
+            fields[0] = format!("{physical_key:?}");
+            fields[1] = logical_key.as_str().to_owned();
+            fields[2] = text.clone().unwrap_or_default();
+        }
+        PlatformEvent::Keyboard(
+            KeyboardEvent::ImePreedit { text, .. }
+            | KeyboardEvent::ImeCommit { text, .. }
+            | KeyboardEvent::TextInput { text, .. },
+        ) => fields[0] = text.clone(),
+        PlatformEvent::Pointer(PointerEvent::Button { button, .. }) => {
+            fields[0] = format!("{button:?}")
+        }
+        PlatformEvent::Gamepad(GamepadEvent::Connected { name, .. }) => fields[0] = name.clone(),
+        PlatformEvent::Gamepad(GamepadEvent::Button { button, .. }) => {
+            fields[0] = format!("{button:?}")
+        }
+        PlatformEvent::Gamepad(GamepadEvent::Axis { axis, .. }) => fields[0] = format!("{axis:?}"),
+        _ => {}
+    }
+    fields
+}
 
 fn push_inline_text(buf: &mut [u8; EVENT_TEXT_CAPACITY], cursor: &mut usize, value: &str) -> u8 {
     let remaining = EVENT_TEXT_CAPACITY.saturating_sub(*cursor);
@@ -294,7 +333,23 @@ pub fn enqueue_events(events: Vec<PlatformEvent>) {
     PENDING_EVENTS.with(|q| {
         let mut q = q.borrow_mut();
         for ev in events {
-            q.push_back(encode_event(ev));
+            let fields = full_text_fields(&ev);
+            let mut record = encode_event(ev);
+            let truncated = fields
+                .iter()
+                .zip([
+                    record.text0_length,
+                    record.text1_length,
+                    record.text2_length,
+                ])
+                .any(|(text, length)| text.len() != usize::from(length));
+            if truncated {
+                record.flags |= FLAG_TEXT_OVERFLOW;
+            }
+            q.push_back(QueuedEvent {
+                record,
+                full_text: truncated.then_some(fields),
+            });
         }
     });
 }
@@ -305,9 +360,11 @@ pub fn pop_next_event() -> GalfusPlatformEvent {
     PENDING_EVENTS.with(|q| {
         let mut q = q.borrow_mut();
         if let Some(mut ev) = q.pop_front() {
-            ev.has_more = u8::from(!q.is_empty());
-            ev
+            ev.record.has_more = u8::from(!q.is_empty());
+            CURRENT_TEXT.with(|text| *text.borrow_mut() = ev.full_text);
+            ev.record
         } else {
+            CURRENT_TEXT.with(|text| *text.borrow_mut() = None);
             GalfusPlatformEvent::default()
         }
     })
@@ -316,6 +373,21 @@ pub fn pop_next_event() -> GalfusPlatformEvent {
 /// Clears all pending events on platform shutdown.
 pub(crate) fn clear_pending_events() {
     PENDING_EVENTS.with(|q| q.borrow_mut().clear());
+    CURRENT_TEXT.with(|text| *text.borrow_mut() = None);
+}
+
+/// The pointer is valid on the current thread until the next event is popped or shutdown.
+pub(crate) fn current_text(slot: usize) -> Option<(*const u8, u32)> {
+    CURRENT_TEXT.with(|current| {
+        let current = current.borrow();
+        let value = current.as_ref()?.get(slot)?;
+        let pointer = if value.is_empty() {
+            c"".as_ptr().cast::<u8>()
+        } else {
+            value.as_ptr()
+        };
+        Some((pointer, u32::try_from(value.len()).ok()?))
+    })
 }
 
 #[cfg(test)]
@@ -404,6 +476,74 @@ mod tests {
             std::str::from_utf8(&commit.text_bytes[..commit.text0_length as usize]).unwrap(),
             "漢字"
         );
+    }
+
+    #[test]
+    fn overflow_preserves_complete_text_selection_order_and_lifetime() {
+        clear_pending_events();
+        let text = format!("{}\0漢😀", "é".repeat(45));
+        enqueue_events(vec![
+            PlatformEvent::Keyboard(KeyboardEvent::ImePreedit {
+                window_id: 9,
+                text: text.clone(),
+                selection: Some([40, 48]),
+            }),
+            PlatformEvent::Keyboard(KeyboardEvent::ImeCommit {
+                window_id: 9,
+                text: text.clone(),
+            }),
+            PlatformEvent::Keyboard(KeyboardEvent::TextInput {
+                window_id: 9,
+                text: text.clone(),
+            }),
+            PlatformEvent::Window(WindowEvent::CloseRequested { window_id: 9 }),
+        ]);
+        for event_type in [4, 5, 7] {
+            let event = pop_next_event();
+            assert_eq!(event.event_type, event_type);
+            assert_ne!(event.flags & FLAG_TEXT_OVERFLOW, 0);
+            assert_eq!(event.has_more, 1);
+            if event_type == 4 {
+                assert_eq!((event.subject_id, event.id), (40, 48));
+            }
+            let mut len = 0;
+            let pointer = unsafe { crate::ffi::galfus_platform_event_text(0, &mut len) };
+            assert!(!pointer.is_null());
+            assert_eq!(
+                unsafe { std::slice::from_raw_parts(pointer, len as usize) },
+                text.as_bytes()
+            );
+            let empty = unsafe { crate::ffi::galfus_platform_event_text(1, &mut len) };
+            assert!(!empty.is_null());
+            assert_eq!(len, 0);
+        }
+        assert_eq!(pop_next_event().kind, 1);
+        let mut len = 1;
+        assert!(unsafe { crate::ffi::galfus_platform_event_text(0, &mut len) }.is_null());
+        assert_eq!(len, 0);
+    }
+
+    #[test]
+    fn key_event_overflow_preserves_individual_fields() {
+        clear_pending_events();
+        let long = "😀".repeat(50);
+        enqueue_events(vec![PlatformEvent::Keyboard(KeyboardEvent::Input {
+            window_id: 1,
+            physical_key: KeyCode::KeyW,
+            logical_key: LogicalKey::Character("é".into()),
+            text: Some(long.clone()),
+            state: KeyState::Pressed,
+            modifiers: ModifiersState::EMPTY,
+            repeat: false,
+        })]);
+        let event = pop_next_event();
+        assert_ne!(event.flags & FLAG_TEXT_OVERFLOW, 0);
+        let (pointer, len) = current_text(2).unwrap();
+        assert_eq!(
+            unsafe { std::slice::from_raw_parts(pointer, len as usize) },
+            long.as_bytes()
+        );
+        clear_pending_events();
     }
 
     #[test]

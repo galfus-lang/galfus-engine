@@ -2,6 +2,26 @@ import type { DescSpec, FunctionSpec } from './types';
 
 export const realm2dUiDescriptors: DescSpec[] = [
   {
+    kind: 'object',
+    name: 'RichTextStyleDesc',
+    fields: {
+      fontSize: { type: 'number', optional: true },
+      fontWeight: { type: 'number', optional: true },
+      italic: { type: 'boolean', optional: true },
+      underline: { type: 'boolean', optional: true },
+      strikethrough: { type: 'boolean', optional: true },
+      color: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true }
+    }
+  },
+  {
+    kind: 'object',
+    name: 'RichTextSpanDesc',
+    fields: {
+      text: { type: 'string' },
+      style: { type: { ref: 'RichTextStyleDesc' }, optional: true }
+    }
+  },
+  {
     kind: 'union',
     name: 'UiDimensionDesc',
     variants: [
@@ -52,9 +72,9 @@ export const realm2dUiDescriptors: DescSpec[] = [
   {
     kind: 'object',
     name: 'UiNodeKindDesc',
-    doc: 'Typed UI node properties; type selects panel, spritePanel, scrollPanel, or text.',
+    doc: 'Typed UI node properties; text nodes do not receive pointer events.',
     fields: {
-      type: { type: { enum: ['panel', 'spritePanel', 'scrollPanel', 'text'] } },
+      type: { type: { enum: ['panel', 'spritePanel', 'scrollPanel', 'text', 'richText'] } },
       backgroundColor: {
         type: { tuple: ['number', 'number', 'number', 'number'] },
         optional: true
@@ -78,7 +98,10 @@ export const realm2dUiDescriptors: DescSpec[] = [
       scrollXEnabled: { type: 'boolean', optional: true },
       scrollYEnabled: { type: 'boolean', optional: true },
       text: { type: 'string', optional: true },
+      spans: { type: { array: { ref: 'RichTextSpanDesc' } }, optional: true },
       fontSize: { type: 'number', optional: true },
+      fontWeight: { type: 'number', optional: true },
+      italic: { type: 'boolean', optional: true },
       lineHeight: { type: 'number', optional: true },
       fontFamily: { type: 'string', optional: true },
       color: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
@@ -186,6 +209,50 @@ export const realm2dUiDescriptors: DescSpec[] = [
 ];
 
 export const realm2dUiFunctions: FunctionSpec[] = [
+  {
+    cName: 'galfus_realm_2d_get_ui_text_geometry',
+    methodName: 'realm2dGetUiTextGeometry',
+    doc: 'Returns Text or RichText geometry in UI coordinates as JSON; offsets are UTF-16 code units.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D realm.' },
+      { name: 'uiId', type: 'u32', doc: 'Logical ID of the UI model.' },
+      { name: 'elementId', type: 'u32', doc: 'Logical ID of the text element.' }
+    ],
+    returnType: 'string'
+  },
+  {
+    cName: 'galfus_realm_2d_get_rich_text_geometry',
+    methodName: 'realm2dGetRichTextGeometry',
+    doc: 'Returns RichText line boxes and shaped clusters in UI coordinates as JSON; offsets are UTF-16 code units.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D realm.' },
+      { name: 'uiId', type: 'u32', doc: 'Logical ID of the UI model.' },
+      { name: 'elementId', type: 'u32', doc: 'Logical ID of the RichText element.' }
+    ],
+    returnType: 'string'
+  },
+  {
+    cName: 'galfus_realm_2d_get_rich_text_clusters',
+    methodName: 'realm2dGetRichTextClusters',
+    doc: 'Returns visual RichText cluster rectangles in UI coordinates as JSON; offsets are UTF-16 code units.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D realm.' },
+      { name: 'uiId', type: 'u32', doc: 'Logical ID of the UI model.' },
+      { name: 'elementId', type: 'u32', doc: 'Logical ID of the RichText element.' }
+    ],
+    returnType: 'string'
+  },
+  {
+    cName: 'galfus_realm_2d_get_ui_layout',
+    methodName: 'realm2dGetUiLayout',
+    doc: 'Returns the last computed UI element layout as JSON; fails if no layout is available.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D realm.' },
+      { name: 'uiId', type: 'u32', doc: 'Logical ID of the UI model.' },
+      { name: 'elementId', type: 'u32', doc: 'Logical ID of the UI element.' }
+    ],
+    returnType: 'string'
+  },
   {
     cName: 'galfus_realm_2d_apply_ui_commands',
     methodName: 'realm2dApplyUiCommands',

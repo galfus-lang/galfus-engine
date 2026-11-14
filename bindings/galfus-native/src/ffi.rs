@@ -414,6 +414,30 @@ pub unsafe extern "C" fn galfus_platform_pump_events(
     0
 }
 
+/// Returns the full UTF-8 bytes for an overflowed event text field (0, 1, or 2).
+/// The borrowed pointer is valid on this thread until the next event is pumped or shutdown.
+///
+/// # Safety
+/// `out_length` must point to writable `u32` storage. Do not free the returned pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_platform_event_text(slot: u32, out_length: *mut u32) -> *const u8 {
+    if out_length.is_null() {
+        set_last_error("Null event text length pointer");
+        return std::ptr::null();
+    }
+    match crate::ffi_event_batch::current_text(slot as usize) {
+        Some((ptr, length)) => {
+            unsafe { *out_length = length };
+            ptr
+        }
+        None => {
+            unsafe { *out_length = 0 };
+            set_last_error("No overflow text for the current event or invalid field");
+            std::ptr::null()
+        }
+    }
+}
+
 /// Returns the current text stored in the platform clipboard as a newly allocated C string, or null on failure.
 #[unsafe(no_mangle)]
 pub extern "C" fn galfus_platform_get_clipboard_text() -> *mut c_char {

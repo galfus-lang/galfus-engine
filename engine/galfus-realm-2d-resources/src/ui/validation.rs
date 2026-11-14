@@ -26,6 +26,11 @@ impl Model2DUI {
         }
 
         for (&id, node) in &self.nodes {
+            if let super::UiNodeKind::RichText(text) = &node.kind
+                && !text.is_valid()
+            {
+                return Err(UiTreeError::InvalidTree("invalid rich text style".into()));
+            }
             self.validate_id(id)?;
             if id != node.id {
                 return Err(UiTreeError::InvalidTree(format!(

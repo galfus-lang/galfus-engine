@@ -2,6 +2,42 @@
 
 use super::*;
 
+#[napi(js_name = "realm2dGetUiTextGeometry")]
+pub fn realm_2d_get_ui_text_geometry(realm_id: u32, ui_id: u32, element_id: u32) -> Result<String> {
+    ffi_string_result(
+        crate::ffi_realm_2d_ui::galfus_realm_2d_get_ui_text_geometry(realm_id, ui_id, element_id),
+    )
+}
+
+#[napi(js_name = "realm2dGetRichTextGeometry")]
+pub fn realm_2d_get_rich_text_geometry(
+    realm_id: u32,
+    ui_id: u32,
+    element_id: u32,
+) -> Result<String> {
+    ffi_string_result(
+        crate::ffi_realm_2d_ui::galfus_realm_2d_get_rich_text_geometry(realm_id, ui_id, element_id),
+    )
+}
+
+#[napi(js_name = "realm2dGetRichTextClusters")]
+pub fn realm_2d_get_rich_text_clusters(
+    realm_id: u32,
+    ui_id: u32,
+    element_id: u32,
+) -> Result<String> {
+    ffi_string_result(
+        crate::ffi_realm_2d_ui::galfus_realm_2d_get_rich_text_clusters(realm_id, ui_id, element_id),
+    )
+}
+
+#[napi(js_name = "realm2dGetUiLayout")]
+pub fn realm_2d_get_ui_layout(realm_id: u32, ui_id: u32, element_id: u32) -> Result<String> {
+    ffi_string_result(crate::ffi_realm_2d_ui::galfus_realm_2d_get_ui_layout(
+        realm_id, ui_id, element_id,
+    ))
+}
+
 // Realm 2D
 #[napi(js_name = "realm2dCreate")]
 pub fn realm_2d_create(realm_id: u32) -> Result<()> {

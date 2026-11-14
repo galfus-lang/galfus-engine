@@ -231,7 +231,27 @@ impl BrowserIme {
                 let Some(input_event) = event.dyn_ref::<web_sys::InputEvent>() else {
                     return;
                 };
-                if !active.get() || composing_ref.get() || input_event.is_composing() {
+                if !active.get() {
+                    return;
+                }
+                if composing_ref.get() || input_event.is_composing() {
+                    // Browser selection offsets are UTF-16. They describe the preedit only
+                    // when the textarea contains exactly the current composition text.
+                    if let Some(text) = input_event.data()
+                        && input_ref.value() == text
+                        && let (Ok(Some(start)), Ok(Some(end))) =
+                            (input_ref.selection_start(), input_ref.selection_end())
+                        && start <= end
+                        && end as usize <= text.encode_utf16().count()
+                    {
+                        queue.borrow_mut().push(PlatformEvent::Keyboard(
+                            KeyboardEvent::ImePreedit {
+                                window_id,
+                                text,
+                                selection: Some([start, end]),
+                            },
+                        ));
+                    }
                     return;
                 }
                 let kind = input_event.input_type();

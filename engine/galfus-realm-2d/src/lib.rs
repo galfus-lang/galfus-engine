@@ -26,8 +26,16 @@ mod ui_flex;
 mod ui_fonts;
 mod ui_grid;
 pub mod ui_layout;
+mod ui_rich_bidi;
+mod ui_rich_text;
 mod ui_scroll;
 pub mod ui_text;
+mod ui_text_caret;
+mod ui_text_fallback;
+mod ui_text_font;
+pub mod ui_text_geometry;
+mod ui_text_lines;
+pub mod ui_text_shape;
 pub mod vector_geometry;
 
 pub use batch::{BatchBuilder2D, PreparedItem2D};

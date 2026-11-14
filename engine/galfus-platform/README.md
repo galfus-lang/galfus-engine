@@ -18,7 +18,7 @@ Environment normalization, native window lifecycle, input event processing, audi
   - Allows the engine to run without a desktop display server (X11/Wayland/Windows Desktop) for CI testing, automated test suites, and offscreen cloud rendering.
 - **Normalized Input Pipeline**:
   - Keyboard: Normalizes physical scan codes and logical keys (including character mappings and named navigation keys).
-  - IME: Per-window enable/disable, candidate area in physical window pixels, and `imeEnabled`, `imePreedit`, `imeCommit`, and `imeDisabled` keyboard events. Preedit selection, when available, uses UTF-16 code-unit offsets into the preedit text. Browser composition events do not expose this selection, so it is omitted there. Empty preedit clears the preview; a commit contains confirmed text.
+  - IME: Per-window enable/disable, candidate area in physical window pixels, and `imeEnabled`, `imePreedit`, `imeCommit`, and `imeDisabled` keyboard events. Preedit selection, when available, uses UTF-16 code-unit offsets into the preedit text. Browsers provide a selection only when the input surface exposes a matching composition value and selection. Empty preedit clears the preview; a commit contains confirmed text.
   - Pointer & Mouse: High-precision cursor positions, deltas, wheel scrolling, button states, and touch pressure extraction.
   - Gamepad (W3C Standard): Normalizes gamepad axes and buttons to the W3C Standard Gamepad layout with configurable stick deadzones.
 - **Integrated Audio Subsystem**:

@@ -1,8 +1,6 @@
 //! Core-owned grid placement and track sizing.
 
-use galfus_realm_2d_resources::ui::{
-    Model2DUI, UiDimension, UiGridTrack, UiLayoutStyle, UiNodeKind,
-};
+use galfus_realm_2d_resources::ui::{Model2DUI, UiDimension, UiGridTrack, UiLayoutStyle};
 
 use crate::ui_layout::resolve_node_layout;
 
@@ -75,8 +73,8 @@ pub(crate) fn layout_grid(
         let col = index % count;
         let row = index / count;
         let child_node = &ui.nodes[&child];
-        let fill_width = matches!(child_node.layout.width, UiDimension::Auto)
-            && !matches!(child_node.kind, UiNodeKind::Text(_));
+        let fill_width =
+            matches!(child_node.layout.width, UiDimension::Auto) && child_node.kind.is_panel();
         let rect = resolve_node_layout(
             ui,
             child,
@@ -103,7 +101,7 @@ pub(crate) fn layout_grid(
             }
             let child = children[index];
             let child_node = &ui.nodes[&child];
-            let is_panel = !matches!(child_node.kind, UiNodeKind::Text(_));
+            let is_panel = child_node.kind.is_panel();
             let fill_width = is_panel && matches!(child_node.layout.width, UiDimension::Auto);
             let fill_height = is_panel
                 && style.grid_row_height.is_some()

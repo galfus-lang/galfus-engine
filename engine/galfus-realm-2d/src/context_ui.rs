@@ -249,7 +249,7 @@ impl UiManager2D {
                     text: text.text.clone(),
                     font_size: text.font_size,
                     color: text.color,
-                    multiline: text.text.contains('\n'),
+                    multiline: text.text.as_utf16().contains(&(b'\n' as u16)),
                     ..Default::default()
                 };
                 crate::ui_text::tessellate_text_run(

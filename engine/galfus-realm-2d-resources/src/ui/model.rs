@@ -45,7 +45,8 @@ pub struct UiText2D {
     pub font_size: f32,
     #[serde(default = "super::types::default_white_vec4")]
     pub color: [f32; 4],
-    pub text: String,
+    /// Unicode text stored as UTF-16; JSON transports encode it as a string.
+    pub text: super::UiText,
     #[serde(default)]
     pub clip_rect: Option<[f32; 4]>,
 }
@@ -152,6 +153,19 @@ impl Model2DUI {
         self.add_node_internal(id, UiNodeKind::Text(text), layout)
     }
 
+    /// Creates a formatted text element; events remain exclusive to panels.
+    pub fn create_rich_text(
+        &mut self,
+        id: u32,
+        text: super::RichText,
+        layout: UiLayoutStyle,
+    ) -> Result<(), UiTreeError> {
+        if !text.is_valid() {
+            return Err(UiTreeError::InvalidTree("invalid rich text style".into()));
+        }
+        self.add_node_internal(id, UiNodeKind::RichText(text), layout)
+    }
+
     fn add_node_internal(
         &mut self,
         id: u32,
@@ -195,7 +209,7 @@ impl Model2DUI {
         // Verify parent is a panel variant (text cannot have children)
         if matches!(
             self.nodes.get(&parent_id).unwrap().kind,
-            UiNodeKind::Text(_)
+            UiNodeKind::Text(_) | UiNodeKind::RichText(_)
         ) {
             return Err(UiTreeError::TextCannotHaveChildren);
         }

@@ -86,7 +86,9 @@ export function createUi1Scene(
   const uiRoot = new UiRoot(runtime, realm2d, {
     width: size[0],
     height: size[1],
-    zLayer: 1
+    zLayer: 1,
+    padding: 0,
+    layout: { type: 'free' }
   });
 
   let zoom = 1.0;
@@ -119,12 +121,67 @@ export function createUi1Scene(
   });
   rootPanel.addText(subtitleText);
 
+  // A core-owned RichText node; the surrounding ModelUI remains non-interactive.
+  const richUi = realm2d.createUi({}, { zLayer: 2 });
+  realm2d.applyUiCommands(richUi, [
+    {
+      type: 'create',
+      id: 1,
+      kind: { type: 'panel', backgroundColor: [0, 0, 0, 0] },
+      layout: {
+        width: { type: 'exact', value: size[0] },
+        height: { type: 'exact', value: size[1] },
+        isStack: true
+      }
+    },
+    {
+      type: 'create',
+      id: 2,
+      kind: {
+        type: 'richText',
+        multiline: false,
+        spans: [
+          { text: 'RichText: ', style: { fontSize: 18, color: [0.8, 0.9, 1, 1] } },
+          { text: 'bold ', style: { fontSize: 18, fontWeight: 700, color: [0.3, 0.9, 1, 1] } },
+          { text: 'italic ', style: { fontSize: 18, italic: true, color: [1, 0.8, 0.4, 1] } },
+          { text: 'underline ', style: { fontSize: 18, underline: true, color: [0.5, 1, 0.6, 1] } },
+          { text: 'strike', style: { fontSize: 18, strikethrough: true, color: [1, 0.5, 0.5, 1] } }
+        ]
+      },
+      layout: { positionOffset: [24, 530] }
+    },
+    { type: 'insert', parentId: 1, childId: 2 },
+    {
+      type: 'create',
+      id: 3,
+      kind: {
+        type: 'richText',
+        multiline: true,
+        wrap: 'wordWrap',
+        spans: [
+          {
+            text: 'Multiline text wraps across ',
+            style: { fontSize: 15, color: [0.8, 0.9, 1, 1] }
+          },
+          {
+            text: 'formatted spans while retaining their styles.',
+            style: { fontSize: 15, underline: true, color: [0.4, 0.9, 0.8, 1] }
+          }
+        ]
+      },
+      layout: { positionOffset: [24, 570], width: { type: 'exact', value: 330 } }
+    },
+    { type: 'insert', parentId: 1, childId: 3 }
+  ]);
+
   // Main Viewport Container Frame
   const viewportContainer = new Panel({
     x: 24,
     y: 80,
     width: 560,
-    height: 420
+    height: 420,
+    padding: 0,
+    layout: { type: 'free' }
   })
     .setBackgroundColor([0.02, 0.04, 0.07, 1])
     .setBorderColor([0.17, 0.32, 0.47, 1])
@@ -150,7 +207,9 @@ export function createUi1Scene(
     x: 608,
     y: 80,
     width: 392,
-    height: 420
+    height: 420,
+    padding: 0,
+    layout: { type: 'free' }
   })
     .setBackgroundColor([0.06, 0.1, 0.16, 1])
     .setBorderColor([0.15, 0.25, 0.38, 1])
@@ -224,7 +283,9 @@ export function createUi1Scene(
     x: 20,
     y: 130,
     width: 170,
-    height: 36
+    height: 36,
+    padding: 0,
+    layout: { type: 'free' }
   })
     .setBackgroundColor([0.12, 0.22, 0.35, 1])
     .setBorderColor([0.25, 0.45, 0.7, 1])
@@ -249,7 +310,9 @@ export function createUi1Scene(
     x: 200,
     y: 130,
     width: 170,
-    height: 36
+    height: 36,
+    padding: 0,
+    layout: { type: 'free' }
   })
     .setBackgroundColor([0.12, 0.22, 0.35, 1])
     .setBorderColor([0.25, 0.45, 0.7, 1])
@@ -325,6 +388,17 @@ export function createUi1Scene(
           camComp.isDirty = true;
         }
         uiRoot.resizeViewport(event.width, event.height);
+        realm2d.applyUiCommands(richUi, [
+          {
+            type: 'setLayout',
+            id: 1,
+            layout: {
+              width: { type: 'exact', value: Math.max(1, event.width) },
+              height: { type: 'exact', value: Math.max(1, event.height) },
+              isStack: true
+            }
+          }
+        ]);
       }
     });
   }
@@ -332,7 +406,9 @@ export function createUi1Scene(
   return {
     realm2d,
     uiRoot,
+    richUi,
     viewportContainer,
+    controlPanel,
     spriteViewport,
     btnSampler,
     btnReset,

@@ -198,6 +198,55 @@ fn explicit_zero_text_width_is_not_replaced_by_intrinsic_width() {
 }
 
 #[test]
+fn rich_text_occupies_space_in_parent_layout() {
+    use galfus_realm_2d_resources::ui::{RichText, RichTextSpan, RichTextStyle};
+    let (fonts, family) = create_test_font_db();
+    let mut ui = Model2DUI::new();
+    ui.create_panel(
+        1,
+        PanelNode::default(),
+        UiLayoutStyle {
+            width: UiDimension::Exact(300.0),
+            height: UiDimension::Exact(100.0),
+            direction: UiLayoutDirection::Row,
+            gap: [5.0, 0.0],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    ui.create_rich_text(
+        2,
+        RichText {
+            spans: vec![RichTextSpan {
+                text: "Hello".into(),
+                style: RichTextStyle::default(),
+            }],
+            multiline: false,
+            ..Default::default()
+        },
+        UiLayoutStyle::default(),
+    )
+    .unwrap();
+    ui.create_panel(
+        3,
+        PanelNode::default(),
+        UiLayoutStyle {
+            width: UiDimension::Exact(20.0),
+            height: UiDimension::Exact(20.0),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    ui.insert_child(1, 2, None).unwrap();
+    ui.insert_child(1, 3, None).unwrap();
+    solve_ui_layout(&mut ui, &fonts, &family, 300.0, 100.0);
+    let rich = ui.computed[&2].absolute_rect;
+    let next = ui.computed[&3].absolute_rect;
+    assert!(rich[2] > 0.0 && rich[3] > 0.0);
+    assert!((next[0] - (rich[0] + rich[2] + 5.0)).abs() < 0.01);
+}
+
+#[test]
 fn test_ui_tree_layout_flex_row_and_column() {
     let (font_db, font_fam) = create_test_font_db();
     let mut ui = Model2DUI::new();
@@ -253,7 +302,7 @@ fn test_ui_native_text_measurement_and_wrapping() {
     let (font_db, font_fam) = create_test_font_db();
 
     let text_node = TextNode {
-        text: "The quick brown fox jumps over the lazy dog".to_string(),
+        text: "The quick brown fox jumps over the lazy dog".into(),
         font_size: 16.0,
         wrap: TextWrapMode::WordWrap,
         ..Default::default()
@@ -272,6 +321,29 @@ fn test_ui_native_text_measurement_and_wrapping() {
             "Wrapped lines should respect approximate bound"
         );
     }
+}
+
+#[test]
+fn text_measurement_uses_shaped_glyph_advances() {
+    let (font_db, family) = create_test_font_db();
+    let node = TextNode {
+        text: "office a\u{301}".into(),
+        font_size: 20.0,
+        ..Default::default()
+    };
+    let actual = measure_text(&font_db, &family, &node, None);
+    let expected = crate::ui_text::with_font_face(&font_db, None, &family, |face| {
+        let glyphs = crate::ui_text_shape::shape_paragraph(face.raw_face().data, 0, &node.text)
+            .expect("test font should be shapeable");
+        glyphs
+            .iter()
+            .map(|glyph| glyph.x_advance as f32)
+            .sum::<f32>()
+            * node.font_size
+            / face.units_per_em() as f32
+    })
+    .expect("test font must exist");
+    assert!((actual.width - expected).abs() < 0.01);
 }
 
 #[test]

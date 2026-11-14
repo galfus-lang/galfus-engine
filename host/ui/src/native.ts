@@ -118,7 +118,8 @@ export class NativeUiPanel extends NativeUiElement {
   }
 
   setKind(kind: UiNodeKindDesc): this {
-    if (kind.type === 'text') throw new Error('A panel cannot be configured as text.');
+    if (kind.type === 'text' || kind.type === 'richText')
+      throw new Error('A panel cannot be configured as text.');
     this.model.apply([{ type: 'setKind', id: this.id, kind }]);
     return this;
   }

@@ -51,6 +51,8 @@ export class CSharpStrategy implements CodegenStrategy {
       '',
       '        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]',
       '        public static extern void galfus_string_free(IntPtr ptr);',
+      '        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]',
+      '        public static extern IntPtr galfus_platform_event_text(uint field, out uint length);',
       '',
       '        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]',
       '        public static extern IntPtr galfus_get_last_error();',
@@ -150,6 +152,7 @@ export class CSharpStrategy implements CodegenStrategy {
       '                Func<int, int, string> readText = (offset, length) => length == 0 ? "" : Encoding.UTF8.GetString(text, offset, length);',
       '                int t0Len = item.text0_length, t1Len = item.text1_length, t2Len = item.text2_length;',
       '                uint flags = item.flags; string text0 = readText(0, t0Len), text1 = readText(t0Len, t1Len), text2 = readText(t0Len + t1Len, t2Len);',
+      '                if ((flags & 512) != 0) { text0 = ReadFullEventText(0); text1 = ReadFullEventText(1); text2 = ReadFullEventText(2); }',
       '                var modifiers = new Dictionary<string, object> { { "shift", (flags & 2) != 0 }, { "ctrl", (flags & 4) != 0 }, { "alt", (flags & 8) != 0 }, { "superKey", (flags & 16) != 0 } };',
       '                var value = new Dictionary<string, object>();',
       '                if (item.kind == 1) { value["kind"] = "window"; value["type"] = windowTypes[item.event_type - 1]; value["windowId"] = item.window_id; if (item.event_type == 1) { value["width"] = item.value0; value["height"] = item.value1; value["scaleFactor"] = item.value2; } else if (item.event_type == 2) { value["x"] = item.value0; value["y"] = item.value1; } else if (item.event_type == 4) value["focused"] = (flags & 1) != 0; else if (item.event_type == 5) value["occluded"] = (flags & 1) != 0; else if (item.event_type == 6) value["scaleFactor"] = item.value0; }',
@@ -162,6 +165,9 @@ export class CSharpStrategy implements CodegenStrategy {
       '            }',
       '            return result;',
       '        }'
+    );
+    lines.push(
+      '        private string ReadFullEventText(uint field) { uint length; IntPtr ptr = Native.galfus_platform_event_text(field, out length); if (ptr == IntPtr.Zero) throw new GalfusError("Could not retrieve event text: " + GetLastError()); byte[] bytes = new byte[checked((int)length)]; if (length != 0) Marshal.Copy(ptr, bytes, 0, bytes.Length); return Encoding.UTF8.GetString(bytes); }'
     );
     lines.push('        #endregion', '');
 

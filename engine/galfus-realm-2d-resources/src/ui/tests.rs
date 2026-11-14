@@ -3,6 +3,38 @@
 use super::*;
 
 #[test]
+fn rich_text_is_a_noninteractive_leaf_and_validates_styles() {
+    let mut ui = Model2DUI::new();
+    ui.create_panel(1, PanelNode::default(), UiLayoutStyle::default())
+        .unwrap();
+    let rich: RichText = serde_json::from_str(
+        r#"{"spans":[{"text":"hello 😀","style":{"fontWeight":700,"color":[1,0,0,1]}}]}"#,
+    )
+    .unwrap();
+    ui.create_rich_text(2, rich, UiLayoutStyle::default())
+        .unwrap();
+    ui.insert_child(1, 2, None).unwrap();
+    ui.create_panel(3, PanelNode::default(), UiLayoutStyle::default())
+        .unwrap();
+    assert!(ui.insert_child(2, 3, None).is_err());
+    assert!(!ui.nodes[&2].kind.is_panel());
+    let invalid = RichText {
+        spans: vec![RichTextSpan {
+            text: "bad".into(),
+            style: RichTextStyle {
+                font_size: 0.0,
+                ..Default::default()
+            },
+        }],
+        ..Default::default()
+    };
+    assert!(
+        ui.create_rich_text(4, invalid, UiLayoutStyle::default())
+            .is_err()
+    );
+}
+
+#[test]
 fn ui_commands_are_atomic_and_preserve_unmodified_nodes() {
     let mut ui = Model2DUI::new();
     let layout = UiLayoutStyle::default();
