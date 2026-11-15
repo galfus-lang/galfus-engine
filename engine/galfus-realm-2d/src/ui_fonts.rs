@@ -1,13 +1,14 @@
 //! Font database for the native UI renderer.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub(crate) struct UiFontLibrary {
     pub(crate) database: Arc<fontdb::Database>,
     pub(crate) default_family: String,
     groups: HashMap<String, FontGroup>,
     families: HashMap<String, UiFontFamily>,
+    pub(crate) color_glyph_cache: Mutex<crate::ui_color_glyph_cache::ColorGlyphCache>,
 }
 
 struct FontGroup {
@@ -75,6 +76,7 @@ impl Default for UiFontLibrary {
             default_family: family,
             groups,
             families,
+            color_glyph_cache: Mutex::default(),
         }
     }
 }
@@ -135,6 +137,10 @@ impl UiFontLibrary {
         for id in group.faces {
             database.remove_face(id);
         }
+        self.color_glyph_cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
         Ok(())
     }
 
@@ -261,6 +267,10 @@ impl UiFontLibrary {
                 database: group_db,
             },
         );
+        self.color_glyph_cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
         Ok(())
     }
 
@@ -277,6 +287,10 @@ impl UiFontLibrary {
             .and_then(|face| face.families.first())
             .map(|(family, _)| family.clone())
             .unwrap_or_else(|| self.default_family.clone());
+        self.color_glyph_cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
         Ok(family)
     }
 }

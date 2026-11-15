@@ -6,6 +6,17 @@ use std::collections::BTreeMap;
 pub trait UiFontSource {
     fn database(&self) -> &fontdb::Database;
 
+    /// Returns decoded color glyph data; sources may retain a bounded cache.
+    fn color_glyph(
+        &self,
+        _id: fontdb::ID,
+        face: &ttf_parser::Face<'_>,
+        glyph: ttf_parser::GlyphId,
+        size: f32,
+    ) -> Option<std::sync::Arc<crate::UiColorGlyph>> {
+        crate::ui_color_glyph::rasterize(face, glyph, size).map(std::sync::Arc::new)
+    }
+
     fn ordered_faces(
         &self,
         family: Option<&str>,
@@ -60,6 +71,20 @@ impl UiFontSource for fontdb::Database {
 impl UiFontSource for crate::ui_fonts::UiFontLibrary {
     fn database(&self) -> &fontdb::Database {
         &self.database
+    }
+
+    fn color_glyph(
+        &self,
+        id: fontdb::ID,
+        face: &ttf_parser::Face<'_>,
+        glyph: ttf_parser::GlyphId,
+        size: f32,
+    ) -> Option<std::sync::Arc<crate::UiColorGlyph>> {
+        face.glyph_raster_image(glyph, size.ceil().clamp(1.0, u16::MAX as f32) as u16)?;
+        self.color_glyph_cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(id, face, glyph, size)
     }
 
     fn ordered_faces(

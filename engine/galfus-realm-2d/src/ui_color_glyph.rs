@@ -4,23 +4,25 @@ use crate::vector_geometry::VectorVertex;
 use image::imageops::FilterType;
 use lyon_tessellation::VertexBuffers;
 
-/// Appends a PNG glyph using its strike metrics. Returns false for unsupported glyphs.
-pub(crate) fn append(
-    buffers: &mut VertexBuffers<VectorVertex, u32>,
+/// A decoded and resized color glyph, independent of its position and opacity.
+pub struct UiColorGlyph {
+    pixels: image::RgbaImage,
+    x: i16,
+    y: i16,
+    width: f32,
+    height: f32,
+    scale: f32,
+}
+
+pub(crate) fn rasterize(
     face: &ttf_parser::Face<'_>,
     glyph: ttf_parser::GlyphId,
     font_size: f32,
-    origin: [f32; 2],
-    z: f32,
-    opacity: f32,
-) -> bool {
-    let Some(bitmap) =
-        face.glyph_raster_image(glyph, font_size.ceil().clamp(1.0, u16::MAX as f32) as u16)
-    else {
-        return false;
-    };
+) -> Option<UiColorGlyph> {
+    let bitmap =
+        face.glyph_raster_image(glyph, font_size.ceil().clamp(1.0, u16::MAX as f32) as u16)?;
     if bitmap.format != ttf_parser::RasterImageFormat::PNG || bitmap.pixels_per_em == 0 {
-        return false;
+        return None;
     }
     let mut reader =
         image::ImageReader::with_format(std::io::Cursor::new(bitmap.data), image::ImageFormat::Png);
@@ -29,22 +31,51 @@ pub(crate) fn append(
     limits.max_image_height = Some(1024);
     limits.max_alloc = Some(16 * 1024 * 1024);
     reader.limits(limits);
-    let Ok(decoded) = reader.decode() else {
-        return false;
-    };
-    let decoded = decoded.to_rgba8();
+    let decoded = reader.decode().ok()?.to_rgba8();
     if decoded.width() == 0 || decoded.height() == 0 {
-        return false;
+        return None;
     }
     let scale = font_size / f32::from(bitmap.pixels_per_em);
     let width = f32::from(bitmap.width) * scale;
     let height = f32::from(bitmap.height) * scale;
-    // Limit geometry per glyph while retaining subpixel alpha at ordinary UI sizes.
     let cols = width.ceil().clamp(1.0, 128.0) as u32;
     let rows = height.ceil().clamp(1.0, 128.0) as u32;
     let pixels = image::imageops::resize(&decoded, cols, rows, FilterType::Triangle);
-    let x0 = origin[0] + f32::from(bitmap.x) * scale;
-    let bottom = origin[1] + f32::from(bitmap.y) * scale;
+    Some(UiColorGlyph {
+        pixels,
+        x: bitmap.x,
+        y: bitmap.y,
+        width,
+        height,
+        scale,
+    })
+}
+
+impl UiColorGlyph {
+    pub(crate) fn byte_size(&self) -> usize {
+        self.pixels.as_raw().len()
+    }
+}
+
+/// Appends cached glyph pixels with this occurrence's position and opacity.
+pub(crate) fn append(
+    buffers: &mut VertexBuffers<VectorVertex, u32>,
+    glyph: &UiColorGlyph,
+    origin: [f32; 2],
+    z: f32,
+    opacity: f32,
+) {
+    let UiColorGlyph {
+        pixels,
+        x,
+        y,
+        width,
+        height,
+        scale,
+    } = glyph;
+    let (cols, rows) = pixels.dimensions();
+    let x0 = origin[0] + f32::from(*x) * scale;
+    let bottom = origin[1] + f32::from(*y) * scale;
     let dx = width / cols as f32;
     let dy = height / rows as f32;
     for row in 0..rows {
@@ -77,13 +108,68 @@ pub(crate) fn append(
             ]);
         }
     }
-    true
 }
 
 #[cfg(test)]
 mod tests {
     use crate::ui_fonts::UiFontLibrary;
     use galfus_realm_2d_resources::ui::TextNode;
+
+    #[test]
+    fn repeated_glyphs_are_cached_per_realm_and_font_changes_clear_them() {
+        let mut fonts = UiFontLibrary::default();
+        let other = UiFontLibrary::default();
+        let render = |fonts: &UiFontLibrary, text: &str, size: f32, x: f32, opacity: f32| {
+            let node = TextNode {
+                text: text.into(),
+                font_size: size,
+                ..Default::default()
+            };
+            let mut buffers = lyon_tessellation::VertexBuffers::new();
+            crate::ui_text::tessellate_text_run(
+                &mut buffers,
+                fonts,
+                &fonts.default_family,
+                &node,
+                x,
+                0.0,
+                200.0,
+                50.0,
+                200.0,
+                50.0,
+                0.0,
+                opacity,
+                None,
+            );
+            buffers.vertices
+        };
+        let first = render(&fonts, "😀😀", 20.0, 0.0, 1.0);
+        let (entries, bytes, hits) = fonts.color_glyph_cache.lock().unwrap().stats();
+        assert_eq!(entries, 1);
+        assert!(bytes > 0);
+        assert!(hits >= 1);
+        let second = render(&fonts, "😀", 20.0, 10.0, 0.5);
+        assert!(fonts.color_glyph_cache.lock().unwrap().stats().2 > hits);
+        assert!(!first.is_empty() && !second.is_empty());
+        assert!((second[0][0] - first[0][0] - 10.0).abs() < 0.001);
+        assert!((second[0][8] - first[0][8] * 0.5).abs() < 0.001);
+        render(&fonts, "😀", 30.0, 0.0, 1.0);
+        assert_eq!(fonts.color_glyph_cache.lock().unwrap().stats().0, 2);
+        assert_eq!(other.color_glyph_cache.lock().unwrap().stats().0, 0);
+        fonts
+            .register_group(
+                "Extra",
+                &[include_bytes!(
+                    "../tests/fixtures/NotoSans-Test-Regular.ttf"
+                )],
+            )
+            .unwrap();
+        assert_eq!(fonts.color_glyph_cache.lock().unwrap().stats().0, 0);
+        render(&fonts, "😀", 20.0, 0.0, 1.0);
+        assert_eq!(fonts.color_glyph_cache.lock().unwrap().stats().0, 1);
+        fonts.remove_group("Extra").unwrap();
+        assert_eq!(fonts.color_glyph_cache.lock().unwrap().stats().0, 0);
+    }
 
     #[test]
     fn emoji_is_selected_measured_and_drawn_in_color() {

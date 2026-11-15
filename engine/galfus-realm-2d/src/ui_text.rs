@@ -490,18 +490,19 @@ pub fn tessellate_text_run(
                 for glyph in run.glyphs {
                     let gid = ttf_parser::GlyphId(glyph.glyph_id as u16);
 
-                    if crate::ui_color_glyph::append(
-                        buffers,
-                        &face,
-                        gid,
-                        text_node.font_size,
-                        [
-                            local_base_x + current_x + glyph.x_offset as f32 * scale,
-                            local_base_y + glyph.y_offset as f32 * scale,
-                        ],
-                        z_layer + 0.0002,
-                        color[3],
-                    ) {
+                    if let Some(bitmap) =
+                        font_db.color_glyph(run.font, &face, gid, text_node.font_size)
+                    {
+                        crate::ui_color_glyph::append(
+                            buffers,
+                            &bitmap,
+                            [
+                                local_base_x + current_x + glyph.x_offset as f32 * scale,
+                                local_base_y + glyph.y_offset as f32 * scale,
+                            ],
+                            z_layer + 0.0002,
+                            color[3],
+                        );
                         current_x += glyph.x_advance as f32 * scale;
                         continue;
                     }

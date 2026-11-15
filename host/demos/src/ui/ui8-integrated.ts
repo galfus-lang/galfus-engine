@@ -19,8 +19,11 @@ import {
   UiSwitch,
   UiTextArea
 } from '@galfus/ui';
-import { runDemoLoop } from '../common/loop';
+import type { UiOverlayManager, UiTextField } from '@galfus/ui';
+import type { KeyboardEvent } from '@galfus/transport-types';
+import { canExitAfterOverlays, runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
+import { canExitUi5 } from './ui5-text-fields';
 
 /** Integrated application exercising components, styles, focus, editing and overlays. */
 export function createUi8Scene(
@@ -233,6 +236,17 @@ export function createUi8Scene(
     }
   };
 }
+
+/** Let overlays and focused text fields handle Escape before leaving the demo. */
+export function canExitUi8(
+  fields: readonly UiTextField[],
+  windowId: number | undefined,
+  event: KeyboardEvent,
+  manager?: UiOverlayManager
+): boolean {
+  return canExitAfterOverlays(event, manager) && canExitUi5(fields, windowId, event);
+}
+
 export async function runDemoUi8(options: HostDemoOptions = {}): Promise<void> {
   const session = createDemoSession(
     options.title ?? 'Galfus Demo [ui8]: Integrated UI',
@@ -245,10 +259,9 @@ export async function runDemoUi8(options: HostDemoOptions = {}): Promise<void> {
       await runDemoLoop(session.runtime, {
         windowId: session.windowId,
         maxFrames: session.maxFrames,
-        exitKeys: ['q'],
-        canExit: () =>
-          !scene.input.getInteractionState(session.windowId).focus &&
-          !scene.area.getInteractionState(session.windowId).focus
+        exitKeys: ['escape', 'q'],
+        canExit: (event) =>
+          canExitUi8([scene.input, scene.area], session.windowId, event, scene.manager)
       });
     } finally {
       scene.dispose();
