@@ -124,6 +124,12 @@ export class NativeUiPanel extends NativeUiElement {
     return this;
   }
 
+  /** Updates the UV rectangle; the core rejects non-sprite panels. */
+  setSpriteUvRect(uvRect: [number, number, number, number]): this {
+    this.model.apply([{ type: 'setSpriteUvRect', id: this.id, uvRect }]);
+    return this;
+  }
+
   on(type: InteractiveEventType, callback: InteractiveCallback): () => void {
     return this.model.listen(this.id).on(type, callback);
   }

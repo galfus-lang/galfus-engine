@@ -1,4 +1,4 @@
-import type { UiTextCluster, UiTextGeometry, UiTextLineGeometry } from './realm';
+import type { UiTextCluster, UiTextGeometry, UiTextLineGeometry } from './ui-types';
 
 /** A possible visual caret position for a UTF-16 offset. */
 export interface UiTextCaret {

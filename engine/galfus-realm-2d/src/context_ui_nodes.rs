@@ -22,6 +22,14 @@ pub(super) struct NodeGeometry {
     pub(super) front: Option<Handle<GpuVectorGeometry>>,
 }
 
+fn same_vector_geometry(previous: &UiNodeKind, next: &UiNodeKind) -> bool {
+    match (previous, next) {
+        // Sprite texture and UV are emitted as instances, outside the panel mesh.
+        (UiNodeKind::SpritePanel(a), UiNodeKind::SpritePanel(b)) => a.panel == b.panel,
+        _ => previous == next,
+    }
+}
+
 impl UiManager2D {
     #[cfg(test)]
     pub(crate) fn node_upload_count(&self, ui_id: u32, node_id: u32) -> u64 {
@@ -69,7 +77,7 @@ impl UiManager2D {
             active.insert(key);
             let mut existing = self.node_geometries.remove(&key);
             if existing.as_ref().is_some_and(|old| {
-                old.kind == node.kind
+                same_vector_geometry(&old.kind, &node.kind)
                     && old.layout == *layout
                     && old.z_layer == node.z_layer
                     && old.dimensions == [dimensions.0, dimensions.1]

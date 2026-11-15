@@ -42,16 +42,12 @@ import {
   type ParticleEmitter2DComponent
 } from './components';
 import { Realm2DSyncSystem } from './sync';
+import { setSpriteUvRect } from './sprite-uv';
 
 import type { UiComputedLayout, UiTextCluster, UiTextGeometry } from './ui-types';
 import { type FontFamilyConfig, packFontGroup } from './fonts';
-export type {
-  UiComputedLayout,
-  UiTextCluster,
-  UiTextGeometry,
-  UiTextLineGeometry
-} from './ui-types';
-export type { FontFamilyConfig } from './fonts';
+export type * from './ui-types';
+export type * from './fonts';
 
 export class Realm2D implements RealmConnector {
   private readonly _disposeListeners = new Set<() => void>();
@@ -305,6 +301,9 @@ export class Realm2D implements RealmConnector {
     this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createSprite2D(spriteId, desc));
     return entityId;
+  }
+  setSpriteUvRect(entityId: EntityId, uvRect: [number, number, number, number]): void {
+    setSpriteUvRect(this.world, entityId, uvRect);
   }
 
   createShape(desc: Shape2DDesc, transform?: Transform2DProps): EntityId {

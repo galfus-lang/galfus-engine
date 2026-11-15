@@ -160,6 +160,7 @@ export interface Sprite2DComponent extends Component {
   readonly spriteId: number;
   desc: Sprite2DDesc;
   isDirty: boolean;
+  uvDirty: boolean;
 }
 
 export function createSprite2D(spriteId: number, desc: Sprite2DDesc): Sprite2DComponent {
@@ -167,7 +168,8 @@ export function createSprite2D(spriteId: number, desc: Sprite2DDesc): Sprite2DCo
     type: 'Sprite2D',
     spriteId,
     desc,
-    isDirty: true
+    isDirty: true,
+    uvDirty: false
   };
 }
 

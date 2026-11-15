@@ -256,6 +256,24 @@ fn tree_batches_preserve_sprite_order_and_rebuild_only_changed_node() {
     let before: Vec<_> = (1..=3)
         .map(|id| realm.ui_manager.node_upload_count(10, id))
         .collect();
+    let uv = [0.0, 0.0, 0.5, 0.5];
+    realm
+        .apply_ui_commands(10, &[UiCommand::SetSpriteUvRect { id: 2, uv_rect: uv }])
+        .unwrap();
+    prepare(&mut realm);
+    assert!(
+        realm
+            .batch_builder
+            .instances()
+            .iter()
+            .any(|instance| instance.uv_rect.to_array() == uv)
+    );
+    assert_eq!(
+        (1..=3)
+            .map(|id| realm.ui_manager.node_upload_count(10, id))
+            .collect::<Vec<_>>(),
+        before
+    );
     let changed = PanelNode {
         background_color: [1.0, 0.0, 0.0, 1.0],
         ..Default::default()

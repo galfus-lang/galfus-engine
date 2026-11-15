@@ -15,6 +15,12 @@ const input = ui.textInput(realm.realmId, {
 
 ## Compatibility and ownership
 
+For a `SpritePanel` created through `NativeUiModel`, call
+`sprite.setSpriteUvRect([u0, v0, u1, v1])` to queue a UV-only update. The
+core rejects the command if the target is not a sprite panel or a coordinate
+is not finite. Reversed and out-of-range coordinates remain available for
+flipping and texture repetition.
+
 The existing `UiRoot`, `NativeUiModel`, `TextInput`, layout helpers and their
 entry points remain available. The new component API is additive; applications
 can migrate individual trees to `createComponentRoot` without replacing their

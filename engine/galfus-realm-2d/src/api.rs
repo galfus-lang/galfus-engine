@@ -72,6 +72,25 @@ impl Realm2DContext {
         Ok(())
     }
 
+    /// Updates only the UV rectangle of an existing sprite.
+    pub fn set_sprite_uv_rect(&mut self, sprite_id: u32, uv: [f32; 4]) -> RealmResult<()> {
+        self.validate_id(sprite_id)?;
+        if !uv.iter().all(|value| value.is_finite()) {
+            return Err(galfus_realm_core::RealmError::Internal(
+                "sprite UV coordinates must be finite".into(),
+            ));
+        }
+        let (sprite, _) = self.sprites.get_mut(&sprite_id).ok_or_else(|| {
+            galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("Sprite {sprite_id}"))
+        })?;
+        let uv = glam::Vec4::from_array(uv);
+        if sprite.uv_rect != uv {
+            sprite.uv_rect = uv;
+            self.dirty = true;
+        }
+        Ok(())
+    }
+
     pub fn set_sprite_transform(&mut self, sprite_id: u32, transform: Transform2D) {
         if let Some((_, t)) = self.sprites.get_mut(&sprite_id) {
             *t = transform;

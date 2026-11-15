@@ -168,6 +168,20 @@ pub fn realm_2d_create_sprite(
     })
 }
 
+#[napi(js_name = "realm2dSetSpriteUvRect")]
+pub fn realm_2d_set_sprite_uv_rect(
+    realm_id: u32,
+    sprite_id: u32,
+    u0: f64,
+    v0: f64,
+    u1: f64,
+    v1: f64,
+) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_2d::galfus_realm_2d_set_sprite_uv_rect(
+        realm_id, sprite_id, u0 as f32, v0 as f32, u1 as f32, v1 as f32,
+    ))
+}
+
 #[napi(js_name = "realm2dSetSpriteTransform")]
 pub fn realm_2d_set_sprite_transform(
     env: Env,

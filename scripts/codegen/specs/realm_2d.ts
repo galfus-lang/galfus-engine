@@ -220,6 +220,20 @@ export const realm2dFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_realm_2d_set_sprite_uv_rect',
+    methodName: 'realm2dSetSpriteUvRect',
+    doc: 'Updates the UV rectangle of an existing 2D sprite.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D realm.' },
+      { name: 'spriteId', type: 'u32', doc: 'Logical sprite ID.' },
+      { name: 'u0', type: 'f32', doc: 'First U coordinate.' },
+      { name: 'v0', type: 'f32', doc: 'First V coordinate.' },
+      { name: 'u1', type: 'f32', doc: 'Second U coordinate.' },
+      { name: 'v1', type: 'f32', doc: 'Second V coordinate.' }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_realm_2d_set_sprite_transform',
     methodName: 'realm2dSetSpriteTransform',
     doc: 'Updates the spatial transform of an existing 2D sprite.',

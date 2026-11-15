@@ -60,6 +60,8 @@ mod transparency_tests;
 mod ui_tests;
 
 #[cfg(test)]
+mod sprite_uv_tests;
+#[cfg(test)]
 mod ui_emoji_gpu_tests;
 
 #[cfg(test)]

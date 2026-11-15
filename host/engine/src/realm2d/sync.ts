@@ -125,8 +125,14 @@ export class Realm2DSyncSystem {
         engine.realm2dCreateSprite(this.realmId, sprite.spriteId, sprite.desc, tf);
         this._syncedSprites.add(sprite.spriteId);
         sprite.isDirty = false;
-      } else if (isSpatialDirty) {
-        engine.realm2dSetSpriteTransform(this.realmId, sprite.spriteId, tf);
+        sprite.uvDirty = false;
+      } else {
+        if (sprite.uvDirty) {
+          const uv = sprite.desc.uvRect!;
+          engine.realm2dSetSpriteUvRect(this.realmId, sprite.spriteId, ...uv);
+          sprite.uvDirty = false;
+        }
+        if (isSpatialDirty) engine.realm2dSetSpriteTransform(this.realmId, sprite.spriteId, tf);
       }
     }
     for (const spriteId of this._syncedSprites) {

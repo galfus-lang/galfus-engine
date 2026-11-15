@@ -123,6 +123,12 @@ runtime.multiverse.createInvocation({
 runtime.start();
 ```
 
+`realm2d.setSpriteUvRect(entityId, [u0, v0, u1, v1])` changes only an
+existing sprite's UV rectangle on the next synchronization. Coordinates must
+be finite; values outside `[0, 1]` and reversed endpoints are supported for
+texture repetition and flipping. The host accepts the entity ID and resolves
+the sprite's logical core ID.
+
 ### 4. Frame Lifecycle & Loops
 
 The engine provides two loop hooks:

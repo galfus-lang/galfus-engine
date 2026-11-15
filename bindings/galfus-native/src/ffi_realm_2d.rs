@@ -196,6 +196,32 @@ pub unsafe extern "C" fn galfus_realm_2d_create_sprite(
     }
 }
 
+/// Updates the UV rectangle of an existing Sprite in the 2D Realm.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_2d_set_sprite_uv_rect(
+    realm_id: u32,
+    sprite_id: u32,
+    u0: f32,
+    v0: f32,
+    u1: f32,
+    v1: f32,
+) -> i32 {
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm2DContext>(realm_id)
+            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
+        realm
+            .set_sprite_uv_rect(sprite_id, [u0, v0, u1, v1])
+            .map_err(|error| error.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(error) => {
+            set_last_error(&error);
+            -1
+        }
+    }
+}
+
 /// Updates the transform of an existing Sprite in the 2D Realm.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_sprite_transform(

@@ -1,5 +1,6 @@
 import { chromium } from '@playwright/test';
 import { API_FUNCTIONS } from './codegen/spec';
+import { BROWSER_SPRITE_UV_SMOKE } from './test-browser-sprite-uv';
 import { existsSync } from 'fs';
 import { mkdir, rm } from 'fs/promises';
 import { homedir } from 'os';
@@ -148,7 +149,7 @@ export { createUi, TextEditor, UiInputText } from '../../host/ui/src/index';
         if (missingExports.length) throw new Error('Missing WASM exports: ' + missingExports.join(', '));
         galfus.platformInit();
         galfus.realm2dCreate(77);
-        const font = new Uint8Array(await (await fetch('./font-variable.ttf')).arrayBuffer());
+${BROWSER_SPRITE_UV_SMOKE}        const font = new Uint8Array(await (await fetch('./font-variable.ttf')).arrayBuffer());
         const fontPackage = new Uint8Array(8 + font.length);
         const fontHeader = new DataView(fontPackage.buffer);
         fontHeader.setUint32(0, 1, true);

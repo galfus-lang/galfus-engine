@@ -126,6 +126,13 @@ export const realm2dUiDescriptors: DescSpec[] = [
       { inline: { type: { type: { literal: 'setRoot' } }, id: { type: 'number' } } },
       {
         inline: {
+          type: { type: { literal: 'setSpriteUvRect' } },
+          id: { type: 'number' },
+          uvRect: { type: { tuple: ['number', 'number', 'number', 'number'] } }
+        }
+      },
+      {
+        inline: {
           type: { type: { enum: ['insert', 'detach', 'reorder'] } },
           parentId: { type: 'number' },
           childId: { type: 'number' },

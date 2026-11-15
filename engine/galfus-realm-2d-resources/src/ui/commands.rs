@@ -43,6 +43,10 @@ pub enum UiCommand {
         id: u32,
         kind: UiNodeKind,
     },
+    SetSpriteUvRect {
+        id: u32,
+        uv_rect: [f32; 4],
+    },
     SetLayout {
         id: u32,
         layout: UiLayoutStyle,
@@ -107,6 +111,27 @@ impl Model2DUI {
                     if node.kind != *kind {
                         node.kind = kind.clone();
                         staged.mark_dirty(*id, UiDirtyFlags::ALL);
+                    }
+                }
+                UiCommand::SetSpriteUvRect { id, uv_rect } => {
+                    staged.validate_id(*id)?;
+                    if !uv_rect.iter().all(|value| value.is_finite()) {
+                        return Err(UiTreeError::InvalidTree(
+                            "sprite UV coordinates must be finite".into(),
+                        ));
+                    }
+                    let node = staged
+                        .nodes
+                        .get_mut(id)
+                        .ok_or(UiTreeError::NodeNotFound(*id))?;
+                    let UiNodeKind::SpritePanel(sprite) = &mut node.kind else {
+                        return Err(UiTreeError::InvalidTree(
+                            "node is not a sprite panel".into(),
+                        ));
+                    };
+                    if sprite.uv_rect != *uv_rect {
+                        sprite.uv_rect = *uv_rect;
+                        staged.mark_dirty(*id, UiDirtyFlags::PAINT);
                     }
                 }
                 UiCommand::SetLayout { id, layout } => {
