@@ -10,7 +10,7 @@ use crate::ui_text::measure_text;
 /// Solves and updates layout for the entire UI tree or dirty subtrees.
 pub fn solve_ui_layout(
     ui: &mut Model2DUI,
-    font_db: &fontdb::Database,
+    font_db: &dyn crate::UiFontSource,
     default_family: &str,
     container_width: f32,
     container_height: f32,
@@ -75,7 +75,7 @@ pub fn solve_ui_layout(
 pub(crate) fn resolve_node_layout(
     ui: &mut Model2DUI,
     node_id: u32,
-    font_db: &fontdb::Database,
+    font_db: &dyn crate::UiFontSource,
     default_family: &str,
     parent_bounds: [f32; 4],
     parent_abs_pos: [f32; 2],

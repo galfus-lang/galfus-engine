@@ -119,6 +119,7 @@ export function resolveComponentStyle(
   const ownText: InheritedText = {};
   for (const key of [
     'fontFamily',
+    'fontAxes',
     'fontSize',
     'fontWeight',
     'italic',

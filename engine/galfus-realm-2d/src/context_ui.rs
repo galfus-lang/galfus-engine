@@ -254,7 +254,7 @@ impl UiManager2D {
                 };
                 crate::ui_text::tessellate_text_run(
                     &mut buffers,
-                    &fonts.database,
+                    fonts,
                     &fonts.default_family,
                     &text_node,
                     tx,

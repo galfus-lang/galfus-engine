@@ -180,6 +180,9 @@ pub struct TextNode {
     /// Optional font family name.
     #[serde(default)]
     pub font_family: Option<String>,
+    /// Per-element OpenType variation coordinates.
+    #[serde(default)]
+    pub font_axes: std::collections::BTreeMap<String, f32>,
     /// Text wrapping behavior.
     #[serde(default)]
     pub wrap: TextWrapMode,
@@ -201,6 +204,7 @@ impl Default for TextNode {
             line_height: None,
             color: default_white_vec4(),
             font_family: None,
+            font_axes: Default::default(),
             wrap: TextWrapMode::NoWrap,
             align: TextAlign::Left,
             multiline: true,

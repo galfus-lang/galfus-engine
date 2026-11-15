@@ -413,6 +413,48 @@ export const realm2dFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_realm_2d_remove_font_family',
+    methodName: 'realm2dRemoveFontFamily',
+    doc: 'Removes a font family not referenced by any UI node; the default family cannot be removed.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'name', type: 'string', doc: 'Family label.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_remove_font_group',
+    methodName: 'realm2dRemoveFontGroup',
+    doc: 'Removes a font group not referenced by any configured family.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'name', type: 'string', doc: 'Group name.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_register_font_group',
+    methodName: 'realm2dRegisterFontGroup',
+    doc: 'Registers an atomic font group from a binary package: little-endian u32 face count, u32 lengths, then concatenated font files.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'name', type: 'string', doc: 'Group name.' },
+      { name: 'data', type: 'ptr', doc: 'Font package bytes.' },
+      { name: 'dataLen', type: 'u64', doc: 'Length of the font package.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_2d_set_font_family',
+    methodName: 'realm2dSetFontFamily',
+    doc: 'Sets a font family from JSON containing name, ordered groups and optional axis values.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 2D Realm.' },
+      { name: 'familyJson', type: 'string', doc: 'Font family descriptor JSON.' }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_realm_2d_load_font_data',
     methodName: 'realm2dLoadFontData',
     doc: 'Registers raw TTF/OTF font binary data from memory (zero filesystem access). Returns the detected font family name.',

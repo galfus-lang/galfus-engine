@@ -27,20 +27,27 @@ pub(crate) struct Line {
     pub(crate) y: f32,
 }
 
-fn node_for(span: &RichTextSpan, text: UiText) -> TextNode {
+fn node_for(
+    span: &RichTextSpan,
+    text: UiText,
+    family: Option<&str>,
+    axes: &std::collections::BTreeMap<String, f32>,
+) -> TextNode {
     TextNode {
         text,
         font_size: span.style.font_size,
         font_weight: span.style.font_weight,
         italic: span.style.italic,
         color: span.style.color,
+        font_family: family.map(str::to_owned),
+        font_axes: axes.clone(),
         ..Default::default()
     }
 }
 
 pub(crate) fn layout(
     text: &RichText,
-    fonts: &fontdb::Database,
+    fonts: &dyn crate::UiFontSource,
     family: &str,
     limit: Option<f32>,
 ) -> (Vec<Fragment>, [f32; 2]) {
@@ -50,7 +57,7 @@ pub(crate) fn layout(
 
 pub(crate) fn layout_with_lines(
     text: &RichText,
-    fonts: &fontdb::Database,
+    fonts: &dyn crate::UiFontSource,
     family: &str,
     limit: Option<f32>,
 ) -> (Vec<Fragment>, [f32; 2], Vec<Line>) {
@@ -135,6 +142,8 @@ pub(crate) fn layout_with_lines(
             let node = node_for(
                 span,
                 UiText::from_utf16(units.clone()).expect("valid UTF-16 token"),
+                text.font_family.as_deref(),
+                &text.font_axes,
             );
             let measured = measure_text(fonts, family, &node, None).width;
             group.push((span, node, measured, *start));
@@ -207,7 +216,7 @@ pub(crate) fn layout_with_lines(
 
 pub(crate) fn measure(
     text: &RichText,
-    fonts: &fontdb::Database,
+    fonts: &dyn crate::UiFontSource,
     family: &str,
     limit: Option<f32>,
 ) -> [f32; 2] {
@@ -218,7 +227,7 @@ pub(crate) fn measure(
 pub(crate) fn tessellate(
     buffers: &mut VertexBuffers<VectorVertex, u32>,
     text: &RichText,
-    fonts: &fontdb::Database,
+    fonts: &dyn crate::UiFontSource,
     family: &str,
     rect: [f32; 4],
     dimensions: [f32; 2],
@@ -277,7 +286,8 @@ mod tests {
     #[test]
     fn formats_fragments_and_wraps_with_the_same_measured_width() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+        fonts
+            .load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![
@@ -345,7 +355,8 @@ mod tests {
     #[test]
     fn synthetic_weight_and_italic_change_glyph_geometry_when_font_has_no_variants() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+        fonts
+            .load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let render = |style: RichTextStyle| {
             let text = RichText {
@@ -385,7 +396,8 @@ mod tests {
     #[test]
     fn inline_and_multiline_preserve_intrinsic_size_and_alignment() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+        fonts
+            .load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let mut text = RichText {
             spans: vec![RichTextSpan {
@@ -411,7 +423,8 @@ mod tests {
     #[test]
     fn inline_line_breaks_remain_on_one_line_and_keep_utf16_offsets() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+        fonts
+            .load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![RichTextSpan {
@@ -438,7 +451,8 @@ mod tests {
     #[test]
     fn bidi_reorders_styled_fragments_without_reversing_the_logical_text() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+        fonts
+            .load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![
@@ -485,7 +499,8 @@ mod tests {
     #[test]
     fn combining_across_styles_is_measured_as_one_grapheme() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+        fonts
+            .load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![
@@ -511,7 +526,8 @@ mod tests {
     #[test]
     fn formatting_boundary_does_not_split_a_word_when_wrapping() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+        fonts
+            .load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![
@@ -546,7 +562,8 @@ mod tests {
     #[test]
     fn fragments_keep_logical_utf16_offsets_across_styles_and_newlines() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+        fonts
+            .load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![

@@ -4,43 +4,39 @@ use galfus_realm_2d_resources::ui::{TextNode, UiText};
 use harfrust::Direction;
 use unicode_bidi::BidiInfo;
 
-use crate::ui_text_font::select_font;
-use crate::ui_text_shape::{ShapedGlyph, shape_directional_run};
+use crate::ui_text_shape::{ShapedGlyph, shape_directional_run_with_variations};
 
 pub(crate) struct FontRun {
     pub font: fontdb::ID,
     pub glyphs: Vec<ShapedGlyph>,
     pub scale: f32,
+    pub variations: Vec<crate::UiFontAxis>,
 }
 
 /// Shapes a paragraph in visual order, choosing a single font for each grapheme.
 pub(crate) fn shape(
-    fonts: &fontdb::Database,
+    fonts: &dyn crate::UiFontSource,
     family: &str,
     node: &TextNode,
 ) -> Result<Vec<FontRun>, String> {
-    let primary = select_font(
-        fonts,
+    let ordered = fonts.ordered_faces(
         node.font_family.as_deref(),
         family,
         node.font_weight,
         node.italic,
-    )
-    .ok_or_else(|| "No usable UI font".to_string())?;
-    let mut candidates: Vec<_> = fonts.faces().filter(|face| face.id != primary).collect();
-    candidates.sort_by_key(|face| {
-        (
-            (face.style
-                != if node.italic {
-                    fontdb::Style::Italic
-                } else {
-                    fontdb::Style::Normal
-                }),
-            face.weight.0.abs_diff(node.font_weight),
-        )
-    });
-    let mut ordered = vec![primary];
-    ordered.extend(candidates.into_iter().map(|face| face.id));
+    )?;
+    shape_ordered(fonts, &ordered, node)
+}
+
+/// Shapes with precisely the supplied face order, without global fallback.
+pub(crate) fn shape_ordered(
+    fonts: &dyn crate::UiFontSource,
+    ordered: &[fontdb::ID],
+    node: &TextNode,
+) -> Result<Vec<FontRun>, String> {
+    let primary = *ordered
+        .first()
+        .ok_or_else(|| "No usable UI font".to_string())?;
     let string = node.text.to_string();
     let bidi = BidiInfo::new(&string, None);
     if bidi.paragraphs.len() > 1 {
@@ -57,12 +53,20 @@ pub(crate) fn shape(
         let run_start = string[..run.start].encode_utf16().count();
         let text = UiText::from(&string[run]);
         let mut groups: Vec<(fontdb::ID, usize, Vec<u16>)> = Vec::new();
-        if supports(fonts, primary, text.as_utf16()) {
+        if !text.as_utf16().contains(&0xfe0f) && supports(fonts, primary, text.as_utf16()) {
             groups.push((primary, run_start, text.as_utf16().to_vec()));
         } else {
             for range in text.grapheme_ranges() {
                 let units = &text.as_utf16()[range.clone()];
                 let font = *coverage.entry(units.to_vec()).or_insert_with(|| {
+                    if units.contains(&0xfe0f)
+                        && let Some(id) = ordered
+                            .iter()
+                            .copied()
+                            .find(|&id| supports(fonts, id, units) && has_bitmap(fonts, id, units))
+                    {
+                        return id;
+                    }
                     ordered
                         .iter()
                         .copied()
@@ -86,6 +90,7 @@ pub(crate) fn shape(
                 .map_err(|_| "Text exceeds the supported UTF-16 offset range".to_string())?;
             let text = UiText::from_utf16(units).map_err(|e| e.to_string())?;
             let shaped = fonts
+                .database()
                 .with_face_data(font, |data, index| {
                     let face = ttf_parser::Face::parse(data, index).map_err(|e| e.to_string())?;
                     let direction = if rtl {
@@ -93,11 +98,26 @@ pub(crate) fn shape(
                     } else {
                         Direction::LeftToRight
                     };
-                    let glyphs = shape_directional_run(data, index, &text, start, Some(direction))?;
+                    let variations = fonts.variations(
+                        node.font_family.as_deref(),
+                        font,
+                        &node.font_axes,
+                        node.font_weight,
+                        node.italic,
+                    )?;
+                    let glyphs = shape_directional_run_with_variations(
+                        data,
+                        index,
+                        &text,
+                        start,
+                        Some(direction),
+                        &variations,
+                    )?;
                     Ok::<FontRun, String>(FontRun {
                         font,
                         glyphs,
                         scale: node.font_size / face.units_per_em() as f32,
+                        variations,
                     })
                 })
                 .ok_or_else(|| "Font data unavailable".to_string())??;
@@ -107,8 +127,26 @@ pub(crate) fn shape(
     Ok(result)
 }
 
-fn supports(fonts: &fontdb::Database, id: fontdb::ID, units: &[u16]) -> bool {
-    fonts.with_face_data(id, |data, index| {
+fn has_bitmap(fonts: &dyn crate::UiFontSource, id: fontdb::ID, units: &[u16]) -> bool {
+    fonts
+        .database()
+        .with_face_data(id, |data, index| {
+            let Ok(face) = ttf_parser::Face::parse(data, index) else {
+                return false;
+            };
+            char::decode_utf16(units.iter().copied())
+                .flatten()
+                .any(|character| {
+                    face.glyph_index(character)
+                        .and_then(|glyph| face.glyph_raster_image(glyph, u16::MAX))
+                        .is_some()
+                })
+        })
+        .unwrap_or(false)
+}
+
+fn supports(fonts: &dyn crate::UiFontSource, id: fontdb::ID, units: &[u16]) -> bool {
+    fonts.database().with_face_data(id, |data, index| {
         let Ok(face) = ttf_parser::Face::parse(data, index) else { return false; };
         char::decode_utf16(units.iter().copied()).all(|c| c.is_ok_and(|c| {
             c.is_control() || matches!(c as u32, 0x200c..=0x200f | 0x202a..=0x202e | 0x2060..=0x206f | 0xfe00..=0xfe0f | 0xe0100..=0xe01ef) || face.glyph_index(c).is_some()
@@ -122,7 +160,7 @@ mod tests {
     use std::sync::Arc;
 
     fn fonts_with_limited_primary() -> (fontdb::Database, String, fontdb::ID, fontdb::ID) {
-        let original = include_bytes!("../assets/Nunito-Regular.ttf").to_vec();
+        let original = include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec();
         let face = ttf_parser::Face::parse(&original, 0).unwrap();
         let a = face.glyph_index('a').unwrap().0;
         let delta = a.wrapping_sub('a' as u16);
@@ -220,6 +258,120 @@ mod tests {
         .unwrap();
         assert_eq!(rich_geometry.clusters.len(), 2);
         assert!((rich_geometry.clusters[1].rect[0] - geometry.clusters[1].rect[0]).abs() < 0.001);
+    }
+
+    #[test]
+    fn explicit_order_excludes_unlisted_fonts_and_preserves_graphemes() {
+        let (fonts, _family, primary, fallback) = fonts_with_limited_primary();
+        let node = TextNode {
+            text: "ab".into(),
+            ..Default::default()
+        };
+        let limited = shape_ordered(&fonts, &[primary], &node).unwrap();
+        assert!(limited.iter().all(|run| run.font == primary));
+        assert!(
+            limited
+                .iter()
+                .flat_map(|run| &run.glyphs)
+                .any(|glyph| glyph.glyph_id == 0)
+        );
+        let resolved = shape_ordered(&fonts, &[primary, fallback], &node).unwrap();
+        assert_eq!(
+            resolved.iter().map(|run| run.font).collect::<Vec<_>>(),
+            [primary, fallback]
+        );
+        let combined = TextNode {
+            text: "a\u{301}".into(),
+            ..Default::default()
+        };
+        let combined_runs = shape_ordered(&fonts, &[primary, fallback], &combined).unwrap();
+        assert!(combined_runs.iter().all(|run| run.font == fallback));
+        assert!(shape_ordered(&fonts, &[], &node).is_err());
+    }
+
+    #[test]
+    fn variable_weight_changes_shaping_and_outline_consistently() {
+        let mut fonts = fontdb::Database::new();
+        fonts.load_font_data(
+            include_bytes!("../tests/fixtures/NotoSans-Variable-subset.ttf").to_vec(),
+        );
+        let face = fonts.faces().next().unwrap();
+        let family = face.families[0].0.clone();
+        let regular = TextNode {
+            text: "office".into(),
+            font_weight: 400,
+            ..Default::default()
+        };
+        let bold = TextNode {
+            font_weight: 900,
+            ..regular.clone()
+        };
+        let regular_runs = shape(&fonts, &family, &regular).unwrap();
+        let bold_runs = shape(&fonts, &family, &bold).unwrap();
+        let width = |runs: &[FontRun]| {
+            runs.iter()
+                .flat_map(|run| &run.glyphs)
+                .map(|glyph| glyph.x_advance)
+                .sum::<i32>()
+        };
+        assert_ne!(width(&regular_runs), width(&bold_runs));
+        assert_eq!(
+            bold_runs[0]
+                .variations
+                .iter()
+                .find(|axis| axis.tag == "wght")
+                .unwrap()
+                .value,
+            900.0
+        );
+        let bounds = |run: &FontRun| {
+            fonts
+                .with_face_data(run.font, |data, index| {
+                    let mut face = ttf_parser::Face::parse(data, index).unwrap();
+                    crate::ui_variations::apply(&mut face, &run.variations);
+                    face.glyph_bounding_box(face.glyph_index('o').unwrap())
+                        .unwrap()
+                })
+                .unwrap()
+        };
+        assert_ne!(bounds(&regular_runs[0]), bounds(&bold_runs[0]));
+        let measurement = crate::ui_text::measure_text(&fonts, &family, &bold, None);
+        let geometry =
+            crate::ui_text_geometry::text_geometry(&bold, &fonts, &family, [0.0, 0.0, 200.0, 50.0])
+                .unwrap();
+        assert!(
+            (measurement.width
+                - geometry
+                    .clusters
+                    .iter()
+                    .map(|cluster| cluster.rect[2])
+                    .sum::<f32>())
+            .abs()
+                < 0.001
+        );
+        let draw = |node: &TextNode| {
+            let mut buffers = lyon_tessellation::VertexBuffers::new();
+            crate::ui_text::tessellate_text_run(
+                &mut buffers,
+                &fonts,
+                &family,
+                node,
+                0.0,
+                0.0,
+                200.0,
+                50.0,
+                200.0,
+                50.0,
+                0.0,
+                1.0,
+                None,
+            );
+            buffers.vertices
+        };
+        let regular_vertices = draw(&regular);
+        let bold_vertices = draw(&bold);
+        assert!(!regular_vertices.is_empty());
+        assert_ne!(regular_vertices, bold_vertices);
     }
 
     #[test]

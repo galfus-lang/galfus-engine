@@ -358,6 +358,59 @@ pub fn realm_2d_load_font_data(realm_id: u32, data: Uint8Array, data_len: f64) -
     ffi_string_result(ptr)
 }
 
+#[wasm_bindgen(js_name = "realm2dRegisterFontGroup")]
+pub fn realm_2d_register_font_group(
+    realm_id: u32,
+    name: String,
+    data: Uint8Array,
+    data_len: f64,
+) -> Result<()> {
+    let len = data_len as usize;
+    if !data_len.is_finite() || data_len < 0.0 || data_len.fract() != 0.0 || len > data.len() {
+        return Err(Error::from_reason(
+            Status::InvalidArg,
+            "Invalid font package length",
+        ));
+    }
+    let name = std::ffi::CString::new(name)
+        .map_err(|error| Error::from_reason(Status::InvalidArg, error.to_string()))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_fonts::galfus_realm_2d_register_font_group(
+            realm_id,
+            name.as_ptr(),
+            data.as_ptr(),
+            len as u64,
+        )
+    })
+}
+
+#[wasm_bindgen(js_name = "realm2dSetFontFamily")]
+pub fn realm_2d_set_font_family(realm_id: u32, family_json: String) -> Result<()> {
+    let json = std::ffi::CString::new(family_json)
+        .map_err(|error| Error::from_reason(Status::InvalidArg, error.to_string()))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_fonts::galfus_realm_2d_set_font_family(realm_id, json.as_ptr())
+    })
+}
+
+#[wasm_bindgen(js_name = "realm2dRemoveFontFamily")]
+pub fn realm_2d_remove_font_family(realm_id: u32, name: String) -> Result<()> {
+    let name = std::ffi::CString::new(name)
+        .map_err(|error| Error::from_reason(Status::InvalidArg, error.to_string()))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_fonts::galfus_realm_2d_remove_font_family(realm_id, name.as_ptr())
+    })
+}
+
+#[wasm_bindgen(js_name = "realm2dRemoveFontGroup")]
+pub fn realm_2d_remove_font_group(realm_id: u32, name: String) -> Result<()> {
+    let name = std::ffi::CString::new(name)
+        .map_err(|error| Error::from_reason(Status::InvalidArg, error.to_string()))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_fonts::galfus_realm_2d_remove_font_group(realm_id, name.as_ptr())
+    })
+}
+
 #[wasm_bindgen(js_name = "realm3dSetInstancedModelData")]
 pub fn realm_3d_set_instanced_model_data(
     realm_id: u32,

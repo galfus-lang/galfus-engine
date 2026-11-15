@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 fn create_test_font_db() -> (fontdb::Database, String) {
     let mut fonts = fontdb::Database::new();
-    fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+    fonts.load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
     let family = fonts
         .faces()
         .next()

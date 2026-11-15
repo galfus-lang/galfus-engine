@@ -1,15 +1,18 @@
 //! Font selection shared by formatted and plain UI text.
 
 pub(crate) fn with_font_face_index<R>(
-    font_db: &fontdb::Database,
+    font_db: &dyn crate::UiFontSource,
     family: Option<&str>,
     default_family: &str,
     weight: u16,
     italic: bool,
     f: impl FnOnce(&ttf_parser::Face, u32) -> R,
 ) -> Option<R> {
-    let id = select_font(font_db, family, default_family, weight, italic)?;
-    font_db.with_face_data(id, |data, index| {
+    let id = *font_db
+        .ordered_faces(family, default_family, weight, italic)
+        .ok()?
+        .first()?;
+    font_db.database().with_face_data(id, |data, index| {
         let face = ttf_parser::Face::parse(data, index).ok()?;
         Some(f(&face, index))
     })?

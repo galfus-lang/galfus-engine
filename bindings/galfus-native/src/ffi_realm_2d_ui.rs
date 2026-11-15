@@ -105,14 +105,14 @@ fn get_text_geometry_json(realm_id: u32, ui_id: u32, element_id: u32, mode: u8) 
         let geometry = match &node.kind {
             UiNodeKind::RichText(text) => galfus_realm_2d::ui_text_geometry::rich_text_geometry(
                 text,
-                realm.font_db(),
+                realm.font_source(),
                 realm.default_font_family(),
                 layout.absolute_rect,
             )?,
             UiNodeKind::Text(text) if mode == 2 => {
                 galfus_realm_2d::ui_text_geometry::text_geometry(
                     text,
-                    realm.font_db(),
+                    realm.font_source(),
                     realm.default_font_family(),
                     layout.absolute_rect,
                 )?

@@ -87,6 +87,10 @@ async function main(): Promise<void> {
     resolve(testDir, 'text-encoding.js')
   ]);
   await Bun.write(
+    resolve(testDir, 'font-variable.ttf'),
+    Bun.file(resolve(rootDir, 'engine/galfus-realm-2d/tests/fixtures/NotoSans-Variable-subset.ttf'))
+  );
+  await Bun.write(
     resolve(testDir, 'host-integration.ts'),
     `export { createRuntime } from '../../host/engine/src/runtime';
 export { createUi, TextEditor, UiInputText } from '../../host/ui/src/index';
@@ -144,6 +148,19 @@ export { createUi, TextEditor, UiInputText } from '../../host/ui/src/index';
         if (missingExports.length) throw new Error('Missing WASM exports: ' + missingExports.join(', '));
         galfus.platformInit();
         galfus.realm2dCreate(77);
+        const font = new Uint8Array(await (await fetch('./font-variable.ttf')).arrayBuffer());
+        const fontPackage = new Uint8Array(8 + font.length);
+        const fontHeader = new DataView(fontPackage.buffer);
+        fontHeader.setUint32(0, 1, true);
+        fontHeader.setUint32(4, font.length, true);
+        fontPackage.set(font, 8);
+        galfus.realm2dRegisterFontGroup(77, 'Variable', fontPackage, fontPackage.length);
+        galfus.realm2dSetFontFamily(77, JSON.stringify({ name: 'display', groups: ['Variable'] }));
+        let blockedRemoval = false;
+        try { galfus.realm2dRemoveFontGroup(77, 'Variable'); } catch { blockedRemoval = true; }
+        if (!blockedRemoval) throw new Error('A referenced font group was removed');
+        galfus.realm2dRemoveFontFamily(77, 'display');
+        galfus.realm2dRemoveFontGroup(77, 'Variable');
         galfus.realm2dEnablePhysics(77, 0, -9.81);
         galfus.realm2dCreateShape(77, 1, { kind: 'circle', radius: 0.5 }, { position: [0, 5] });
         galfus.realm2dAttachRigidbody(77, 1, { bodyType: 'dynamic', mass: 1, initialPosition: [0, 5], initialRotation: 0 });

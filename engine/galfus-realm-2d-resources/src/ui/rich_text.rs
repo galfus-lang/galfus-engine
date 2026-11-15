@@ -54,6 +54,12 @@ pub struct RichTextSpan {
 pub struct RichText {
     #[serde(default)]
     pub spans: Vec<RichTextSpan>,
+    /// Realm-local font family label shared by the spans.
+    #[serde(default)]
+    pub font_family: Option<String>,
+    /// Per-element OpenType variation coordinates shared by the spans.
+    #[serde(default)]
+    pub font_axes: std::collections::BTreeMap<String, f32>,
     /// Text wrapping policy; defaults to no automatic wrapping.
     #[serde(default)]
     pub wrap: TextWrapMode,
@@ -69,6 +75,8 @@ impl Default for RichText {
     fn default() -> Self {
         Self {
             spans: Vec::new(),
+            font_family: None,
+            font_axes: Default::default(),
             wrap: TextWrapMode::NoWrap,
             align: TextAlign::Left,
             multiline: true,

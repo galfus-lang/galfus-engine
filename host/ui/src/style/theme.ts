@@ -17,6 +17,7 @@ export const UI_STYLE_STATE_ORDER: readonly UiStyleState[] = Object.freeze([
 
 export interface UiTypography {
   fontFamily?: string;
+  fontAxes?: Record<string, number>;
   fontSize?: number;
   fontWeight?: number;
   italic?: boolean;

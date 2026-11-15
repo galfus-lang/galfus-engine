@@ -4,6 +4,30 @@ import { createAnchor } from '../src/anchors/index';
 import { Realm2D } from '../src/realm2d/index';
 
 describe('@galfus/engine > Realm2D', () => {
+  it('packages font files and configures ordered families', () => {
+    const realm = new Realm2D(21);
+    let packageBytes: Uint8Array | undefined;
+    let family: unknown;
+    const engine = {
+      realm2dCreate: () => {},
+      realm2dRegisterFontGroup: (id: number, name: string, bytes: Uint8Array, length: number) => {
+        expect(id).toBe(21);
+        expect(name).toBe('Example');
+        expect(length).toBe(bytes.length);
+        packageBytes = bytes;
+      },
+      realm2dSetFontFamily: (id: number, json: string) => {
+        expect(id).toBe(21);
+        family = JSON.parse(json);
+      }
+    } as unknown as GalfusEngine;
+    realm.bindEngine(engine);
+    realm.registerFontGroup('Example', [new Uint8Array([1, 2]), new Uint8Array([3])]);
+    expect([...packageBytes!]).toEqual([2, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 1, 2, 3]);
+    realm.setFontFamily({ name: 'display', groups: ['Example'], axes: { wght: 500 } });
+    expect(family).toEqual({ name: 'display', groups: ['Example'], axes: { wght: 500 } });
+    expect(() => realm.registerFontGroup('Empty', [])).toThrow();
+  });
   it('creates entities and synchronizes them to GalfusEngine with resolved anchors', () => {
     const realm = new Realm2D(10);
     const calls: string[] = [];

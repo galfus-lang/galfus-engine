@@ -28,6 +28,11 @@ bun demo phys3d2 --headless --frames 10
 
 ## Categories
 
+`ui1` demonstrates the named `display` family and a `monospace` family using
+JetBrains Mono with Noto Sans as an explicit fallback. JetBrains Mono is included
+only in the demos package; its SIL Open Font License is in
+`src/assets/fonts/LICENSE-JetBrainsMono.txt`.
+
 The `ui3` demo shows the core-backed `@galfus/ui` button, button group, app
 bar, and toolbar. Use Tab and Shift+Tab to move focus, and Enter, Space, or the
 pointer to activate buttons. `ui4` demonstrates nested popovers and tooltips;

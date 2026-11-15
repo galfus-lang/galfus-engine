@@ -59,6 +59,14 @@ async function ensureDir(dirPath: string): Promise<void> {
   await mkdir(dirPath, { recursive: true });
 }
 
+async function copyFontLicenses(destination: string): Promise<void> {
+  for (const name of ['LICENSE-NotoSans.txt', 'LICENSE-NotoColorEmoji.txt'])
+    await copyFile(
+      resolve(rootDir, 'engine/galfus-realm-2d/assets', name),
+      resolve(destination, name)
+    );
+}
+
 async function syncTypeScriptSdk(): Promise<void> {
   logStep('codegen', 'Running multi-language codegen strategy engine and syncing host packages...');
   runCommand(['bun', 'run', 'codegen']);
@@ -82,10 +90,7 @@ async function buildNativeBinaries(platform: NativePlatform, mode: SyncMode): Pr
   await ensureDir(ffiDestDir);
   const ffiDestFile = resolve(ffiDestDir, getArtifactFileName('ffi', platform));
   await copyFile(nativeOut, ffiDestFile);
-  await copyFile(
-    resolve(rootDir, 'engine/galfus-realm-2d/assets/LICENSE-Nunito.txt'),
-    resolve(ffiDestDir, 'LICENSE-Nunito.txt')
-  );
+  await copyFontLicenses(ffiDestDir);
   logStep('cargo:ffi', `✔ Copied FFI binary to: ${ffiDestFile}`);
 
   // 2. Build Node-API addon binary
@@ -96,10 +101,7 @@ async function buildNativeBinaries(platform: NativePlatform, mode: SyncMode): Pr
   await ensureDir(napiDestDir);
   const napiDestFile = resolve(napiDestDir, getArtifactFileName('napi', platform));
   await copyFile(nativeOut, napiDestFile);
-  await copyFile(
-    resolve(rootDir, 'engine/galfus-realm-2d/assets/LICENSE-Nunito.txt'),
-    resolve(napiDestDir, 'LICENSE-Nunito.txt')
-  );
+  await copyFontLicenses(napiDestDir);
   logStep('cargo:napi', `✔ Copied Node-API addon to: ${napiDestFile}`);
 
   // 3. Rebuild clean FFI binary in cargo-target so native debug/release directory remains clean
@@ -145,10 +147,7 @@ async function buildBrowserWasm(mode: SyncMode): Promise<void> {
     'galfus_browser',
     wasmOutput
   ]);
-  await copyFile(
-    resolve(rootDir, 'engine/galfus-realm-2d/assets/LICENSE-Nunito.txt'),
-    resolve(browserDistDir, 'LICENSE-Nunito.txt')
-  );
+  await copyFontLicenses(browserDistDir);
   logStep('wasm-bindgen', `✔ Browser WASM module ready in: ${browserDistDir}`);
 }
 

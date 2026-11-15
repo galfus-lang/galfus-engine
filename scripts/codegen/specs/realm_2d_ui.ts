@@ -104,6 +104,7 @@ export const realm2dUiDescriptors: DescSpec[] = [
       italic: { type: 'boolean', optional: true },
       lineHeight: { type: 'number', optional: true },
       fontFamily: { type: 'string', optional: true },
+      fontAxes: { type: { map: 'number' }, optional: true },
       color: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       wrap: { type: { enum: ['noWrap', 'wordWrap'] }, optional: true },
       align: { type: { enum: ['left', 'center', 'right'] }, optional: true },

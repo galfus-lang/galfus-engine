@@ -68,7 +68,8 @@ describe('ui1 demo (Native SpritePanel & Texture Lab)', () => {
         'bold ',
         'italic ',
         'underline ',
-        'strike'
+        'strike',
+        ' 😀 ❤️'
       ]);
       expect(rich.kind.spans[3].style.underline).toBe(true);
       expect(rich.kind.spans[4].style.strikethrough).toBe(true);
@@ -128,19 +129,26 @@ describe('ui1 demo (Native SpritePanel & Texture Lab)', () => {
     await runDemoUi1({ headless: true, maxFrames: 2 });
   });
 
-  it('retrieves the actual core layout of the formatted text', () => {
+  it('retrieves the actual core layout of formatted and monospace text', async () => {
     const transport = createBunTransport({ headless: true });
     const runtime = createRuntime(transport);
     try {
       const target = runtime.multiverse.createTarget({
         kind: { type: 'texture', width: 1024, height: 680 }
       });
-      const scene = createUi1Scene(runtime, target, undefined, [1024, 680]);
+      const font = new Uint8Array(
+        await Bun.file(
+          new URL('../src/assets/fonts/JetBrainsMono-Variable.ttf', import.meta.url)
+        ).arrayBuffer()
+      );
+      const scene = createUi1Scene(runtime, target, undefined, [1024, 680], font);
       advanceFrame(runtime, transport);
       const first = scene.realm2d.getUiLayout(scene.richUi, 2);
       const second = scene.realm2d.getUiLayout(scene.richUi, 3);
       const clusters = scene.realm2d.getRichTextClusters(scene.richUi, 2);
       const geometry = scene.realm2d.getUiTextGeometry(scene.richUi, 2);
+      const mono = scene.realm2d.getUiTextGeometry(scene.richUi, 4);
+      expect(mono.clusters[0]!.rect[2]).toBeCloseTo(mono.clusters[1]!.rect[2], 3);
       expect(first.absoluteRect[0]).toBe(24);
       expect(first.absoluteRect[1]).toBe(530);
       expect(first.absoluteRect[2]).toBeGreaterThan(0);

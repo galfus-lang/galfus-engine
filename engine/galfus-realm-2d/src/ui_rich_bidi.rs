@@ -7,7 +7,7 @@ use crate::ui_text::measure_text;
 
 pub(crate) fn reorder_lines(
     fragments: Vec<Fragment>,
-    fonts: &fontdb::Database,
+    fonts: &dyn crate::UiFontSource,
     family: &str,
 ) -> Vec<Fragment> {
     let mut output = Vec::with_capacity(fragments.len());

@@ -77,6 +77,10 @@ impl Realm2DContext {
         &self.ui_fonts.database
     }
 
+    pub fn font_source(&self) -> &dyn crate::UiFontSource {
+        &self.ui_fonts
+    }
+
     pub fn default_font_family(&self) -> &str {
         &self.ui_fonts.default_family
     }
@@ -214,7 +218,7 @@ impl Realm for Realm2DContext {
                 let (w, h) = crate::context_ui::compute_ui_dimensions(ui);
                 crate::ui_layout::solve_ui_layout(
                     ui,
-                    &self.ui_fonts.database,
+                    &self.ui_fonts,
                     &self.ui_fonts.default_family,
                     w,
                     h,

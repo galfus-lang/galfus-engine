@@ -150,7 +150,7 @@ impl UiManager2D {
                     }
                     UiNodeKind::Text(text) => crate::ui_text::tessellate_text_run(
                         &mut back,
-                        &fonts.database,
+                        fonts,
                         &fonts.default_family,
                         text,
                         x,
@@ -166,7 +166,7 @@ impl UiManager2D {
                     UiNodeKind::RichText(text) => crate::ui_rich_text::tessellate(
                         &mut back,
                         text,
-                        &fonts.database,
+                        fonts,
                         &fonts.default_family,
                         [x, y, width, height],
                         [dimensions.0, dimensions.1],

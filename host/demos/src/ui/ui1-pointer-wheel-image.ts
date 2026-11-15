@@ -48,7 +48,8 @@ export function createUi1Scene(
   runtime: MultiverseRuntime,
   targetId: TargetId,
   _windowId?: WindowId,
-  size: readonly [number, number] = [1024, 680]
+  size: readonly [number, number] = [1024, 680],
+  monospaceFont?: Uint8Array
 ) {
   const radar = createRadarTexture(128);
   const pixel = createCheckerTexture(64);
@@ -71,6 +72,14 @@ export function createUi1Scene(
   });
 
   const realm2d = runtime.createRealm2D(1);
+  realm2d.setFontFamily({ name: 'display', groups: ['Noto Sans', 'Noto Color Emoji'] });
+  if (monospaceFont) {
+    realm2d.registerFontGroup('DemoMono', [monospaceFont]);
+    realm2d.setFontFamily({
+      name: 'monospace',
+      groups: ['DemoMono', 'Noto Sans', 'Noto Color Emoji']
+    });
+  }
   realm2d.setShadowConfig({ ambient: 1 });
   const { entityId: camEntity } = realm2d.createCamera(
     { orthoScale: size[1], near: -100, far: 100 },
@@ -139,13 +148,15 @@ export function createUi1Scene(
       id: 2,
       kind: {
         type: 'richText',
+        fontFamily: 'display',
         multiline: false,
         spans: [
           { text: 'RichText: ', style: { fontSize: 18, color: [0.8, 0.9, 1, 1] } },
           { text: 'bold ', style: { fontSize: 18, fontWeight: 700, color: [0.3, 0.9, 1, 1] } },
           { text: 'italic ', style: { fontSize: 18, italic: true, color: [1, 0.8, 0.4, 1] } },
           { text: 'underline ', style: { fontSize: 18, underline: true, color: [0.5, 1, 0.6, 1] } },
-          { text: 'strike', style: { fontSize: 18, strikethrough: true, color: [1, 0.5, 0.5, 1] } }
+          { text: 'strike', style: { fontSize: 18, strikethrough: true, color: [1, 0.5, 0.5, 1] } },
+          { text: ' 😀 ❤️', style: { fontSize: 18 } }
         ]
       },
       layout: { positionOffset: [24, 530] }
@@ -173,6 +184,23 @@ export function createUi1Scene(
     },
     { type: 'insert', parentId: 1, childId: 3 }
   ]);
+  if (monospaceFont) {
+    realm2d.applyUiCommands(richUi, [
+      {
+        type: 'create',
+        id: 4,
+        kind: {
+          type: 'text',
+          text: 'MONOSPACE  0123456789',
+          fontFamily: 'monospace',
+          fontSize: 15,
+          color: [0.7, 0.9, 0.85, 1]
+        },
+        layout: { positionOffset: [24, 625] }
+      },
+      { type: 'insert', parentId: 1, childId: 4 }
+    ]);
+  }
 
   // Main Viewport Container Frame
   const viewportContainer = new Panel({
@@ -449,7 +477,12 @@ export async function runDemoUi1(options: HostDemoOptions = {}): Promise<void> {
     );
     const size =
       windowId === undefined ? ([1024, 680] as const) : runtime.platform.window.getSize(windowId);
-    createUi1Scene(runtime, targetId, windowId, size);
+    const mono = new Uint8Array(
+      await Bun.file(
+        new URL('../assets/fonts/JetBrainsMono-Variable.ttf', import.meta.url)
+      ).arrayBuffer()
+    );
+    createUi1Scene(runtime, targetId, windowId, size, mono);
     await runDemoLoop(runtime, { windowId, maxFrames, exitKeys: ['escape', 'q'] });
   } finally {
     runtime.dispose();

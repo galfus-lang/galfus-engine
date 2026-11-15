@@ -1,11 +1,11 @@
 # UI fonts
 
-The renderer embeds Nunito Regular, Bold, Italic and Bold Italic as its default
-family. The files and `LICENSE-Nunito.txt` are from the Google Fonts repository
-at commit `c7e2740188205a85323c7385547f6f59b4f2245a`, under the SIL Open Font
-License 1.1:
+The renderer embeds Noto Sans variable regular and italic as its default font.
+The font files and `LICENSE-NotoSans.txt` are from the
+[Google Fonts Noto Sans repository](https://github.com/google/fonts/tree/main/ofl/notosans)
+and are distributed under the SIL Open Font License 1.1.
 
-https://github.com/google/fonts/tree/c7e2740188205a85323c7385547f6f59b4f2245a/ofl/nunito
-
-No additional fallback font is bundled. Applications can load fonts for
-scripts and characters not covered by Nunito.
+Noto Color Emoji is also embedded and used as the ordered fallback for emoji.
+Its font and `LICENSE-NotoColorEmoji.txt` come from
+[Noto Emoji](https://github.com/googlefonts/noto-emoji) and are distributed
+under the SIL Open Font License 1.1.

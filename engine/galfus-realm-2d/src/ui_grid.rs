@@ -10,7 +10,7 @@ pub(crate) fn layout_grid(
     ui: &mut Model2DUI,
     children: &[u32],
     style: &UiLayoutStyle,
-    fonts: &fontdb::Database,
+    fonts: &dyn crate::UiFontSource,
     family: &str,
     origin: [f32; 2],
     available: [f32; 2],

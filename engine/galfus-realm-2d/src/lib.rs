@@ -22,7 +22,9 @@ pub mod surface_effect;
 pub mod types;
 mod ui_borders;
 mod ui_clip;
+mod ui_color_glyph;
 mod ui_flex;
+mod ui_font_source;
 mod ui_fonts;
 mod ui_grid;
 pub mod ui_layout;
@@ -36,6 +38,7 @@ mod ui_text_font;
 pub mod ui_text_geometry;
 mod ui_text_lines;
 pub mod ui_text_shape;
+mod ui_variations;
 pub mod vector_geometry;
 
 pub use batch::{BatchBuilder2D, PreparedItem2D};
@@ -45,11 +48,17 @@ pub use shader::compile_2d_shader;
 pub use shadow::ShadowManager2D;
 pub use surface_effect::compose_surface_shader_2d;
 pub use types::*;
+pub use ui_font_source::UiFontSource;
+pub use ui_fonts::UiFontFamily;
+pub use ui_variations::UiFontAxis;
 
 #[cfg(test)]
 mod transparency_tests;
 #[cfg(test)]
 mod ui_tests;
+
+#[cfg(test)]
+mod ui_emoji_gpu_tests;
 
 #[cfg(test)]
 mod ui_layout_tests;

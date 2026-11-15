@@ -43,40 +43,15 @@ import {
 } from './components';
 import { Realm2DSyncSystem } from './sync';
 
-/** Layout from the last frame in which the core solved the UI tree. */
-export interface UiComputedLayout {
-  readonly localRect: [number, number, number, number];
-  readonly absoluteRect: [number, number, number, number];
-  readonly clipRect: [number, number, number, number] | null;
-  readonly accumulatedOpacity: number;
-  readonly contentSize: [number, number];
-}
-
-/** One visually ordered shaped cluster in UI coordinates and logical UTF-16 offsets. */
-export interface UiTextCluster {
-  readonly start: number;
-  readonly end: number;
-  readonly rect: [number, number, number, number];
-  readonly rightToLeft: boolean;
-  /** Interior UTF-16 boundaries with positions supplied by the font, when available. */
-  readonly carets?: readonly {
-    readonly offset: number;
-    readonly x: number;
-    readonly approximate?: boolean;
-  }[];
-}
-
-/** A line's UTF-16 range excludes the line break; empty lines have equal endpoints. */
-export interface UiTextLineGeometry {
-  readonly start: number;
-  readonly end: number;
-  readonly rect: [number, number, number, number];
-}
-
-export interface UiTextGeometry {
-  readonly lines: UiTextLineGeometry[];
-  readonly clusters: UiTextCluster[];
-}
+import type { UiComputedLayout, UiTextCluster, UiTextGeometry } from './ui-types';
+import { type FontFamilyConfig, packFontGroup } from './fonts';
+export type {
+  UiComputedLayout,
+  UiTextCluster,
+  UiTextGeometry,
+  UiTextLineGeometry
+} from './ui-types';
+export type { FontFamilyConfig } from './fonts';
 
 export class Realm2D implements RealmConnector {
   private readonly _disposeListeners = new Set<() => void>();
@@ -518,6 +493,33 @@ export class Realm2D implements RealmConnector {
       throw new Error('Cannot load font: Realm2D is not bound to an engine instance.');
     }
     return this._engine.realm2dLoadFontData(this.realmId, data, data.byteLength);
+  }
+
+  /** Atomically registers the font faces that make up a group. */
+  registerFontGroup(name: string, files: readonly Uint8Array[]): void {
+    if (!this._engine)
+      throw new Error('Cannot register font group: Realm2D is not bound to an engine instance.');
+    const data = packFontGroup(files);
+    this._engine.realm2dRegisterFontGroup(this.realmId, name, data, data.byteLength);
+  }
+
+  /** Sets the ordered groups and default variation axes for a family label. */
+  setFontFamily(config: FontFamilyConfig): void {
+    if (!this._engine)
+      throw new Error('Cannot set font family: Realm2D is not bound to an engine instance.');
+    this._engine.realm2dSetFontFamily(this.realmId, JSON.stringify(config));
+  }
+
+  removeFontFamily(name: string): void {
+    if (!this._engine)
+      throw new Error('Cannot remove font family: Realm2D is not bound to an engine instance.');
+    this._engine.realm2dRemoveFontFamily(this.realmId, name);
+  }
+
+  removeFontGroup(name: string): void {
+    if (!this._engine)
+      throw new Error('Cannot remove font group: Realm2D is not bound to an engine instance.');
+    this._engine.realm2dRemoveFontGroup(this.realmId, name);
   }
 
   /** Registers a material for upload during the next sync or flush. */

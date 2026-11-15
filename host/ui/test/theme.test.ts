@@ -49,7 +49,7 @@ describe('component themes and style inheritance', () => {
       });
       const parent = context.root.addPanel();
       parent.setStyle({
-        typography: { fontFamily: 'Example', fontSize: 18 },
+        typography: { fontFamily: 'Example', fontAxes: { wdth: 90 }, fontSize: 18 },
         color: { token: 'colors.brand' },
         backgroundColor: [0.5, 0.5, 0.5, 1],
         width: { token: 'sizes.card' }
@@ -66,11 +66,13 @@ describe('component themes and style inheritance', () => {
       expect(child.resolvedStyle.layout.width).toBeUndefined();
       expect(inherited.resolvedStyle.kind).toMatchObject({
         fontFamily: 'Example',
+        fontAxes: { wdth: 90 },
         fontSize: 18,
         color: [0.1, 0.2, 0.3, 1]
       });
       expect(explicit.resolvedStyle.kind).toMatchObject({
         fontFamily: 'Example',
+        fontAxes: { wdth: 90 },
         fontSize: 12,
         color: [1, 0, 0, 1]
       });

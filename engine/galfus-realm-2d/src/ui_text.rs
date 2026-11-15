@@ -42,7 +42,7 @@ pub struct UiTextMeasurement {
 
 /// Resolves a font face from the database matching the requested family or fallback.
 pub fn with_font_face<R>(
-    font_db: &fontdb::Database,
+    font_db: &dyn crate::UiFontSource,
     family: Option<&str>,
     default_family: &str,
     f: impl FnOnce(&ttf_parser::Face) -> R,
@@ -54,7 +54,7 @@ pub fn with_font_face<R>(
 
 /// Measures text using actual font metrics and wraps lines to the specified max width constraint.
 pub fn measure_text(
-    font_db: &fontdb::Database,
+    font_db: &dyn crate::UiFontSource,
     default_family: &str,
     node: &TextNode,
     max_width: Option<f32>,
@@ -69,6 +69,28 @@ pub fn measure_text(
         text.replace(['\r', '\n'], " ")
     };
 
+    let axes = font_db
+        .ordered_faces(
+            node.font_family.as_deref(),
+            default_family,
+            node.font_weight,
+            node.italic,
+        )
+        .ok()
+        .and_then(|faces| faces.first().copied())
+        .and_then(|id| {
+            font_db
+                .variations(
+                    node.font_family.as_deref(),
+                    id,
+                    &node.font_axes,
+                    node.font_weight,
+                    node.italic,
+                )
+                .ok()
+        })
+        .unwrap_or_default();
+
     let result = with_font_face_index(
         font_db,
         node.font_family.as_deref(),
@@ -76,6 +98,8 @@ pub fn measure_text(
         node.font_weight,
         node.italic,
         |face, _face_index| {
+            let mut face = face.clone();
+            crate::ui_variations::apply(&mut face, &axes);
             let units = face.units_per_em() as f32;
             let scale = node.font_size / units;
             let ascender = face.ascender() as f32 * scale;
@@ -388,7 +412,7 @@ pub fn tessellate_rounded_panel_sides(
 #[allow(clippy::too_many_arguments)]
 pub fn tessellate_text_run(
     buffers: &mut VertexBuffers<VectorVertex, u32>,
-    font_db: &fontdb::Database,
+    font_db: &dyn crate::UiFontSource,
     default_family: &str,
     text_node: &TextNode,
     qx: f32,
@@ -449,12 +473,38 @@ pub fn tessellate_text_run(
         };
         for run in runs {
             let scale = run.scale;
-            let _ = font_db.with_face_data(run.font, |data, index| {
-                let Ok(face) = ttf_parser::Face::parse(data, index) else {
+            let _ = font_db.database().with_face_data(run.font, |data, index| {
+                let Ok(mut face) = ttf_parser::Face::parse(data, index) else {
                     return;
                 };
+                crate::ui_variations::apply(&mut face, &run.variations);
+                let variable_italic = run.variations.iter().any(|axis| {
+                    (axis.tag == "ital" && axis.value > 0.0)
+                        || (axis.tag == "slnt" && axis.value != 0.0)
+                });
+                let variable_weight = run
+                    .variations
+                    .iter()
+                    .find(|axis| axis.tag == "wght")
+                    .map(|axis| axis.value);
                 for glyph in run.glyphs {
                     let gid = ttf_parser::GlyphId(glyph.glyph_id as u16);
+
+                    if crate::ui_color_glyph::append(
+                        buffers,
+                        &face,
+                        gid,
+                        text_node.font_size,
+                        [
+                            local_base_x + current_x + glyph.x_offset as f32 * scale,
+                            local_base_y + glyph.y_offset as f32 * scale,
+                        ],
+                        z_layer + 0.0002,
+                        color[3],
+                    ) {
+                        current_x += glyph.x_advance as f32 * scale;
+                        continue;
+                    }
 
                     let mut path_builder = LyonPath::builder();
                     let mut glyph_builder = GlyphOutlineBuilder {
@@ -462,7 +512,7 @@ pub fn tessellate_text_run(
                         scale,
                         offset_x: local_base_x + current_x + glyph.x_offset as f32 * scale,
                         offset_y: local_base_y + glyph.y_offset as f32 * scale,
-                        shear: if text_node.italic && !face.is_italic() {
+                        shear: if text_node.italic && !face.is_italic() && !variable_italic {
                             0.2
                         } else {
                             0.0
@@ -490,7 +540,10 @@ pub fn tessellate_text_run(
                             }),
                         );
 
-                        if text_node.font_weight >= 600 && face.weight().to_number() < 600 {
+                        if text_node.font_weight >= 600
+                            && variable_weight.unwrap_or(f32::from(face.weight().to_number()))
+                                < 600.0
+                        {
                             let bold_opts = StrokeOptions::default()
                                 .with_line_width(text_node.font_size * 0.035);
                             let _ = stroke_tess.tessellate_path(

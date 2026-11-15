@@ -267,6 +267,99 @@ impl Realm2DContext {
         let family = self.ui_fonts.load(data).map_err(|e| {
             galfus_realm_core::RealmError::Internal(format!("Font loading failed: {e}"))
         })?;
+        self.invalidate_ui_fonts();
+        Ok(family)
+    }
+
+    /// Atomically registers the faces in a named font group.
+    pub fn register_font_group(&mut self, name: &str, files: &[&[u8]]) -> RealmResult<()> {
+        self.ui_fonts.register_group(name, files).map_err(|error| {
+            galfus_realm_core::RealmError::Internal(format!(
+                "Font group registration failed: {error}"
+            ))
+        })?;
+        self.invalidate_ui_fonts();
+        Ok(())
+    }
+
+    /// Replaces an ordered font family configuration for this realm.
+    pub fn set_font_family(&mut self, name: &str, family: crate::UiFontFamily) -> RealmResult<()> {
+        self.ui_fonts.set_family(name, family).map_err(|error| {
+            galfus_realm_core::RealmError::Internal(format!("Invalid font family: {error}"))
+        })?;
+        self.invalidate_ui_fonts();
+        Ok(())
+    }
+
+    /// Looks up a configured font family by its realm-local label.
+    pub fn font_family(&self, name: &str) -> Option<&crate::UiFontFamily> {
+        self.ui_fonts.family(name)
+    }
+
+    /// Removes a family only when no UI node refers to it.
+    pub fn remove_font_family(&mut self, name: &str) -> RealmResult<()> {
+        use galfus_realm_2d_resources::ui::UiNodeKind;
+        let in_use = self.uis.values().any(|(ui, _)| {
+            ui.nodes.values().any(|node| match &node.kind {
+                UiNodeKind::Text(text) => text.font_family.as_deref() == Some(name),
+                UiNodeKind::RichText(text) => text.font_family.as_deref() == Some(name),
+                _ => false,
+            })
+        });
+        if in_use {
+            return Err(galfus_realm_core::RealmError::Internal(format!(
+                "Font family is used by a UI node: {name}"
+            )));
+        }
+        self.ui_fonts
+            .remove_family(name)
+            .map_err(galfus_realm_core::RealmError::Internal)?;
+        self.invalidate_ui_fonts();
+        Ok(())
+    }
+
+    /// Removes an unreferenced group and releases its font faces.
+    pub fn remove_font_group(&mut self, name: &str) -> RealmResult<()> {
+        self.ui_fonts
+            .remove_group(name)
+            .map_err(galfus_realm_core::RealmError::Internal)?;
+        self.invalidate_ui_fonts();
+        Ok(())
+    }
+
+    /// Resolves one matching face from each group in the configured order.
+    pub fn font_family_faces(
+        &self,
+        name: &str,
+        weight: u16,
+        italic: bool,
+    ) -> RealmResult<Vec<fontdb::ID>> {
+        self.ui_fonts
+            .family_faces(name, weight, italic)
+            .map_err(|error| {
+                galfus_realm_core::RealmError::Internal(format!("Font selection failed: {error}"))
+            })
+    }
+
+    /// Resolves family and element variation settings for a face in the family.
+    pub fn font_face_variations(
+        &self,
+        family: &str,
+        face: fontdb::ID,
+        element_axes: &std::collections::BTreeMap<String, f32>,
+        weight: u16,
+        italic: bool,
+    ) -> RealmResult<Vec<crate::UiFontAxis>> {
+        self.ui_fonts
+            .face_variations(family, face, element_axes, weight, italic)
+            .map_err(|error| {
+                galfus_realm_core::RealmError::Internal(format!(
+                    "Font variation resolution failed: {error}"
+                ))
+            })
+    }
+
+    fn invalidate_ui_fonts(&mut self) {
         // Font selection can change intrinsic text sizes even when no UI node changed.
         for (ui, _) in self.uis.values_mut() {
             for (&id, node) in &ui.nodes {
@@ -284,7 +377,28 @@ impl Realm2DContext {
         }
         self.shadow_manager.mark_dirty();
         self.dirty = true;
-        Ok(family)
+    }
+
+    fn validate_ui_font_families(&self, ui: &Model2DUI) -> RealmResult<()> {
+        use galfus_realm_2d_resources::ui::UiNodeKind;
+        for node in ui.nodes.values() {
+            let (family, axes) = match &node.kind {
+                UiNodeKind::Text(text) => (text.font_family.as_deref(), &text.font_axes),
+                UiNodeKind::RichText(text) => (text.font_family.as_deref(), &text.font_axes),
+                _ => continue,
+            };
+            crate::ui_variations::validate_axes(axes).map_err(|error| {
+                galfus_realm_core::RealmError::Internal(format!("Invalid font axes: {error}"))
+            })?;
+            if let Some(name) = family
+                && self.ui_fonts.family(name).is_none()
+            {
+                return Err(galfus_realm_core::RealmError::Internal(format!(
+                    "Unknown font family: {name}"
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Creates or updates a 2D UI model with initial quads, text batches, and world transform.
@@ -298,6 +412,7 @@ impl Realm2DContext {
         ui.validate_tree().map_err(|error| {
             galfus_realm_core::RealmError::Internal(format!("Invalid Model2DUI {ui_id}: {error}"))
         })?;
+        self.validate_ui_font_families(&ui)?;
         self.uis.insert(ui_id, (ui, transform));
         if let Some(spatial) = self.model_transforms.get_mut(&ui_id) {
             *spatial = transform;
@@ -312,6 +427,7 @@ impl Realm2DContext {
         ui.validate_tree().map_err(|error| {
             galfus_realm_core::RealmError::Internal(format!("Invalid Model2DUI {ui_id}: {error}"))
         })?;
+        self.validate_ui_font_families(&ui)?;
         let entry = self.uis.get_mut(&ui_id).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("Model2DUI {ui_id}"))
         })?;
@@ -327,12 +443,15 @@ impl Realm2DContext {
         commands: &[galfus_realm_2d_resources::ui::UiCommand],
     ) -> RealmResult<()> {
         self.validate_id(ui_id)?;
-        let (ui, _) = self.uis.get_mut(&ui_id).ok_or_else(|| {
+        let (ui, _) = self.uis.get(&ui_id).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("Model2DUI {ui_id}"))
         })?;
-        ui.apply_commands(commands).map_err(|error| {
+        let mut candidate = ui.clone();
+        candidate.apply_commands(commands).map_err(|error| {
             galfus_realm_core::RealmError::Internal(format!("Invalid Model2DUI {ui_id}: {error}"))
         })?;
+        self.validate_ui_font_families(&candidate)?;
+        self.uis.get_mut(&ui_id).expect("validated UI exists").0 = candidate;
         self.dirty = true;
         Ok(())
     }

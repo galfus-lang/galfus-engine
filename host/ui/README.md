@@ -398,8 +398,24 @@ After rollback, the visual text is reconciled with the current editor state.
 Run `bun demo ui5` for single-line, multiline, and read-only examples. Escape
 first cancels an active IME composition or releases the focused field; press it
 again after focus leaves the field to exit. `q` exits while no field has focus.
-Nunito is the bundled default font. It does not cover every Unicode character;
-load additional fonts with `realm.loadFontData()` when required.
+Noto Sans and Noto Color Emoji are the bundled default fonts. They do not cover every Unicode character;
+register additional font groups and include them in the ordered family when needed:
+
+```ts
+realm.registerFontGroup('Extra', [fontBytes]);
+realm.setFontFamily({ name: 'default', groups: ['Noto Sans', 'Extra', 'Noto Color Emoji'] });
+```
+
+Families are local to each realm. Use `fontFamily` on Text or RichText to select
+another configured label. `loadFontData()` alone does not add a font to a family.
+Set `axes` on a family or `fontAxes` on an element to configure variable font
+axes; element values override family values. `fontWeight` and `italic` control
+the `wght` and `ital` axes, and `slnt` can be configured separately. Values
+are clamped to the supported range of each face.
+
+Use `removeFontFamily(name)` and `removeFontGroup(name)` to release unused
+resources. Removal fails while a family is referenced by a UI node or a group
+is referenced by a family. The `default` family cannot be removed.
 
 ## Selection and value controls
 

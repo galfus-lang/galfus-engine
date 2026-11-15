@@ -52,7 +52,10 @@ export function createTextInputScene(
         resize(event.width, event.height);
     });
   realm.setShadowConfig({ ambient: 1 });
-  if (fontData) realm.loadFontData(fontData);
+  if (fontData) {
+    realm.registerFontGroup('DemoFont', [fontData]);
+    realm.setFontFamily({ name: 'default', groups: ['Noto Sans', 'DemoFont', 'Noto Color Emoji'] });
+  }
 
   const uiRoot = new UiRoot(runtime, realm, {
     width: 760,

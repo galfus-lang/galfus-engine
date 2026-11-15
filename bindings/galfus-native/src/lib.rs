@@ -9,6 +9,7 @@ pub mod ffi_multiverse;
 pub mod ffi_native_structs;
 pub mod ffi_realm_2d;
 pub mod ffi_realm_2d_desc;
+pub mod ffi_realm_2d_fonts;
 pub mod ffi_realm_2d_ui;
 pub mod ffi_realm_3d;
 pub mod ffi_realm_3d_desc;

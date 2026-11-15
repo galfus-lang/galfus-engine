@@ -44,12 +44,13 @@ fn coordinates(
 
 /// Estimates interior caret positions from the isolated grapheme advances when GDEF is absent.
 pub(crate) fn estimate_carets(
-    fonts: &fontdb::Database,
+    fonts: &dyn crate::UiFontSource,
     font: fontdb::ID,
     text: &UiText,
     graphemes: &[std::ops::Range<usize>],
     offset: usize,
     cluster: &UiTextCluster,
+    axes: &[crate::UiFontAxis],
 ) -> Vec<UiClusterCaret> {
     let start = cluster.start - offset;
     let end = cluster.end - offset;
@@ -67,6 +68,7 @@ pub(crate) fn estimate_carets(
         return Vec::new();
     }
     let weights = fonts
+        .database()
         .with_face_data(font, |data, face_index| {
             ranges
                 .iter()
@@ -77,12 +79,13 @@ pub(crate) fn estimate_carets(
                     } else {
                         harfrust::Direction::LeftToRight
                     };
-                    let glyphs = crate::ui_text_shape::shape_directional_run(
+                    let glyphs = crate::ui_text_shape::shape_directional_run_with_variations(
                         data,
                         face_index,
                         &piece,
                         0,
                         Some(direction),
+                        axes,
                     )
                     .ok()?;
                     Some(

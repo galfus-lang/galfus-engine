@@ -162,6 +162,7 @@ export function renderFieldType(
   if ('array' in type) {
     return `${renderFieldType(type.array, false, enumNames)}[]`;
   }
+  if ('map' in type) return `Dictionary<string, ${renderFieldType(type.map, false, enumNames)}>`;
   if ('inline' in type) {
     return 'Dictionary<string, object>';
   }

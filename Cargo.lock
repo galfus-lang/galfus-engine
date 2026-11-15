@@ -955,6 +955,7 @@ dependencies = [
  "galfus-realm-core",
  "glam 0.33.12",
  "harfrust",
+ "image",
  "lyon_tessellation",
  "pollster",
  "read-fonts",

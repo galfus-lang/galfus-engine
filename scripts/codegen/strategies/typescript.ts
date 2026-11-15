@@ -29,6 +29,7 @@ function renderTsType(type: FieldType): string {
     const inner = renderTsType(type.array);
     return inner.includes(' ') || inner.includes('|') ? `(${inner})[]` : `${inner}[]`;
   }
+  if ('map' in type) return `Record<string, ${renderTsType(type.map)}>`;
   if ('inline' in type) {
     const fields = Object.entries(type.inline).map(([name, spec]) => {
       const opt = spec.optional ? '?' : '';

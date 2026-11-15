@@ -17,6 +17,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 wgpu.workspace = true
 lyon_tessellation.workspace = true
+image.workspace = true
 ttf-parser = "0.25"
 fontdb = "0.24"
 harfrust = "0.12.0"

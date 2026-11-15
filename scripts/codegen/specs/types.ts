@@ -66,6 +66,7 @@ export type FieldType =
   | { ref: string }
   | { enum: string[] }
   | { array: FieldType }
+  | { map: FieldType }
   | { tuple: FieldType[] }
   | { literal: string | number }
   | { inline: Record<string, FieldSpec> };

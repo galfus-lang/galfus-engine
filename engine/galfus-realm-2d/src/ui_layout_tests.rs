@@ -8,7 +8,7 @@ use galfus_realm_2d_resources::ui::{
 
 fn create_test_font_db() -> (fontdb::Database, String) {
     let mut db = fontdb::Database::new();
-    db.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+    db.load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
     let family = db
         .faces()
         .next()

@@ -48,7 +48,7 @@ pub struct UiTextGeometry {
 /// Computes geometry for all lines, including empty lines and trailing line breaks.
 pub fn rich_text_geometry(
     text: &RichText,
-    fonts: &fontdb::Database,
+    fonts: &dyn crate::UiFontSource,
     family: &str,
     rect: [f32; 4],
 ) -> Result<UiTextGeometry, String> {
@@ -90,7 +90,7 @@ pub fn rich_text_geometry(
 /// Ligatures may contain more than one grapheme and are returned as one cluster.
 pub fn rich_text_clusters(
     text: &RichText,
-    fonts: &fontdb::Database,
+    fonts: &dyn crate::UiFontSource,
     family: &str,
     rect: [f32; 4],
 ) -> Result<Vec<UiTextCluster>, String> {
@@ -122,7 +122,7 @@ pub fn rich_text_clusters(
 /// Computes simple text geometry from the same lines and fonts used for rendering.
 pub fn text_geometry(
     node: &TextNode,
-    fonts: &fontdb::Database,
+    fonts: &dyn crate::UiFontSource,
     family: &str,
     rect: [f32; 4],
 ) -> Result<UiTextGeometry, String> {
@@ -187,7 +187,7 @@ fn merge_inline_crlf(clusters: &mut Vec<UiTextCluster>, units: &[u16]) {
 
 fn shape_clusters(
     node: &TextNode,
-    fonts: &fontdb::Database,
+    fonts: &dyn crate::UiFontSource,
     family: &str,
     offset: usize,
     position: [f32; 3],
@@ -207,6 +207,7 @@ fn shape_clusters(
     let mut x = position[0];
     for run in runs {
         fonts
+            .database()
             .with_face_data(run.font, |data, index| {
                 for glyph in run.glyphs {
                     let start = glyph.cluster as usize;
@@ -227,6 +228,7 @@ fn shape_clusters(
                         let mut carets = Vec::new();
                         if !interior.is_empty()
                             && counts[&glyph.cluster] == 1
+                            && run.variations.iter().all(|axis| axis.value == axis.default)
                             && let Some(mut coordinates) =
                                 crate::ui_text_caret::ligature_carets(data, index, glyph.glyph_id)
                             && coordinates.len() == interior.len()
@@ -262,17 +264,17 @@ fn shape_clusters(
                             right_to_left: glyph.right_to_left,
                             carets,
                         });
-                        cluster_fonts.push(run.font);
+                        cluster_fonts.push((run.font, run.variations.clone()));
                     }
                     x += advance;
                 }
             })
             .ok_or_else(|| "Font data unavailable".to_string())?;
     }
-    for (cluster, font) in clusters.iter_mut().zip(cluster_fonts) {
+    for (cluster, (font, axes)) in clusters.iter_mut().zip(cluster_fonts) {
         if cluster.carets.is_empty() && cluster.end - cluster.start > 1 {
             cluster.carets = crate::ui_text_caret::estimate_carets(
-                fonts, font, &node.text, &graphemes, offset, cluster,
+                fonts, font, &node.text, &graphemes, offset, cluster, &axes,
             );
         }
     }
@@ -288,7 +290,8 @@ mod tests {
     #[test]
     fn clusters_use_utf16_offsets_and_line_positions() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+        fonts
+            .load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![RichTextSpan {
@@ -313,7 +316,8 @@ mod tests {
     #[test]
     fn bidi_clusters_keep_logical_indices_in_visual_order() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+        fonts
+            .load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![RichTextSpan {
@@ -339,7 +343,8 @@ mod tests {
     #[test]
     fn geometry_preserves_empty_lines_and_utf16_line_breaks() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+        fonts
+            .load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![RichTextSpan {
@@ -391,7 +396,8 @@ mod tests {
     #[test]
     fn simple_text_geometry_preserves_spaces_and_utf16_offsets_across_wrapping() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
+        fonts
+            .load_font_data(include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let node = TextNode {
             text: "😀  b\r\n\nc".into(),
@@ -448,7 +454,7 @@ mod tests {
 
     #[test]
     fn geometry_exposes_gdef_ligature_carets_from_the_rendered_font() {
-        let mut data = include_bytes!("../assets/Nunito-Regular.ttf").to_vec();
+        let mut data = include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf").to_vec();
         let face = ttf_parser::Face::parse(&data, 0).unwrap();
         let glyph = face.glyph_index('f').unwrap().0;
         let second = face.glyph_index('i').unwrap().0;

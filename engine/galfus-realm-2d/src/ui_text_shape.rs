@@ -1,7 +1,7 @@
 //! Shaping of individual directional runs with UTF-16 cluster indices.
 
 use galfus_realm_2d_resources::ui::UiText;
-use harfrust::{Direction, FontRef, ShapeOptions, ShaperData, UnicodeBuffer};
+use harfrust::{Direction, FontRef, ShapeOptions, ShaperData, ShaperInstance, UnicodeBuffer};
 use unicode_bidi::BidiInfo;
 
 /// A glyph positioned relative to the run, in font units.
@@ -35,9 +35,24 @@ pub(crate) fn shape_directional_run(
     start: u32,
     direction: Option<Direction>,
 ) -> Result<Vec<ShapedGlyph>, String> {
+    shape_directional_run_with_variations(font_data, face_index, text, start, direction, &[])
+}
+
+pub(crate) fn shape_directional_run_with_variations(
+    font_data: &[u8],
+    face_index: u32,
+    text: &UiText,
+    start: u32,
+    direction: Option<Direction>,
+    axes: &[crate::UiFontAxis],
+) -> Result<Vec<ShapedGlyph>, String> {
     let font = FontRef::from_index(font_data, face_index).map_err(|error| error.to_string())?;
     let shaper_data = ShaperData::new(&font);
-    let shaper = shaper_data.shaper(&font).build();
+    let instance = ShaperInstance::from_variations(
+        &font,
+        axes.iter().map(|axis| (axis.tag.as_str(), axis.value)),
+    );
+    let shaper = shaper_data.shaper(&font).instance(Some(&instance)).build();
     let mut input = UnicodeBuffer::new();
     let mut utf16_offset = start;
     for decoded in char::decode_utf16(text.as_utf16().iter().copied()) {
@@ -109,7 +124,7 @@ pub fn shape_paragraph(
 mod tests {
     use super::*;
 
-    const FONT: &[u8] = include_bytes!("../assets/Nunito-Regular.ttf");
+    const FONT: &[u8] = include_bytes!("../tests/fixtures/NotoSans-Test-Regular.ttf");
 
     #[test]
     fn clusters_are_utf16_offsets_not_utf8_byte_offsets() {
