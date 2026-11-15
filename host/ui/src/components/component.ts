@@ -152,6 +152,16 @@ export class UiPanelComponent extends UiComponent {
       layout
     ) as UiPanelComponent;
   }
+  addSpritePanel(
+    properties: Omit<UiNodeKindDesc, 'type'> = {},
+    layout: UiLayoutStyleDesc = {}
+  ): UiSpritePanelComponent {
+    return this.owner.addNode(
+      this.id,
+      { ...properties, type: 'spritePanel' },
+      layout
+    ) as UiSpritePanelComponent;
+  }
   addText(
     text: string,
     fontSize?: number,
@@ -175,5 +185,13 @@ export class UiPanelComponent extends UiComponent {
   on(type: InteractiveEventType, callback: InteractiveCallback): () => void {
     this.owner.observePanel(this.id);
     return this.owner.onPanel(this.id, type, callback);
+  }
+}
+
+/** A staged sprite panel with UV-only updates. */
+export class UiSpritePanelComponent extends UiPanelComponent {
+  setSpriteUvRect(uvRect: [number, number, number, number]): this {
+    this.owner.setSpriteUvRect(this.id, uvRect);
+    return this;
   }
 }

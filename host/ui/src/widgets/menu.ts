@@ -3,6 +3,9 @@ import type { UiPanelComponent } from '../components/component';
 import type { UiOverlayManager } from '../overlay/manager';
 import type { UiOverlayCloseReason, UiOverlayPlacement, UiPopover } from '../overlay/popover';
 import type { UiStyle } from '../style/theme';
+import type { InteractiveCallback } from '@galfus/engine';
+import { UiIcon } from '../icons/component';
+import type { UiIconAtlas } from '../icons/atlas';
 
 export interface UiMenuItem {
   readonly id: string;
@@ -25,6 +28,7 @@ export interface UiMenuOptions {
   readonly style?: UiStyle;
   readonly onSelect?: (event: UiMenuSelection) => void;
   readonly onClose?: (reason: UiMenuCloseReason) => void;
+  readonly iconAtlas?: UiIconAtlas;
 }
 function copyItems(
   items: readonly UiMenuItem[],
@@ -63,6 +67,7 @@ export class UiMenu {
   private page = 0;
   private highlighted = -1;
   private buttons: UiButton[] = [];
+  private icons: UiIcon[] = [];
   private previous?: UiButton;
   private next?: UiButton;
   private child?: UiMenu;
@@ -95,11 +100,14 @@ export class UiMenu {
       style: options.style,
       build: (root) => {
         this.buttons = [];
+        this.icons = [];
         const rows = Math.max(1, Math.min(this.pageSize, this.items_.length));
         for (let slot = 0; slot < rows; slot++) {
           const button = new UiButton(root.root, {
             label: '',
             layout: {
+              direction: 'row',
+              gap: [8, 0],
               width: { type: 'percent', value: 100 },
               height: { type: 'exact', value: 36 }
             },
@@ -122,7 +130,9 @@ export class UiMenu {
               this.openChild(this.page * this.pageSize + slot);
             else if (event.logicalKey === 'ArrowLeft' && this.nested) this.close();
           });
-          button.panel.on('hover', ({ pointer }) => {
+          const icon = new UiIcon(button.panel, 'submenu', 'closed', this.options.iconAtlas);
+          this.icons.push(icon);
+          const hover: InteractiveCallback = ({ pointer }) => {
             const index = this.page * this.pageSize + slot;
             if (!this.items_[index] || this.items_[index]!.disabled) return;
             if (this.child && this.childIndex !== index) {
@@ -133,7 +143,9 @@ export class UiMenu {
             this.highlighted = index;
             button.requestFocus(pointer.windowId);
             if (this.items_[index]?.children) this.openChild(index);
-          });
+          };
+          button.panel.on('hover', hover);
+          icon.panel.on('hover', hover);
           this.buttons.push(button);
         }
         if (this.items_.length > this.pageSize) {
@@ -162,6 +174,7 @@ export class UiMenu {
         this.child = undefined;
         this.childIndex = -1;
         this.buttons = [];
+        this.icons = [];
         this.previous = undefined;
         this.next = undefined;
         const actual = this.requested ?? reason;
@@ -227,8 +240,11 @@ export class UiMenu {
     this.buttons.forEach((button, slot) => {
       const item = this.items_[this.page * this.pageSize + slot];
       button.setVisible(!!item);
+      const icon = this.icons[slot]!;
+      const visible = !!item?.children;
+      if (icon.panel.visible !== visible) icon.panel.setVisible(visible);
       if (!item) return;
-      button.setLabel(item.label + (item.children ? '  >' : ''));
+      button.setLabel(item.label);
       button.setDisabled(!!item.disabled);
     });
     this.previous?.setDisabled(this.page <= 0);
@@ -262,6 +278,7 @@ export class UiMenu {
         pageSize: this.pageSize,
         placement: 'right',
         style: this.options.style,
+        iconAtlas: this.options.iconAtlas,
         onSelect: (event) => {
           this.close('selection');
           this.options.onSelect?.({ ...event, path: [item.id, ...event.path] });

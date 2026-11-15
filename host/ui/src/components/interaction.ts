@@ -41,7 +41,12 @@ export class PanelInteraction {
     private readonly owner: ComponentInteractions,
     readonly id: number
   ) {
-    const listener = owner.root.panelListener(id);
+    this.attachTarget(id);
+  }
+
+  /** Route events from a decorative child panel through the owning control. */
+  attachTarget(id: number): void {
+    const listener = this.owner.root.panelListener(id);
     const on = listener.on.bind(listener);
     this.stop.push(
       on('hover', ({ pointer }) => {
@@ -67,6 +72,8 @@ export class PanelInteraction {
         const state = this.window(pointer.windowId);
         state.pressed.add(pointer.pointerId);
         state.focusVisible = false;
+        if (id !== this.id && this.focusable)
+          this.owner.focus.requestFocus(this.focusable, pointer.windowId, 'pointer');
         this.update();
       })
     );

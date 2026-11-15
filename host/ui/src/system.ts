@@ -3,6 +3,7 @@ import {
   type InteractiveTarget,
   type MultiverseRuntime,
   Realm2D,
+  type TextureId,
   type WindowId
 } from '@galfus/engine';
 import { type Focusable, FocusManager } from './focus';
@@ -13,6 +14,8 @@ import { ComponentRoot, type ComponentRootOptions } from './components/root';
 import { UiOverlayManager } from './overlay/manager';
 import type { KeyboardEvent } from '@galfus/transport-types';
 import type { UiPanelComponent } from './components/component';
+import { UiIconAtlas } from './icons/atlas';
+import { createDefaultIconAtlas } from './icons/default';
 
 // Focus and keyboard capture are window-global. Competing coordinators would
 // deliver one event to multiple focus targets and cannot contain modal input.
@@ -32,6 +35,8 @@ export class UiSystem {
   private readonly _unobserve: () => void;
   private readonly _unfilter: () => void;
   private _disposed = false;
+  private _defaultIcons?: UiIconAtlas;
+  private _customIcons?: UiIconAtlas;
 
   constructor(private readonly runtime: MultiverseRuntime) {
     if (runtime.isDisposed) throw new Error('Cannot create UiSystem for a disposed runtime.');
@@ -96,6 +101,18 @@ export class UiSystem {
   /** Returns the target focused in a window, if any. */
   getFocused(windowId: number): Focusable | undefined {
     return this._focus.getFocused(windowId);
+  }
+  /** Shared icon atlas. The default texture is loaded lazily once per UI system. */
+  get icons(): UiIconAtlas {
+    if (this._disposed) throw new Error('UiSystem is disposed.');
+    if (this._customIcons) return this._customIcons;
+    return (this._defaultIcons ??= createDefaultIconAtlas(this.runtime.resources));
+  }
+
+  /** Use a borrowed custom atlas for future consumers, or restore the default. */
+  setIconAtlas(atlas?: UiIconAtlas): void {
+    if (this._disposed) throw new Error('UiSystem is disposed.');
+    this._customIcons = atlas;
   }
   /** @internal */
   pushFocusScope(
@@ -192,6 +209,10 @@ export class UiSystem {
       throw new Error('UI root requires a registered, live Realm2D.');
     const root = new ComponentRoot(this.runtime, realm, options);
     root.attachFocus(this._focus);
+    root.attachIcons((name) => {
+      if (this._customIcons?.has(name)) return this._customIcons;
+      return (this._defaultIcons ??= createDefaultIconAtlas(this.runtime.resources));
+    });
     this._componentRoots.add(root);
     root.onSyncState((state) => {
       if (state === 'disposed') this._componentRoots.delete(root);
@@ -236,6 +257,12 @@ export class UiSystem {
     this._roots.clear();
     for (const input of [...this._textInputs.values()]) run(() => input.dispose());
     run(() => this._focus.dispose());
+    if (this._defaultIcons) {
+      const textureId = this._defaultIcons.sheet.textureId as TextureId;
+      this._defaultIcons = undefined;
+      run(() => this.runtime.resources.disposeTexture(textureId));
+    }
+    this._customIcons = undefined;
     if (failed) throw failure;
   }
 

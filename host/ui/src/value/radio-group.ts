@@ -1,6 +1,7 @@
 import { makePanel, type UiContainerOptions, UiControl } from '../components/controls';
 import type { UiPanelComponent } from '../components/component';
 import { UiRadio, type UiToggleOptions } from './toggle';
+import type { UiIconAtlas } from '../icons/atlas';
 
 export interface UiRadioOption {
   readonly value: string;
@@ -13,6 +14,7 @@ export interface UiRadioGroupOptions extends UiContainerOptions {
   readonly value?: string | null;
   readonly readOnly?: boolean;
   readonly onChange?: (value: string | null) => void;
+  readonly iconAtlas?: UiIconAtlas;
 }
 /** Radio group with unique string identities and exclusive selection. */
 export class UiRadioGroup extends UiControl {
@@ -21,6 +23,7 @@ export class UiRadioGroup extends UiControl {
   private value_: string | null = null;
   private readOnly_: boolean;
   private updating = false;
+  private readonly iconAtlas?: UiIconAtlas;
   constructor(parent: UiPanelComponent, options: UiRadioGroupOptions = {}) {
     const entries = options.options ?? [];
     const names = new Set<string>();
@@ -52,6 +55,7 @@ export class UiRadioGroup extends UiControl {
     });
     super(panel);
     this.readOnly_ = options.readOnly ?? false;
+    this.iconAtlas = options.iconAtlas;
     panel.setReadOnly(this.readOnly_);
     if (options.onChange) this.callbacks.add(options.onChange);
     for (const entry of entries) this.addRadio(entry);
@@ -135,6 +139,7 @@ export class UiRadioGroup extends UiControl {
     const { onChange, ...configuration } = extra;
     const radio = new UiRadio(this.panel, {
       ...configuration,
+      iconAtlas: configuration.iconAtlas ?? this.iconAtlas,
       value: false,
       label: option.label,
       disabled: option.disabled,

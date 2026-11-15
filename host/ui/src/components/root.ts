@@ -24,6 +24,8 @@ import type { KeyboardEvent } from '@galfus/transport-types';
 import { sameUiValue } from '../style/resolve';
 import type { FocusManager } from '../focus';
 import { ComponentInteractions, type PanelInteraction } from './interaction';
+import type { UiIconAtlas } from '../icons/atlas';
+import { stageSpriteUv } from './sprite-uv';
 
 export type ComponentSyncState = 'pending' | 'synced' | 'failed' | 'disposed';
 export interface ComponentRootOptions {
@@ -39,8 +41,13 @@ export interface ComponentRootOptions {
 
 type NodeRecord = StyledNode;
 
-export { UiComponent, UiPanelComponent, UiTextComponent } from './component';
-import { UiComponent, UiPanelComponent, UiTextComponent } from './component';
+export * from './component';
+import {
+  UiComponent,
+  UiPanelComponent,
+  UiSpritePanelComponent,
+  UiTextComponent
+} from './component';
 
 /** Component tree whose staged changes are committed atomically to one Model2DUI. */
 export class ComponentRoot {
@@ -65,6 +72,15 @@ export class ComponentRoot {
   private colliderSize: [number, number];
   private colliderActive = true;
   private interactions?: ComponentInteractions;
+  private iconsProvider?: (name: string) => UiIconAtlas;
+
+  attachIcons(provider: (name: string) => UiIconAtlas): void {
+    this.iconsProvider = provider;
+  }
+  getIcons(name: string): UiIconAtlas {
+    if (!this.iconsProvider) throw new Error('Icons require a root created by UiSystem.');
+    return this.iconsProvider(name);
+  }
 
   /** @internal */
   getRuntime(): MultiverseRuntime {
@@ -344,8 +360,8 @@ export class ComponentRoot {
   /** @internal */
   addNode(parent: number, kind: UiNodeKindDesc, layout: UiLayoutStyleDesc): UiComponent {
     this.requireNode(parent, 'panel');
-    if (kind.type !== 'panel' && kind.type !== 'text')
-      throw new Error('Only panel and text components are supported.');
+    if (kind.type !== 'panel' && kind.type !== 'spritePanel' && kind.type !== 'text')
+      throw new Error('Only panel, sprite panel and text components are supported.');
     const id = this.nextId;
     assertValidLogicalId(id, 'UI element ID');
     this.nextId++;
@@ -369,7 +385,11 @@ export class ComponentRoot {
     const resolved = draft.get(id)!.resolved!;
     this.nodes = draft;
     const component =
-      type === 'text' ? new UiTextComponent(this, id) : new UiPanelComponent(this, id);
+      type === 'text'
+        ? new UiTextComponent(this, id)
+        : kind.type === 'spritePanel'
+          ? new UiSpritePanelComponent(this, id)
+          : new UiPanelComponent(this, id);
     this.components.set(id, component);
     this.commands.push(
       {
@@ -409,8 +429,13 @@ export class ComponentRoot {
   setPanelProperties(id: number, properties: Omit<UiNodeKindDesc, 'type'>): void {
     this.requireNode(id, 'panel');
     this.updateNode(id, (node) => {
-      node.kind = structuredClone({ ...properties, type: 'panel' });
+      node.kind = structuredClone({ ...properties, type: node.kind.type });
     });
+  }
+
+  setSpriteUvRect(id: number, uvRect: [number, number, number, number]): void {
+    if (stageSpriteUv(this.requireNode(id, 'panel'), uvRect, this.commands))
+      this.changeState('pending');
   }
 
   /** @internal */

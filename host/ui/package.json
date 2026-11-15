@@ -29,6 +29,7 @@
   },
   "files": [
     "src",
+    "assets",
     "examples",
     "README.md",
     "VALIDATION.md"

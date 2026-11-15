@@ -189,7 +189,7 @@ describe('native UI pointer integration', () => {
         for (let i = 0; i < 4; i++) advanceFrame(runtime, transport);
         const checkboxRect = values.realm.getUiLayout(
           values.root.handle,
-          values.checkbox.panel.id
+          values.checkbox.icon.panel.id
         ).absoluteRect;
         click(checkboxRect[0] + checkboxRect[2] / 2, checkboxRect[1] + checkboxRect[3] / 2);
         expect(values.checkbox.value).toBe(true);

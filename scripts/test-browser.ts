@@ -94,6 +94,7 @@ async function main(): Promise<void> {
   await Bun.write(
     resolve(testDir, 'host-integration.ts'),
     `export { createRuntime } from '../../host/engine/src/runtime';
+export { SpriteSheet } from '../../host/engine/src/realm2d/sprite-sheet';
 export { createUi, TextEditor, UiInputText } from '../../host/ui/src/index';
 `
   );
@@ -122,7 +123,7 @@ export { createUi, TextEditor, UiInputText } from '../../host/ui/src/index';
       import init, * as wasm from './pkg/galfus_browser.js';
       import { initializeGalfusBrowser } from './galfus-sdk.js';
       import { TextEncoding } from './text-encoding.js';
-      import { createRuntime, createUi, TextEditor, UiInputText } from './host-integration.js';
+      import { createRuntime, SpriteSheet, createUi, TextEditor, UiInputText } from './host-integration.js';
 
       let galfus;
       let windowId;

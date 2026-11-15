@@ -21,6 +21,57 @@ core rejects the command if the target is not a sprite panel or a coordinate
 is not finite. Reversed and out-of-range coordinates remain available for
 flipping and texture repetition.
 
+## Shared icon atlas
+
+`ui.icons` lazily loads one built-in sprite sheet per UI system and shares it
+across roots and windows. It includes checkbox, radio, switch, select, submenu,
+chevron, check, close, menu, more and add icons. The distributable source image
+is [ui-icons.png](assets/ui-icons.png); `bun host/ui/scripts/generate-icons.ts`
+regenerates it and the identical embedded image used by Bun and browsers.
+
+The atlas exposes independent animation players for its consumers. For example,
+when using a native sprite panel:
+
+```typescript
+const atlas = ui.icons;
+const panel = root.root.addSpritePanel({ textureId: atlas.sheet.textureId });
+const icon = atlas.createAnimation('checkbox', 'unchecked', (uv) => panel.setSpriteUvRect(uv));
+runtime.on('tick', ({ dt }) => icon.update(dt));
+icon.setState('checked');
+```
+
+The default icons change immediately. To supply your own image, frames, and
+transitions, create a `SpriteSheet` with an application-owned texture and
+configure an atlas before creating its consumers:
+
+```typescript
+const atlas = new UiIconAtlas(sheet, {
+  checkbox: {
+    states: { unchecked: 0, checked: 10 },
+    transitions: {
+      'unchecked|checked': { frames: [3, 4, 5, 6, 7, 8, 9, 10], frameDuration: 0.04 }
+    }
+  }
+});
+ui.setIconAtlas(atlas);
+```
+
+`setIconAtlas()` restores the default for future consumers. Existing players
+retain their atlas, so keep a custom texture alive for as long as it is used.
+The UI system never disposes a custom texture. It disposes its default texture
+when the UI system is reset or disposed; stop updating players when their
+targets or atlas are no longer valid. Reset also clears the custom selection.
+Checkboxes, radios, switches, select indicators, and submenu indicators use
+sprite panels. Their animations advance with the runtime tick. Controls retain
+their atlas when `setIconAtlas` changes the default, and a partial custom atlas
+falls back to the built-in atlas for icons it does not define. An `iconAtlas`
+option also selects an atlas for an individual checkbox, radio, radio group,
+switch, select, or menu. Custom definitions must provide the states used by
+each control: `unchecked`/`checked`, `off`/`on`, `closed`/`open` for select,
+and `closed` for submenu. Pointer input on an icon is routed to its owning
+control. When a root has uncommitted changes its icon animations wait for the
+next successful flush, so animation cannot commit unrelated staged changes.
+
 The existing `UiRoot`, `NativeUiModel`, `TextInput`, layout helpers and their
 entry points remain available. The new component API is additive; applications
 can migrate individual trees to `createComponentRoot` without replacing their

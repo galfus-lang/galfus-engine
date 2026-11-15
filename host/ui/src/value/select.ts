@@ -3,6 +3,8 @@ import type { UiPanelComponent, UiTextComponent } from '../components/component'
 import type { UiOverlayManager } from '../overlay/manager';
 import type { UiPopover } from '../overlay/popover';
 import { UiValueControl, type UiValueOptions } from './base';
+import { UiIcon } from '../icons/component';
+import type { UiIconAtlas } from '../icons/atlas';
 
 export interface UiSelectOption {
   readonly value: string;
@@ -14,6 +16,7 @@ export interface UiSelectOptions extends UiValueOptions<string | null> {
   readonly placeholder?: string;
   readonly width?: number;
   readonly pageSize?: number;
+  readonly iconAtlas?: UiIconAtlas;
 }
 function validateOptions(options: readonly UiSelectOption[]): UiSelectOption[] {
   const seen = new Set<string>();
@@ -45,6 +48,7 @@ function validValue(value: string | null, options: readonly UiSelectOption[]): b
 export class UiSelect extends UiValueControl<string | null> {
   readonly labelNode: UiTextComponent;
   readonly popover: UiPopover;
+  readonly icon: UiIcon;
   private options_: UiSelectOption[];
   private readonly placeholder: string;
   private readonly pageSize: number;
@@ -75,6 +79,8 @@ export class UiSelect extends UiValueControl<string | null> {
     const panel = makePanel(parent, 'select', options, {
       direction: 'row',
       padding: [8, 12, 8, 12],
+      alignItems: 'center',
+      gap: [8, 0],
       minHeight: 36,
       ...options.layout,
       width: { type: 'exact', value: width }
@@ -84,6 +90,12 @@ export class UiSelect extends UiValueControl<string | null> {
     this.placeholder = options.placeholder ?? 'Select...';
     this.pageSize = pageSize;
     this.labelNode = panel.addText('');
+    try {
+      this.icon = new UiIcon(panel, 'select', 'closed', options.iconAtlas, ['open']);
+    } catch (error) {
+      panel.remove();
+      throw error;
+    }
     panel.setFocusable(options.tabIndex);
     const rows = Math.max(1, Math.min(pageSize, values.length));
     this.popover = manager.createPopover({
@@ -146,6 +158,7 @@ export class UiSelect extends UiValueControl<string | null> {
         this.buttons = [];
         this.prev = undefined;
         this.next = undefined;
+        if (this.icon.panel.isAttached) this.icon.setState('closed');
       }
     });
     panel.onActivate(({ windowId }) => {
@@ -189,6 +202,7 @@ export class UiSelect extends UiValueControl<string | null> {
     if (this.highlighted < 0) this.highlighted = this.options_.findIndex((item) => !item.disabled);
     this.page = this.highlighted < 0 ? 0 : Math.floor(this.highlighted / this.pageSize);
     this.popover.open();
+    this.icon.setState('open');
   }
   close(): void {
     this.popover.close();
@@ -236,7 +250,7 @@ export class UiSelect extends UiValueControl<string | null> {
   protected syncView(): void {
     const text =
       this.options_.find((item) => item.value === this.value_)?.label ?? this.placeholder;
-    if (this.labelNode.text !== `${text}  v`) this.labelNode.setText(`${text}  v`);
+    if (this.labelNode.text !== text) this.labelNode.setText(text);
     this.state('checked', this.value_ !== null);
   }
   private renderPage(): void {

@@ -129,6 +129,58 @@ be finite; values outside `[0, 1]` and reversed endpoints are supported for
 texture repetition and flipping. The host accepts the entity ID and resolves
 the sprite's logical core ID.
 
+`SpriteSheet` describes a borrowed texture and maps named or numbered frames
+to UV rectangles. Grid dimensions, margins, and spacing are specified in pixels:
+
+```typescript
+const sheet = new SpriteSheet({
+  textureId,
+  textureSize: [128, 64],
+  grid: {
+    columns: 4,
+    rows: 2,
+    frameSize: [32, 32],
+    names: { idle: 0, selected: 5 }
+  }
+});
+
+sheet.applyToSprite(realm2d, spriteEntityId, 'selected');
+sheet.applyToPanel(nativeSpritePanel, 0);
+```
+
+For irregular atlases, provide `frames: [{ name, rect: [x, y, width, height] }]`
+instead of `grid`. Sprite materials and sprite panels must already reference
+the sheet's texture. A sheet does not create or dispose the texture; the caller
+must supply its actual dimensions and keep it alive in the same runtime for as
+long as it is used. `applyToPanel` supports both native and host-side SpritePanel
+handles.
+
+`SpriteAnimation` plays sheet frames on any target that accepts UV updates.
+States select their resting frames; transitions are keyed by `source|destination`:
+
+```typescript
+const animation = new SpriteAnimation({
+  sheet,
+  setUvRect: (uv) => realm2d.setSpriteUvRect(spriteEntityId, uv),
+  states: { off: 0, on: 7 },
+  initialState: 'off',
+  transitions: {
+    'off|on': { frames: [3, 4, 5, 6], frameDuration: 0.05 },
+    'on|off': { frames: [6, 5, 4, 3], frameDuration: 0.05 }
+  }
+});
+runtime.on('tick', ({ dt }) => animation.update(dt)); // seconds
+animation.setState('on');
+```
+
+For a sprite panel, use `setUvRect: (uv) => panel.setSpriteUvRect(uv)`
+(or `panel.setUvRect(uv)` for the host-side panel). A missing transition changes
+the state immediately. Interrupting a transition uses its destination as the
+source of the next transition. `play({ frames, frameDuration }, { loop: true })`
+also supports standalone clips, and `pause`, `resume`, and `stop` control playback.
+The application owns the tick subscription and must stop updating a player when
+its target is disposed. Sheet texture ownership remains with the application.
+
 ### 4. Frame Lifecycle & Loops
 
 The engine provides two loop hooks:

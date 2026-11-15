@@ -1,6 +1,7 @@
 export { Focusable, FocusManager } from './focus';
 export type { FocusCallback, FocusEvent, FocusEventType } from './focus';
 export * from './layout/index';
+export * from './icons/atlas';
 export * from './components/root';
 export {
   UiControl,

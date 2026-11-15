@@ -2,9 +2,12 @@ import { makePanel, type UiControlOptions } from '../components/controls';
 import type { UiPanelComponent, UiTextComponent } from '../components/component';
 import { UiValueControl, type UiValueOptions } from './base';
 import type { UiComponentStyleKind } from '../style/theme';
+import { UiIcon } from '../icons/component';
+import type { UiIconAtlas } from '../icons/atlas';
 
 export interface UiToggleOptions extends UiValueOptions<boolean> {
   readonly label?: string;
+  readonly iconAtlas?: UiIconAtlas;
 }
 function checkBoolean(value: boolean): boolean {
   if (typeof value !== 'boolean') throw new TypeError('Value must be a boolean.');
@@ -13,13 +16,14 @@ function checkBoolean(value: boolean): boolean {
 
 export abstract class UiToggle extends UiValueControl<boolean> {
   readonly labelNode: UiTextComponent;
+  readonly icon: UiIcon;
   protected label_: string;
   /** @internal */ userGuard?: () => boolean;
   protected constructor(
     parent: UiPanelComponent,
     kind: UiComponentStyleKind,
     options: UiToggleOptions,
-    private readonly marker: (value: boolean) => string,
+    private readonly iconName: 'checkbox' | 'radio' | 'switch',
     private readonly toggle: boolean
   ) {
     const initial = checkBoolean(options.value === undefined ? false : options.value);
@@ -31,18 +35,26 @@ export abstract class UiToggle extends UiValueControl<boolean> {
       direction: 'row',
       padding: [7, 10, 7, 10],
       alignItems: 'center',
+      gap: [8, 0],
       minHeight: 34,
       ...options.layout
     });
     super(panel, initial, options);
-    this.label_ = options.label ?? '';
-    this.labelNode = panel.addText('');
-    panel.setFocusable(options.tabIndex);
-    panel.onActivate(({ windowId }) => {
-      if (this.canUserChange(windowId) && (this.userGuard?.() ?? true))
-        this.setValue(this.toggle ? !this.value : true);
-    });
-    this.initialize();
+    try {
+      this.label_ = options.label ?? '';
+      const state = this.iconState(initial);
+      this.icon = new UiIcon(panel, iconName, state, options.iconAtlas, [this.iconState(!initial)]);
+      this.labelNode = panel.addText('');
+      panel.setFocusable(options.tabIndex);
+      panel.onActivate(({ windowId }) => {
+        if (this.canUserChange(windowId) && (this.userGuard?.() ?? true))
+          this.setValue(this.toggle ? !this.value : true);
+      });
+      this.initialize();
+    } catch (error) {
+      panel.remove();
+      throw error;
+    }
   }
   get checked(): boolean {
     return this.value;
@@ -63,20 +75,21 @@ export abstract class UiToggle extends UiValueControl<boolean> {
   }
   protected syncView(): void {
     this.state('checked', this.value_);
-    const label = this.label_
-      ? `${this.marker(this.value_)}  ${this.label_}`
-      : this.marker(this.value_);
-    if (this.labelNode.text !== label) this.labelNode.setText(label);
+    this.icon.setState(this.iconState(this.value_));
+    if (this.labelNode.text !== this.label_) this.labelNode.setText(this.label_);
+  }
+  private iconState(value: boolean): string {
+    return this.iconName === 'switch' ? (value ? 'on' : 'off') : value ? 'checked' : 'unchecked';
   }
 }
 export class UiCheckbox extends UiToggle {
   constructor(parent: UiPanelComponent, options: UiToggleOptions = {}) {
-    super(parent, 'checkbox', options, (value) => (value ? '[x]' : '[ ]'), true);
+    super(parent, 'checkbox', options, 'checkbox', true);
   }
 }
 export class UiSwitch extends UiToggle {
   constructor(parent: UiPanelComponent, options: UiToggleOptions = {}) {
-    super(parent, 'switch', options, (value) => (value ? '[ON]' : '[OFF]'), true);
+    super(parent, 'switch', options, 'switch', true);
   }
 }
 export class UiRadio extends UiToggle {
@@ -87,7 +100,7 @@ export class UiRadio extends UiToggle {
     this.value_ = false;
   }
   constructor(parent: UiPanelComponent, options: UiToggleOptions = {}) {
-    super(parent, 'radio', options, (value) => (value ? '(●)' : '( )'), false);
+    super(parent, 'radio', options, 'radio', false);
   }
   override setValue(value: boolean, emit = true): this {
     if (value) this.beforeChecked?.();
