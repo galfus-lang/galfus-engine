@@ -7,6 +7,7 @@ import {
 import { createUi, UiCheckbox, UiRadioGroup, UiSelect, UiSlider, UiSwitch } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
+import { createUi6CustomIcons } from './ui6-custom-icons';
 
 /** Interactive selection and numeric controls. */
 export function createUi6Scene(
@@ -24,6 +25,7 @@ export function createUi6Scene(
     clearColor: [0.025, 0.04, 0.07, 1]
   });
   const ui = createUi(runtime);
+  const customIcons = createUi6CustomIcons(runtime);
   const root = ui.createComponentRoot(realm, {
     width: size[0],
     height: size[1],
@@ -33,7 +35,11 @@ export function createUi6Scene(
   });
   root.root.addText('SELECTION AND VALUE CONTROLS', 22);
   root.root.addText('Tab to focus, Enter or Space to activate, arrows to navigate or adjust.', 14);
-  const checkbox = new UiCheckbox(root.root, { label: 'Enable notifications', variant: 'accent' });
+  const checkbox = new UiCheckbox(root.root, {
+    label: 'Enable notifications (animated icon)',
+    variant: 'accent',
+    iconAtlas: customIcons.atlas
+  });
   const toggle = new UiSwitch(root.root, { label: 'Auto-save', value: true });
   const disabled = new UiCheckbox(root.root, { label: 'Disabled example', disabled: true });
   const readOnly = new UiSwitch(root.root, {
@@ -84,33 +90,39 @@ export function createUi6Scene(
   slider.onChange(update);
   select?.onChange(update);
   root.flush();
-  if (windowId !== undefined)
-    runtime.on('window', (event) => {
-      if (
-        event.windowId !== windowId ||
-        event.type !== 'resized' ||
-        event.width <= 0 ||
-        event.height <= 0
-      )
-        return;
-      const component = realm.world.getComponent<Camera2DComponent>(camera.entityId, 'Camera2D');
-      if (component) {
-        component.desc.orthoScale = event.height;
-        component.isDirty = true;
-      }
-      root.root.setLayout({
-        ...root.root.layout,
-        width: { type: 'exact', value: event.width },
-        height: { type: 'exact', value: event.height }
-      });
-      root.flush();
-      manager?.setViewport([0, 0, event.width, event.height]);
-    });
+  const stopResize =
+    windowId === undefined
+      ? undefined
+      : runtime.on('window', (event) => {
+          if (
+            event.windowId !== windowId ||
+            event.type !== 'resized' ||
+            event.width <= 0 ||
+            event.height <= 0
+          )
+            return;
+          const component = realm.world.getComponent<Camera2DComponent>(
+            camera.entityId,
+            'Camera2D'
+          );
+          if (component) {
+            component.desc.orthoScale = event.height;
+            component.isDirty = true;
+          }
+          root.root.setLayout({
+            ...root.root.layout,
+            width: { type: 'exact', value: event.width },
+            height: { type: 'exact', value: event.height }
+          });
+          root.flush();
+          manager?.setViewport([0, 0, event.width, event.height]);
+        });
   return {
     realm,
     ui,
     root,
     checkbox,
+    customIcons: customIcons.atlas,
     toggle,
     disabled,
     readOnly,
@@ -118,7 +130,11 @@ export function createUi6Scene(
     slider,
     select,
     status,
-    dispose: () => ui.dispose()
+    dispose: () => {
+      stopResize?.();
+      ui.dispose();
+      customIcons.dispose();
+    }
   };
 }
 export async function runDemoUi6(options: HostDemoOptions = {}): Promise<void> {

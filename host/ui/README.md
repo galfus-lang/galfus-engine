@@ -72,6 +72,12 @@ and `closed` for submenu. Pointer input on an icon is routed to its owning
 control. When a root has uncommitted changes its icon animations wait for the
 next successful flush, so animation cannot commit unrelated staged changes.
 
+The `ui6` demo uses an application-owned, eight-frame checkbox sheet with
+forward and reverse transitions, alongside controls using the default atlas.
+See [ui6-custom-icons.ts](../demos/src/ui/ui6-custom-icons.ts) for the atlas
+definition and [ui6-selection-controls.ts](../demos/src/ui/ui6-selection-controls.ts)
+for assigning it to a control and releasing its texture.
+
 The existing `UiRoot`, `NativeUiModel`, `TextInput`, layout helpers and their
 entry points remain available. The new component API is additive; applications
 can migrate individual trees to `createComponentRoot` without replacing their

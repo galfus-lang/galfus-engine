@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { createRuntime } from '@galfus/engine';
 import { createBunTransport } from '@galfus/transport-bun';
 import { advanceFrame } from './test-helpers';
@@ -32,6 +32,43 @@ describe('ui6 selection controls', () => {
         scene.realm.getUiLayout(scene.root.handle, scene.status.id).absoluteRect[1]
       ).toBeLessThan(560);
       scene.dispose();
+    } finally {
+      runtime.dispose();
+    }
+  });
+  it('animates the custom checkbox sheet while the other controls use the default atlas', () => {
+    const transport = createBunTransport({ headless: true });
+    const runtime = createRuntime(transport);
+    try {
+      const disposeTexture = spyOn(runtime.resources, 'disposeTexture');
+      const target = runtime.multiverse.createTarget({
+        kind: { type: 'texture', width: 900, height: 560 }
+      });
+      const scene = createUi6Scene(runtime, target);
+      const sheet = scene.customIcons.sheet;
+      const icon = scene.checkbox.icon.panel;
+      const current = () => scene.root.nodeSnapshot(icon.id).kind.uvRect;
+      expect(scene.root.nodeSnapshot(icon.id).kind.textureId).toBe(sheet.textureId);
+      expect(scene.root.nodeSnapshot(scene.toggle.icon.panel.id).kind.textureId).not.toBe(
+        sheet.textureId
+      );
+      expect(current()).toEqual(sheet.uvRect(0));
+      advanceFrame(runtime, transport);
+      expect(scene.realm.getUiLayout(scene.root.handle, icon.id).absoluteRect.slice(2)).toEqual([
+        20, 20
+      ]);
+      scene.checkbox.setChecked(true);
+      expect(current()).toEqual(sheet.uvRect(1));
+      advanceFrame(runtime, transport, 0.061);
+      expect(current()).toEqual(sheet.uvRect(2));
+      advanceFrame(runtime, transport, 0.5);
+      expect(current()).toEqual(sheet.uvRect(7));
+      scene.checkbox.setChecked(false);
+      expect(current()).toEqual(sheet.uvRect(6));
+      advanceFrame(runtime, transport, 0.5);
+      expect(current()).toEqual(sheet.uvRect(0));
+      scene.dispose();
+      expect(disposeTexture.mock.calls.some(([id]) => id === sheet.textureId)).toBe(true);
     } finally {
       runtime.dispose();
     }
