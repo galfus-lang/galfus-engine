@@ -82,12 +82,23 @@ export class InteractiveSystem {
   private readonly realms = new Map<number, RealmState>();
   private readonly pointers = new Map<number, Map<number, PointerState>>();
   private readonly observers = new Set<InteractiveObserver>();
+  private readonly dispatchFilters = new Set<
+    (listener: InteractiveListener, event: PointerEvent) => boolean
+  >();
 
   constructor(private readonly multiverse: MultiverseCoordinator) {}
 
   observe(observer: InteractiveObserver): () => void {
     this.observers.add(observer);
     return () => void this.observers.delete(observer);
+  }
+
+  /** @internal Filters pointer delivery before listeners run. */
+  addDispatchFilter(
+    filter: (listener: InteractiveListener, event: PointerEvent) => boolean
+  ): () => void {
+    this.dispatchFilters.add(filter);
+    return () => void this.dispatchFilters.delete(filter);
   }
 
   usesRealm(realmId: number): boolean {
@@ -386,6 +397,13 @@ export class InteractiveSystem {
     elementId?: number
   ): void {
     if (listener?.hasListeners(type)) {
+      if (
+        type !== 'leave' &&
+        type !== 'cancel' &&
+        type !== 'pressup' &&
+        [...this.dispatchFilters].some((filter) => !filter(listener, pointer.event))
+      )
+        return;
       const localPos = pointer.positions.get(listener);
       const uv = pointer.uvs.get(listener);
       const ev = pointer.event;
@@ -398,6 +416,7 @@ export class InteractiveSystem {
         realmId: listener.realmId,
         target: listener.target,
         pointer: p,
+        windowPosition: ev.position,
         uv: uv ? [uv[0], uv[1]] : undefined,
         elementId,
         scrollDelta

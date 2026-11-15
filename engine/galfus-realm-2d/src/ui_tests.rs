@@ -105,7 +105,7 @@ fn clipping_preserves_partially_visible_text() {
 
 pub(crate) fn create_test_font_db() -> (fontdb::Database, String) {
     let mut db = fontdb::Database::new();
-    db.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+    db.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
     let default_family = db
         .faces()
         .next()
@@ -532,4 +532,46 @@ fn clipped_sprites_keep_original_texture_coordinates() {
         );
         assert!(instances.iter().all(|instance| instance.tint.w == 1.0));
     }
+}
+
+#[test]
+fn text_and_rich_text_never_capture_pointer_hits() {
+    use galfus_realm_2d_resources::ui::{RichText, RichTextSpan};
+    let (fonts, family) = create_test_font_db();
+    let mut ui = Model2DUI::new();
+    let layout = UiLayoutStyle {
+        width: UiDimension::Exact(100.0),
+        height: UiDimension::Exact(40.0),
+        is_stack: true,
+        ..Default::default()
+    };
+    ui.create_panel(1, PanelNode::default(), layout.clone())
+        .unwrap();
+    ui.create_text(
+        2,
+        TextNode {
+            text: "simple".into(),
+            ..Default::default()
+        },
+        layout.clone(),
+    )
+    .unwrap();
+    ui.create_rich_text(
+        3,
+        RichText {
+            spans: vec![RichTextSpan {
+                text: "rich".into(),
+                style: Default::default(),
+            }],
+            ..Default::default()
+        },
+        layout,
+    )
+    .unwrap();
+    ui.insert_child(1, 2, None).unwrap();
+    ui.insert_child(1, 3, None).unwrap();
+    solve_ui_layout(&mut ui, &fonts, &family, 100.0, 40.0);
+    assert_eq!(ui.pick_panel([10.0, 10.0]), Some(1));
+    assert!(!ui.is_interactive_panel(2));
+    assert!(!ui.is_interactive_panel(3));
 }

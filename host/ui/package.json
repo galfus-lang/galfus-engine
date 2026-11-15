@@ -29,7 +29,9 @@
   },
   "files": [
     "src",
-    "README.md"
+    "examples",
+    "README.md",
+    "VALIDATION.md"
   ],
   "dependencies": {
     "@galfus/engine": "workspace:*",

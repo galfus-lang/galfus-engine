@@ -79,6 +79,7 @@ export interface UiTextGeometry {
 }
 
 export class Realm2D implements RealmConnector {
+  private readonly _disposeListeners = new Set<() => void>();
   readonly realmKind: RealmKind = '2d';
   readonly realmId: RealmId;
   readonly world = new EcsWorld();
@@ -126,6 +127,13 @@ export class Realm2D implements RealmConnector {
 
   get isDisposed(): boolean {
     return this._disposed;
+  }
+
+  /** Subscribes to realm disposal. The returned function removes the subscription. */
+  onDispose(callback: () => void): () => void {
+    if (this._disposed) throw new Error('Cannot observe a disposed Realm2D.');
+    this._disposeListeners.add(callback);
+    return () => this._disposeListeners.delete(callback);
   }
 
   allocateResourceId(): number {
@@ -189,6 +197,15 @@ export class Realm2D implements RealmConnector {
   dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
+    const errors: unknown[] = [];
+    for (const listener of [...this._disposeListeners]) {
+      try {
+        listener();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    this._disposeListeners.clear();
     this._physics?.dispose();
     this.hierarchy.reset();
     this.syncSystem.dispose(this._engine);
@@ -199,6 +216,7 @@ export class Realm2D implements RealmConnector {
     this.world.reset();
     this.solver.cache.clear();
     this._materials.clear();
+    if (errors.length > 0) throw new AggregateError(errors, 'Realm disposal listeners failed.');
   }
 
   /** Adds a collider to an entity with a matching Model component. */
@@ -393,6 +411,21 @@ export class Realm2D implements RealmConnector {
     const comp = this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI');
     if (!comp || comp.uiId !== handle.uiId) throw new Error('UI model does not exist.');
     if (commands.length > 0) comp.pendingCommands.push(structuredClone([...commands]));
+  }
+
+  /** Applies one atomic UI batch immediately after pending host synchronization. */
+  commitUiCommands(
+    handle: { entityId: EntityId; uiId: number },
+    commands: readonly UiCommandDesc[]
+  ): void {
+    if (this._disposed) throw new Error('Cannot update a disposed Realm2D.');
+    const component = this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI');
+    if (!component || component.uiId !== handle.uiId) throw new Error('UI model does not exist.');
+    if (!this._engine) throw new Error('Cannot update UI without a bound transport.');
+    if (component.isDirty || component.pendingCommands.length > 0)
+      throw new Error('UI model has unsynchronized host changes.');
+    if (commands.length > 0)
+      this._engine.realm2dApplyUiCommands(this.realmId, handle.uiId, [...commands]);
   }
 
   /** Reads a node's last computed layout in UI-local coordinates. */

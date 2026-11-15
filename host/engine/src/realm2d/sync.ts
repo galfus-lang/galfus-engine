@@ -81,6 +81,21 @@ export class Realm2DSyncSystem {
     engine: GalfusEngine,
     materials: ReadonlyMap<number, Material2DDesc> = new Map()
   ): void {
+    // Destroy stale colliders before their models: core model destruction also
+    // removes orphaned colliders, so reversing this order would destroy twice.
+    const liveColliders = new Set<number>();
+    for (const id of world.query('Collider2D')) {
+      const collider = world.getComponent<Collider2DComponent>(id, 'Collider2D');
+      if (!collider || !world.getComponent<Model2DComponent>(id, 'Model2D')) continue;
+      for (const entry of getColliderEntries(collider))
+        if (entry.active) liveColliders.add(entry.colliderId);
+    }
+    for (const colliderId of this._syncedColliders.keys()) {
+      if (!liveColliders.has(colliderId)) {
+        engine.realm2dDestroyCollider(this.realmId, colliderId);
+        this._syncedColliders.delete(colliderId);
+      }
+    }
     for (const [id, desc] of materials) {
       if (!this._syncedMaterials.has(id)) {
         engine.realm2dCreateMaterial(this.realmId, id, desc);

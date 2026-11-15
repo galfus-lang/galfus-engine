@@ -122,7 +122,7 @@ mod tests {
     use std::sync::Arc;
 
     fn fonts_with_limited_primary() -> (fontdb::Database, String, fontdb::ID, fontdb::ID) {
-        let original = include_bytes!("../assets/default_font.ttf").to_vec();
+        let original = include_bytes!("../assets/Nunito-Regular.ttf").to_vec();
         let face = ttf_parser::Face::parse(&original, 0).unwrap();
         let a = face.glyph_index('a').unwrap().0;
         let delta = a.wrapping_sub('a' as u16);

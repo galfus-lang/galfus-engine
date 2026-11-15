@@ -33,6 +33,12 @@ import { runDemo3d10 } from './realm3d/d3d10-morph-targets';
 import { runDemo3d11 } from './realm3d/d3d11-imported-skybox';
 import { runDemoUi1 } from './ui/ui1-pointer-wheel-image';
 import { runDemoUi2 } from './ui/ui2-panels-layout';
+import { runDemoUi3 } from './ui/ui3-components';
+import { runDemoUi4 } from './ui/ui4-overlays';
+import { runDemoUi5 } from './ui/ui5-text-fields';
+import { runDemoUi6 } from './ui/ui6-selection-controls';
+import { runDemoUi7 } from './ui/ui7-menu-dialog-progress';
+import { runDemoUi8 } from './ui/ui8-integrated';
 
 export type DemoCategory =
   | 'Host & Interaction'
@@ -104,7 +110,7 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     run: runTransRealmDemo
   },
 
-  // 2. UI (2 demos)
+  // 2. UI (6 demos)
   {
     id: 'ui1',
     aliases: ['ui-events', 'sprite-image', 'wheel'],
@@ -124,6 +130,70 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     description:
       'Responsive Model2DUI panel hierarchy with horizontal/vertical SplitGroup sashes, ScrollPanel wheel/thumb scrolling, grid/flex layouts, and floating resizable panels.',
     run: runDemoUi2
+  },
+
+  {
+    id: 'ui3',
+    aliases: ['ui-components', 'buttons'],
+    title: 'UI Components, Buttons & Toolbars',
+    category: 'UI',
+    tags: ['ui', 'button', 'toolbar', 'appbar', 'keyboard', 'theme'],
+    description:
+      'Core-backed buttons, nested button groups, app bar and toolbars with pointer and keyboard navigation.',
+    run: runDemoUi3
+  },
+
+  {
+    id: 'ui4',
+    aliases: ['overlays', 'popover', 'tooltip'],
+    title: 'Popovers, Tooltips & Nested Layers',
+    category: 'UI',
+    tags: ['ui', 'overlay', 'popover', 'tooltip', 'keyboard', 'focus'],
+    description:
+      'Anchored popovers and tooltips with nesting, focus restoration, pointer and keyboard dismissal.',
+    run: runDemoUi4
+  },
+
+  {
+    id: 'ui5',
+    aliases: ['ui-text-fields', 'ui-ime'],
+    title: 'UI Text Fields and IME',
+    category: 'UI',
+    tags: ['ui', 'text', 'selection', 'ime', 'keyboard'],
+    description:
+      'Single-line and multiline component text fields with selections, word navigation and IME.',
+    run: runDemoUi5
+  },
+
+  {
+    id: 'ui6',
+    aliases: ['ui-selection', 'ui-controls'],
+    title: 'UI Selection and Value Controls',
+    category: 'UI',
+    tags: ['ui', 'checkbox', 'radio', 'switch', 'slider', 'select'],
+    description:
+      'Checkbox, radio, switch, slider and select with keyboard and pointer interaction.',
+    run: runDemoUi6
+  },
+
+  {
+    id: 'ui7',
+    aliases: ['ui-menu', 'ui-dialog'],
+    title: 'UI Menus, Dialogs and Progress',
+    category: 'UI',
+    tags: ['ui', 'menu', 'dialog', 'progress'],
+    description: 'Nested menus, modal focus containment and progress indicators.',
+    run: runDemoUi7
+  },
+
+  {
+    id: 'ui8',
+    aliases: ['ui-integrated', 'ui-design-system'],
+    title: 'Integrated UI Application',
+    category: 'UI',
+    tags: ['ui', 'theme', 'text', 'ime', 'forms', 'overlay'],
+    description: 'Integrated design system, text editing, form controls, focus and overlays.',
+    run: runDemoUi8
   },
 
   // 3. Physics & Anchors (5 demos)

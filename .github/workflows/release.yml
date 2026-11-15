@@ -168,6 +168,7 @@ jobs:
           cp "build/cargo-target/${{ matrix.target }}/release/${library}" "${package_dir}/lib/galfus.node"
           cp -R sdk "${package_dir}/sdk"
           cp docs/release-package.md "${package_dir}/README.md"
+          cp engine/galfus-realm-2d/assets/LICENSE-Nunito.txt "${package_dir}/LICENSE-Nunito.txt"
 
           tar -C package -czf "dist/${package_name}.tar.gz" "${package_name}"
           bun scripts/github/create-md5.ts "dist/${package_name}.tar.gz"
@@ -235,6 +236,7 @@ jobs:
             --out-name galfus_browser \
             build/cargo-target/wasm32-unknown-unknown/release/galfus_browser.wasm
           cp docs/release-package.md "${package_dir}/README.md"
+          cp engine/galfus-realm-2d/assets/LICENSE-Nunito.txt "${package_dir}/LICENSE-Nunito.txt"
 
           tar -C package -czf "dist/${package_name}.tar.gz" "${package_name}"
           bun scripts/github/create-md5.ts "dist/${package_name}.tar.gz"

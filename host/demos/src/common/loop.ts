@@ -1,4 +1,6 @@
 import { isKey, type MultiverseRuntime, type WindowId } from '@galfus/engine';
+import type { KeyboardEvent } from '@galfus/transport-types';
+import type { UiOverlayManager } from '@galfus/ui';
 
 /** Runs a demo until its window closes, an exit key is pressed, or its frame limit is reached. */
 export function runDemoLoop(
@@ -7,7 +9,7 @@ export function runDemoLoop(
     windowId?: WindowId;
     maxFrames?: number;
     exitKeys: string[];
-    canExit?: () => boolean;
+    canExit?: (event: KeyboardEvent) => boolean;
   }
 ): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -25,8 +27,9 @@ export function runDemoLoop(
       if (
         event.type === 'input' &&
         event.state === 'pressed' &&
+        !event.repeat &&
         isKey(event, ...options.exitKeys) &&
-        (options.canExit?.() ?? true)
+        (options.canExit?.(event) ?? true)
       )
         stop();
     });
@@ -35,4 +38,9 @@ export function runDemoLoop(
     });
     runtime.start();
   });
+}
+
+/** Let an overlay or active composition consume Escape before the demo exits. */
+export function canExitAfterOverlays(event: KeyboardEvent, manager?: UiOverlayManager): boolean {
+  return event.type !== 'input' || event.logicalKey !== 'Escape' || !manager?.consumeEscape();
 }

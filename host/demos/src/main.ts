@@ -47,7 +47,9 @@ function formatCatalogTable(categoryFilter?: string): string {
   lines.push('  bun demo                         Launch interactive fuzzy catalog');
   lines.push('  bun demo <id>                    Run a specific demo by ID or alias');
   lines.push('  bun demo <id> --headless -f 60   Run headless smoke validation');
-  lines.push('  bun demo --list                  List all 27 demos by category');
+  lines.push(
+    `  bun demo --list                  List all ${DEMO_CATALOG.length} demos by category`
+  );
   lines.push('================================================================');
   return lines.join('\n');
 }
@@ -58,7 +60,7 @@ async function runInteractiveBrowser(initialCategory?: string): Promise<DemoDesc
   let selectedCategory = initialCategory;
   if (!selectedCategory) {
     const modeChoice = await select({
-      message: 'How would you like to browse the 27 Galfus Engine demos?',
+      message: `How would you like to browse the ${DEMO_CATALOG.length} Galfus Engine demos?`,
       options: [
         {
           value: '__fuzzy__',

@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn clusters_use_utf16_offsets_and_line_positions() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![RichTextSpan {
@@ -313,7 +313,7 @@ mod tests {
     #[test]
     fn bidi_clusters_keep_logical_indices_in_visual_order() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![RichTextSpan {
@@ -339,7 +339,7 @@ mod tests {
     #[test]
     fn geometry_preserves_empty_lines_and_utf16_line_breaks() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![RichTextSpan {
@@ -391,7 +391,7 @@ mod tests {
     #[test]
     fn simple_text_geometry_preserves_spaces_and_utf16_offsets_across_wrapping() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let node = TextNode {
             text: "😀  b\r\n\nc".into(),
@@ -448,7 +448,7 @@ mod tests {
 
     #[test]
     fn geometry_exposes_gdef_ligature_carets_from_the_rendered_font() {
-        let mut data = include_bytes!("../assets/default_font.ttf").to_vec();
+        let mut data = include_bytes!("../assets/Nunito-Regular.ttf").to_vec();
         let face = ttf_parser::Face::parse(&data, 0).unwrap();
         let glyph = face.glyph_index('f').unwrap().0;
         let second = face.glyph_index('i').unwrap().0;

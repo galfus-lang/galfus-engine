@@ -89,7 +89,7 @@ async function main(): Promise<void> {
   await Bun.write(
     resolve(testDir, 'host-integration.ts'),
     `export { createRuntime } from '../../host/engine/src/runtime';
-export { createUi, TextEditor } from '../../host/ui/src/index';
+export { createUi, TextEditor, UiInputText } from '../../host/ui/src/index';
 `
   );
   run([
@@ -117,7 +117,7 @@ export { createUi, TextEditor } from '../../host/ui/src/index';
       import init, * as wasm from './pkg/galfus_browser.js';
       import { initializeGalfusBrowser } from './galfus-sdk.js';
       import { TextEncoding } from './text-encoding.js';
-      import { createRuntime, createUi, TextEditor } from './host-integration.js';
+      import { createRuntime, createUi, TextEditor, UiInputText } from './host-integration.js';
 
       let galfus;
       let windowId;
@@ -344,6 +344,16 @@ export { createUi, TextEditor } from '../../host/ui/src/index';
         const ui = createUi(runtime);
         const hostWindow = runtime.platform.window.create();
         const realm = runtime.createRealm2D(1);
+        const themed = ui.createComponentRoot(realm, { width: 120, height: 40, theme: { tokens: { colors: { ink: [0.1, 0.2, 0.3, 1] } } } });
+        const themedPanel = themed.root.addPanel();
+        themedPanel.setStyle({ color: { token: 'colors.ink' } });
+        const themedLabel = themedPanel.addText('Theme');
+        themed.flush();
+        if (themedLabel.resolvedStyle.kind.color.join(',') !== '0.1,0.2,0.3,1') throw new Error('Browser theme inheritance failed');
+        themed.patchTheme({ tokens: { colors: { ink: [0.4, 0.5, 0.6, 1] } } });
+        themed.flush();
+        if (themedLabel.resolvedStyle.kind.color.join(',') !== '0.4,0.5,0.6,1') throw new Error('Browser theme update failed');
+        themed.dispose();
         realm.createCamera({ orthoScale: 10 });
         const hostTarget = runtime.multiverse.createTarget({ kind: { type: 'window', windowId: hostWindow } });
         runtime.multiverse.createInvocation({ realmId: 1, targetId: hostTarget });
@@ -362,7 +372,9 @@ export { createUi, TextEditor } from '../../host/ui/src/index';
         canvas.dispatchEvent(hostTab);
         tick();
         if (!hostTab.defaultPrevented || ui.getFocused(hostWindow) !== secondFocus) throw new Error('Browser Tab did not advance host focus');
-        const textInput = ui.textInput(1, { entityId: first, value: 'a' });
+        const fieldRoot = ui.createComponentRoot(realm, { width: 300, height: 80, windowId: hostWindow });
+        const textInput = new UiInputText(ui, fieldRoot.root, { value: 'a' });
+        fieldRoot.flush();
         tick();
         if (!textInput.requestFocus(hostWindow) || document.activeElement !== input) throw new Error('Text input did not activate the browser IME');
         window.galfusHostImeTest = { tick, snapshot: () => ({ value: textInput.value, displayValue: textInput.displayValue, composition: textInput.composition }), reset: () => textInput.setValue('a'), selectEmoji: () => { textInput.setValue('a😀b'); textInput.setSelection(1, 3); }, resume: null };

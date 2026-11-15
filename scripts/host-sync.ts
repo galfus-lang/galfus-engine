@@ -82,6 +82,10 @@ async function buildNativeBinaries(platform: NativePlatform, mode: SyncMode): Pr
   await ensureDir(ffiDestDir);
   const ffiDestFile = resolve(ffiDestDir, getArtifactFileName('ffi', platform));
   await copyFile(nativeOut, ffiDestFile);
+  await copyFile(
+    resolve(rootDir, 'engine/galfus-realm-2d/assets/LICENSE-Nunito.txt'),
+    resolve(ffiDestDir, 'LICENSE-Nunito.txt')
+  );
   logStep('cargo:ffi', `✔ Copied FFI binary to: ${ffiDestFile}`);
 
   // 2. Build Node-API addon binary
@@ -92,6 +96,10 @@ async function buildNativeBinaries(platform: NativePlatform, mode: SyncMode): Pr
   await ensureDir(napiDestDir);
   const napiDestFile = resolve(napiDestDir, getArtifactFileName('napi', platform));
   await copyFile(nativeOut, napiDestFile);
+  await copyFile(
+    resolve(rootDir, 'engine/galfus-realm-2d/assets/LICENSE-Nunito.txt'),
+    resolve(napiDestDir, 'LICENSE-Nunito.txt')
+  );
   logStep('cargo:napi', `✔ Copied Node-API addon to: ${napiDestFile}`);
 
   // 3. Rebuild clean FFI binary in cargo-target so native debug/release directory remains clean
@@ -137,6 +145,10 @@ async function buildBrowserWasm(mode: SyncMode): Promise<void> {
     'galfus_browser',
     wasmOutput
   ]);
+  await copyFile(
+    resolve(rootDir, 'engine/galfus-realm-2d/assets/LICENSE-Nunito.txt'),
+    resolve(browserDistDir, 'LICENSE-Nunito.txt')
+  );
   logStep('wasm-bindgen', `✔ Browser WASM module ready in: ${browserDistDir}`);
 }
 

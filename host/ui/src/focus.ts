@@ -7,6 +7,7 @@ export interface FocusEvent {
   readonly windowId: number;
   readonly realmId: number;
   readonly target: InteractiveTarget;
+  readonly source?: 'pointer' | 'keyboard' | 'programmatic';
 }
 export type FocusCallback = (event: FocusEvent) => void;
 
@@ -21,12 +22,16 @@ export class Focusable {
   constructor(
     readonly listener: InteractiveListener,
     private readonly manager: FocusManager,
-    tabIndex: number
+    tabIndex: number,
+    readonly windowId?: number,
+    private readonly isPresented: () => boolean = () => true,
+    private readonly containsPointer: (listener: InteractiveListener) => boolean = (listener) =>
+      listener === this.listener
   ) {
     this.tabIndex_ = Focusable.validateTabIndex(tabIndex);
     listener.on('down', ({ pointer }) => {
       if (pointer.type === 'button' && pointer.button === 'primary')
-        this.requestFocus(pointer.windowId);
+        this.manager.requestFocus(this, pointer.windowId, 'pointer');
     });
   }
 
@@ -44,6 +49,14 @@ export class Focusable {
   }
   get tabIndex(): number {
     return this.tabIndex_;
+  }
+  /** @internal */
+  get eligible(): boolean {
+    return this.enabled && this.isPresented();
+  }
+  /** @internal */
+  acceptsPointer(listener: InteractiveListener | undefined): boolean {
+    return !!listener && this.containsPointer(listener);
   }
 
   setEnabled(enabled: boolean): void {
@@ -83,8 +96,8 @@ export class Focusable {
   }
 
   /** @internal */
-  emit(type: FocusEventType, windowId: number): void {
-    const event = { type, windowId, realmId: this.realmId, target: this.target };
+  emit(type: FocusEventType, windowId: number, source?: FocusEvent['source']): void {
+    const event = { type, windowId, realmId: this.realmId, target: this.target, source };
     for (const callback of this.callbacks.get(type) ?? []) {
       callback(event);
       if (this.disposed) break;
@@ -117,6 +130,13 @@ export class FocusManager {
   private readonly composing = new Set<number>();
   private readonly unfocused = new Set<number>();
   private readonly capturedWindows = new Set<number>();
+  private readonly scopes = new Map<
+    number,
+    Array<{
+      accepts: (target: Focusable) => boolean;
+      acceptsPointer: (listener: InteractiveListener) => boolean;
+    }>
+  >();
 
   constructor(
     private readonly interaction: InteractiveSystem,
@@ -125,8 +145,14 @@ export class FocusManager {
     private readonly requestInputFocus: (windowId: number) => void
   ) {}
 
-  register(listener: InteractiveListener, tabIndex = 0): Focusable {
-    const target = new Focusable(listener, this, tabIndex);
+  register(
+    listener: InteractiveListener,
+    tabIndex = 0,
+    windowId?: number,
+    isPresented?: () => boolean,
+    containsPointer?: (listener: InteractiveListener) => boolean
+  ): Focusable {
+    const target = new Focusable(listener, this, tabIndex, windowId, isPresented, containsPointer);
     this.targets.add(target);
     this.refreshCapture();
     return target;
@@ -135,12 +161,48 @@ export class FocusManager {
   getFocused(windowId: number): Focusable | undefined {
     return this.focused.get(windowId);
   }
+  /** @internal */
+  pushScope(
+    windowId: number,
+    accepts: (target: Focusable) => boolean,
+    acceptsPointer: (listener: InteractiveListener) => boolean
+  ): () => void {
+    let scopes = this.scopes.get(windowId);
+    if (!scopes) this.scopes.set(windowId, (scopes = []));
+    const scope = { accepts, acceptsPointer };
+    scopes.push(scope);
+    this.refreshCapture();
+    return () => {
+      const active = this.scopes.get(windowId);
+      if (!active) return;
+      const index = active.indexOf(scope);
+      if (index >= 0) active.splice(index, 1);
+      if (!active.length) this.scopes.delete(windowId);
+      this.refreshCapture();
+    };
+  }
+  enforceScope(windowId: number): void {
+    const focused = this.focused.get(windowId);
+    if (focused && !this.allowed(focused, windowId)) this.blurWindow(windowId);
+  }
+  allowsPointer(listener: InteractiveListener, windowId: number): boolean {
+    return this.scopes.get(windowId)?.at(-1)?.acceptsPointer(listener) ?? true;
+  }
+  private allowed(target: Focusable, windowId: number): boolean {
+    return this.scopes.get(windowId)?.at(-1)?.accepts(target) ?? true;
+  }
 
-  requestFocus(target: Focusable, windowId?: number): boolean {
-    if (!this.targets.has(target) || !target.enabled || target.isDisposed) return false;
+  requestFocus(
+    target: Focusable,
+    windowId?: number,
+    source: FocusEvent['source'] = 'programmatic'
+  ): boolean {
+    if (!this.targets.has(target) || !target.eligible || target.isDisposed) return false;
     if (windowId === undefined) {
       let match: number | undefined;
       for (const id of this.windowIds()) {
+        if (target.windowId !== undefined && target.windowId !== id) continue;
+        if (!this.allowed(target, id)) continue;
         if (this.unfocused.has(id)) continue;
         if (this.interaction.presentationOrder(target.listener, id) === undefined) continue;
         if (match !== undefined) return false;
@@ -150,6 +212,8 @@ export class FocusManager {
       windowId = match;
     }
     if (
+      (target.windowId !== undefined && target.windowId !== windowId) ||
+      !this.allowed(target, windowId) ||
       this.unfocused.has(windowId) ||
       this.interaction.presentationOrder(target.listener, windowId) === undefined
     )
@@ -164,13 +228,14 @@ export class FocusManager {
       this.focused.has(windowId) ||
       this.unfocused.has(windowId) ||
       !this.targets.has(target) ||
-      !target.enabled ||
+      !target.eligible ||
+      !this.allowed(target, windowId) ||
       this.interaction.presentationOrder(target.listener, windowId) === undefined
     )
       return false;
     this.focused.set(windowId, target);
     this.refreshCapture();
-    target.emit('focus', windowId);
+    target.emit('focus', windowId, source);
     return this.focused.get(windowId) === target;
   }
 
@@ -181,7 +246,10 @@ export class FocusManager {
     let sequence = 0;
     for (const target of this.targets) {
       const order =
-        target.enabled && target.tabIndex >= 0
+        target.eligible &&
+        this.allowed(target, windowId) &&
+        target.tabIndex >= 0 &&
+        (target.windowId === undefined || target.windowId === windowId)
           ? this.interaction.presentationOrder(target.listener, windowId)
           : undefined;
       if (order !== undefined) candidates.push({ target, order, sequence });
@@ -203,7 +271,7 @@ export class FocusManager {
           ? realmCandidates.length - 1
           : 0
         : (current + (reverse ? -1 : 1) + realmCandidates.length) % realmCandidates.length;
-    return this.requestFocus(realmCandidates[index]!.target, windowId);
+    return this.requestFocus(realmCandidates[index]!.target, windowId, 'keyboard');
   }
 
   handleKeyboard(event: KeyboardEvent): void {
@@ -228,7 +296,10 @@ export class FocusManager {
   handlePointer(event: PointerEvent): void {
     if (event.type !== 'button' || event.state !== 'pressed' || event.button !== 'primary') return;
     const hovered = this.interaction.hovered(event.windowId, event.pointerId);
-    for (const target of this.targets) if (target.enabled && target.listener === hovered) return;
+    for (const target of this.targets)
+      if (target.eligible && this.allowed(target, event.windowId) && target.acceptsPointer(hovered))
+        return;
+    if (this.scopes.get(event.windowId)?.length) return;
     this.blurWindow(event.windowId);
     this.refreshCapture();
   }
@@ -251,6 +322,7 @@ export class FocusManager {
   }
 
   windowClosed(windowId: number): void {
+    this.scopes.delete(windowId);
     this.capturedWindows.delete(windowId);
     this.unfocused.delete(windowId);
     this.blurWindow(windowId);
@@ -275,11 +347,13 @@ export class FocusManager {
 
   /** Reconciles focus after a successful presentation. */
   afterDispatch(): void {
-    if (!this.targets.size && !this.focused.size && !this.capturedWindows.size) return;
+    if (!this.targets.size && !this.focused.size && !this.capturedWindows.size && !this.scopes.size)
+      return;
     for (const target of this.targets) if (target.listener.isDisposed) target.dispose();
     for (const [windowId, target] of this.focused)
       if (
-        !target.enabled ||
+        !target.eligible ||
+        !this.allowed(target, windowId) ||
         this.interaction.presentationOrder(target.listener, windowId) === undefined
       )
         this.blurWindow(windowId);
@@ -288,7 +362,8 @@ export class FocusManager {
 
   /** Synchronizes platform Tab capture only when eligibility changes. */
   refreshCapture(): void {
-    if (!this.targets.size && !this.focused.size && !this.capturedWindows.size) return;
+    if (!this.targets.size && !this.focused.size && !this.capturedWindows.size && !this.scopes.size)
+      return;
     const windows = this.windowIds();
     for (const windowId of this.capturedWindows) {
       if (windows.includes(windowId)) continue;
@@ -296,12 +371,14 @@ export class FocusManager {
       this.capturedWindows.delete(windowId);
     }
     for (const windowId of windows) {
-      let needed = this.focused.has(windowId);
+      let needed = this.focused.has(windowId) || !!this.scopes.get(windowId)?.length;
       for (const target of this.targets) {
         if (needed) break;
         if (
-          target.enabled &&
+          target.eligible &&
+          this.allowed(target, windowId) &&
           target.tabIndex >= 0 &&
+          (target.windowId === undefined || target.windowId === windowId) &&
           this.interaction.presentationOrder(target.listener, windowId) !== undefined
         ) {
           needed = true;
@@ -321,5 +398,6 @@ export class FocusManager {
     this.composing.clear();
     this.unfocused.clear();
     this.capturedWindows.clear();
+    this.scopes.clear();
   }
 }

@@ -28,6 +28,8 @@ export interface InteractiveEvent {
   readonly realmId: number;
   readonly target: InteractiveTarget;
   readonly pointer: PointerEvent;
+  /** Original pointer position in window pixels, independent of local hit coordinates. */
+  readonly windowPosition?: readonly [number, number];
   /** Normalized `[u, v]` coordinates (`0..1`) within the target surface bounds. */
   readonly uv?: [number, number];
   /** Sub-element numeric ID if targeted (e.g. UI Panel). */

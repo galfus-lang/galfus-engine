@@ -4,6 +4,7 @@ Each native release archive is scoped to one operating system, CPU architecture,
 
 ```text
 galfus-engine-<version>-<target>/
+├── LICENSE-Nunito.txt
 ├── lib/
 │   ├── libgalfus_native.so | libgalfus_native.dylib | galfus_native.dll
 │   └── galfus.node
@@ -19,7 +20,9 @@ galfus-engine-<version>-<target>/
 
 The Bun, Node.js, Python, and Lua SDKs locate the bundled library automatically. C and C# applications must copy the matching native library from `lib/` beside their executable or configure their platform's normal dynamic-library search path.
 
-The browser archive contains the `wasm-bindgen` web output in `browser/`. Serve those generated files from a web server and import the generated JavaScript module.
+The browser archive contains the `wasm-bindgen` web output in `browser/` and `LICENSE-Nunito.txt` in its root. Serve those generated files from a web server and import the generated JavaScript module.
+
+All builds embed the Nunito font, distributed under the SIL Open Font License 1.1. Include the accompanying `LICENSE-Nunito.txt` and copyright notice when redistributing the engine binaries or applications that bundle the font.
 
 Every archive has an adjacent `.md5` file in the GitHub Release. Verify it after downloading:
 

@@ -109,7 +109,7 @@ pub fn shape_paragraph(
 mod tests {
     use super::*;
 
-    const FONT: &[u8] = include_bytes!("../assets/default_font.ttf");
+    const FONT: &[u8] = include_bytes!("../assets/Nunito-Regular.ttf");
 
     #[test]
     fn clusters_are_utf16_offsets_not_utf8_byte_offsets() {

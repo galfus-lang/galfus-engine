@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn formats_fragments_and_wraps_with_the_same_measured_width() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn synthetic_weight_and_italic_change_glyph_geometry_when_font_has_no_variants() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let render = |style: RichTextStyle| {
             let text = RichText {
@@ -385,7 +385,7 @@ mod tests {
     #[test]
     fn inline_and_multiline_preserve_intrinsic_size_and_alignment() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let mut text = RichText {
             spans: vec![RichTextSpan {
@@ -411,7 +411,7 @@ mod tests {
     #[test]
     fn inline_line_breaks_remain_on_one_line_and_keep_utf16_offsets() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![RichTextSpan {
@@ -438,7 +438,7 @@ mod tests {
     #[test]
     fn bidi_reorders_styled_fragments_without_reversing_the_logical_text() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![
@@ -485,7 +485,7 @@ mod tests {
     #[test]
     fn combining_across_styles_is_measured_as_one_grapheme() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![
@@ -511,7 +511,7 @@ mod tests {
     #[test]
     fn formatting_boundary_does_not_split_a_word_when_wrapping() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![
@@ -546,7 +546,7 @@ mod tests {
     #[test]
     fn fragments_keep_logical_utf16_offsets_across_styles_and_newlines() {
         let mut fonts = fontdb::Database::new();
-        fonts.load_font_data(include_bytes!("../assets/default_font.ttf").to_vec());
+        fonts.load_font_data(include_bytes!("../assets/Nunito-Regular.ttf").to_vec());
         let family = fonts.faces().next().unwrap().families[0].0.clone();
         let text = RichText {
             spans: vec![
