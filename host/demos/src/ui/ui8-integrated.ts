@@ -1,31 +1,87 @@
 import {
   type Camera2DComponent,
+  type Model3DComponent,
   type MultiverseRuntime,
   type TargetId,
   type WindowId
 } from '@galfus/engine';
-import {
-  createUi,
-  UiAppBar,
-  UiButtonGroup,
-  UiCheckbox,
-  UiDialog,
-  UiInputText,
-  UiMenu,
-  UiProgressBar,
-  UiRadioGroup,
-  UiSelect,
-  UiSlider,
-  UiSwitch,
-  UiTextArea
-} from '@galfus/ui';
-import type { UiOverlayManager, UiTextField } from '@galfus/ui';
-import type { KeyboardEvent } from '@galfus/transport-types';
-import { canExitAfterOverlays, runDemoLoop } from '../common/loop';
+import { createUi, type UiPanelComponent } from '@galfus/ui';
+import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
-import { canExitUi5 } from './ui5-text-fields';
+import { createEditorPreview } from './ui8-preview';
+import { createEditorSplits } from './ui8-splits';
 
-/** Integrated application exercising components, styles, focus, editing and overlays. */
+type Color = [number, number, number, number];
+const colors = {
+  background: [0.055, 0.067, 0.085, 1],
+  chrome: [0.09, 0.106, 0.129, 1],
+  surface: [0.105, 0.122, 0.149, 1],
+  elevated: [0.14, 0.16, 0.19, 1],
+  border: [0.2, 0.23, 0.27, 1],
+  text: [0.88, 0.91, 0.94, 1],
+  muted: [0.54, 0.6, 0.66, 1],
+  accent: [0.3, 0.72, 0.73, 1]
+} satisfies Record<string, Color>;
+
+const exact = (value: number) => ({ type: 'exact' as const, value });
+const full = { type: 'percent' as const, value: 100 };
+
+function text(parent: UiPanelComponent, value: string, size = 12, color: Color = colors.text) {
+  return parent.addText(value, size, { color });
+}
+
+function line(parent: UiPanelComponent, value: string, selected = false, indent = 0) {
+  const row = parent.addPanel(
+    { backgroundColor: selected ? [0.17, 0.3, 0.33, 1] : [0, 0, 0, 0] },
+    {
+      width: full,
+      height: exact(27),
+      direction: 'row',
+      alignItems: 'center',
+      padding: [0, 8, 0, 10 + indent]
+    }
+  );
+  text(row, value, 12, selected ? [0.77, 0.96, 0.94, 1] : colors.text);
+  return row;
+}
+
+function heading(parent: UiPanelComponent, label: string, trailing = '') {
+  const row = parent.addPanel(
+    { backgroundColor: colors.chrome },
+    {
+      width: full,
+      height: exact(35),
+      direction: 'row',
+      alignItems: 'center',
+      justifyContent: 'spaceBetween',
+      padding: [0, 12, 0, 12]
+    }
+  );
+  text(row, label, 11, colors.text);
+  if (trailing) text(row, trailing, 11, colors.muted);
+}
+
+function inspectorRow(parent: UiPanelComponent, label: string, value: string) {
+  const row = parent.addPanel(
+    {},
+    {
+      width: full,
+      height: exact(29),
+      direction: 'row',
+      alignItems: 'center',
+      justifyContent: 'spaceBetween',
+      padding: [0, 12, 0, 12]
+    }
+  );
+  text(row, label, 11, colors.muted);
+  const field = row.addPanel(
+    { backgroundColor: colors.elevated, borderRadius: [3, 3, 3, 3] },
+    { width: exact(108), height: exact(23), padding: [4, 7, 4, 7] }
+  );
+  text(field, value, 11);
+}
+
+/** Visual editor mockup containing a live 3D realm. */
 export function createUi8Scene(
   runtime: MultiverseRuntime,
   targetId: TargetId,
@@ -38,143 +94,213 @@ export function createUi8Scene(
   runtime.multiverse.createInvocation({
     realmId: realm.realmId,
     targetId,
-    clearColor: [0.025, 0.04, 0.07, 1]
+    clearColor: colors.background,
+    zIndex: 0
   });
   const ui = createUi(runtime);
   const root = ui.createComponentRoot(realm, {
     width: size[0],
     height: size[1],
     windowId,
-    layout: { direction: 'column', padding: [18, 18, 18, 18], gap: [7, 7], alignItems: 'start' },
-    theme: {
-      tokens: { colors: { brand: [0.12, 0.42, 0.63, 1] } },
-      components: {
-        appBar: {
-          base: { color: [0.82, 0.95, 1, 1], typography: { fontSize: 18, fontWeight: 700 } }
-        },
-        button: {
-          variants: { brand: { backgroundColor: { token: 'colors.brand' } } },
-          states: { focusVisible: { borderColor: [1, 0.8, 0.2, 1], borderWidth: [2, 2, 2, 2] } }
-        }
-      }
+    panel: { backgroundColor: colors.background },
+    layout: { isStack: true }
+  });
+  let renderTarget = runtime.multiverse.createTarget({
+    kind: { type: 'texture', width: 1, height: 1 }
+  });
+  const preview = createEditorPreview(runtime, renderTarget);
+  const slot = 'editor-viewport';
+  runtime.multiverse.bindTargetTexture({
+    sourceTargetId: renderTarget,
+    realmId: realm.realmId,
+    slot
+  });
+
+  const header = root.root.addPanel(
+    { backgroundColor: colors.chrome },
+    {
+      width: full,
+      height: exact(44),
+      direction: 'row',
+      alignItems: 'center',
+      justifyContent: 'spaceBetween',
+      padding: [0, 16, 0, 16]
     }
-  });
-  const bar = new UiAppBar(root.root, {
-    spacing: 16,
-    layout: { width: { type: 'percent', value: 100 }, padding: [6, 10, 6, 10] }
-  });
-  const title = bar.addText('GALFUS / UI');
-  const toolbar = bar.addToolbar({ spacing: 6 });
-  const menuButton = toolbar.addButton({ label: 'Menu', variant: 'brand' });
-  const dialogButton = toolbar.addButton({ label: 'Dialog' });
-  const helpButton = toolbar.addButton({ label: 'Help' });
-  root.root.addText(
-    'Tab, Shift+Tab, pointer, keyboard and IME. Yellow border indicates keyboard focus.',
-    13
   );
-  root.root.addText('Name', 14);
-  const input = new UiInputText(ui, root.root, { value: 'Ada França', width: 360 });
-  root.root.addText('Notes', 14);
-  const area = new UiTextArea(ui, root.root, {
-    value: 'Type, select or compose text here.',
-    width: 480,
-    height: 72
+  const brand = header.addPanel({}, { direction: 'row', alignItems: 'center', gap: [10, 0] });
+  const logo = brand.addPanel(
+    { backgroundColor: colors.accent, borderRadius: [4, 4, 4, 4] },
+    {
+      width: exact(22),
+      height: exact(22),
+      alignItems: 'center',
+      justifyContent: 'center'
+    }
+  );
+  text(logo, 'G', 13, colors.background);
+  const title = text(brand, 'GALFUS  /  EDITOR', 13);
+  text(header, 'File     Edit     View     Scene     Window', 12, colors.muted);
+  text(header, 'My Game  /  Main Scene', 11, colors.muted);
+
+  const toolbar = root.root.addPanel(
+    { backgroundColor: colors.surface },
+    {
+      width: full,
+      height: exact(40),
+      direction: 'row',
+      alignItems: 'center',
+      justifyContent: 'spaceBetween',
+      padding: [0, 16, 0, 16],
+      positionOffset: [0, 44]
+    }
+  );
+  text(toolbar, 'SCENE     Select     Move     Rotate     Scale', 11, colors.text);
+  const previewBadge = toolbar.addPanel(
+    { backgroundColor: [0.17, 0.35, 0.34, 1], borderRadius: [4, 4, 4, 4] },
+    {
+      width: exact(80),
+      height: exact(26),
+      alignItems: 'center',
+      justifyContent: 'center'
+    }
+  );
+  text(previewBadge, 'Preview', 11, [0.74, 0.94, 0.91, 1]);
+
+  const hierarchy = root.root.addPanel({ backgroundColor: colors.chrome, clip: true });
+  heading(hierarchy, 'HIERARCHY', '+');
+  line(hierarchy, 'v  Main Scene');
+  line(hierarchy, 'Camera', false, 15);
+  line(hierarchy, 'Directional Light', false, 15);
+  line(hierarchy, 'Player', true, 15);
+  line(hierarchy, 'Environment', false, 15);
+  line(hierarchy, 'Ground', false, 27);
+  line(hierarchy, 'Props', false, 27);
+
+  const viewport = root.root.addSpritePanel({ textureId: renderTarget });
+  const inspector = root.root.addPanel({ backgroundColor: colors.chrome, clip: true });
+  heading(inspector, 'INSPECTOR', '...');
+  line(inspector, 'Player');
+  heading(inspector, 'TRANSFORM', 'v');
+  inspectorRow(inspector, 'Position', '0.0   1.2   0.0');
+  inspectorRow(inspector, 'Rotation', '0.0   0.0   0.0');
+  inspectorRow(inspector, 'Scale', '1.0   1.0   1.0');
+  heading(inspector, 'MESH RENDERER', 'v');
+  inspectorRow(inspector, 'Mesh', 'Cube');
+  inspectorRow(inspector, 'Layer', 'Default');
+  heading(inspector, 'RIGIDBODY 3D', 'v');
+  inspectorRow(inspector, 'Body type', 'Dynamic');
+  inspectorRow(inspector, 'Gravity', '1.0');
+
+  const assets = root.root.addPanel(
+    { backgroundColor: colors.surface, clip: true },
+    {
+      width: full,
+      height: exact(142),
+      direction: 'column'
+    }
+  );
+  heading(assets, 'PROJECT    /    Assets', 'Search assets');
+  const assetRow = assets.addPanel(
+    {},
+    { direction: 'row', gap: [10, 0], padding: [12, 16, 12, 16] }
+  );
+  for (const [name, fill] of [
+    ['Scenes', [0.67, 0.53, 0.31, 1]],
+    ['Sprites', [0.67, 0.53, 0.31, 1]],
+    ['Materials', [0.67, 0.53, 0.31, 1]],
+    ['player.png', [0.28, 0.48, 0.48, 1]],
+    ['level.scene', [0.31, 0.42, 0.55, 1]]
+  ] as Array<[string, Color]>) {
+    const tile = assetRow.addPanel(
+      {},
+      { width: exact(82), direction: 'column', alignItems: 'center', gap: [0, 5] }
+    );
+    tile.addPanel(
+      { backgroundColor: fill, borderRadius: [5, 5, 5, 5] },
+      { width: exact(52), height: exact(42) }
+    );
+    text(tile, name, 10, colors.text);
+  }
+  const status = root.root.addPanel(
+    { backgroundColor: [0.07, 0.09, 0.11, 1] },
+    {
+      width: full,
+      height: exact(22),
+      direction: 'row',
+      alignItems: 'center',
+      justifyContent: 'spaceBetween',
+      padding: [0, 12, 0, 12],
+      positionOffset: [0, size[1] - 22]
+    }
+  );
+  const statusText = text(status, 'Ready   •   Click an object in the viewport', 10, colors.muted);
+  text(status, 'Galfus Engine', 10, colors.muted);
+
+  let surfaceWidth = 1;
+  let surfaceHeight = 1;
+  let disconnectSurface: (() => void) | undefined;
+  const cubeListener = runtime.interactive(preview.realm.realmId, {
+    type: 'collider',
+    entityId: preview.cube.entityId
   });
-  const row = root.root.addPanel({}, { direction: 'row', gap: [12, 0], alignItems: 'center' });
-  const checkbox = new UiCheckbox(row, { label: 'Notifications' });
-  const toggle = new UiSwitch(row, { label: 'Auto-save', value: true });
-  const radios = new UiRadioGroup(root.root, {
-    orientation: 'horizontal',
-    value: 'normal',
-    options: [
-      { value: 'normal', label: 'Normal' },
-      { value: 'high', label: 'High' }
-    ]
+  const orbListener = runtime.interactive(preview.realm.realmId, {
+    type: 'collider',
+    entityId: preview.orb.entityId
   });
-  const slider = new UiSlider(root.root, { min: 0, max: 100, step: 5, value: 40, width: 320 });
-  const progress = new UiProgressBar(ui, root.root, { value: 40, width: 320 });
-  const actions = new UiButtonGroup(root.root, { spacing: 6 });
-  const info = actions.addButton({ label: 'Details' });
-  const disabled = actions.addButton({ label: 'Disabled', disabled: true });
-  const status = root.root.addText('Ready.', 14);
-  const update = (message: string) => {
-    if (root.syncState !== 'disposed') {
-      status.setText(message);
+  const blueListener = runtime.interactive(preview.realm.realmId, {
+    type: 'collider',
+    entityId: preview.blueCube.entityId
+  });
+  const selectObject = (entityId: number, label: string) => {
+    for (const entity of [preview.cube.entityId, preview.orb.entityId, preview.blueCube.entityId]) {
+      const model = preview.realm.world.getComponent<Model3DComponent>(entity, 'Model3D')!;
+      const scale = entity === entityId ? 1.2 : 1;
+      model.setScale(scale, scale, scale);
+    }
+    statusText.setText(`Selected   •   ${label}`);
+    root.flush();
+  };
+  cubeListener.on('click', () => selectObject(preview.cube.entityId, 'Cube'));
+  orbListener.on('click', () => selectObject(preview.orb.entityId, 'Sphere'));
+  blueListener.on('click', () => selectObject(preview.blueCube.entityId, 'Blue cube'));
+  const splits = createEditorSplits(
+    root.root,
+    { hierarchy, viewport, inspector, assets },
+    (viewWidth, viewHeight) => {
+      if (!disconnectSurface || viewWidth !== surfaceWidth || viewHeight !== surfaceHeight) {
+        disconnectSurface?.();
+        runtime.multiverse.unbindTargetTexture(realm.realmId, slot);
+        const oldTarget = renderTarget;
+        renderTarget = runtime.multiverse.createTarget({
+          kind: { type: 'texture', width: viewWidth, height: viewHeight }
+        });
+        preview.setTarget(renderTarget);
+        viewport.setProperties({ textureId: renderTarget });
+        runtime.multiverse.bindTargetTexture({
+          sourceTargetId: renderTarget,
+          realmId: realm.realmId,
+          slot
+        });
+        root.flush();
+        disconnectSurface = runtime.interaction.connectUiSurface({
+          realmId: realm.realmId,
+          uiId: root.uiId,
+          elementId: viewport.id,
+          slot
+        });
+        runtime.multiverse.destroyTarget(oldTarget);
+        surfaceWidth = viewWidth;
+        surfaceHeight = viewHeight;
+      }
       root.flush();
     }
+  );
+  const resize = (width: number, height: number) => {
+    root.root.setLayout({ ...root.root.layout, width: exact(width), height: exact(height) });
+    status.setLayout({ ...status.layout, positionOffset: [0, height - 22] });
+    splits.resize(width, height);
   };
-  slider.onChange((value) => {
-    progress.setValue(value);
-    update(`Progress: ${value}%`);
-  });
-  checkbox.onChange((value) => update(`Notifications: ${value}`));
-  toggle.onChange((value) => update(`Auto-save: ${value}`));
-  radios.onChange((value) => update(`Priority: ${value}`));
-  const manager = windowId === undefined ? undefined : ui.createOverlayManager(root, windowId);
-  const select = manager
-    ? new UiSelect(root.root, manager, {
-        width: 200,
-        value: 'system',
-        options: [
-          { value: 'system', label: 'System' },
-          { value: 'light', label: 'Light' },
-          { value: 'dark', label: 'Dark' }
-        ]
-      })
-    : undefined;
-  select?.onChange((value) => update(`Theme: ${value}`));
-  const menu = manager
-    ? new UiMenu(manager, {
-        anchor: menuButton.panel,
-        items: [
-          { id: 'new', label: 'New' },
-          {
-            id: 'export',
-            label: 'Export',
-            children: [
-              { id: 'text', label: 'Text' },
-              { id: 'json', label: 'JSON' }
-            ]
-          }
-        ],
-        onSelect: ({ path }) => update(`Action: ${path.join(' / ')}`)
-      })
-    : undefined;
-  const dialog = manager
-    ? new UiDialog(manager, {
-        anchor: dialogButton.panel,
-        width: 360,
-        height: 160,
-        build: (content) => {
-          content.addText('Confirm settings', 18);
-          content.addText('Tab remains in this dialog until it closes.', 14);
-          const close = new UiButtonGroup(content).addButton({
-            label: 'Close',
-            onActivate: () => dialog?.close()
-          });
-          return close.panel;
-        },
-        onClose: (reason) => update(`Dialog closed: ${reason}`)
-      })
-    : undefined;
-  const popover = manager?.createPopover({
-    anchor: info.panel,
-    width: 240,
-    height: 64,
-    build: (content) => {
-      content.root.addText('Application details', 15);
-    }
-  });
-  const tooltip = manager?.createTooltip({
-    anchor: helpButton.panel,
-    text: 'Tab and keyboard activation show focus-visible.',
-    width: 260,
-    height: 52
-  });
-  menuButton.onActivate(() => menu?.toggle());
-  dialogButton.onActivate(() => dialog?.open());
-  info.onActivate(() => popover?.toggle());
-  root.flush();
+  resize(size[0], size[1]);
   const stopResize =
     windowId === undefined
       ? undefined
@@ -195,61 +321,44 @@ export function createUi8Scene(
             component.desc.orthoScale = event.height;
             component.isDirty = true;
           }
-          root.root.setLayout({
-            ...root.root.layout,
-            width: { type: 'exact', value: event.width },
-            height: { type: 'exact', value: event.height }
-          });
-          root.flush();
-          manager?.setViewport([0, 0, event.width, event.height]);
+          resize(event.width, event.height);
         });
   return {
     realm,
     ui,
     root,
     title,
-    bar,
+    header,
     toolbar,
-    menuButton,
-    dialogButton,
-    helpButton,
-    input,
-    area,
-    checkbox,
-    toggle,
-    radios,
-    slider,
-    progress,
-    actions,
-    info,
-    disabled,
-    select,
-    manager,
-    menu,
-    dialog,
-    popover,
-    tooltip,
+    splits,
+    hierarchy,
+    viewport,
+    statusText,
+    get renderTarget() {
+      return renderTarget;
+    },
+    preview,
+    inspector,
+    assets,
     status,
+    resize,
     dispose: () => {
       stopResize?.();
+      disconnectSurface?.();
+      cubeListener.dispose();
+      orbListener.dispose();
+      blueListener.dispose();
       ui.dispose();
+      preview.dispose();
+      runtime.multiverse.destroyTarget(renderTarget);
+      runtime.multiverse.unregisterRealm(realm.realmId);
     }
   };
 }
 
-/** Let overlays and focused text fields handle Escape before leaving the demo. */
-export function canExitUi8(
-  fields: readonly UiTextField[],
-  windowId: number | undefined,
-  event: KeyboardEvent,
-  manager?: UiOverlayManager
-): boolean {
-  return canExitAfterOverlays(event, manager) && canExitUi5(fields, windowId, event);
-}
-
 export async function runDemoUi8(options: HostDemoOptions = {}): Promise<void> {
   const session = createDemoSession(
-    options.title ?? 'Galfus Demo [ui8]: Integrated UI',
+    options.title ?? 'Galfus Demo [ui8]: Game Editor',
     options,
     [960, 720]
   );
@@ -259,9 +368,7 @@ export async function runDemoUi8(options: HostDemoOptions = {}): Promise<void> {
       await runDemoLoop(session.runtime, {
         windowId: session.windowId,
         maxFrames: session.maxFrames,
-        exitKeys: ['escape', 'q'],
-        canExit: (event) =>
-          canExitUi8([scene.input, scene.area], session.windowId, event, scene.manager)
+        exitKeys: ['escape', 'q']
       });
     } finally {
       scene.dispose();

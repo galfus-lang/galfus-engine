@@ -80,6 +80,7 @@ export class UiSelect extends UiValueControl<string | null> {
       direction: 'row',
       padding: [8, 12, 8, 12],
       alignItems: 'center',
+      justifyContent: 'spaceBetween',
       gap: [8, 0],
       minHeight: 36,
       ...options.layout,
@@ -109,6 +110,8 @@ export class UiSelect extends UiValueControl<string | null> {
           const button = new UiButton(root.root, {
             label: '',
             layout: {
+              direction: 'row',
+              justifyContent: 'start',
               width: { type: 'percent', value: 100 },
               height: { type: 'exact', value: 36 }
             },
@@ -136,7 +139,12 @@ export class UiSelect extends UiValueControl<string | null> {
         if (this.options_.length > this.pageSize) {
           const nav = root.root.addPanel(
             { backgroundColor: [0, 0, 0, 0] },
-            { direction: 'row', gap: [4, 0] }
+            {
+              direction: 'row',
+              gap: [4, 0],
+              justifyContent: 'spaceBetween',
+              width: { type: 'percent', value: 100 }
+            }
           );
           this.prev = new UiButton(nav, {
             label: 'Previous',

@@ -6,6 +6,7 @@ export interface PresentationSurface {
   readonly realmId: number;
   readonly slot: string;
   readonly entityId: number;
+  readonly elementId?: number;
 }
 export interface PresentationBinding {
   readonly realmId: number;

@@ -189,10 +189,10 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
   {
     id: 'ui8',
     aliases: ['ui-integrated', 'ui-design-system'],
-    title: 'Integrated UI Application',
+    title: 'Game Editor UI',
     category: 'UI',
-    tags: ['ui', 'theme', 'text', 'ime', 'forms', 'overlay'],
-    description: 'Integrated design system, text editing, form controls, focus and overlays.',
+    tags: ['ui', 'editor', 'layout'],
+    description: 'Visual game editor mockup with an animated 3D scene, hierarchy and inspector.',
     run: runDemoUi8
   },
 

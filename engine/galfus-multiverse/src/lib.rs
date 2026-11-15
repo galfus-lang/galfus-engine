@@ -34,7 +34,7 @@ pub use context::MultiverseContext;
 pub use error::{MultiverseError, MultiverseResult};
 pub use interaction::{
     InteractionButtonState, InteractionEvent, InteractionPointerEvent, InteractionSurface,
-    InteractionType, MultiverseInteractionSystem,
+    InteractionType, MultiverseInteractionSystem, UiInteractionSurface,
 };
 pub use schedule::{MultiverseSchedule, ResolvedInvocationStep, TargetExecutionBlock};
 pub use screen_effect::{
@@ -44,3 +44,6 @@ pub use types::{
     AnchorX, AnchorY, AntiAliasingMode, InvocationDesc, InvocationFilter, TargetDesc, TargetKind,
     TargetTextureBinding, UnitValue, ViewportRect,
 };
+
+#[cfg(test)]
+mod interaction_ui_target_tests;

@@ -219,7 +219,55 @@ The engine provides two loop hooks:
 
 2D materials are realm-owned resources. `Realm2D.createMaterial` returns a logical ID and queues the material for the next sync or `flush()`, even if the realm is not yet bound to an engine. `destroyMaterial(id)` queues its removal without destroying entities that reference it. `reset()` and `dispose()` release the realm's materials.
 
-The Multiverse maintains a host-side `presentationGraph` rooted at targets of open windows. It is populated from the renderer's resolved schedule and published after a successful dispatch. `getWindow(windowId)` is unavailable before the first successful dispatch or after the window closes; otherwise it exposes an immutable snapshot of reachable targets, invocations, resolved viewports, render order and texture-binding candidates. The last snapshot remains available while paused and when a dispatch fails. Unchanged schedules and links reuse the existing snapshot. A texture binding alone is a candidate, not a traversable surface; future interaction code must validate and maintain surface mappings. Cycle edges sampled from the previous frame are exposed as `softCutEdges`.
+The Multiverse maintains a host-side `presentationGraph` rooted at targets of open windows. It is populated from the renderer's resolved schedule and published after a successful dispatch. `getWindow(windowId)` is unavailable before the first successful dispatch or after the window closes; otherwise it exposes an immutable snapshot of reachable targets, invocations, resolved viewports, render order and texture-binding candidates. The last snapshot remains available while paused and when a dispatch fails. Unchanged schedules and links reuse the existing snapshot. A texture binding alone is a candidate, not a traversable surface. Cycle edges sampled from the previous frame are exposed as `softCutEdges`.
+
+To forward pointer hits through a textured sprite, bind its source target and
+connect the sprite entity and collider. The host resolves the entity to the
+core model ID; `flipY` adapts the collider's upward Y axis to texture coordinates.
+The returned function disconnects the surface and should be called before its
+entity, texture binding, or target is destroyed.
+
+```typescript
+runtime.multiverse.bindTargetTexture({
+  realmId: realm2d.realmId,
+  slot: 'viewport',
+  sourceTargetId
+});
+const disconnect = runtime.interaction.connectSurface({
+  realmId: realm2d.realmId,
+  entityId: spriteEntityId,
+  colliderId,
+  slot: 'viewport',
+  flipY: true
+});
+// Later: disconnect();
+```
+
+For a core-backed ModelUI, connect an individual `SpritePanel` after committing
+the UI tree. Its `textureId` must be the bound texture target ID, and the UI
+model must have a collider. The host resolves its entity and collider IDs:
+
+```typescript
+root.flush();
+runtime.multiverse.bindTargetTexture({
+  realmId: realm2d.realmId,
+  slot: 'panel',
+  sourceTargetId
+});
+const disconnectPanel = runtime.interaction.connectUiSurface({
+  realmId: realm2d.realmId,
+  uiId: root.uiId,
+  elementId: spritePanel.id,
+  slot: 'panel'
+});
+// Call disconnectPanel() before removing the element or unbinding the texture.
+```
+
+The presented layout and texture coordinates determine the routed position.
+`stretch`, `contain`, and `cover` are supported; `contain` margins do not
+forward. `nineSlice` is rejected. A hit that does not reach an object inside
+the target remains on the SpritePanel. Like other presentation surfaces, the
+source target and input routing use the last successfully presented frame.
 
 2D objects are drawn back to front by `zLayer`, then `drawOrder`, then logical resource ID. Set distinct layers or draw orders when overlap must remain independent of resource creation order. Changing `Model2DComponent.zLayer` or `drawOrder` is synchronized on the next frame.
 

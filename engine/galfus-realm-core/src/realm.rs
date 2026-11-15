@@ -115,6 +115,22 @@ pub trait Realm: RealmThreadBound + 'static {
         false
     }
 
+    /// Returns the texture of a supported UI presentation surface, if present.
+    fn ui_surface_texture(&self, _model_id: u32, _element_id: u32) -> Option<u32> {
+        None
+    }
+
+    /// Maps a world-space hit to a UI surface's sampled texture coordinates.
+    fn ui_surface_uv(
+        &self,
+        _model_id: u32,
+        _element_id: u32,
+        _world_point: glam::Vec2,
+        _texture_size: [u32; 2],
+    ) -> Option<glam::Vec2> {
+        None
+    }
+
     /// Applies a pointer wheel delta to a UI element and its scrollable ancestors.
     fn scroll_ui_element(&mut self, _model_id: u32, _element_id: u32, _delta: [f32; 2]) {}
 

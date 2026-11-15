@@ -22,11 +22,23 @@ pub struct InteractionSurface {
     pub flip_y: bool,
 }
 
+/// Routes one SpritePanel in a ModelUI to a bound texture target.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UiInteractionSurface {
+    pub realm_id: u32,
+    pub model_id: u32,
+    pub collider_id: u32,
+    pub element_id: u32,
+    pub slot: String,
+}
+
 /// Routes window events to realms and delegates pointer state to the core.
 #[derive(Default)]
 pub struct MultiverseInteractionSystem {
     inner: InteractionSystem,
     surfaces: HashMap<(u32, u32), InteractionSurface>,
+    ui_surfaces: HashMap<(u32, u32, u32), UiInteractionSurface>,
 }
 
 impl MultiverseInteractionSystem {
@@ -60,6 +72,7 @@ impl MultiverseInteractionSystem {
         bindings: &[crate::types::TargetTextureBinding],
         cut_edges: &[(u32, u32)],
         surfaces: &HashMap<(u32, u32), InteractionSurface>,
+        ui_surfaces: &HashMap<(u32, u32, u32), UiInteractionSurface>,
     ) -> Option<galfus_core::interaction::InteractionHit> {
         let coordinates = match event {
             InteractionPointerEvent::Move {
@@ -86,6 +99,7 @@ impl MultiverseInteractionSystem {
             realms,
             bindings,
             surfaces,
+            ui_surfaces,
             cut_edges,
         };
         let hit = coordinates.and_then(|(window, position)| routing.pick_window(window, position));
@@ -114,13 +128,43 @@ impl MultiverseInteractionSystem {
         self.surfaces.remove(&(realm_id, collider_id));
     }
 
+    pub(crate) fn connect_ui_surface(&mut self, surface: UiInteractionSurface) {
+        self.ui_surfaces.insert(
+            (surface.realm_id, surface.model_id, surface.element_id),
+            surface,
+        );
+    }
+
+    pub(crate) fn capture_ui_surfaces(
+        &mut self,
+        realms: &HashMap<u32, Box<dyn galfus_realm_core::Realm>>,
+    ) -> HashMap<(u32, u32, u32), UiInteractionSurface> {
+        self.ui_surfaces.retain(|_, surface| {
+            realms.get(&surface.realm_id).is_some_and(|realm| {
+                realm.has_collider(surface.model_id, surface.collider_id)
+                    && realm
+                        .ui_surface_texture(surface.model_id, surface.element_id)
+                        .is_some()
+            })
+        });
+        self.ui_surfaces.clone()
+    }
+
+    pub(crate) fn disconnect_ui_surface(&mut self, realm_id: u32, model_id: u32, element_id: u32) {
+        self.ui_surfaces.remove(&(realm_id, model_id, element_id));
+    }
+
     pub(crate) fn disconnect_slot(&mut self, realm_id: u32, slot: &str) {
         self.surfaces
+            .retain(|_, surface| surface.realm_id != realm_id || surface.slot != slot);
+        self.ui_surfaces
             .retain(|_, surface| surface.realm_id != realm_id || surface.slot != slot);
     }
 
     pub(crate) fn disconnect_realm(&mut self, realm_id: u32) {
         self.surfaces
+            .retain(|_, surface| surface.realm_id != realm_id);
+        self.ui_surfaces
             .retain(|_, surface| surface.realm_id != realm_id);
     }
 }

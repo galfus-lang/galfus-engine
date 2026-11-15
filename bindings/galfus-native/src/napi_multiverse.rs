@@ -220,6 +220,48 @@ pub fn multiverse_bind_target_texture(env: Env, binding_val: JsUnknown) -> Resul
 }
 
 #[napi]
+pub fn multiverse_connect_ui_interaction_surface(env: Env, value: JsUnknown) -> Result<()> {
+    let surface: galfus_multiverse::UiInteractionSurface = env.from_js_value(value)?;
+    with_multiverse_mut(|mv| {
+        mv.connect_ui_interaction_surface(surface)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_disconnect_ui_interaction_surface(
+    realm_id: u32,
+    model_id: u32,
+    element_id: u32,
+) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        mv.disconnect_ui_interaction_surface(realm_id, model_id, element_id)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_connect_interaction_surface(env: Env, value: JsUnknown) -> Result<()> {
+    let surface: galfus_multiverse::InteractionSurface = env.from_js_value(value)?;
+    with_multiverse_mut(|mv| {
+        mv.connect_interaction_surface(surface)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn multiverse_disconnect_interaction_surface(realm_id: u32, collider_id: u32) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        mv.disconnect_interaction_surface(realm_id, collider_id)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
 pub fn multiverse_unbind_target_texture(realm_id: u32, slot: String) -> Result<()> {
     with_multiverse_mut(|mv| {
         mv.unbind_target_texture(realm_id, &slot)

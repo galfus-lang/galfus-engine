@@ -510,7 +510,6 @@ impl Realm for Realm2DContext {
     fn referenced_texture_ids(&self) -> Vec<u32> {
         self.collect_referenced_texture_ids()
     }
-
     fn pick_2d(
         &self,
         camera_slot: Option<u32>,
@@ -518,7 +517,6 @@ impl Realm for Realm2DContext {
     ) -> Option<galfus_realm_core::HitResult2D> {
         self.perform_pick_2d(camera_slot, world_pos)
     }
-
     fn viewport_point_2d(
         &self,
         camera_slot: Option<u32>,
@@ -553,13 +551,23 @@ impl Realm for Realm2DContext {
             .get(&collider_id)
             .is_some_and(|c| c.model_id == model_id && c.active)
     }
-
     fn has_interactive_element(&self, model_id: u32, element_id: u32) -> bool {
         self.uis
             .get(&model_id)
             .is_some_and(|(ui, _)| ui.is_interactive_panel(element_id))
     }
-
+    fn ui_surface_texture(&self, model_id: u32, element_id: u32) -> Option<u32> {
+        self.interaction_ui_surface_texture(model_id, element_id)
+    }
+    fn ui_surface_uv(
+        &self,
+        model_id: u32,
+        element_id: u32,
+        point: Vec2,
+        size: [u32; 2],
+    ) -> Option<Vec2> {
+        self.interaction_ui_surface_uv(model_id, element_id, point, size)
+    }
     fn scroll_ui_element(&mut self, model_id: u32, element_id: u32, delta: [f32; 2]) {
         if let Some((ui, _)) = self.uis.get_mut(&model_id)
             && crate::ui_scroll::scroll_element(ui, element_id, delta)
@@ -567,21 +575,17 @@ impl Realm for Realm2DContext {
             self.dirty = true;
         }
     }
-
     fn has_collider(&self, model_id: u32, collider_id: u32) -> bool {
         self.colliders
             .get(&collider_id)
             .is_some_and(|c| c.model_id == model_id)
     }
-
     fn supports_interaction_surface(&self, model_id: u32, collider_id: u32) -> bool {
         self.has_collider(model_id, collider_id)
     }
-
     fn snapshot_interaction(&self) -> Option<Box<dyn Realm>> {
         self.build_interaction_snapshot()
     }
-
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

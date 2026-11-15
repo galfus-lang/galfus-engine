@@ -2,7 +2,9 @@
 
 use crate::context::MultiverseContext;
 use crate::error::{MultiverseError, MultiverseResult};
-use crate::interaction::{InteractionEvent, InteractionPointerEvent, InteractionSurface};
+use crate::interaction::{
+    InteractionEvent, InteractionPointerEvent, InteractionSurface, UiInteractionSurface,
+};
 use crate::types::{InvocationDesc, TargetDesc, TargetTextureBinding};
 use galfus_realm_core::Realm;
 use glam::UVec2;
@@ -17,6 +19,7 @@ pub(crate) struct InteractionFrame {
     realms: HashMap<u32, Box<dyn Realm>>,
     bindings: Vec<TargetTextureBinding>,
     surfaces: HashMap<(u32, u32), InteractionSurface>,
+    ui_surfaces: HashMap<(u32, u32, u32), UiInteractionSurface>,
     cut_edges: Vec<(u32, u32)>,
 }
 
@@ -33,6 +36,7 @@ impl InteractionFrame {
             realms: &self.realms,
             bindings: &self.bindings,
             surfaces: &self.surfaces,
+            ui_surfaces: &self.ui_surfaces,
             cut_edges: &self.cut_edges,
         };
         self.realms.get(&target.realm_id).is_some_and(|realm| {
@@ -68,6 +72,7 @@ impl MultiverseContext {
             &frame.bindings,
             &frame.cut_edges,
             &frame.surfaces,
+            &frame.ui_surfaces,
         );
         if let (InteractionPointerEvent::Scroll { delta, .. }, Some(hit)) = (event, hit)
             && let Some(element_id) = hit.element_id
@@ -108,6 +113,7 @@ impl MultiverseContext {
             .filter_map(|(&id, realm)| realm.snapshot_interaction().map(|snapshot| (id, snapshot)))
             .collect();
         let surfaces = self.interaction.capture_surfaces(&self.realms);
+        let ui_surfaces = self.interaction.capture_ui_surfaces(&self.realms);
         let frame = Arc::new(InteractionFrame {
             window_sizes: self.window_sizes.clone(),
             targets: self.targets.clone(),
@@ -115,6 +121,7 @@ impl MultiverseContext {
             realms,
             bindings: self.bindings.clone(),
             surfaces,
+            ui_surfaces,
             cut_edges: schedule.soft_cut_edges.clone(),
         });
         for &window_id in presented_windows {
@@ -167,6 +174,59 @@ impl MultiverseContext {
         galfus_core::id::validate_host_logical_id(realm_id)?;
         galfus_core::id::validate_host_logical_id(collider_id)?;
         self.interaction.disconnect_surface(realm_id, collider_id);
+        Ok(())
+    }
+
+    /// Connects a SpritePanel to the target already bound to its texture slot.
+    pub fn connect_ui_interaction_surface(
+        &mut self,
+        surface: UiInteractionSurface,
+    ) -> MultiverseResult<()> {
+        for id in [
+            surface.realm_id,
+            surface.model_id,
+            surface.collider_id,
+            surface.element_id,
+        ] {
+            galfus_core::id::validate_host_logical_id(id)?;
+        }
+        let realm = self
+            .realms
+            .get(&surface.realm_id)
+            .ok_or(MultiverseError::RealmNotFound(surface.realm_id))?;
+        if !realm.has_collider(surface.model_id, surface.collider_id) {
+            return Err(MultiverseError::InvalidConfig(
+                "UI interaction surface requires a collider on its model".into(),
+            ));
+        }
+        let target = self
+            .bindings
+            .iter()
+            .find(|binding| binding.realm_id == surface.realm_id && binding.slot == surface.slot)
+            .ok_or_else(|| {
+                MultiverseError::InvalidConfig(
+                    "UI interaction surface requires a bound texture slot".into(),
+                )
+            })?
+            .source_target_id;
+        if realm.ui_surface_texture(surface.model_id, surface.element_id) != Some(target) {
+            return Err(MultiverseError::InvalidConfig("UI interaction surface requires a supported SpritePanel displaying the bound target".into()));
+        }
+        self.interaction.connect_ui_surface(surface);
+        Ok(())
+    }
+
+    pub fn disconnect_ui_interaction_surface(
+        &mut self,
+        realm_id: u32,
+        model_id: u32,
+        element_id: u32,
+    ) -> MultiverseResult<()> {
+        for id in [realm_id, model_id, element_id] {
+            galfus_core::id::validate_host_logical_id(id)?;
+        }
+        self.interaction
+            .disconnect_ui_surface(realm_id, model_id, element_id);
         Ok(())
     }
 }

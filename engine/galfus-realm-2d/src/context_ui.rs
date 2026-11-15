@@ -5,7 +5,7 @@ mod batches;
 #[path = "context_ui_nodes.rs"]
 mod nodes;
 #[path = "context_ui_sprite_fit.rs"]
-mod sprite_fit;
+pub(crate) mod sprite_fit;
 #[path = "context_ui_sprite_slices.rs"]
 mod sprite_slices;
 

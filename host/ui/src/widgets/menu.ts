@@ -108,6 +108,7 @@ export class UiMenu {
             layout: {
               direction: 'row',
               gap: [8, 0],
+              justifyContent: 'spaceBetween',
               width: { type: 'percent', value: 100 },
               height: { type: 'exact', value: 36 }
             },
@@ -151,7 +152,12 @@ export class UiMenu {
         if (this.items_.length > this.pageSize) {
           const nav = root.root.addPanel(
             { backgroundColor: [0, 0, 0, 0] },
-            { direction: 'row', gap: [4, 0] }
+            {
+              direction: 'row',
+              gap: [4, 0],
+              justifyContent: 'spaceBetween',
+              width: { type: 'percent', value: 100 }
+            }
           );
           this.previous = new UiButton(nav, {
             label: 'Previous',

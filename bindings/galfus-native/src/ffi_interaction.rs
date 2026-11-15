@@ -11,6 +11,51 @@ use serde::Deserialize;
 use crate::ffi::{from_c_str, set_last_error, to_c_string};
 use crate::state::with_multiverse_mut;
 
+/// # Safety
+/// `surface_json` must be a valid null-terminated UTF-8 string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_multiverse_connect_ui_interaction_surface(
+    surface_json: *const c_char,
+) -> i32 {
+    let result = unsafe { from_c_str(surface_json) }
+        .map_err(|e| e.to_string())
+        .and_then(|json| {
+            serde_json::from_str::<galfus_multiverse::UiInteractionSurface>(json)
+                .map_err(|e| e.to_string())
+        })
+        .and_then(|surface| {
+            with_multiverse_mut(|mv| {
+                mv.connect_ui_interaction_surface(surface)
+                    .map_err(|e| e.to_string())
+            })
+        });
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
+            set_last_error(&error);
+            -1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_multiverse_disconnect_ui_interaction_surface(
+    realm_id: u32,
+    model_id: u32,
+    element_id: u32,
+) -> i32 {
+    match with_multiverse_mut(|mv| {
+        mv.disconnect_ui_interaction_surface(realm_id, model_id, element_id)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(error) => {
+            set_last_error(&error);
+            -1
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum ColliderInput2D {
@@ -309,6 +354,52 @@ pub extern "C" fn galfus_multiverse_poll_interaction_events() -> *mut c_char {
         Err(e) => {
             set_last_error(&e);
             std::ptr::null_mut()
+        }
+    }
+}
+
+/// Connects a collider to a previously bound texture target.
+///
+/// # Safety
+/// `surface_json` must be a valid null-terminated UTF-8 string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_multiverse_connect_interaction_surface(
+    surface_json: *const c_char,
+) -> i32 {
+    let result = unsafe { from_c_str(surface_json) }
+        .map_err(|e| e.to_string())
+        .and_then(|json| {
+            serde_json::from_str::<galfus_multiverse::InteractionSurface>(json)
+                .map_err(|e| e.to_string())
+        })
+        .and_then(|surface| {
+            with_multiverse_mut(|mv| {
+                mv.connect_interaction_surface(surface)
+                    .map_err(|e| e.to_string())
+            })
+        });
+    match result {
+        Ok(()) => 0,
+        Err(error) => {
+            set_last_error(&error);
+            -1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_multiverse_disconnect_interaction_surface(
+    realm_id: u32,
+    collider_id: u32,
+) -> i32 {
+    match with_multiverse_mut(|mv| {
+        mv.disconnect_interaction_surface(realm_id, collider_id)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(error) => {
+            set_last_error(&error);
+            -1
         }
     }
 }

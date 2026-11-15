@@ -1,6 +1,8 @@
 import type { DescSpec, FunctionSpec } from './types';
+import { interactionSurfaceDescriptors, interactionSurfaceFunctions } from './interaction_surface';
 
 export const multiverseDescriptors: DescSpec[] = [
+  ...interactionSurfaceDescriptors,
   {
     kind: 'union',
     name: 'TargetKind',
@@ -457,6 +459,7 @@ export const multiverseFunctions: FunctionSpec[] = [
     ],
     returnType: 'i32'
   },
+  ...interactionSurfaceFunctions,
   {
     cName: 'galfus_multiverse_unbind_target_texture',
     methodName: 'multiverseUnbindTargetTexture',

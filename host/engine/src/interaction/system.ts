@@ -20,6 +20,7 @@ import { Realm3D } from '../realm3d/realm';
 import { InteractiveListener } from './listener';
 import type { InteractiveEventType, InteractiveObserver, InteractiveTarget } from './types';
 import type { PointerState, RealmState, TargetRecord } from './types_internal';
+import { connectUiSurface, type UiSurfaceOptions } from './ui-surface';
 
 function toCorePointerEvent(event: PointerEvent): object | null {
   switch (event.type) {
@@ -77,6 +78,7 @@ function toCorePointerEvent(event: PointerEvent): object | null {
 
 /** Native pointer dispatch against the Multiverse interaction subsystem. */
 export class InteractiveSystem {
+  private readonly surfaces = new Map<string, () => void>();
   private readonly records = new Map<InteractiveListener, TargetRecord>();
   private readonly modelRecords = new Map<string, Set<TargetRecord>>();
   private readonly realms = new Map<number, RealmState>();
@@ -103,6 +105,70 @@ export class InteractiveSystem {
 
   usesRealm(realmId: number): boolean {
     return this.realms.has(realmId);
+  }
+
+  /** Connects a SpritePanel in a synchronized ModelUI to a bound texture target. */
+  connectUiSurface(options: UiSurfaceOptions): () => void {
+    return connectUiSurface(this.multiverse, this.surfaces, options);
+  }
+
+  /** Connects a host entity's collider to the target bound to a realm texture slot. */
+  connectSurface(options: {
+    realmId: number;
+    entityId: number;
+    colliderId: number;
+    slot: string;
+    flipY?: boolean;
+  }): () => void {
+    const realm = this.multiverse.getRealm(options.realmId);
+    if (!(realm instanceof Realm2D || realm instanceof Realm3D) || realm.isDisposed)
+      throw new Error('Interaction surface requires a live realm.');
+    const model = realm.world.getComponent<Model2DComponent | Model3DComponent>(
+      options.entityId,
+      realm instanceof Realm2D ? 'Model2D' : 'Model3D'
+    );
+    const collider = realm.world.getComponent<Collider2DComponent | Collider3DComponent>(
+      options.entityId,
+      realm instanceof Realm2D ? 'Collider2D' : 'Collider3D'
+    );
+    if (
+      !model ||
+      !collider ||
+      ![...getColliderEntries(collider as Collider2DComponent)].some(
+        (entry) => entry.colliderId === options.colliderId
+      )
+    )
+      throw new Error('Interaction surface requires a collider belonging to the entity.');
+    const key = `${options.realmId}:${options.colliderId}`;
+    if (this.surfaces.has(key)) throw new Error('Collider already has an interaction surface.');
+    const engine = this.multiverse.engine;
+    if (!engine) throw new Error('Interaction surface requires a bound engine.');
+    realm.flush();
+    const surface = { realmId: options.realmId, slot: options.slot, entityId: options.entityId };
+    this.multiverse.connectPresentationSurface(surface);
+    try {
+      engine.multiverseConnectInteractionSurface({
+        realmId: options.realmId,
+        modelId: model.modelId,
+        colliderId: options.colliderId,
+        slot: options.slot,
+        flipY: options.flipY ?? false
+      });
+    } catch (error) {
+      this.multiverse.disconnectPresentationSurface(surface);
+      throw error;
+    }
+    let connected = true;
+    const disconnect = () => {
+      if (!connected) return;
+      connected = false;
+      this.surfaces.delete(key);
+      this.multiverse.disconnectPresentationSurface(surface);
+      if (this.multiverse.getRealm(options.realmId) === realm && !realm.isDisposed)
+        engine.multiverseDisconnectInteractionSurface(options.realmId, options.colliderId);
+    };
+    this.surfaces.set(key, disconnect);
+    return disconnect;
   }
 
   presentationOrder(listener: InteractiveListener, windowId: number): number | undefined {
@@ -500,6 +566,7 @@ export class InteractiveSystem {
   }
 
   dispose(): void {
+    for (const disconnect of [...this.surfaces.values()]) disconnect();
     for (const id of [...this.pointers.keys()]) this.windowClosed(id);
     for (const listener of [...this.records.keys()]) listener.dispose();
     this.realms.clear();

@@ -2,7 +2,7 @@
 
 use galfus_realm_2d_resources::ui::SpriteImageMode;
 
-pub(super) fn fit_sprite(
+pub(crate) fn fit_sprite(
     rect: [f32; 4],
     uv: [f32; 4],
     texture: [f32; 2],

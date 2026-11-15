@@ -75,3 +75,8 @@ mod ui_render_tests;
 
 #[cfg(test)]
 mod ui_batch_tests;
+
+#[cfg(test)]
+mod ui_surface_tests;
+
+mod context_ui_surface;

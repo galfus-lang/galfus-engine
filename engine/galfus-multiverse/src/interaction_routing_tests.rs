@@ -108,6 +108,7 @@ fn routing_obeys_cut_edges_and_stops_at_cycles() {
         realms: &realms,
         bindings: &bindings,
         surfaces: &surfaces,
+        ui_surfaces: &HashMap::new(),
         cut_edges: &[],
     };
     assert_eq!(
@@ -172,6 +173,7 @@ fn routing_and_visibility_stop_at_the_third_level() {
         realms: &realms,
         bindings: &bindings,
         surfaces: &surfaces,
+        ui_surfaces: &HashMap::new(),
         cut_edges: &[],
     };
     assert_eq!(

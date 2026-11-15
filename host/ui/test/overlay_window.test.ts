@@ -262,12 +262,33 @@ describe('native UI pointer integration', () => {
           values.root.handle,
           select.panel.id
         ).absoluteRect;
+        const selectIcon = values.realm.getUiLayout(
+          values.root.handle,
+          select.icon.panel.id
+        ).absoluteRect;
+        expect(selectIcon[0] + selectIcon[2]).toBeCloseTo(selectRect[0] + selectRect[2] - 12, 1);
         click(selectRect[0] + selectRect[2] / 2, selectRect[1] + selectRect[3] / 2);
         expect(select.isOpen).toBe(true);
         for (let i = 0; i < 3; i++) advanceFrame(runtime, transport);
         const popup = select.popover.root!;
         const option = popup.root.children[2]!;
         const optionRect = values.realm.getUiLayout(popup.handle, option.id).absoluteRect;
+        const optionPanel = popup.root.children[0] as import('../src').UiPanelComponent;
+        const optionLabel = values.realm.getUiLayout(
+          popup.handle,
+          optionPanel.children[0]!.id
+        ).absoluteRect;
+        const firstOptionRect = values.realm.getUiLayout(popup.handle, optionPanel.id).absoluteRect;
+        expect(optionLabel[0]).toBeCloseTo(firstOptionRect[0] + 12, 1);
+        const nav = popup.root.children[3] as import('../src').UiPanelComponent;
+        const navRect = values.realm.getUiLayout(popup.handle, nav.id).absoluteRect;
+        const previousRect = values.realm.getUiLayout(
+          popup.handle,
+          nav.children[0]!.id
+        ).absoluteRect;
+        const nextRect = values.realm.getUiLayout(popup.handle, nav.children[1]!.id).absoluteRect;
+        expect(previousRect[0]).toBeCloseTo(navRect[0], 1);
+        expect(nextRect[0] + nextRect[2]).toBeCloseTo(navRect[0] + navRect[2], 1);
         const screen = uiTextRectToWindow(runtime, popup, windowId, optionRect)!;
         click(screen[0] + screen[2] / 2, screen[1] + screen[3] / 2);
         expect(select.value).toBe('dark');
@@ -285,6 +306,11 @@ describe('native UI pointer integration', () => {
         const menuRoot = widgets.menu!.popover.root!;
         const menuItem = widgets.menu!.itemPanel('open')!;
         const menuRect = widgets.realm.getUiLayout(menuRoot.handle, menuItem.id).absoluteRect;
+        const menuLabel = widgets.realm.getUiLayout(
+          menuRoot.handle,
+          menuItem.children[0]!.id
+        ).absoluteRect;
+        expect(menuLabel[0]).toBeCloseTo(menuRect[0] + 12, 1);
         const menuScreen = uiTextRectToWindow(runtime, menuRoot, windowId, menuRect)!;
         click(menuScreen[0] + menuScreen[2] / 2, menuScreen[1] + menuScreen[3] / 2);
         expect(widgets.menu?.isOpen).toBe(false);
@@ -292,10 +318,18 @@ describe('native UI pointer integration', () => {
         clickWidget(widgets.menuButton.panel.id);
         for (let i = 0; i < 3; i++) advanceFrame(runtime, transport);
         const exportRoot = widgets.menu!.popover.root!;
-        const exportRect = widgets.realm.getUiLayout(
+        const exportItem = widgets.menu!.itemPanel('export')!;
+        const exportRect = widgets.realm.getUiLayout(exportRoot.handle, exportItem.id).absoluteRect;
+        const exportLabel = widgets.realm.getUiLayout(
           exportRoot.handle,
-          widgets.menu!.itemPanel('export')!.id
+          exportItem.children[0]!.id
         ).absoluteRect;
+        const exportIcon = widgets.realm.getUiLayout(
+          exportRoot.handle,
+          exportItem.children[1]!.id
+        ).absoluteRect;
+        expect(exportLabel[0]).toBeCloseTo(exportRect[0] + 12, 1);
+        expect(exportIcon[0] + exportIcon[2]).toBeCloseTo(exportRect[0] + exportRect[2] - 12, 1);
         const exportScreen = uiTextRectToWindow(runtime, exportRoot, windowId, exportRect)!;
         runtime.interaction.handle(
           move(
@@ -320,49 +354,39 @@ describe('native UI pointer integration', () => {
         widgets.dispose();
         const integrated = createUi8Scene(runtime, target, windowId, [width, height]);
         for (let i = 0; i < 4; i++) advanceFrame(runtime, transport);
-        const fieldRect = integrated.realm.getUiLayout(
-          integrated.root.handle,
-          integrated.input.panel.id
-        ).absoluteRect;
-        click(fieldRect[0] + 20, fieldRect[1] + fieldRect[3] / 2);
-        expect(integrated.input.getInteractionState(windowId).focus).toBe(true);
-        runtime.interaction.handleKeyboard({
-          kind: 'keyboard',
-          type: 'textInput',
-          windowId,
-          text: 'X'
-        });
-        expect(integrated.input.value).toContain('X');
-        const menuRect8 = integrated.realm.getUiLayout(
-          integrated.root.handle,
-          integrated.menuButton.panel.id
-        ).absoluteRect;
-        click(menuRect8[0] + menuRect8[2] / 2, menuRect8[1] + menuRect8[3] / 2);
-        expect(integrated.menu?.isOpen).toBe(true);
-        integrated.menu?.close();
-        for (let i = 0; i < 3; i++) advanceFrame(runtime, transport);
-        runtime.interaction.handleKeyboard({
-          kind: 'keyboard',
-          type: 'input',
-          windowId,
-          physicalKey: 'Enter',
-          logicalKey: 'Enter',
-          state: 'pressed',
-          repeat: false,
-          modifiers: { ctrl: false, shift: false, alt: false, superKey: false }
-        });
-        runtime.interaction.handleKeyboard({
-          kind: 'keyboard',
-          type: 'input',
-          windowId,
-          physicalKey: 'Enter',
-          logicalKey: 'Enter',
-          state: 'released',
-          repeat: false,
-          modifiers: { ctrl: false, shift: false, alt: false, superKey: false }
-        });
-        expect(integrated.menuButton.getInteractionState(windowId).focusVisible).toBe(true);
-        expect(integrated.menu?.isOpen).toBe(true);
+        const clickViewport = () => {
+          const rect = integrated.realm.getUiLayout(
+            integrated.root.handle,
+            integrated.viewport.id
+          ).absoluteRect;
+          const screen = uiTextRectToWindow(runtime, integrated.root, windowId, rect)!;
+          click(screen[0] + screen[2] / 2, screen[1] + screen[3] / 2);
+        };
+        clickViewport();
+        expect(integrated.statusText.text).toBe('Selected   •   Cube');
+        const sash = integrated.splits.sashes[0]!;
+        const sashRect = integrated.realm.getUiLayout(integrated.root.handle, sash.id).absoluteRect;
+        const sashScreen = uiTextRectToWindow(runtime, integrated.root, windowId, sashRect)!;
+        const sashX = sashScreen[0] + sashScreen[2] / 2;
+        const sashY = sashScreen[1] + sashScreen[3] / 2;
+        const beforeSash = integrated.splits.horizontal.panels[0]!.rect.width;
+        runtime.interaction.handle(move(windowId, sashX, sashY) as PointerEvent);
+        runtime.interaction.handle(button(windowId, sashX, sashY, 'pressed') as PointerEvent);
+        runtime.interaction.handle(move(windowId, sashX + 25, sashY) as PointerEvent);
+        runtime.interaction.handle(button(windowId, sashX + 25, sashY, 'released') as PointerEvent);
+        expect(integrated.splits.horizontal.panels[0]!.rect.width).toBeGreaterThan(beforeSash);
+        for (let i = 0; i < 4; i++) advanceFrame(runtime, transport);
+        integrated.statusText.setText('Ready');
+        integrated.root.flush();
+        clickViewport();
+        expect(integrated.statusText.text).toBe('Selected   •   Cube');
+        integrated.statusText.setText('Ready');
+        integrated.root.flush();
+        integrated.resize(width - 20, height);
+        integrated.resize(width, height);
+        for (let i = 0; i < 4; i++) advanceFrame(runtime, transport);
+        clickViewport();
+        expect(integrated.statusText.text).toBe('Selected   •   Cube');
         integrated.dispose();
       } finally {
         runtime.dispose();

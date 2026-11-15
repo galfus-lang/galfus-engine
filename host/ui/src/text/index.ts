@@ -8,5 +8,5 @@ export type {
   TextInputOptions
 } from './input';
 export { applyTextKeyboardEvent } from './keyboard';
-export { uiTextRectToWindow } from './coordinates';
+export { uiTextRectToWindow, uiWindowPointToLocal } from './coordinates';
 export * from './field';

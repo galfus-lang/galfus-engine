@@ -7,3 +7,4 @@ export type {
   InteractiveObserver,
   InteractiveTarget
 } from './types';
+export type { UiSurfaceOptions } from './ui-surface';

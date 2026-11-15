@@ -6,7 +6,7 @@ use galfus_core::interaction::{InteractionGeometry, InteractionHit};
 use galfus_realm_core::{Realm, RealmKind};
 use glam::{UVec2, Vec2};
 
-use crate::interaction::InteractionSurface;
+use crate::interaction::{InteractionSurface, UiInteractionSurface};
 use crate::types::{InvocationDesc, TargetDesc, TargetKind, TargetTextureBinding};
 
 /// The window realm counts as the first presentation level.
@@ -19,6 +19,7 @@ pub(crate) struct InteractionRouting<'a> {
     pub realms: &'a HashMap<u32, Box<dyn Realm>>,
     pub bindings: &'a [TargetTextureBinding],
     pub surfaces: &'a HashMap<(u32, u32), InteractionSurface>,
+    pub ui_surfaces: &'a HashMap<(u32, u32, u32), UiInteractionSurface>,
     pub cut_edges: &'a [(u32, u32)],
 }
 
@@ -76,6 +77,38 @@ impl InteractionRouting<'_> {
                 }
                 if depth >= MAX_PRESENTATION_DEPTH {
                     continue;
+                }
+                for surface in self
+                    .ui_surfaces
+                    .values()
+                    .filter(|surface| surface.realm_id == inv.realm_id)
+                {
+                    if !realm.has_interactive_collider(surface.model_id, surface.collider_id)
+                        || !realm.has_interactive_element(surface.model_id, surface.element_id)
+                    {
+                        continue;
+                    }
+                    let Some(binding) = self.bindings.iter().find(|binding| {
+                        binding.realm_id == surface.realm_id && binding.slot == surface.slot
+                    }) else {
+                        continue;
+                    };
+                    let source = binding.source_target_id;
+                    if realm.ui_surface_texture(surface.model_id, surface.element_id)
+                        != Some(source)
+                        || self.cut_edges.contains(&(source, destination))
+                    {
+                        continue;
+                    }
+                    if let Some(TargetDesc {
+                        kind: TargetKind::Texture { width, height, .. },
+                        ..
+                    }) = self.targets.get(&source)
+                        && *width > 0
+                        && *height > 0
+                    {
+                        pending.push((source, UVec2::new(*width, *height), depth + 1));
+                    }
                 }
                 for surface in self
                     .surfaces
@@ -206,6 +239,48 @@ impl InteractionRouting<'_> {
     ) -> Option<InteractionHit> {
         if visited.len() >= MAX_PRESENTATION_DEPTH {
             return None;
+        }
+        if let Some(element_id) = hit.element_id
+            && let Some(surface) = self
+                .ui_surfaces
+                .get(&(hit.realm_id, hit.model_id, element_id))
+        {
+            if surface.collider_id != hit.collider_id {
+                return None;
+            }
+            let binding = self.bindings.iter().find(|binding| {
+                binding.realm_id == surface.realm_id && binding.slot == surface.slot
+            })?;
+            let source = binding.source_target_id;
+            if visited.contains(&source) || self.cut_edges.contains(&(source, destination)) {
+                return None;
+            }
+            let TargetKind::Texture { width, height, .. } = self.targets.get(&source)?.kind else {
+                return None;
+            };
+            if width == 0 || height == 0 {
+                return None;
+            }
+            let realm = self.realms.get(&hit.realm_id)?;
+            if realm.ui_surface_texture(hit.model_id, element_id) != Some(source) {
+                return None;
+            }
+            let uv = realm.ui_surface_uv(
+                hit.model_id,
+                element_id,
+                Vec2::from(hit.local_pos),
+                [width, height],
+            )?;
+            let position = Vec2::new(
+                uv.x.min(1.0 - f32::EPSILON) * width as f32,
+                uv.y.min(1.0 - f32::EPSILON) * height as f32,
+            );
+            return self.pick(
+                position,
+                UVec2::new(width, height),
+                |candidate_id, _| candidate_id == source,
+                visited,
+            );
         }
         let surface = self.surfaces.get(&(hit.realm_id, hit.collider_id))?;
         if surface.model_id != hit.model_id {
