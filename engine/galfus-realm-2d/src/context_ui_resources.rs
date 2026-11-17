@@ -35,13 +35,44 @@ impl Realm2DContext {
         ids
     }
 
+    pub(crate) fn new_interaction_snapshot(id: u32) -> Self {
+        Self {
+            id,
+            cameras: std::collections::BTreeMap::new(),
+            sprites: std::collections::HashMap::new(),
+            shapes: std::collections::HashMap::new(),
+            materials: std::collections::HashMap::new(),
+            lights: std::collections::HashMap::new(),
+            emitters: std::collections::HashMap::new(),
+            ui_manager: crate::context_ui::UiManager2D::new(),
+            ui_fonts: crate::ui_fonts::UiFontLibrary::empty(),
+            uis: std::collections::HashMap::new(),
+            colliders: std::collections::HashMap::new(),
+            model_transforms: std::collections::HashMap::new(),
+            hierarchy: galfus_realm_core::hierarchy::HierarchyGraph2D::new(),
+            physics: None,
+            dirty: false,
+            pipeline_manager: None,
+            batch_builder: crate::batch::BatchBuilder2D::new(),
+            shadow_manager: crate::shadow::ShadowManager2D::default(),
+            shadow_data: crate::context_shadows::ShadowFrameData::default(),
+            gpu_res: None,
+            total_time: 0.0,
+            material_bind_groups: std::collections::HashMap::new(),
+            material_uniform_buffers: std::collections::HashMap::new(),
+            material_texture_slots: std::collections::HashMap::new(),
+        }
+    }
+
     pub(crate) fn build_interaction_snapshot(&self) -> Option<Box<dyn Realm>> {
-        let mut snapshot = Self::new(self.id);
+        let mut snapshot = Self::new_interaction_snapshot(self.id);
         snapshot.cameras = self.cameras.clone();
         snapshot.colliders = self.colliders.clone();
         for collider in self.colliders.values() {
-            if let Some(ui) = self.uis.get(&collider.model_id) {
-                snapshot.uis.insert(collider.model_id, ui.clone());
+            if let Some((ui, tf)) = self.uis.get(&collider.model_id) {
+                let mut ui_copy = ui.clone();
+                ui_copy.damage_regions.clear();
+                snapshot.uis.insert(collider.model_id, (ui_copy, *tf));
             }
         }
         for collider in self.colliders.values() {

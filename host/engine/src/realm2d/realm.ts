@@ -2,26 +2,30 @@
  * High-level Realm2D manager combining an ECS World, Anchor solver, and core sync.
  */
 
-import type {
-  Camera2DDesc,
-  GalfusEngine,
-  Light2DDesc,
-  Material2DDesc,
-  Model2DUIDesc,
-  ParticleEmitter2DDesc,
-  Shadow2DConfigDesc,
-  Shape2DDesc,
-  Sprite2DDesc,
-  TransitionConfig,
-  UiCommandDesc
+import {
+  assertValidLogicalId,
+  type Camera2DDesc,
+  type GalfusEngine,
+  type Light2DDesc,
+  type Material2DDesc,
+  type Model2DUIDesc,
+  type ParticleEmitter2DDesc,
+  type Shadow2DConfigDesc,
+  type Shape2DDesc,
+  type Sprite2DDesc,
+  type TransitionConfig,
+  type UiCommandDesc
 } from '@galfus/transport-types';
-import { assertValidLogicalId } from '@galfus/transport-types';
 import type { Transform2DProps } from '../anchors/component';
 import { HierarchyCoordinator } from '../anchors/hierarchy';
 import { translateColliderHits } from '../collision/transport-hits';
 import { AnchorSolveSystem } from '../anchors/solver';
 import type { AnimationCoordinator } from '../animation/coordinator';
-import { Collider2DComponent, type ColliderOptions } from '../collision/components';
+import {
+  Collider2DComponent,
+  type ColliderOptions,
+  getColliderEntries
+} from '../collision/components';
 import { queryPoint2D, raycast2D } from '../collision/query2d';
 import type { EntityId } from '../ecs/entity';
 import type { SystemContext } from '../ecs/system';
@@ -75,6 +79,12 @@ export class Realm2D implements RealmConnector {
 
   private _registerInternalSystems(): void {
     this.world.addSystem('preRender', this.solver.createSystem(), { kind: 'anchor' });
+    this.world.onDestroyEntity((entityId) => {
+      this.hierarchy.detach(entityId);
+      this.hierarchy.handleTargetDestroyed(entityId);
+      this._physics?.removeRigidBody(entityId);
+      this.solver.cache.remove(entityId);
+    });
   }
 
   get id(): number {
@@ -143,6 +153,7 @@ export class Realm2D implements RealmConnector {
 
   flush(): void {
     if (this._disposed) return;
+    this.world.flushIntents();
     if (this._engine) {
       this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0, engine: this._engine });
       this.syncSystem.sync(this.world, this._engine, this._materials);
@@ -261,29 +272,29 @@ export class Realm2D implements RealmConnector {
   }
 
   destroyEntity(entityId: EntityId): boolean {
-    if (!this.world.isAlive(entityId)) return false;
-    this.hierarchy.detach(entityId);
-    this.hierarchy.handleTargetDestroyed(entityId);
-    this._physics?.removeRigidBody(entityId);
-    this.solver.cache.remove(entityId);
     return this.world.destroyEntity(entityId);
   }
 
   // ---------------------------------------------------------------------------
   // Fluent Entity Spawning Helpers
   // ---------------------------------------------------------------------------
+  private _applyTransform(
+    model: ReturnType<typeof createModel2D>,
+    transform?: Transform2DProps
+  ): void {
+    if (!transform) return;
+    model.setTRS(transform.position, transform.rotation, transform.scale);
+    model.zLayer = transform.zLayer ?? 0;
+    model.drawOrder = transform.drawOrder ?? 0;
+  }
+
   /**
    * Creates a pure 2D spatial node holding Model2DComponent without visual attachment.
    */
   createSpatialNode(transform?: Transform2DProps): EntityId {
     const entityId = this.world.createEntity();
-    const modelId = this.allocateResourceId();
-    const model = createModel2D(modelId);
-    if (transform) {
-      model.setTRS(transform.position, transform.rotation, transform.scale);
-      model.zLayer = transform.zLayer ?? 0;
-      model.drawOrder = transform.drawOrder ?? 0;
-    }
+    const model = createModel2D(this.allocateResourceId());
+    this._applyTransform(model, transform);
     this.world.attachComponent(entityId, model);
     return entityId;
   }
@@ -291,13 +302,8 @@ export class Realm2D implements RealmConnector {
   createSprite(desc: Sprite2DDesc, transform?: Transform2DProps): EntityId {
     const entityId = this.world.createEntity();
     const spriteId = this.allocateResourceId();
-
     const model = createModel2D(spriteId);
-    if (transform) {
-      model.setTRS(transform.position, transform.rotation, transform.scale);
-      model.zLayer = transform.zLayer ?? 0;
-      model.drawOrder = transform.drawOrder ?? 0;
-    }
+    this._applyTransform(model, transform);
     this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createSprite2D(spriteId, desc));
     return entityId;
@@ -309,13 +315,8 @@ export class Realm2D implements RealmConnector {
   createShape(desc: Shape2DDesc, transform?: Transform2DProps): EntityId {
     const entityId = this.world.createEntity();
     const shapeId = this.allocateResourceId();
-
     const model = createModel2D(shapeId);
-    if (transform) {
-      model.setTRS(transform.position, transform.rotation, transform.scale);
-      model.zLayer = transform.zLayer ?? 0;
-      model.drawOrder = transform.drawOrder ?? 0;
-    }
+    this._applyTransform(model, transform);
     this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createShape2D(shapeId, desc));
     return entityId;
@@ -325,11 +326,7 @@ export class Realm2D implements RealmConnector {
     const entityId = this.world.createEntity();
     const lightId = this.allocateResourceId();
     const model = createModel2D(lightId);
-    if (transform) {
-      model.setTRS(transform.position, transform.rotation, transform.scale);
-      model.zLayer = transform.zLayer ?? 0;
-      model.drawOrder = transform.drawOrder ?? 0;
-    }
+    this._applyTransform(model, transform);
     this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createLight2D(lightId, desc));
     return entityId;
@@ -342,9 +339,7 @@ export class Realm2D implements RealmConnector {
     const entityId = this.world.createEntity();
     const cameraId = this.allocateResourceId();
     const model = createModel2D(cameraId);
-    if (transform) {
-      model.setTRS(transform.position, transform.rotation, transform.scale);
-    }
+    if (transform) model.setTRS(transform.position, transform.rotation, transform.scale);
     this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createCamera2D(cameraId, desc));
     return { entityId, cameraId };
@@ -356,13 +351,8 @@ export class Realm2D implements RealmConnector {
   ): { entityId: EntityId; uiId: number } {
     const entityId = this.world.createEntity();
     const uiId = this.allocateResourceId();
-
     const model = createModel2D(uiId);
-    if (transform) {
-      model.setTRS(transform.position, transform.rotation, transform.scale);
-      model.zLayer = transform.zLayer ?? 0;
-      model.drawOrder = transform.drawOrder ?? 0;
-    }
+    this._applyTransform(model, transform);
     this.world.attachComponent(entityId, model);
     this.world.attachComponent(entityId, createModel2DUI(uiId, desc));
     return { entityId, uiId };
@@ -414,11 +404,10 @@ export class Realm2D implements RealmConnector {
     ) as UiComputedLayout;
   }
 
-  /** Reads advance rectangles for shaped RichText clusters after the core has laid out the UI. */
-  getRichTextClusters(
+  private _assertUiQueryReady(
     handle: { entityId: EntityId; uiId: number },
     elementId: number
-  ): UiTextCluster[] {
+  ): void {
     if (this._disposed) throw new Error('Cannot query a disposed Realm2D.');
     const component = this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI');
     if (!component || component.uiId !== handle.uiId) throw new Error('UI model does not exist.');
@@ -429,8 +418,16 @@ export class Realm2D implements RealmConnector {
         'UI has pending changes; synchronize and present a frame before querying text.'
       );
     }
+  }
+
+  /** Reads advance rectangles for shaped RichText clusters after the core has laid out the UI. */
+  getRichTextClusters(
+    handle: { entityId: EntityId; uiId: number },
+    elementId: number
+  ): UiTextCluster[] {
+    this._assertUiQueryReady(handle, elementId);
     return JSON.parse(
-      this._engine.realm2dGetRichTextClusters(this.realmId, handle.uiId, elementId)
+      this._engine!.realm2dGetRichTextClusters(this.realmId, handle.uiId, elementId)
     ) as UiTextCluster[];
   }
 
@@ -439,18 +436,9 @@ export class Realm2D implements RealmConnector {
     handle: { entityId: EntityId; uiId: number },
     elementId: number
   ): UiTextGeometry {
-    if (this._disposed) throw new Error('Cannot query a disposed Realm2D.');
-    const component = this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI');
-    if (!component || component.uiId !== handle.uiId) throw new Error('UI model does not exist.');
-    assertValidLogicalId(elementId, 'UI element ID');
-    if (!this._engine) throw new Error('Cannot query UI text without a bound transport.');
-    if (component.isDirty || component.pendingCommands.length > 0) {
-      throw new Error(
-        'UI has pending changes; synchronize and present a frame before querying text.'
-      );
-    }
+    this._assertUiQueryReady(handle, elementId);
     return JSON.parse(
-      this._engine.realm2dGetRichTextGeometry(this.realmId, handle.uiId, elementId)
+      this._engine!.realm2dGetRichTextGeometry(this.realmId, handle.uiId, elementId)
     ) as UiTextGeometry;
   }
 
@@ -459,23 +447,38 @@ export class Realm2D implements RealmConnector {
     handle: { entityId: EntityId; uiId: number },
     elementId: number
   ): UiTextGeometry {
-    if (this._disposed) throw new Error('Cannot query a disposed Realm2D.');
-    const component = this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI');
-    if (!component || component.uiId !== handle.uiId) throw new Error('UI model does not exist.');
-    assertValidLogicalId(elementId, 'UI element ID');
-    if (!this._engine) throw new Error('Cannot query UI text without a bound transport.');
-    if (component.isDirty || component.pendingCommands.length > 0) {
-      throw new Error(
-        'UI has pending changes; synchronize and present a frame before querying text.'
-      );
-    }
+    this._assertUiQueryReady(handle, elementId);
     return JSON.parse(
-      this._engine.realm2dGetUiTextGeometry(this.realmId, handle.uiId, elementId)
+      this._engine!.realm2dGetUiTextGeometry(this.realmId, handle.uiId, elementId)
     ) as UiTextGeometry;
   }
 
   destroyUi(handle: { entityId: EntityId; uiId: number }): void {
-    this.world.destroyEntity(handle.entityId);
+    assertValidLogicalId(handle.uiId, 'UI ID');
+    const uiComp = this.world.isAlive(handle.entityId)
+      ? this.world.getComponent<Model2DUIComponent>(handle.entityId, 'Model2DUI')
+      : undefined;
+    if (uiComp && uiComp.uiId === handle.uiId) {
+      const collider = this.world.getComponent<Collider2DComponent>(handle.entityId, 'Collider2D');
+      if (collider) {
+        if (this._engine) {
+          for (const entry of getColliderEntries(collider)) {
+            if (this.syncSystem.isColliderSynced(entry.colliderId)) {
+              this._engine.realm2dDestroyCollider(this.realmId, entry.colliderId);
+              this.syncSystem.untrackCollider(entry.colliderId);
+            }
+          }
+        }
+        this.world.detachComponent(handle.entityId, 'Collider2D');
+      }
+    }
+    if (this._engine && this.syncSystem.isUiSynced(handle.uiId)) {
+      this._engine.realm2dDestroyUi(this.realmId, handle.uiId);
+      this.syncSystem.untrackUi(handle.uiId);
+    }
+    if (uiComp && uiComp.uiId === handle.uiId) {
+      this.destroyEntity(handle.entityId);
+    }
   }
 
   // ---------------------------------------------------------------------------

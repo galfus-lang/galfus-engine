@@ -140,6 +140,22 @@ describe('UI focus management and Tab navigation', () => {
     }
   });
 
+  it('does not blur a focusable target clicked directly without prior move event', () => {
+    const { runtime, transport, realm, events, windowId } = setup();
+    const ui = createUi(runtime);
+    try {
+      const entity = realm.createSpatialNode();
+      realm.addCollider(entity, { type: 'circle', radius: 1 });
+      const target = ui.focusable(1, { type: 'collider', entityId: entity });
+      advanceFrame(runtime, transport);
+      events.push(button(windowId, 50, 50, 'pressed'));
+      advanceFrame(runtime, transport);
+      expect(ui.getFocused(windowId)).toBe(target);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
   it('does not override a focus change made by a blur callback', () => {
     const { runtime, transport, realm, windowId } = setup();
     const ui = createUi(runtime);

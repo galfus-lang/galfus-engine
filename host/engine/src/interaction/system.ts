@@ -1,14 +1,16 @@
-import type {
-  InteractionEvent,
-  KeyboardEvent,
-  PointerEvent,
-  ScrollDelta,
-  WindowEvent
+import {
+  assertValidLogicalId,
+  type InteractionEvent,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ScrollDelta,
+  type WindowEvent
 } from '@galfus/transport-types';
 import {
   type Collider2DComponent,
   type Collider3DComponent,
-  getColliderEntries
+  getColliderEntries,
+  hasCollider
 } from '../collision/components';
 import { DebugLatencyTracker } from '../debug/latency-tracker';
 import type { Component } from '../ecs/component';
@@ -131,13 +133,7 @@ export class InteractiveSystem {
       options.entityId,
       realm instanceof Realm2D ? 'Collider2D' : 'Collider3D'
     );
-    if (
-      !model ||
-      !collider ||
-      ![...getColliderEntries(collider as Collider2DComponent)].some(
-        (entry) => entry.colliderId === options.colliderId
-      )
-    )
+    if (!model || !collider || !hasCollider(collider, options.colliderId))
       throw new Error('Interaction surface requires a collider belonging to the entity.');
     const key = `${options.realmId}:${options.colliderId}`;
     if (this.surfaces.has(key)) throw new Error('Collider already has an interaction surface.');
@@ -247,6 +243,8 @@ export class InteractiveSystem {
       component = collider;
     } else if (input.type === 'ui') {
       if (!(realm instanceof Realm2D)) throw new Error('Interactive UI requires a Realm2D.');
+      assertValidLogicalId(input.uiId, 'UI ID');
+      assertValidLogicalId(input.elementId, 'UI element ID');
       for (const id of realm.world.query('Model2DUI')) {
         const ui = realm.world.getComponent<Model2DUIComponent>(id, 'Model2DUI');
         if (ui?.uiId === input.uiId) {
@@ -325,58 +323,57 @@ export class InteractiveSystem {
   }
 
   afterDispatch(): void {
-    if (!this.records.size) {
-      for (const observer of this.observers) observer.onAfterDispatch?.();
-      return;
-    }
-    let removed: TargetRecord[] | undefined;
-    for (const record of this.records.values()) {
-      const { realm, entityId, component, model } = record;
-      if (
-        realm.isDisposed ||
-        realm.world.getComponent(entityId, model.type) !== model ||
-        realm.world.getComponent(entityId, component.type) !== component
-      ) {
-        (removed ??= []).push(record);
-        continue;
-      }
-      if (record.listener.target.type === 'collider') {
-        const cid = record.listener.target.colliderId;
-        if (cid !== undefined) {
-          const entries = [...getColliderEntries(component as any)];
-          if (!entries.some((e: any) => e.colliderId === cid)) {
+    if (this.records.size) {
+      let removed: TargetRecord[] | undefined;
+      for (const record of this.records.values()) {
+        const { realm, entityId, component, model } = record;
+        if (
+          realm.isDisposed ||
+          realm.world.getComponent(entityId, model.type) !== model ||
+          realm.world.getComponent(entityId, component.type) !== component
+        ) {
+          (removed ??= []).push(record);
+          continue;
+        }
+        if (record.listener.target.type === 'collider') {
+          const cid = record.listener.target.colliderId;
+          if (cid !== undefined && !hasCollider(component as any, cid)) {
             (removed ??= []).push(record);
             continue;
           }
         }
       }
-    }
-    if (removed) {
-      for (const record of removed) {
-        for (const pointers of this.pointers.values()) {
-          for (const pointer of pointers.values()) {
-            let pressed = false;
-            for (const [button, listener] of pointer.pressed) {
-              if (listener === record.listener) {
-                pointer.pressed.delete(button);
-                pressed = true;
+      if (removed) {
+        for (const record of removed) {
+          for (const pointers of this.pointers.values()) {
+            for (const pointer of pointers.values()) {
+              let pressed = false;
+              for (const [button, listener] of pointer.pressed) {
+                if (listener === record.listener) {
+                  pointer.pressed.delete(button);
+                  pressed = true;
+                }
+              }
+              if (pressed) this.emit(record.listener, 'cancel', pointer);
+              if (pointer.hover === record.listener) {
+                pointer.hover = undefined;
+                this.emit(record.listener, 'leave', pointer);
               }
             }
-            if (pressed) this.emit(record.listener, 'cancel', pointer);
-            if (pointer.hover === record.listener) {
-              pointer.hover = undefined;
-              this.emit(record.listener, 'leave', pointer);
-            }
           }
+          record.listener.dispose();
         }
-        record.listener.dispose();
       }
     }
-    for (const observer of this.observers) observer.onAfterDispatch?.();
     const engine = this.multiverse.engine;
     if (engine && 'multiversePollInteractionEvents' in engine) {
       this.pollNativeEvents(engine);
     }
+    for (const observer of this.observers) observer.onAfterDispatch?.();
+  }
+
+  tick(dt: number): void {
+    for (const observer of this.observers) observer.onTick?.(dt);
   }
 
   private pollNativeEvents(engine: NonNullable<MultiverseCoordinator['engine']>): void {
@@ -403,7 +400,7 @@ export class InteractiveSystem {
               windowId: ev.windowId,
               pointerId: Number(ev.pointerId),
               pointerType: 'mouse',
-              position: ev.localPos,
+              position: ev.windowPosition ?? ev.localPos,
               delta: ev.delta,
               pressure: 0
             },
@@ -412,6 +409,8 @@ export class InteractiveSystem {
             uvs: new Map()
           })
         );
+      } else {
+        pointer.event.position = ev.windowPosition ?? ev.localPos;
       }
       const records = this.modelRecords.get(`${ev.realmId}:${ev.modelId}`);
       if (records) {
@@ -423,11 +422,7 @@ export class InteractiveSystem {
               record.listener.target.colliderId === ev.colliderId;
           } else if (record.listener.target.type === 'ui') {
             const target = record.listener.target;
-            const targetNumeric =
-              typeof target.elementId === 'number' ? target.elementId : Number(target.elementId);
-            matches =
-              (!isNaN(targetNumeric) && ev.elementId === targetNumeric) ||
-              (ev.elementId !== undefined && String(ev.elementId) === String(target.elementId));
+            matches = ev.elementId !== undefined && ev.elementId === target.elementId;
           }
           if (matches) {
             pointer.positions.set(record.listener, ev.localPos);
@@ -441,6 +436,7 @@ export class InteractiveSystem {
             } else if (type === 'leave') {
               if (pointer.hover === record.listener) pointer.hover = undefined;
             } else if (type === 'down') {
+              pointer.hover ??= record.listener;
               pointer.pressed.set(ev.button ?? 0, record.listener);
             } else if (type === 'pressup' || type === 'cancel') {
               pointer.pressed.delete(ev.button ?? 0);
@@ -448,7 +444,14 @@ export class InteractiveSystem {
             const scrollDelta: ScrollDelta | undefined = ev.scrollDelta
               ? { pixels: [ev.scrollDelta[0], ev.scrollDelta[1]] }
               : undefined;
-            this.emit(record.listener, type, pointer, scrollDelta, ev.elementId);
+            this.emit(
+              record.listener,
+              type,
+              pointer,
+              scrollDelta,
+              ev.elementId,
+              ev.presentationTargetId
+            );
           }
         }
       }
@@ -460,7 +463,8 @@ export class InteractiveSystem {
     type: InteractiveEventType,
     pointer: PointerState,
     scrollDelta?: ScrollDelta,
-    elementId?: number
+    elementId?: number,
+    presentationTargetId?: number
   ): void {
     if (listener?.hasListeners(type)) {
       if (
@@ -483,6 +487,7 @@ export class InteractiveSystem {
         target: listener.target,
         pointer: p,
         windowPosition: ev.position,
+        presentationTargetId,
         uv: uv ? [uv[0], uv[1]] : undefined,
         elementId,
         scrollDelta

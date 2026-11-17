@@ -59,7 +59,7 @@ describe('core-owned UI facade', () => {
       const panel = model.root.addPanel({ backgroundColor: [1, 0, 0, 1] }, { flexGrow: 1 });
       const text = panel.addText('hello', 12);
       expect('on' in text).toBe(false);
-      expect(realm.world.getComponent(model.handle.entityId, 'Collider2D')).toBeUndefined();
+      expect(realm.world.getComponent(model.handle.entityId, 'Collider2D')).toBeDefined();
       const clicked: number[] = [];
       panel.on('click', () => clicked.push(panel.id));
       realm.flush();

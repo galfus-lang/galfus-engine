@@ -7,7 +7,7 @@ import type {
 
 export type InteractiveTarget =
   | { type: 'collider'; entityId: number; colliderId?: number }
-  | { type: 'ui'; uiId: number; elementId: string | number };
+  | { type: 'ui'; uiId: number; elementId: number };
 
 export type InteractiveEventType =
   | 'hover'
@@ -30,6 +30,8 @@ export interface InteractiveEvent {
   readonly pointer: PointerEvent;
   /** Original pointer position in window pixels, independent of local hit coordinates. */
   readonly windowPosition?: readonly [number, number];
+  /** Render target through which this collider was reached. */
+  readonly presentationTargetId?: number;
   /** Normalized `[u, v]` coordinates (`0..1`) within the target surface bounds. */
   readonly uv?: [number, number];
   /** Sub-element numeric ID if targeted (e.g. UI Panel). */
@@ -46,6 +48,7 @@ export interface InteractiveObserver {
   onPointerEvent?(event: PointerEvent): void;
   onKeyboardEvent?(event: KeyboardEvent): void;
   onWindowClosed?(windowId: number): void;
+  onTick?(dt: number): void;
   onAfterDispatch?(): void;
   onDispose?(): void;
 }

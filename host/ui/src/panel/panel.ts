@@ -91,6 +91,8 @@ export class Panel implements UiNode {
   protected _style: PanelStyle;
   protected _padding: UiPadding | undefined;
   protected _layout: LayoutConfig;
+  protected _explicitPadding: boolean;
+  protected _explicitLayout: boolean;
   protected readonly _clip: boolean;
   protected readonly _resizable: PanelResizeOptions | undefined;
   protected readonly _draggable: boolean;
@@ -119,10 +121,16 @@ export class Panel implements UiNode {
       height: initH
     };
     this._title = options.title;
+    const hasBorder =
+      options.borderColor !== undefined ||
+      options.borderWidth !== undefined ||
+      options.style?.stroke !== undefined ||
+      options.style?.strokeWidth !== undefined ||
+      options.title !== undefined;
     this._style = {
       fill: options.backgroundColor ?? options.style?.fill ?? '#101d2d',
       stroke: options.borderColor ?? options.style?.stroke ?? '#244263',
-      strokeWidth: options.borderWidth ?? options.style?.strokeWidth ?? 1.5,
+      strokeWidth: options.borderWidth ?? options.style?.strokeWidth ?? (hasBorder ? 1.5 : 0),
       radius: options.borderRadius ?? options.style?.radius ?? 8,
       headerFill: options.style?.headerFill ?? '#162940',
       headerHeight: options.style?.headerHeight ?? 30,
@@ -130,7 +138,9 @@ export class Panel implements UiNode {
       titleFontSize: options.style?.titleFontSize ?? 13,
       ...options.style
     };
+    this._explicitPadding = options.padding !== undefined;
     this._padding = options.padding ?? 8;
+    this._explicitLayout = options.layout !== undefined;
     this._layout = options.layout ?? { type: 'vertical', gap: 8 };
     this._clip = options.clip ?? false;
     this._resizable =
@@ -233,6 +243,7 @@ export class Panel implements UiNode {
 
   setLayout(layout: LayoutConfig): void {
     this._appliedRect = undefined;
+    this._explicitLayout = true;
     this._layout = layout;
     this.layoutChildren(this._host);
     this._host?.markLayoutDirty();
@@ -240,6 +251,7 @@ export class Panel implements UiNode {
 
   setPadding(padding: UiPadding): void {
     this._appliedRect = undefined;
+    this._explicitPadding = true;
     this._padding = padding;
     this.layoutChildren(this._host);
     this._host?.markLayoutDirty();
@@ -252,8 +264,13 @@ export class Panel implements UiNode {
   /** Sets the local `(x, y)` position relative to the parent panel's inner content area. */
   setPosition(x: number, y: number): void {
     const bounds = this._parentBounds;
-    const localX = bounds ? clampSize(x, 0, Math.max(0, bounds.width - this._rect.width)) : x;
-    const localY = bounds ? clampSize(y, 0, Math.max(0, bounds.height - this._rect.height)) : y;
+    const clampToParent = (this._draggable || Boolean(this._resizable)) && bounds !== undefined;
+    const localX = clampToParent
+      ? clampSize(x, 0, Math.max(0, bounds.width - this._rect.width))
+      : x;
+    const localY = clampToParent
+      ? clampSize(y, 0, Math.max(0, bounds.height - this._rect.height))
+      : y;
     this.constraints.x = localX;
     this.constraints.y = localY;
     const absX = (bounds?.x ?? 0) + localX;
@@ -275,22 +292,19 @@ export class Panel implements UiNode {
 
   setSize(width: number, height: number): void {
     const bounds = this._parentBounds;
-    const curLocalX = bounds ? Math.max(0, this._rect.x - bounds.x) : 0;
-    const curLocalY = bounds ? Math.max(0, this._rect.y - bounds.y) : 0;
-    const maxW = bounds
-      ? Math.min(
-          this.constraints.maxWidth ?? Infinity,
-          Math.max(this.constraints.minWidth ?? 60, bounds.width - curLocalX)
-        )
+    const minW = this.constraints.minWidth ?? (this._resizable ? 60 : 0);
+    const minH = this.constraints.minHeight ?? (this._resizable ? 40 : 0);
+    const clampToParent = (this._draggable || Boolean(this._resizable)) && bounds !== undefined;
+    const curLocalX = clampToParent ? Math.max(0, this._rect.x - bounds.x) : 0;
+    const curLocalY = clampToParent ? Math.max(0, this._rect.y - bounds.y) : 0;
+    const maxW = clampToParent
+      ? Math.min(this.constraints.maxWidth ?? Infinity, Math.max(minW, bounds.width - curLocalX))
       : this.constraints.maxWidth;
-    const maxH = bounds
-      ? Math.min(
-          this.constraints.maxHeight ?? Infinity,
-          Math.max(this.constraints.minHeight ?? 40, bounds.height - curLocalY)
-        )
+    const maxH = clampToParent
+      ? Math.min(this.constraints.maxHeight ?? Infinity, Math.max(minH, bounds.height - curLocalY))
       : this.constraints.maxHeight;
-    const w = clampSize(width, this.constraints.minWidth ?? 60, maxW);
-    const h = clampSize(height, this.constraints.minHeight ?? 40, maxH);
+    const w = clampSize(width, minW, maxW);
+    const h = clampSize(height, minH, maxH);
     this.constraints.width = w;
     this.constraints.height = h;
     if (this._host) {
@@ -544,7 +558,14 @@ export class Panel implements UiNode {
   protected layoutChildren(host?: UiHost): void {
     if (this._children.length === 0) return;
     const body = this.bodyRect;
-    const pad = resolvePadding(this._padding);
+    const hasPositionedChild =
+      !this._explicitLayout &&
+      this._children.some((c) => c.constraints.x !== undefined || c.constraints.y !== undefined);
+    const effectivePadding = hasPositionedChild && !this._explicitPadding ? 0 : this._padding;
+    const effectiveLayout: LayoutConfig = hasPositionedChild
+      ? { type: 'relative', fit: 'passthrough' }
+      : this._layout;
+    const pad = resolvePadding(effectivePadding);
     const innerBounds: UiRect = {
       x: body.x + pad.left,
       y: body.y + pad.top,
@@ -553,15 +574,15 @@ export class Panel implements UiNode {
     };
     const solution = solveLayout(
       body,
-      this._padding,
-      this._layout,
+      effectivePadding,
+      effectiveLayout,
       this._children.map((c) => c.constraints)
     );
     for (let i = 0; i < this._children.length; i++) {
       const child = this._children[i]!;
       const childRect = solution.rects[i]!;
       child.setParentBounds?.(innerBounds);
-      if (this._layout.type === 'free') {
+      if (effectiveLayout.type === 'free') {
         child.constraints.x = childRect.x - innerBounds.x;
         child.constraints.y = childRect.y - innerBounds.y;
       }

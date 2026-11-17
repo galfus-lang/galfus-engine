@@ -33,10 +33,10 @@ export abstract class UiToggle extends UiValueControl<boolean> {
       throw new RangeError('tabIndex must be a safe integer.');
     const panel = makePanel(parent, kind, options as UiControlOptions, {
       direction: 'row',
-      padding: [7, 10, 7, 10],
+      padding: [4, 6, 4, 2],
       alignItems: 'center',
       gap: [8, 0],
-      minHeight: 34,
+      minHeight: 28,
       ...options.layout
     });
     super(panel, initial, options);

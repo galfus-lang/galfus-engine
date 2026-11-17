@@ -82,3 +82,33 @@ fn snapshot_picks_presented_panel_in_model_space_with_transformed_colliders() {
         Some(2)
     );
 }
+
+#[test]
+fn snapshot_interaction_does_not_load_fonts_and_clears_damage_regions() {
+    let mut realm = Realm2DContext::new(1);
+    let mut ui = Model2DUI::new();
+    ui.damage_regions.push([0.0, 0.0, 50.0, 50.0]);
+    realm.create_ui(10, ui, Transform2D::default()).unwrap();
+    realm
+        .create_collider_2d(Collider2D {
+            id: 20,
+            model_id: 10,
+            shape: ColliderShape2D::Rectangle {
+                half_extents: [10.0, 10.0],
+            },
+            offset: [0.0; 2],
+            local_matrix: None,
+            active: true,
+            sensor: false,
+            layer: 1,
+            mask: u32::MAX,
+        })
+        .unwrap();
+
+    let snapshot = realm.snapshot_interaction().unwrap();
+    let frozen = snapshot.as_any().downcast_ref::<Realm2DContext>().unwrap();
+    // Font DB must be empty (0 faces loaded)
+    assert_eq!(frozen.font_db().faces().count(), 0);
+    // Damage regions must be cleared on the snapshot UI
+    assert!(frozen.uis.get(&10).unwrap().0.damage_regions.is_empty());
+}

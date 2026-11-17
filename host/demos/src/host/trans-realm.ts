@@ -129,15 +129,19 @@ export function createTransRealmScene(
   const screenQuad = realm1.createPrimitive({ kind: 'quad', width: 3.6, height: 2.8 }, screenMat, {
     position: [0.8, 0, 0]
   });
-  realm1.addCollider(screenQuad.entityId, { type: 'plane', halfExtents: [1.8, 1.4] });
+  const screenCollider = realm1.addCollider(screenQuad.entityId, {
+    type: 'plane',
+    halfExtents: [1.8, 1.4]
+  });
   runtime.interactive(1, { type: 'collider', entityId: screenQuad.entityId });
 
   // Connect Realm 1 3D Plane to Texture Target 20 (Realm 2)
   runtime.multiverse.bindTargetTexture({ realmId: 1, slot: 'plane_portal', sourceTargetId: 20 });
-  runtime.multiverse.connectPresentationSurface({
+  runtime.interaction.connectSurface({
     realmId: 1,
     slot: 'plane_portal',
-    entityId: screenQuad.entityId
+    entityId: screenQuad.entityId,
+    colliderId: screenCollider
   });
 
   // =========================================================================
@@ -196,15 +200,20 @@ export function createTransRealmScene(
     { dimensions: [160, 160], materialId: subMat },
     { position: [100, 0] }
   );
-  realm2.addCollider(surface2, { type: 'rectangle', halfExtents: [80, 80] });
+  const surface2Collider = realm2.addCollider(surface2, {
+    type: 'rectangle',
+    halfExtents: [80, 80]
+  });
   runtime.interactive(2, { type: 'collider', entityId: surface2 });
 
   // Connect Realm 2 2D Surface to Texture Target 30 (Realm 3)
   runtime.multiverse.bindTargetTexture({ realmId: 2, slot: 'sub_portal', sourceTargetId: 30 });
-  runtime.multiverse.connectPresentationSurface({
+  runtime.interaction.connectSurface({
     realmId: 2,
     slot: 'sub_portal',
-    entityId: surface2
+    entityId: surface2,
+    colliderId: surface2Collider,
+    flipY: true
   });
 
   // =========================================================================

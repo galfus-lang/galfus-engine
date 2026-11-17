@@ -96,6 +96,14 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
       this.skinningSystem.createSystem(() => this._engine),
       { kind: 'sync', priority: RESERVED_PRIORITY_INTERNAL_RESOLVERS }
     );
+    this.world.onDestroyEntity((entityId) => {
+      const model = this.world.getComponent<Model3DComponent>(entityId, 'Model3D');
+      if (model) this._pendingMorphWeights.delete(model.modelId);
+      this.hierarchy.detach(entityId);
+      this.hierarchy.handleTargetDestroyed(entityId);
+      this._physics?.removeRigidBody(entityId);
+      this.solver.cache.remove(entityId);
+    });
   }
 
   get isDisposed(): boolean {
@@ -256,17 +264,12 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   }
 
   destroyEntity(entityId: EntityId): boolean {
-    if (!this.world.isAlive(entityId)) return false;
-    const model = this.world.getComponent<Model3DComponent>(entityId, 'Model3D');
-    if (model) this._pendingMorphWeights.delete(model.modelId);
-    this.hierarchy.detach(entityId);
-    this.hierarchy.handleTargetDestroyed(entityId);
-    this._physics?.removeRigidBody(entityId);
-    this.solver.cache.remove(entityId);
     return this.world.destroyEntity(entityId);
   }
 
   flush(): void {
+    if (this._disposed) return;
+    this.world.flushIntents();
     if (this._engine) {
       this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0, engine: this._engine });
       this.syncSystem.sync(this.world, this._engine, this);

@@ -20,6 +20,17 @@ export class EcsWorld implements IntentFlusher {
   readonly components = new ComponentStore();
   readonly intents = new IntentStore();
   readonly systems = new SystemPipeline<EcsWorld>();
+  private readonly _destroyListeners = new Set<(id: EntityId) => void>();
+  private readonly _destroying = new Set<EntityId>();
+
+  /**
+   * Registers a listener notified immediately when an entity is destroyed.
+   * Returns an unsubscribe callback.
+   */
+  onDestroyEntity(callback: (id: EntityId) => void): () => void {
+    this._destroyListeners.add(callback);
+    return () => this._destroyListeners.delete(callback);
+  }
 
   /**
    * Spawns a new entity and returns its ID.
@@ -32,11 +43,26 @@ export class EcsWorld implements IntentFlusher {
    * Destroys an entity and immediately detaches all its attached components.
    */
   destroyEntity(entityId: EntityId): boolean {
-    if (this.entities.destroy(entityId)) {
-      this.components.removeAllForEntity(entityId);
-      return true;
+    if (!this.entities.isAlive(entityId) || this._destroying.has(entityId)) {
+      return false;
     }
-    return false;
+    this._destroying.add(entityId);
+    try {
+      for (const listener of [...this._destroyListeners]) {
+        try {
+          listener(entityId);
+        } catch (err) {
+          console.error('[EcsWorld] Error in onDestroyEntity listener:', err);
+        }
+      }
+      if (this.entities.destroy(entityId)) {
+        this.components.removeAllForEntity(entityId);
+        return true;
+      }
+      return false;
+    } finally {
+      this._destroying.delete(entityId);
+    }
   }
 
   /**
@@ -250,7 +276,7 @@ export class EcsWorld implements IntentFlusher {
    * Executes the pre-render phases:
    * 1. Runs `input` stage systems & flushes intents.
    * 2. Runs `update` stage systems & flushes intents.
-   * 3. Runs `preRender` stage systems & flushes intents.
+   * 3. Runs `preRender` stage systems (flushing intents before internal anchor resolvers) & flushes intents.
    */
   stepPreRender(context: SystemContext): void {
     this.systems.runStep('input', this, context);
@@ -259,7 +285,7 @@ export class EcsWorld implements IntentFlusher {
     this.systems.runStep('update', this, context);
     this.flushIntents();
 
-    this.systems.runStep('preRender', this, context);
+    this.systems.runStep('preRender', this, context, () => this.flushIntents());
     this.flushIntents();
   }
 
@@ -281,12 +307,13 @@ export class EcsWorld implements IntentFlusher {
   }
 
   /**
-   * Resets the entire world, clearing entities, components, systems, and intents.
+   * Resets the entire world, clearing entities, components, systems, intents, and listeners.
    */
   reset(): void {
     this.components.clear();
     this.entities.clear();
     this.intents.clear();
     this.systems.clear();
+    this._destroyListeners.clear();
   }
 }

@@ -427,6 +427,35 @@ export function createMockInteractionEngine(getRealm?: (realmId: number) => any)
         const hit = getHit(ev.windowId, ev.position);
         const target = hit?.collider ?? state.hover;
         if (ev.state === 'pressed') {
+          if (state.hover !== target) {
+            if (state.hover) {
+              queuedEvents.push({
+                interactionType: 'leave',
+                windowId: ev.windowId,
+                pointerId,
+                realmId: state.hover.realmId,
+                modelId: state.hover.modelId,
+                colliderId: state.hover.colliderId,
+                localPos: ev.position,
+                uv: [0.5, 0.5],
+                delta: [0, 0]
+              });
+            }
+            if (target) {
+              queuedEvents.push({
+                interactionType: 'hover',
+                windowId: ev.windowId,
+                pointerId,
+                realmId: target.realmId,
+                modelId: target.modelId,
+                colliderId: target.colliderId,
+                localPos: hit?.localPos ?? ev.position,
+                uv: hit?.uv ?? [0.5, 0.5],
+                delta: [0, 0]
+              });
+            }
+            state.hover = target;
+          }
           if (target) {
             state.pressed = target;
             state.pressedButton = ev.button;

@@ -20,6 +20,7 @@ export interface UiRootOptions extends PanelOptions {
   readonly rotation?: number;
   readonly zLayer?: number;
   readonly drawOrder?: number;
+  readonly onDispose?: () => void;
 }
 
 /**
@@ -39,6 +40,8 @@ export class UiRoot implements UiHost {
   private _layoutDirty = false;
   private _batching = false;
   private _disposed = false;
+  private readonly _onDispose?: () => void;
+  private readonly _stopRealmObserver: () => void;
   private readonly _userListeners = new Map<string, Set<(event?: any) => void>>();
 
   constructor(
@@ -64,6 +67,7 @@ export class UiRoot implements UiHost {
     const texts: UiText2DDesc[] = [];
     this.rootPanel.compileUi(quads, texts);
     const scale = options.scale ?? [1, 1];
+    this._onDispose = options.onDispose;
     this._uiHandle = realm.createUi(
       { quads, texts },
       {
@@ -75,16 +79,22 @@ export class UiRoot implements UiHost {
       }
     );
 
-    // Attach collider to make UiRoot interactive
-    this._colliderId = realm.addCollider(this.entityId, {
-      type: 'rectangle',
-      halfExtents: [this._width * 0.5, this._height * 0.5]
-    });
+    try {
+      // Attach collider to make UiRoot interactive
+      this._colliderId = realm.addCollider(this.entityId, {
+        type: 'rectangle',
+        halfExtents: [this._width * 0.5, this._height * 0.5]
+      });
 
-    this.rootPanel.attachHost(this);
-    this.rootPanel.bindInteractions(this);
+      this.rootPanel.attachHost(this);
+      this.rootPanel.bindInteractions(this);
 
-    this.setupInteractionRouting();
+      this.setupInteractionRouting();
+    } catch (err) {
+      realm.destroyUi(this._uiHandle);
+      throw err;
+    }
+    this._stopRealmObserver = realm.onDispose(() => this.dispose());
   }
 
   get uiId(): number {
@@ -176,8 +186,6 @@ export class UiRoot implements UiHost {
   flush(): void {
     if (this._disposed || this._batching) return;
     if (this._structureDirty || this._layoutDirty) {
-      this._structureDirty = false;
-      this._layoutDirty = false;
       this.rootPanel.applyRect({ x: 0, y: 0, width: this._width, height: this._height });
 
       const quads: UiQuad2DDesc[] = [];
@@ -186,6 +194,8 @@ export class UiRoot implements UiHost {
       if (this._uiHandle) {
         this.realm.setUiContent(this._uiHandle, { quads, texts });
       }
+      this._structureDirty = false;
+      this._layoutDirty = false;
     }
   }
 
@@ -409,8 +419,10 @@ export class UiRoot implements UiHost {
   dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
+    this._stopRealmObserver?.();
     this._interactiveSubscription?.dispose();
     this._userListeners.clear();
     this.realm.destroyUi(this._uiHandle);
+    this._onDispose?.();
   }
 }

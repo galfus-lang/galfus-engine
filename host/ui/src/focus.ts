@@ -26,7 +26,16 @@ export class Focusable {
     readonly windowId?: number,
     private readonly isPresented: () => boolean = () => true,
     private readonly containsPointer: (listener: InteractiveListener) => boolean = (listener) =>
-      listener === this.listener
+      listener === this.listener ||
+      (listener.realmId === this.listener.realmId &&
+        listener.target.type === this.listener.target.type &&
+        (listener.target.type === 'collider' && this.listener.target.type === 'collider'
+          ? listener.target.entityId === this.listener.target.entityId &&
+            listener.target.colliderId === this.listener.target.colliderId
+          : listener.target.type === 'ui' && this.listener.target.type === 'ui'
+            ? listener.target.uiId === this.listener.target.uiId &&
+              listener.target.elementId === this.listener.target.elementId
+            : false))
   ) {
     this.tabIndex_ = Focusable.validateTabIndex(tabIndex);
     listener.on('down', ({ pointer }) => {
@@ -129,6 +138,7 @@ export class FocusManager {
   private readonly focused = new Map<number, Focusable>();
   private readonly composing = new Set<number>();
   private readonly unfocused = new Set<number>();
+  private lastPointerFocused?: Focusable;
   private readonly capturedWindows = new Set<number>();
   private readonly scopes = new Map<
     number,
@@ -208,18 +218,33 @@ export class FocusManager {
         if (match !== undefined) return false;
         match = id;
       }
+      if (match === undefined) {
+        for (const id of this.windowIds()) {
+          if (target.windowId !== undefined && target.windowId !== id) continue;
+          if (!this.allowed(target, id)) continue;
+          if (this.interaction.presentationOrder(target.listener, id) === undefined) continue;
+          if (match !== undefined) return false;
+          match = id;
+        }
+      }
       if (match === undefined) return false;
       windowId = match;
     }
     if (
       (target.windowId !== undefined && target.windowId !== windowId) ||
       !this.allowed(target, windowId) ||
-      this.unfocused.has(windowId) ||
       this.interaction.presentationOrder(target.listener, windowId) === undefined
     )
       return false;
+    if (this.unfocused.has(windowId)) {
+      this.requestInputFocus(windowId);
+      return false;
+    }
     const previous = this.focused.get(windowId);
-    if (previous === target) return true;
+    if (previous === target) {
+      if (source === 'pointer') this.lastPointerFocused = target;
+      return true;
+    }
     this.requestInputFocus(windowId);
     this.focused.delete(windowId);
     previous?.emit('blur', windowId);
@@ -234,6 +259,9 @@ export class FocusManager {
     )
       return false;
     this.focused.set(windowId, target);
+    if (source === 'pointer') {
+      this.lastPointerFocused = target;
+    }
     this.refreshCapture();
     target.emit('focus', windowId, source);
     return this.focused.get(windowId) === target;
@@ -295,6 +323,11 @@ export class FocusManager {
 
   handlePointer(event: PointerEvent): void {
     if (event.type !== 'button' || event.state !== 'pressed' || event.button !== 'primary') return;
+    const justFocused = this.lastPointerFocused;
+    this.lastPointerFocused = undefined;
+    if (justFocused && this.focused.get(event.windowId) === justFocused) {
+      return;
+    }
     const hovered = this.interaction.hovered(event.windowId, event.pointerId);
     for (const target of this.targets)
       if (target.eligible && this.allowed(target, event.windowId) && target.acceptsPointer(hovered))

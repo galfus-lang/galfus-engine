@@ -72,6 +72,30 @@ describe('ui5 text fields', () => {
       expect(scene.input.value).toBe('office café');
       expect(scene.area.value).toContain('\n');
       expect(scene.readOnly.readOnly).toBe(true);
+      const scrollThumb = scene.area.panel.children[4];
+      expect(scrollThumb?.visible).toBe(true);
+      const beforeOffsetY = scene.area.textNode.layout.positionOffset?.[1] ?? 8;
+      const interaction = runtime.interaction as any;
+      interaction.pollNativeEvents({
+        multiversePollInteractionEvents: () =>
+          JSON.stringify([
+            {
+              interactionType: 'scroll',
+              windowId: 1,
+              pointerId: 0,
+              realmId: scene.realm.realmId,
+              modelId: scene.root.uiId,
+              elementId: scene.area.panel.id,
+              colliderId: 1,
+              localPos: [0, 0],
+              uv: [0.5, 0.5],
+              delta: [0, 0],
+              scrollDelta: [0, -1]
+            }
+          ])
+      });
+      const afterOffsetY = scene.area.textNode.layout.positionOffset?.[1] ?? 8;
+      expect(afterOffsetY).toBeLessThan(beforeOffsetY);
       scene.dispose();
     } finally {
       runtime.dispose();

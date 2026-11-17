@@ -16,7 +16,17 @@ function fail(message: string): never {
 }
 
 async function getPublishedVersions(): Promise<Set<string>> {
-  const packages = ['engine', 'transport-types'];
+  const packages = [
+    'transport-types',
+    'model-loader-types',
+    'engine',
+    'ui',
+    'transport-bun',
+    'transport-node',
+    'transport-browser',
+    'gltf-loader',
+    'demos'
+  ];
   const versions = new Set<string>();
 
   await Promise.all(

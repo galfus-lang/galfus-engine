@@ -446,6 +446,7 @@ export class MultiverseRuntime {
 
     // 5. Step animations (this also pumps animation events and triggers registered listeners)
     this.animation.step(timing.dt);
+    this.interaction.tick(timing.dt);
 
     // 6. Prepare ECS context
     const context: SystemContext = {

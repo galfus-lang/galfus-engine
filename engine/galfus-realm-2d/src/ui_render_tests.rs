@@ -146,7 +146,18 @@ fn tree_batches_preserve_sprite_order_and_rebuild_only_changed_node() {
             })
             .unwrap()
     };
+    realm
+        .uis
+        .get_mut(&10)
+        .unwrap()
+        .0
+        .damage_regions
+        .push([0.0, 0.0, 10.0, 10.0]);
     prepare(&mut realm);
+    assert!(
+        realm.uis.get(&10).unwrap().0.damage_regions.is_empty(),
+        "damage regions should be cleared on prepare"
+    );
     let geometries: Vec<_> = realm
         .batch_builder
         .ranges()

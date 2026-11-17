@@ -7,9 +7,14 @@ import {
   type UiTextGeometry
 } from '@galfus/engine';
 import type { UiPanelComponent, UiTextComponent } from '../components/component';
+import { uiWindowPointToLocal } from './coordinates';
 import type { TextEditor } from './editor';
 
 const PADDING = 8;
+const SCROLLBAR_WIDTH = 6;
+const SCROLLBAR_MARGIN = 4;
+const SCROLLBAR_RESERVE = SCROLLBAR_WIDTH + SCROLLBAR_MARGIN * 2;
+
 function mergeSelection(
   rectangles: [number, number, number, number][]
 ): [number, number, number, number][] {
@@ -35,9 +40,12 @@ export class TextFieldVisual {
   readonly text: UiTextComponent;
   private readonly selectionLayer: UiPanelComponent;
   private readonly caret: UiPanelComponent;
+  private readonly scrollTrack?: UiPanelComponent;
+  private readonly scrollThumb?: UiPanelComponent;
   private readonly rectangles: UiPanelComponent[] = [];
   private scrollX = 0;
   private scrollY = 0;
+  private followCaret = true;
   private geometry?: UiTextGeometry;
   private preferredX?: number;
   private readonly stop: (() => void)[] = [];
@@ -48,7 +56,7 @@ export class TextFieldVisual {
     width: number,
     private readonly pointer: (event: InteractiveEvent, drag: boolean) => void
   ) {
-    const innerWidth = Math.max(1, width - 2 * PADDING);
+    const innerWidth = Math.max(1, width - 2 * PADDING - (multiline ? SCROLLBAR_RESERVE : 0));
     this.selectionLayer = panel.addPanel(
       { backgroundColor: [0, 0, 0, 0] },
       {
@@ -75,6 +83,33 @@ export class TextFieldVisual {
       }
     );
     this.caret.setVisible(false);
+    if (multiline) {
+      this.scrollTrack = panel.addPanel(
+        { backgroundColor: [0.04, 0.07, 0.11, 0.85], borderRadius: [3, 3, 3, 3] },
+        {
+          width: { type: 'exact', value: SCROLLBAR_WIDTH },
+          height: { type: 'exact', value: 1 },
+          positionOffset: [
+            Math.max(PADDING, width - SCROLLBAR_WIDTH - SCROLLBAR_MARGIN),
+            SCROLLBAR_MARGIN
+          ]
+        }
+      );
+      this.scrollThumb = panel.addPanel(
+        { backgroundColor: [0.38, 0.56, 0.76, 0.9], borderRadius: [3, 3, 3, 3] },
+        {
+          width: { type: 'exact', value: SCROLLBAR_WIDTH },
+          height: { type: 'exact', value: 1 },
+          positionOffset: [
+            Math.max(PADDING, width - SCROLLBAR_WIDTH - SCROLLBAR_MARGIN),
+            SCROLLBAR_MARGIN
+          ]
+        }
+      );
+      this.scrollThumb.setVisible(false);
+      this.bindScrollbar(this.scrollTrack);
+      this.bindScrollbar(this.scrollThumb);
+    }
     this.bind(panel);
     this.bind(this.selectionLayer);
     this.bind(this.caret);
@@ -82,10 +117,28 @@ export class TextFieldVisual {
   private bind(panel: UiPanelComponent): void {
     this.stop.push(panel.on('down', (event) => this.pointer(event, false)));
     this.stop.push(panel.on('pressmove', (event) => this.pointer(event, true)));
+    this.stop.push(panel.on('scroll', (event) => this.onScroll(event)));
+  }
+  private bindScrollbar(part: UiPanelComponent): void {
+    this.stop.push(part.on('down', (event) => this.onScrollbarPointer(event)));
+    this.stop.push(part.on('pressmove', (event) => this.onScrollbarPointer(event)));
+    this.stop.push(part.on('scroll', (event) => this.onScroll(event)));
+  }
+  requestFollowCaret(): void {
+    this.followCaret = true;
+  }
+  setSize(width: number): void {
+    if (!this.multiline) return;
+    const innerWidth = Math.max(1, width - 2 * PADDING - SCROLLBAR_RESERVE);
+    this.text.setLayout({
+      ...this.text.layout,
+      width: { type: 'exact', value: innerWidth }
+    });
   }
   setText(value: string): void {
     if (this.text.text !== value) {
       this.geometry = undefined;
+      this.followCaret = true;
       this.text.setText(value);
     }
   }
@@ -142,13 +195,16 @@ export class TextFieldVisual {
     const caret = this.findCaret(geometry, offset);
     const root = this.panel.componentRoot;
     const bounds = root.realm.getUiLayout(root.handle, this.panel.id).absoluteRect;
+    const contentHeight = this.computeContentHeight(geometry);
+    const viewportHeight = Math.max(1, bounds[3] - 2 * PADDING);
+    const maxScrollY = Math.max(0, contentHeight - viewportHeight);
     const left = bounds[0] + PADDING,
-      right = bounds[0] + bounds[2] - PADDING;
+      right = bounds[0] + bounds[2] - PADDING - (this.multiline ? SCROLLBAR_RESERVE : 0);
     const top = bounds[1] + PADDING,
       bottom = bounds[1] + bounds[3] - PADDING;
     let dx = 0,
       dy = 0;
-    if (focused) {
+    if (focused && this.followCaret) {
       dx =
         caret.rect[0] > right
           ? caret.rect[0] - right
@@ -162,6 +218,8 @@ export class TextFieldVisual {
             : caret.rect[1] < top
               ? caret.rect[1] - top
               : 0;
+    } else if (this.multiline && this.scrollY > maxScrollY + 0.01) {
+      dy = maxScrollY - this.scrollY;
     }
     // Core layout is represented as f32; ignore subpixel rounding noise so
     // cursor correction converges and selection decorations can be updated.
@@ -169,13 +227,16 @@ export class TextFieldVisual {
     if (Math.abs(dy) < 0.01) dy = 0;
     if (dx || dy) {
       this.scrollX = Math.max(0, this.scrollX + dx);
-      this.scrollY = Math.max(0, this.scrollY + dy);
+      this.scrollY = Math.max(0, Math.min(maxScrollY, this.scrollY + dy));
       this.text.setLayout({
         ...this.text.layout,
         positionOffset: [PADDING - this.scrollX, PADDING - this.scrollY]
       });
+      this.updateScrollbar(bounds, contentHeight, viewportHeight, maxScrollY);
       return undefined;
     }
+    if (focused) this.followCaret = false;
+    this.updateScrollbar(bounds, contentHeight, viewportHeight, maxScrollY);
     const caretLayout = {
       width: { type: 'exact' as const, value: 1 },
       height: { type: 'exact' as const, value: Math.max(1, caret.rect[3]) },
@@ -210,6 +271,116 @@ export class TextFieldVisual {
       if (!panel.visible) panel.setVisible(true);
     });
     return caret;
+  }
+  private computeContentHeight(geometry: UiTextGeometry): number {
+    if (!geometry.lines.length) return 0;
+    const first = geometry.lines[0]!;
+    const last = geometry.lines.at(-1)!;
+    return Math.max(0, last.rect[1] + last.rect[3] - first.rect[1]);
+  }
+  private updateScrollbar(
+    bounds: readonly [number, number, number, number],
+    contentHeight: number,
+    viewportHeight: number,
+    maxScrollY: number
+  ): void {
+    if (!this.multiline || !this.scrollTrack || !this.scrollThumb) return;
+    const trackX = Math.max(PADDING, bounds[2] - SCROLLBAR_WIDTH - SCROLLBAR_MARGIN);
+    const trackY = SCROLLBAR_MARGIN;
+    const trackH = Math.max(8, bounds[3] - SCROLLBAR_MARGIN * 2);
+    const trackLayout = {
+      width: { type: 'exact' as const, value: SCROLLBAR_WIDTH },
+      height: { type: 'exact' as const, value: trackH },
+      positionOffset: [trackX, trackY] as [number, number]
+    };
+    if (JSON.stringify(this.scrollTrack.layout) !== JSON.stringify(trackLayout))
+      this.scrollTrack.setLayout(trackLayout);
+    if (!this.scrollTrack.visible) this.scrollTrack.setVisible(true);
+    if (maxScrollY <= 0.5) {
+      if (this.scrollThumb.visible) this.scrollThumb.setVisible(false);
+      return;
+    }
+    const ratio = Math.min(1, viewportHeight / Math.max(1, contentHeight));
+    const thumbH = Math.max(Math.min(18, trackH), Math.round(trackH * ratio));
+    const progress = Math.max(0, Math.min(1, this.scrollY / maxScrollY));
+    const thumbY = trackY + (trackH - thumbH) * progress;
+    const thumbLayout = {
+      width: { type: 'exact' as const, value: SCROLLBAR_WIDTH },
+      height: { type: 'exact' as const, value: thumbH },
+      positionOffset: [trackX, thumbY] as [number, number]
+    };
+    if (JSON.stringify(this.scrollThumb.layout) !== JSON.stringify(thumbLayout))
+      this.scrollThumb.setLayout(thumbLayout);
+    if (!this.scrollThumb.visible) this.scrollThumb.setVisible(true);
+  }
+  private applyScrollY(nextY: number): void {
+    const root = this.panel.componentRoot;
+    if (root.syncState === 'disposed' || !this.panel.isAttached) return;
+    const geometry = this.geometry ?? this.readGeometry();
+    this.geometry = geometry;
+    const bounds = root.realm.getUiLayout(root.handle, this.panel.id).absoluteRect;
+    const contentHeight = this.computeContentHeight(geometry);
+    const viewportHeight = Math.max(1, bounds[3] - 2 * PADDING);
+    const maxScrollY = Math.max(0, contentHeight - viewportHeight);
+    const clampedY = Math.max(0, Math.min(maxScrollY, nextY));
+    const dy = clampedY - this.scrollY;
+    this.followCaret = false;
+    if (Math.abs(dy) < 0.01) return;
+    this.scrollY = clampedY;
+    this.text.setLayout({
+      ...this.text.layout,
+      positionOffset: [PADDING - this.scrollX, PADDING - this.scrollY]
+    });
+    const caretOffset = this.caret.layout.positionOffset;
+    if (caretOffset) {
+      this.caret.setLayout({
+        ...this.caret.layout,
+        positionOffset: [caretOffset[0], caretOffset[1] - dy]
+      });
+    }
+    for (const rectPanel of this.rectangles) {
+      const off = rectPanel.layout.positionOffset;
+      if (rectPanel.visible && off) {
+        rectPanel.setLayout({
+          ...rectPanel.layout,
+          positionOffset: [off[0], off[1] - dy]
+        });
+      }
+    }
+    this.updateScrollbar(bounds, contentHeight, viewportHeight, maxScrollY);
+    if ((root.syncState as string) === 'pending') root.flush();
+  }
+  private onScroll(event: InteractiveEvent): void {
+    if (!this.multiline || !this.panel.isAttached) return;
+    const delta =
+      event.scrollDelta ?? (event.pointer.type === 'scroll' ? event.pointer.delta : undefined);
+    if (!delta) return;
+    const [dx, dy] = 'pixels' in delta ? delta.pixels : [delta.lines[0] * 28, delta.lines[1] * 28];
+    const amount = dy || dx;
+    if (!Number.isFinite(amount) || amount === 0) return;
+    this.applyScrollY(this.scrollY - amount);
+  }
+  private onScrollbarPointer(event: InteractiveEvent): void {
+    if (!this.multiline || !this.panel.isAttached) return;
+    const root = this.panel.componentRoot;
+    const bounds = root.realm.getUiLayout(root.handle, this.panel.id).absoluteRect;
+    const viewport = root.realm.getUiLayout(root.handle, root.root.id).absoluteRect;
+    const point =
+      event.windowPosition &&
+      uiWindowPointToLocal(root.getRuntime(), root, event.pointer.windowId, event.windowPosition);
+    const local =
+      point ??
+      (event.uv ? [event.uv[0] * viewport[2], (1 - event.uv[1]) * viewport[3]] : undefined);
+    if (!local) return;
+    const geometry = this.geometry ?? this.readGeometry();
+    const contentHeight = this.computeContentHeight(geometry);
+    const viewportHeight = Math.max(1, bounds[3] - 2 * PADDING);
+    const maxScrollY = Math.max(0, contentHeight - viewportHeight);
+    if (maxScrollY <= 0) return;
+    const trackY = bounds[1] + SCROLLBAR_MARGIN;
+    const trackH = Math.max(8, bounds[3] - SCROLLBAR_MARGIN * 2);
+    const ratio = Math.max(0, Math.min(1, (local[1]! - trackY) / trackH));
+    this.applyScrollY(ratio * maxScrollY);
   }
   private findCaret(geometry: UiTextGeometry, offset: number): UiTextCaret {
     let positions: UiTextCaret[];

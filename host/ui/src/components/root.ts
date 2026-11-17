@@ -1,47 +1,44 @@
 import type {
-  Collider2DComponent,
   InteractiveCallback,
   InteractiveEventType,
   InteractiveListener,
+  Model2DUIComponent,
   MultiverseRuntime,
-  Realm2D,
-  Transform2DProps,
-  WindowId
+  Realm2D
 } from '@galfus/engine';
-import { assertValidLogicalId } from '@galfus/transport-types';
-import type { UiCommandDesc, UiLayoutStyleDesc, UiNodeKindDesc } from '@galfus/transport-types';
-import { createUiTheme, mergeUiTheme, UI_STYLE_STATE_ORDER } from '../style/theme';
-import type {
-  UiStyle,
-  UiStyleConfig,
-  UiStyleState,
-  UiTheme,
-  UiThemeOverrides
+import {
+  assertValidLogicalId,
+  type KeyboardEvent,
+  type UiCommandDesc,
+  type UiLayoutStyleDesc,
+  type UiNodeKindDesc
+} from '@galfus/transport-types';
+import {
+  createUiTheme,
+  mergeUiTheme,
+  UI_STYLE_STATE_ORDER,
+  type UiStyle,
+  type UiStyleConfig,
+  type UiStyleState,
+  type UiTheme,
+  type UiThemeOverrides
 } from '../style/theme';
 import { reconcileStyles } from '../style/reconcile';
-import type { StyledNode } from '../style/reconcile';
-import type { KeyboardEvent } from '@galfus/transport-types';
 import { sameUiValue } from '../style/resolve';
 import type { FocusManager } from '../focus';
 import { ComponentInteractions, type PanelInteraction } from './interaction';
 import type { UiIconAtlas } from '../icons/atlas';
 import { stageSpriteUv } from './sprite-uv';
 
-export type ComponentSyncState = 'pending' | 'synced' | 'failed' | 'disposed';
-export interface ComponentRootOptions {
-  readonly width: number;
-  readonly height: number;
-  /** Closing this window disposes the root. Omit for a realm shared by multiple targets. */
-  readonly windowId?: number;
-  readonly transform?: Transform2DProps;
-  readonly panel?: Omit<UiNodeKindDesc, 'type'>;
-  readonly layout?: Omit<UiLayoutStyleDesc, 'width' | 'height'>;
-  readonly theme?: UiThemeOverrides;
-}
-
-type NodeRecord = StyledNode;
-
+export * from './types';
 export * from './component';
+import {
+  type ComponentRootOptions,
+  type ComponentSyncState,
+  type NodeRecord,
+  syncRootCollider,
+  validateComponentRootOptions
+} from './types';
 import {
   UiComponent,
   UiPanelComponent,
@@ -67,6 +64,7 @@ export class ComponentRoot {
   private readonly stateListeners = new Set<(state: ComponentSyncState, error?: unknown) => void>();
   private readonly stopObserving: () => void;
   private readonly stopRealmObserver: () => void;
+  private readonly stopEntityObserver: () => void;
   private readonly windowId: number | undefined;
   private readonly colliderId: number;
   private colliderSize: [number, number];
@@ -76,6 +74,14 @@ export class ComponentRoot {
 
   attachIcons(provider: (name: string) => UiIconAtlas): void {
     this.iconsProvider = provider;
+  }
+  private tickProvider?: (cb: (dt: number) => void) => () => void;
+  attachTick(provider: (cb: (dt: number) => void) => () => void): void {
+    this.tickProvider = provider;
+  }
+  onTick(callback: (dt: number) => void): () => void {
+    if (this.tickProvider) return this.tickProvider(callback);
+    return this.runtime.on('tick', ({ dt }) => callback(dt));
   }
   getIcons(name: string): UiIconAtlas {
     if (!this.iconsProvider) throw new Error('Icons require a root created by UiSystem.');
@@ -92,74 +98,64 @@ export class ComponentRoot {
     readonly realm: Realm2D,
     options: ComponentRootOptions
   ) {
-    if (realm.isDisposed) throw new Error('Cannot create UI in a disposed realm.');
-    if (runtime.multiverse.getRealm(realm.realmId) !== realm)
-      throw new Error('UI root requires a realm registered with this runtime.');
-    if (
-      !Number.isFinite(options.width) ||
-      options.width <= 0 ||
-      !Number.isFinite(options.height) ||
-      options.height <= 0
-    )
-      throw new RangeError('UI dimensions must be positive and finite.');
-    if (
-      options.windowId !== undefined &&
-      (!Number.isSafeInteger(options.windowId) || options.windowId < 0)
-    )
-      throw new RangeError('Invalid window ID.');
-    if (
-      options.windowId !== undefined &&
-      !runtime.platform.window.isOpen(options.windowId as WindowId)
-    )
-      throw new Error('UI root requires an open window in this runtime.');
+    validateComponentRootOptions(runtime, realm, options);
     this.windowId = options.windowId;
     this.theme = createUiTheme(options.theme);
-    const kind: UiNodeKindDesc = { ...options.panel, type: 'panel' };
-    const layout: UiLayoutStyleDesc = {
-      ...options.layout,
-      width: { type: 'exact', value: options.width },
-      height: { type: 'exact', value: options.height }
-    };
     this.nodes.set(1, {
       id: 1,
       type: 'panel',
       parent: null,
       children: [],
-      kind: structuredClone(kind),
-      layout: structuredClone(layout),
+      kind: structuredClone({ ...options.panel, type: 'panel' }),
+      layout: structuredClone({
+        ...options.layout,
+        width: { type: 'exact', value: options.width },
+        height: { type: 'exact', value: options.height }
+      }),
       visible: true,
       style: {}
     });
     reconcileStyles(this.nodes, 1, this.theme);
     const resolved = this.nodes.get(1)!.resolved!;
     this.handle = realm.createUi({}, options.transform);
-    this.colliderId = realm.addCollider(this.handle.entityId, {
-      type: 'rectangle',
-      halfExtents: [options.width / 2, options.height / 2]
-    });
-    this.colliderSize = [options.width, options.height];
-    this.root = new UiPanelComponent(this, 1);
-    this.components.set(1, this.root);
-    this.commands.push({
-      type: 'create',
-      id: 1,
-      kind: structuredClone(resolved.kind),
-      layout: structuredClone(resolved.layout)
-    });
-    this.stopRealmObserver = realm.onDispose(() => this.dispose());
-    this.stopObserving = runtime.interaction.observe({
-      onWindowClosed: (id) => {
-        if (id === options.windowId) this.dispose();
-      },
-      onAfterDispatch: () => {
-        if (!realm.world.isAlive(this.handle.entityId)) this.dispose();
-        else {
-          this.presented = this.committed;
-          this.interactions?.afterDispatch();
-        }
-      },
-      onDispose: () => this.dispose()
-    });
+    try {
+      this.colliderId = realm.addCollider(this.handle.entityId, {
+        type: 'rectangle',
+        halfExtents: [options.width / 2, options.height / 2]
+      });
+      this.colliderSize = [options.width, options.height];
+      this.root = new UiPanelComponent(this, 1);
+      this.components.set(1, this.root);
+      this.commands.push({
+        type: 'create',
+        id: 1,
+        kind: structuredClone(resolved.kind),
+        layout: structuredClone(resolved.layout)
+      });
+      this.stopRealmObserver = realm.onDispose(() => this.dispose());
+      this.stopEntityObserver = realm.world.onDestroyEntity((id) => {
+        if (id === this.handle.entityId) this.dispose();
+      });
+      this.stopObserving = runtime.interaction.observe({
+        onWindowClosed: (id) => {
+          if (id === options.windowId) this.dispose();
+        },
+        onAfterDispatch: () => this.syncPresented(),
+        onDispose: () => this.dispose()
+      });
+    } catch (err) {
+      realm.destroyUi(this.handle);
+      throw err;
+    }
+  }
+
+  /** @internal */
+  syncPresented(): void {
+    if (!this._isLiveUi()) this.dispose();
+    else {
+      this.presented = this.committed;
+      this.interactions?.afterDispatch();
+    }
   }
 
   get syncState(): ComponentSyncState {
@@ -281,39 +277,18 @@ export class ComponentRoot {
       throw error;
     }
     this.commands = [];
-    this.committed = structuredClone(this.nodes);
+    this.committed = new Map(this.nodes);
     this.committedTheme = structuredClone(this.theme);
-    const rootNode = this.nodes.get(1)!;
-    const layout = rootNode.resolved?.layout;
-    if (layout?.width?.type === 'exact' && layout.height?.type === 'exact') {
-      const collider = this.realm.world.getComponent<Collider2DComponent>(
-        this.entityId,
-        'Collider2D'
-      );
-      const validSize = layout.width.value > 0 && layout.height.value > 0;
-      const active = rootNode.visible && validSize;
-      if (
-        collider &&
-        (active !== this.colliderActive ||
-          (validSize &&
-            (layout.width.value !== this.colliderSize[0] ||
-              layout.height.value !== this.colliderSize[1])))
-      ) {
-        const size: [number, number] = validSize
-          ? [layout.width.value, layout.height.value]
-          : this.colliderSize;
-        collider.set(
-          this.colliderId,
-          {
-            type: 'rectangle',
-            halfExtents: [size[0] / 2, size[1] / 2]
-          },
-          { active }
-        );
-        this.colliderSize = size;
-        this.colliderActive = active;
-      }
-    }
+    const syncedCollider = syncRootCollider(
+      this.realm,
+      this.entityId,
+      this.colliderId,
+      this.nodes.get(1)!,
+      this.colliderSize,
+      this.colliderActive
+    );
+    this.colliderSize = syncedCollider.size;
+    this.colliderActive = syncedCollider.active;
     this.error = undefined;
     this.releaseRemovedListeners();
     this.changeState('synced');
@@ -325,7 +300,7 @@ export class ComponentRoot {
     this.assertLive();
     if (!this.committed)
       throw new Error('The root must be synchronized before changes can be discarded.');
-    this.nodes = structuredClone(this.committed);
+    this.nodes = new Map(this.committed);
     this.theme = structuredClone(this.committedTheme!);
     this.commands = [];
     this.error = undefined;
@@ -335,12 +310,7 @@ export class ComponentRoot {
   }
 
   hasNode(id: number): boolean {
-    return (
-      this.state !== 'disposed' &&
-      !this.realm.isDisposed &&
-      this.realm.world.isAlive(this.handle.entityId) &&
-      this.nodes.has(id)
-    );
+    return this.state !== 'disposed' && this._isLiveUi() && this.nodes.has(id);
   }
 
   /** @internal */
@@ -368,8 +338,10 @@ export class ComponentRoot {
     const safeKind = structuredClone(kind),
       safeLayout = structuredClone(layout);
     const type = kind.type === 'text' ? 'text' : 'panel';
-    const draft = structuredClone(this.nodes);
-    const parentNode = draft.get(parent)!;
+    const draft = new Map(this.nodes);
+    const parentOriginal = draft.get(parent)!;
+    const parentNode = { ...parentOriginal, children: [...parentOriginal.children, id] };
+    draft.set(parent, parentNode);
     draft.set(id, {
       id,
       type,
@@ -380,7 +352,6 @@ export class ComponentRoot {
       visible: true,
       style: {}
     });
-    parentNode.children.push(id);
     reconcileStyles(draft, id, this.theme);
     const resolved = draft.get(id)!.resolved!;
     this.nodes = draft;
@@ -407,7 +378,7 @@ export class ComponentRoot {
   /** @internal */
   setVisible(id: number, visible: boolean): void {
     const node = this.requireNode(id);
-    node.visible = visible;
+    this.nodes.set(id, { ...node, visible });
     this.commands.push({ type: 'setVisible', id, visible });
     this.changeState('pending');
     this.interactions?.reconcile();
@@ -434,7 +405,7 @@ export class ComponentRoot {
   }
 
   setSpriteUvRect(id: number, uvRect: [number, number, number, number]): void {
-    if (stageSpriteUv(this.requireNode(id, 'panel'), uvRect, this.commands))
+    if (stageSpriteUv(this.nodes, this.requireNode(id, 'panel'), uvRect, this.commands))
       this.changeState('pending');
   }
 
@@ -466,10 +437,18 @@ export class ComponentRoot {
 
   private updateNode(id: number, update: (node: NodeRecord) => void): void {
     this.requireNode(id);
-    const draft = structuredClone(this.nodes);
-    const node = draft.get(id)!;
+    const draft = new Map(this.nodes);
+    const original = draft.get(id)!;
+    const node: NodeRecord = {
+      ...original,
+      kind: structuredClone(original.kind),
+      layout: structuredClone(original.layout),
+      style: structuredClone(original.style),
+      children: [...original.children]
+    };
+    draft.set(id, node);
     update(node);
-    if (sameUiValue(node, this.nodes.get(id))) return;
+    if (sameUiValue(node, original)) return;
     const updates = reconcileStyles(draft, id, this.theme);
     this.nodes = draft;
     this.commands.push(...updates);
@@ -479,7 +458,7 @@ export class ComponentRoot {
   private updateTheme(theme: UiTheme): void {
     this.assertLive();
     if (sameUiValue(theme, this.theme)) return;
-    const draft = structuredClone(this.nodes);
+    const draft = new Map(this.nodes);
     const updates = reconcileStyles(draft, 1, theme, true);
     this.nodes = draft;
     this.theme = theme;
@@ -488,18 +467,22 @@ export class ComponentRoot {
   }
   /** @internal */
   moveChild(parent: number, child: UiComponent, index: number): void {
-    const node = this.requireNode(parent, 'panel');
+    const original = this.requireNode(parent, 'panel');
     if (
       !Number.isSafeInteger(index) ||
       index < 0 ||
-      index >= node.children.length ||
-      !node.children.includes(child.id) ||
+      index >= original.children.length ||
+      !original.children.includes(child.id) ||
       !child.isAttached ||
       !child.belongsTo(this)
     )
       throw new Error('Child or index is invalid.');
+    const draft = new Map(this.nodes);
+    const node = { ...original, children: [...original.children] };
+    draft.set(parent, node);
     node.children.splice(node.children.indexOf(child.id), 1);
     node.children.splice(index, 0, child.id);
+    this.nodes = draft;
     this.commands.push({ type: 'reorder', parentId: parent, childId: child.id, index });
     this.changeState('pending');
   }
@@ -508,15 +491,22 @@ export class ComponentRoot {
     const node = this.requireNode(id);
     if (node.parent === null)
       throw new Error('The root panel cannot be removed; dispose the root instead.');
-    const siblings = this.requireNode(node.parent, 'panel').children;
-    siblings.splice(siblings.indexOf(id), 1);
+    const draft = new Map(this.nodes);
+    const parentOriginal = this.requireNode(node.parent, 'panel');
+    draft.set(node.parent, {
+      ...parentOriginal,
+      children: parentOriginal.children.filter((childId) => childId !== id)
+    });
     const todo = [id];
     while (todo.length) {
       const current = todo.pop()!;
-      const entry = this.nodes.get(current)!;
-      todo.push(...entry.children);
-      this.nodes.delete(current);
+      const entry = draft.get(current);
+      if (entry) {
+        todo.push(...entry.children);
+        draft.delete(current);
+      }
     }
+    this.nodes = draft;
     this.commands.push({ type: 'remove', id });
     this.changeState('pending');
     this.interactions?.reconcile();
@@ -526,8 +516,9 @@ export class ComponentRoot {
     this.requireNode(id, 'panel');
     const listener = this.panelListener(id);
     return listener.on(type, (event) => {
+      const isTerminal = type === 'leave' || type === 'cancel' || type === 'pressup';
       if (
-        this.interactionEligible(id) &&
+        (isTerminal || this.interactionEligible(id)) &&
         (this.windowId === undefined || event.pointer.windowId === this.windowId)
       )
         callback(event);
@@ -553,26 +544,30 @@ export class ComponentRoot {
     this.state = 'disposed';
     this.stopObserving();
     this.stopRealmObserver();
+    this.stopEntityObserver();
     this.interactions?.dispose();
     for (const listener of this.listeners.values()) listener.dispose();
     this.listeners.clear();
     this.components.clear();
     this.nodes.clear();
     this.commands = [];
-    if (!this.realm.isDisposed && this.realm.world.isAlive(this.handle.entityId))
-      this.realm.destroyUi(this.handle);
+    if (this._isLiveUi()) this.realm.destroyUi(this.handle);
     try {
       for (const callback of [...this.stateListeners]) callback('disposed');
     } finally {
       this.stateListeners.clear();
     }
   }
+  private _isLiveUi(): boolean {
+    return (
+      !this.realm.isDisposed &&
+      this.realm.world.isAlive(this.handle.entityId) &&
+      this.realm.world.getComponent<Model2DUIComponent>(this.handle.entityId, 'Model2DUI')?.uiId ===
+        this.handle.uiId
+    );
+  }
   private assertLive(): void {
-    if (
-      this.state === 'disposed' ||
-      this.realm.isDisposed ||
-      !this.realm.world.isAlive(this.handle.entityId)
-    )
+    if (this.state === 'disposed' || !this._isLiveUi())
       throw new Error('UI component root is disposed.');
   }
   private requireNode(id: number, type?: NodeRecord['type']): NodeRecord {

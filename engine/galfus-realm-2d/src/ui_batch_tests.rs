@@ -210,3 +210,122 @@ fn test_ui_text_run_vertex_bounds() {
         "Text height should be roughly font_size (20), but got: {height}"
     );
 }
+
+#[test]
+fn test_ui_textured_materials_eviction_and_view_change() {
+    let instance = wgpu::Instance::default();
+    let Ok(adapter) = pollster::block_on(instance.request_adapter(&Default::default())) else {
+        return;
+    };
+    let Ok((device, queue)) = pollster::block_on(adapter.request_device(&Default::default()))
+    else {
+        return;
+    };
+    let fonts = crate::ui_fonts::UiFontLibrary::empty();
+    let mut manager = UiManager2D::new();
+    let mut mat_bgs = HashMap::new();
+
+    let dummy_texture1 = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("dummy1"),
+        size: wgpu::Extent3d {
+            width: 16,
+            height: 16,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let dummy_view1 = dummy_texture1.create_view(&Default::default());
+
+    let dummy_texture2 = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("dummy2"),
+        size: wgpu::Extent3d {
+            width: 32,
+            height: 32,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let dummy_view2 = dummy_texture2.create_view(&Default::default());
+
+    let samplers = galfus_gpu_manager::StandardSamplers::new(&device);
+    let pipeline_mgr = crate::pipeline::PipelineManager2D::new(&device);
+
+    let mut ui = Model2DUI::new();
+    ui.quads.push(galfus_realm_2d_resources::ui::UiQuad2D {
+        rect: [0.0, 0.0, 100.0, 100.0],
+        z_layer: 0.0,
+        border_radius: [0.0; 4],
+        border_width: [0.0; 4],
+        background_color: [1.0; 4],
+        border_color: [0.0; 4],
+        texture_id: Some(42),
+        uv_rect: [0.0, 0.0, 1.0, 1.0],
+        sampler_index: 0,
+        tint_color: [1.0; 4],
+        clip_rect: None,
+    });
+
+    let mut uis = HashMap::new();
+    uis.insert(10, (ui, Transform2D::default()));
+
+    let mut current_view = &dummy_view1;
+    manager.sync_gpu(
+        &device,
+        &queue,
+        &pipeline_mgr.material_bind_group_layout,
+        &samplers,
+        &dummy_view1,
+        &dummy_view1,
+        &dummy_view1,
+        &|id| (id == 42).then_some(current_view),
+        &uis,
+        &mut mat_bgs,
+        &fonts,
+    );
+    assert_eq!(manager.textured_material_count(), 1);
+    assert_eq!(mat_bgs.len(), 1);
+
+    current_view = &dummy_view2;
+    manager.sync_gpu(
+        &device,
+        &queue,
+        &pipeline_mgr.material_bind_group_layout,
+        &samplers,
+        &dummy_view1,
+        &dummy_view1,
+        &dummy_view1,
+        &|id| (id == 42).then_some(current_view),
+        &uis,
+        &mut mat_bgs,
+        &fonts,
+    );
+    assert_eq!(manager.textured_material_count(), 1);
+    assert_eq!(mat_bgs.len(), 1);
+
+    uis.get_mut(&10).unwrap().0.quads.clear();
+    manager.sync_gpu(
+        &device,
+        &queue,
+        &pipeline_mgr.material_bind_group_layout,
+        &samplers,
+        &dummy_view1,
+        &dummy_view1,
+        &dummy_view1,
+        &|id| (id == 42).then_some(current_view),
+        &uis,
+        &mut mat_bgs,
+        &fonts,
+    );
+    assert_eq!(manager.textured_material_count(), 0);
+    assert_eq!(mat_bgs.len(), 0);
+}

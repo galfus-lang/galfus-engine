@@ -41,6 +41,7 @@ function snap(value: number, min: number, max: number, step: number): number {
 /** Finite, stepped numeric control. Pointer drag commits each distinct stepped value. */
 export class UiSlider extends UiValueControl<number> {
   readonly track: UiPanelComponent;
+  readonly fill: UiPanelComponent;
   readonly thumb: UiPanelComponent;
   private min_: number;
   private max_: number;
@@ -76,15 +77,21 @@ export class UiSlider extends UiValueControl<number> {
     this.width_ = width;
     this.height_ = height;
     this.track = panel.addPanel({
-      backgroundColor: [0.25, 0.34, 0.43, 1],
+      backgroundColor: [0.2, 0.28, 0.38, 1],
+      borderRadius: [3, 3, 3, 3]
+    });
+    this.fill = panel.addPanel({
+      backgroundColor: [0.22, 0.58, 0.98, 1],
       borderRadius: [3, 3, 3, 3]
     });
     this.thumb = panel.addPanel({
-      backgroundColor: [0.55, 0.82, 1, 1],
+      backgroundColor: [0.96, 0.98, 1, 1],
+      borderColor: [0.22, 0.58, 0.98, 1],
+      borderWidth: [2, 2, 2, 2],
       borderRadius: [6, 6, 6, 6]
     });
     panel.setFocusable(options.tabIndex);
-    for (const part of [panel, this.track, this.thumb]) {
+    for (const part of [panel, this.track, this.fill, this.thumb]) {
       part.on('down', (event) => this.pointer(event, 'down'));
       part.on('pressmove', (event) => this.pointer(event, 'move'));
       part.on('pressup', (event) => this.pointer(event, 'end'));
@@ -178,8 +185,16 @@ export class UiSlider extends UiValueControl<number> {
     const horizontal = this.orientation_ === 'horizontal',
       ratio = (this.value_ - this.min_) / (this.max_ - this.min_);
     const track = horizontal
-      ? { x: 8, y: this.height_ / 2 - 2, w: this.width_ - 16, h: 4 }
-      : { x: this.width_ / 2 - 2, y: 8, w: 4, h: this.height_ - 16 };
+      ? { x: 8, y: this.height_ / 2 - 3, w: this.width_ - 16, h: 6 }
+      : { x: this.width_ / 2 - 3, y: 8, w: 6, h: this.height_ - 16 };
+    const fill = horizontal
+      ? { x: 8, y: this.height_ / 2 - 3, w: Math.max(0, ratio * (this.width_ - 16)), h: 6 }
+      : {
+          x: this.width_ / 2 - 3,
+          y: 8 + (1 - ratio) * (this.height_ - 16),
+          w: 6,
+          h: Math.max(0, ratio * (this.height_ - 16))
+        };
     const thumb = horizontal
       ? { x: 2 + ratio * (this.width_ - 16), y: this.height_ / 2 - 6 }
       : { x: this.width_ / 2 - 6, y: 2 + (1 - ratio) * (this.height_ - 16) };
@@ -189,8 +204,11 @@ export class UiSlider extends UiValueControl<number> {
       positionOffset: [x, y] as [number, number]
     });
     const a = layout(track.x, track.y, track.w, track.h),
+      f = layout(fill.x, fill.y, fill.w, fill.h),
       b = layout(thumb.x, thumb.y, 12, 12);
     if (JSON.stringify(this.track.layout) !== JSON.stringify(a)) this.track.setLayout(a);
+    if (JSON.stringify(this.fill.layout) !== JSON.stringify(f)) this.fill.setLayout(f);
+    if (this.fill.visible !== ratio > 0) this.fill.setVisible(ratio > 0);
     if (JSON.stringify(this.thumb.layout) !== JSON.stringify(b)) this.thumb.setLayout(b);
   }
   private scroll(event: InteractiveEvent): void {

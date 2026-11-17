@@ -1,3 +1,4 @@
+import type { TransitionId } from '@galfus/engine';
 import { makePanel, UiControl, type UiControlOptions } from '../components/controls';
 import type { UiPanelComponent } from '../components/component';
 import type { UiSystem } from '../system';
@@ -25,12 +26,14 @@ function normalize(value: number | null, min: number, max: number): number | nul
 /** Non-interactive determined or animated indeterminate progress indicator. */
 export class UiProgressBar extends UiControl {
   readonly fill: UiPanelComponent;
+  private readonly ui: UiSystem;
   private min_: number;
   private max_: number;
   private value_: number | null;
   private width_: number;
   private height_: number;
   private phase = 0;
+  private transitionId?: TransitionId;
   private readonly callbacks = new Set<(value: number | null) => void>();
   private readonly stopTick: () => void;
   constructor(ui: UiSystem, parent: UiPanelComponent, options: UiProgressOptions = {}) {
@@ -51,40 +54,47 @@ export class UiProgressBar extends UiControl {
       isStack: true
     });
     super(panel);
-    panel.setProperties({ clip: true });
-    this.min_ = min;
-    this.max_ = max;
-    this.value_ = value;
-    this.width_ = width;
-    this.height_ = height;
-    this.fill = panel.addPanel({ clip: true });
-    this.fill.setComponentStyle('progressFill');
-    if (options.fillStyle) this.fill.setStyle(options.fillStyle);
-    if (options.onChange) this.callbacks.add(options.onChange);
-    this.updateVisual();
-    this.stopTick = ui.getRuntime().on('tick', ({ dt }) => {
-      if (
-        this.value_ !== null ||
-        !this.isAttached ||
-        this.panel.componentRoot.syncState !== 'synced'
-      )
-        return;
-      this.phase = (this.phase + Math.max(0, dt) * 0.65) % 1.3;
+    this.ui = ui;
+    try {
+      panel.setProperties({ clip: true });
+      this.min_ = min;
+      this.max_ = max;
+      this.value_ = value;
+      this.width_ = width;
+      this.height_ = height;
+      this.fill = panel.addPanel({ clip: true });
+      this.fill.setComponentStyle('progressFill');
+      if (options.fillStyle) this.fill.setStyle(options.fillStyle);
+      if (options.onChange) this.callbacks.add(options.onChange);
       this.updateVisual();
-      if ((this.panel.componentRoot.syncState as string) === 'pending')
-        this.panel.componentRoot.flush();
-    });
-    const root = panel.componentRoot;
-    const stop = root.onSyncState((state) => {
-      if (state === 'disposed' || (state === 'synced' && !this.isAttached)) {
-        this.stopTick();
-        this.callbacks.clear();
-        stop();
-      } else if (state === 'synced' && this.isAttached) {
+      this.stopTick = ui.onTick((dt) => {
+        if (
+          this.value_ !== null ||
+          !this.isAttached ||
+          this.panel.componentRoot.syncState !== 'synced'
+        )
+          return;
+        this.phase = (this.phase + Math.max(0, dt) * 0.65) % 1.3;
         this.updateVisual();
-        if ((root.syncState as string) === 'pending') root.flush();
-      }
-    });
+        if ((this.panel.componentRoot.syncState as string) === 'pending')
+          this.panel.componentRoot.flush();
+      });
+      const root = panel.componentRoot;
+      const stop = root.onSyncState((state) => {
+        if (state === 'disposed' || (state === 'synced' && !this.isAttached)) {
+          this.clearTransition();
+          this.stopTick();
+          this.callbacks.clear();
+          stop();
+        } else if (state === 'synced' && this.isAttached) {
+          this.updateVisual();
+          if ((root.syncState as string) === 'pending') root.flush();
+        }
+      });
+    } catch (err) {
+      panel.remove();
+      throw err;
+    }
   }
   get value(): number | null {
     return this.value_;
@@ -106,9 +116,15 @@ export class UiProgressBar extends UiControl {
     if (!this.isAttached) throw new Error('Progress indicator is not attached.');
     const next = normalize(value, this.min_, this.max_);
     if (next === this.value_) return this;
+    const prev = this.value_;
     const root = this.panel.componentRoot,
       synced = root.syncState === 'synced';
     this.value_ = next;
+    if (next === null) {
+      this.clearTransition();
+    } else if (prev !== null && root.wasPresented(this.fill.id)) {
+      this.animateFillWidth(prev, next);
+    }
     this.updateVisual();
     if (synced && (root.syncState as string) === 'pending') root.flush();
     if (emit) for (const callback of [...this.callbacks]) callback(next);
@@ -140,6 +156,45 @@ export class UiProgressBar extends UiControl {
     this.updateVisual();
     return this;
   }
+  private clearTransition(): void {
+    if (this.transitionId === undefined) return;
+    try {
+      this.ui.getRuntime().animation.destroyTransition(this.transitionId);
+    } catch {
+      // Ignore if runtime animation was already reset/disposed
+    }
+    this.transitionId = undefined;
+  }
+  private animateFillWidth(prev: number, next: number): void {
+    const root = this.panel.componentRoot;
+    const innerWidth = Math.max(0, this.width_ - 4);
+    const fillHeight = Math.max(0, this.height_ - 4);
+    const prevRatio = (prev - this.min_) / (this.max_ - this.min_);
+    const nextRatio = (next - this.min_) / (this.max_ - this.min_);
+    let fromWidth = innerWidth * prevRatio;
+    try {
+      const presentedW = root.realm.getUiLayout(root.handle, this.fill.id).absoluteRect[2];
+      if (Number.isFinite(presentedW) && presentedW >= 0) fromWidth = presentedW;
+    } catch {
+      // Fallback to computed prevWidth
+    }
+    const toWidth = innerWidth * nextRatio;
+    const config = { duration: 0.22, easing: 'easeOutCubic' as const };
+    const anim = this.ui.getRuntime().animation;
+    if (this.transitionId === undefined) {
+      this.transitionId = anim.createTransition(
+        { type: 'vec2', value: [fromWidth, fillHeight] },
+        config,
+        {
+          kind: 'uiElementSize',
+          realmId: root.realm.realmId,
+          uiId: root.uiId,
+          elementId: this.fill.id
+        }
+      );
+    }
+    anim.transitionTo(this.transitionId, { type: 'vec2', value: [toWidth, fillHeight] }, config);
+  }
   private updateVisual(): void {
     if (!this.isAttached) return;
     const ratio = this.value_ === null ? 0.3 : (this.value_ - this.min_) / (this.max_ - this.min_);
@@ -151,6 +206,7 @@ export class UiProgressBar extends UiControl {
       positionOffset: [x, 2] as [number, number]
     };
     if (JSON.stringify(this.fill.layout) !== JSON.stringify(layout)) this.fill.setLayout(layout);
-    if (this.fill.visible !== ratio > 0) this.fill.setVisible(ratio > 0);
+    const shouldBeVisible = ratio > 0 || this.transitionId !== undefined;
+    if (this.fill.visible !== shouldBeVisible) this.fill.setVisible(shouldBeVisible);
   }
 }

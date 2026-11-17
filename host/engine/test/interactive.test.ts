@@ -297,4 +297,75 @@ describe('pointer interaction in direct realms', () => {
       runtime.dispose();
     }
   });
+
+  it('rejects reserved and invalid element IDs for interactive UI targets', () => {
+    const { runtime, realm } = setup();
+    try {
+      const ui = realm.createUi({});
+      expect(() =>
+        runtime.interactive(1, { type: 'ui', uiId: ui.uiId, elementId: -1 as any })
+      ).toThrow();
+      expect(() =>
+        runtime.interactive(1, { type: 'ui', uiId: ui.uiId, elementId: 4294901761 })
+      ).toThrow();
+      expect(() =>
+        runtime.interactive(1, { type: 'ui', uiId: ui.uiId, elementId: 'panel-1' as any })
+      ).toThrow();
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it('drains native interaction events even when records.size is zero', () => {
+    const { runtime, transport } = setup();
+    try {
+      let polled = false;
+      (transport.engine as any).multiversePollInteractionEvents = () => {
+        polled = true;
+        return JSON.stringify([]);
+      };
+      runtime.interaction.afterDispatch();
+      expect(polled).toBe(true);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it('forwards windowPosition and presentationTargetId to interactive callbacks', () => {
+    const { runtime, realm } = setup();
+    try {
+      const ui = realm.createUi({});
+      const listener = runtime.interactive(1, { type: 'ui', uiId: ui.uiId, elementId: 5 });
+      let receivedWindowPos: readonly [number, number] | undefined;
+      let receivedPresentationTarget: number | undefined;
+      listener.on('hover', (event) => {
+        receivedWindowPos = event.windowPosition;
+        receivedPresentationTarget = event.presentationTargetId;
+      });
+
+      (runtime.interaction as any).pollNativeEvents({
+        multiversePollInteractionEvents: () =>
+          JSON.stringify([
+            {
+              interactionType: 'hover',
+              windowId: 1,
+              pointerId: 1,
+              windowPosition: [120, 80],
+              presentationTargetId: 42,
+              realmId: 1,
+              modelId: ui.uiId,
+              colliderId: 0,
+              elementId: 5,
+              localPos: [20, 30],
+              uv: [0.5, 0.5],
+              delta: [0, 0]
+            }
+          ])
+      });
+      expect(receivedWindowPos).toEqual([120, 80]);
+      expect(receivedPresentationTarget).toBe(42);
+    } finally {
+      runtime.dispose();
+    }
+  });
 });

@@ -87,112 +87,112 @@ export class UiSelect extends UiValueControl<string | null> {
       width: { type: 'exact', value: width }
     });
     super(panel, value, options);
-    this.options_ = values;
-    this.placeholder = options.placeholder ?? 'Select...';
-    this.pageSize = pageSize;
-    this.labelNode = panel.addText('');
     try {
+      this.options_ = values;
+      this.placeholder = options.placeholder ?? 'Select...';
+      this.pageSize = pageSize;
+      this.labelNode = panel.addText('');
       this.icon = new UiIcon(panel, 'select', 'closed', options.iconAtlas, ['open']);
+      panel.setFocusable(options.tabIndex);
+      const rows = Math.max(1, Math.min(pageSize, values.length));
+      this.popover = manager.createPopover({
+        anchor: panel,
+        width,
+        height: 16 + 36 * (rows + (values.length > pageSize ? 1 : 0)),
+        build: (root) => {
+          this.buttons = [];
+          const rows = Math.max(1, Math.min(this.pageSize, this.options_.length));
+          for (let slot = 0; slot < rows; slot++) {
+            const button = new UiButton(root.root, {
+              label: '',
+              layout: {
+                direction: 'row',
+                justifyContent: 'start',
+                width: { type: 'percent', value: 100 },
+                height: { type: 'exact', value: 36 }
+              },
+              onActivate: ({ windowId }) => this.chooseSlot(slot, windowId)
+            });
+            button.setStateStyle('checked', { backgroundColor: [0.12, 0.4, 0.58, 1] });
+            button.panel.onKeyboard((event) => {
+              if (
+                event.type !== 'input' ||
+                event.state !== 'pressed' ||
+                event.modifiers.ctrl ||
+                event.modifiers.alt ||
+                event.modifiers.superKey
+              )
+                return;
+              if (event.logicalKey === 'ArrowDown' || event.logicalKey === 'ArrowRight')
+                this.moveHighlight(1, event.windowId);
+              else if (event.logicalKey === 'ArrowUp' || event.logicalKey === 'ArrowLeft')
+                this.moveHighlight(-1, event.windowId);
+              else if (event.logicalKey === 'Home') this.highlightEdge(false, event.windowId);
+              else if (event.logicalKey === 'End') this.highlightEdge(true, event.windowId);
+            });
+            this.buttons.push(button);
+          }
+          if (this.options_.length > this.pageSize) {
+            const nav = root.root.addPanel(
+              { backgroundColor: [0, 0, 0, 0] },
+              {
+                direction: 'row',
+                gap: [4, 0],
+                justifyContent: 'spaceBetween',
+                width: { type: 'percent', value: 100 }
+              }
+            );
+            this.prev = new UiButton(nav, {
+              label: 'Previous',
+              layout: { height: { type: 'exact', value: 36 } },
+              onActivate: ({ windowId }) => this.changePage(-1, windowId)
+            });
+            this.next = new UiButton(nav, {
+              label: 'Next',
+              layout: { height: { type: 'exact', value: 36 } },
+              onActivate: ({ windowId }) => this.changePage(1, windowId)
+            });
+          }
+          this.renderPage();
+          return this.highlighted >= 0
+            ? this.buttons[this.highlighted % this.pageSize]?.panel
+            : undefined;
+        },
+        onClose: () => {
+          this.buttons = [];
+          this.prev = undefined;
+          this.next = undefined;
+          if (this.icon.panel.isAttached) this.icon.setState('closed');
+        }
+      });
+      panel.onActivate(({ windowId }) => {
+        if (!this.panel.getInteractionState(windowId).disabled) this.toggle();
+      });
+      panel.onKeyboard((event) => {
+        if (
+          event.type !== 'input' ||
+          event.state !== 'pressed' ||
+          event.modifiers.ctrl ||
+          event.modifiers.alt ||
+          event.modifiers.superKey
+        )
+          return;
+        if (event.logicalKey === 'ArrowDown' || event.logicalKey === 'ArrowUp') {
+          if (!this.popover.isOpen) this.open();
+          else this.moveHighlight(event.logicalKey === 'ArrowDown' ? 1 : -1, event.windowId);
+        }
+      });
+      const root = panel.componentRoot;
+      const stop = root.onSyncState((state) => {
+        if (state === 'disposed' || (state === 'synced' && !panel.isAttached)) {
+          this.popover.dispose();
+          stop();
+        }
+      });
     } catch (error) {
       panel.remove();
       throw error;
     }
-    panel.setFocusable(options.tabIndex);
-    const rows = Math.max(1, Math.min(pageSize, values.length));
-    this.popover = manager.createPopover({
-      anchor: panel,
-      width,
-      height: 16 + 36 * (rows + (values.length > pageSize ? 1 : 0)),
-      build: (root) => {
-        this.buttons = [];
-        const rows = Math.max(1, Math.min(this.pageSize, this.options_.length));
-        for (let slot = 0; slot < rows; slot++) {
-          const button = new UiButton(root.root, {
-            label: '',
-            layout: {
-              direction: 'row',
-              justifyContent: 'start',
-              width: { type: 'percent', value: 100 },
-              height: { type: 'exact', value: 36 }
-            },
-            onActivate: ({ windowId }) => this.chooseSlot(slot, windowId)
-          });
-          button.setStateStyle('checked', { backgroundColor: [0.12, 0.4, 0.58, 1] });
-          button.panel.onKeyboard((event) => {
-            if (
-              event.type !== 'input' ||
-              event.state !== 'pressed' ||
-              event.modifiers.ctrl ||
-              event.modifiers.alt ||
-              event.modifiers.superKey
-            )
-              return;
-            if (event.logicalKey === 'ArrowDown' || event.logicalKey === 'ArrowRight')
-              this.moveHighlight(1, event.windowId);
-            else if (event.logicalKey === 'ArrowUp' || event.logicalKey === 'ArrowLeft')
-              this.moveHighlight(-1, event.windowId);
-            else if (event.logicalKey === 'Home') this.highlightEdge(false, event.windowId);
-            else if (event.logicalKey === 'End') this.highlightEdge(true, event.windowId);
-          });
-          this.buttons.push(button);
-        }
-        if (this.options_.length > this.pageSize) {
-          const nav = root.root.addPanel(
-            { backgroundColor: [0, 0, 0, 0] },
-            {
-              direction: 'row',
-              gap: [4, 0],
-              justifyContent: 'spaceBetween',
-              width: { type: 'percent', value: 100 }
-            }
-          );
-          this.prev = new UiButton(nav, {
-            label: 'Previous',
-            layout: { height: { type: 'exact', value: 36 } },
-            onActivate: ({ windowId }) => this.changePage(-1, windowId)
-          });
-          this.next = new UiButton(nav, {
-            label: 'Next',
-            layout: { height: { type: 'exact', value: 36 } },
-            onActivate: ({ windowId }) => this.changePage(1, windowId)
-          });
-        }
-        this.renderPage();
-        return this.highlighted >= 0
-          ? this.buttons[this.highlighted % this.pageSize]?.panel
-          : undefined;
-      },
-      onClose: () => {
-        this.buttons = [];
-        this.prev = undefined;
-        this.next = undefined;
-        if (this.icon.panel.isAttached) this.icon.setState('closed');
-      }
-    });
-    panel.onActivate(({ windowId }) => {
-      if (!this.panel.getInteractionState(windowId).disabled) this.toggle();
-    });
-    panel.onKeyboard((event) => {
-      if (
-        event.type !== 'input' ||
-        event.state !== 'pressed' ||
-        event.modifiers.ctrl ||
-        event.modifiers.alt ||
-        event.modifiers.superKey
-      )
-        return;
-      if (event.logicalKey === 'ArrowDown' || event.logicalKey === 'ArrowUp') {
-        if (!this.popover.isOpen) this.open();
-        else this.moveHighlight(event.logicalKey === 'ArrowDown' ? 1 : -1, event.windowId);
-      }
-    });
-    const root = panel.componentRoot;
-    const stop = root.onSyncState((state) => {
-      if (state === 'disposed' || (state === 'synced' && !panel.isAttached)) {
-        this.popover.dispose();
-        stop();
-      }
-    });
     this.initialize();
   }
   get options(): readonly UiSelectOption[] {

@@ -122,7 +122,7 @@ export async function runCli(argv = process.argv): Promise<void> {
     .option('-f, --frames <count>', 'Stop automatically after rendering <count> frames')
     .option('-l, --list', 'Print the full demo catalog grouped by category')
     .option('-c, --category <category>', 'Filter catalog by category')
-    .option('--font <path>', 'Custom TTF/OTF font path (used by text-input demo)')
+    .option('--font <path>', 'Custom TTF/OTF font path')
     .helpOption('-h, --help', 'Display help for command')
     .addHelpText('after', `\n${formatCatalogTable()}`);
 

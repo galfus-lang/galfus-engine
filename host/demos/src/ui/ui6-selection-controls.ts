@@ -31,7 +31,7 @@ export function createUi6Scene(
     height: size[1],
     windowId,
     layout: { direction: 'column', padding: [24, 24, 24, 24], gap: [8, 8], alignItems: 'start' },
-    theme: { components: { checkbox: { variants: { accent: { borderColor: [0.4, 0.8, 1, 1] } } } } }
+    theme: { components: { checkbox: { variants: { accent: { color: [0.75, 0.92, 1, 1] } } } } }
   });
   root.root.addText('SELECTION AND VALUE CONTROLS', 22);
   root.root.addText('Tab to focus, Enter or Space to activate, arrows to navigate or adjust.', 14);

@@ -67,6 +67,18 @@ export const AngularSpringAnchorStrategy2D: AnchorStrategy2D = {
       angularState2D.set(outWorld, st);
     }
 
+    if (context.dt === 0) {
+      const sx = Math.hypot(local[0]!, local[1]!) || 1;
+      const sy = Math.hypot(local[2]!, local[3]!) || 1;
+      outWorld[0] = Math.cos(st.angle) * sx;
+      outWorld[1] = Math.sin(st.angle) * sx;
+      outWorld[2] = -Math.sin(st.angle) * sy;
+      outWorld[3] = Math.cos(st.angle) * sy;
+      outWorld[4] = tx;
+      outWorld[5] = ty;
+      return;
+    }
+
     const diff = targetAngle - st.angle;
     const accel = diff * k - st.w * d;
     st.w += accel * dt;
@@ -120,6 +132,19 @@ export const AngularSpringAnchorStrategy3D: AnchorStrategy3D = {
     if (!st || !st.initialized) {
       st = { initialized: true, angle: targetAngle, w: 0 };
       angularState3D.set(outWorld, st);
+    }
+
+    if (context.dt === 0) {
+      const axisRaw = p?.axis ?? [0, 1, 0];
+      const axisLen = Math.hypot(axisRaw[0]!, axisRaw[1]!, axisRaw[2]!) || 1;
+      const normAxis: [number, number, number] = [
+        axisRaw[0]! / axisLen,
+        axisRaw[1]! / axisLen,
+        axisRaw[2]! / axisLen
+      ];
+      quat.setAxisAngle(tempQuat, normAxis, st.angle);
+      mat4.fromRotationTranslationScale(outWorld, tempQuat, [tx, ty, tz], [1, 1, 1]);
+      return;
     }
 
     const diff = targetAngle - st.angle;

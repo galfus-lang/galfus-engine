@@ -21,16 +21,16 @@ describe('DebugLatencyTracker', () => {
     DebugLatencyTracker.recordHover(10, {
       type: 'ui',
       uiId: 1,
-      elementId: 'btn-play'
+      elementId: 101
     });
 
-    const hover = DebugLatencyTracker.getHoverRecord('btn-play');
+    const hover = DebugLatencyTracker.getHoverRecord('101');
     expect(hover).toBeDefined();
     expect(hover?.frameId).toBe(10);
     expect(hover?.inputFrameId).toBe(10);
 
     // Case 1: Instant response in same frame (Frame 10)
-    DebugLatencyTracker.recordStyleUpdate(10, 1, 'btn-play', 'fill', '#3b82f6');
+    DebugLatencyTracker.recordStyleUpdate(10, 1, '101', 'fill', '#3b82f6');
     expect(DebugLatencyTracker.getPendingCount()).toBe(1);
 
     DebugLatencyTracker.recordDispatch(10);
@@ -51,12 +51,12 @@ describe('DebugLatencyTracker', () => {
     DebugLatencyTracker.recordHover(20, {
       type: 'ui',
       uiId: 1,
-      elementId: 'btn-settings'
+      elementId: 102
     });
 
     // Next frame (Frame 21) the style update arrives
     DebugLatencyTracker.setFrameId(21);
-    DebugLatencyTracker.recordStyleUpdate(21, 1, 'btn-settings', 'fill', '#60a5fa');
+    DebugLatencyTracker.recordStyleUpdate(21, 1, '102', 'fill', '#60a5fa');
     expect(DebugLatencyTracker.getPendingCount()).toBe(1);
 
     DebugLatencyTracker.recordDispatch(21);

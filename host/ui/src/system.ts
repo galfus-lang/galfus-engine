@@ -31,6 +31,7 @@ export class UiSystem {
   private readonly _nativeRoots = new Set<NativeUiModel>();
   private readonly _componentRoots = new Set<ComponentRoot>();
   private readonly _overlayManagers = new Set<UiOverlayManager>();
+  private readonly _tickListeners = new Set<(dt: number) => void>();
   private readonly _focus: FocusManager;
   private readonly _unobserve: () => void;
   private readonly _unfilter: () => void;
@@ -72,7 +73,11 @@ export class UiSystem {
         this._focus.windowClosed(windowId);
         for (const root of this._componentRoots) root.windowClosed(windowId);
       },
+      onTick: (dt) => {
+        for (const listener of [...this._tickListeners]) listener(dt);
+      },
       onAfterDispatch: () => {
+        for (const root of [...this._componentRoots]) root.syncPresented();
         this._focus.afterDispatch();
         for (const [focusable, input] of this._textInputs) {
           if (focusable.isDisposed) input.dispose();
@@ -186,10 +191,23 @@ export class UiSystem {
     }
   }
 
+  /** Registers a recurring tick animation listener isolated from runtime.clearListeners(). */
+  onTick(listener: (dt: number) => void): () => void {
+    this._tickListeners.add(listener);
+    return () => this._tickListeners.delete(listener);
+  }
+
   /** Creates a `UiRoot` that compiles and manages a native `Model2DUI` panel hierarchy in `realm`. */
   createRoot(realm: Realm2D, options: UiRootOptions = {}): UiRoot {
     if (this._disposed) throw new Error('UiSystem is disposed.');
-    const root = new UiRoot(this.runtime, realm, options);
+    let root!: UiRoot;
+    root = new UiRoot(this.runtime, realm, {
+      ...options,
+      onDispose: () => {
+        options.onDispose?.();
+        this._roots.delete(root);
+      }
+    });
     this._roots.add(root);
     return root;
   }
@@ -197,7 +215,14 @@ export class UiSystem {
   /** Creates a command-only facade for a UI tree owned by the core. */
   createNativeRoot(realm: Realm2D, options: NativeUiOptions): NativeUiModel {
     if (this._disposed) throw new Error('UiSystem is disposed.');
-    const root = new NativeUiModel(this.runtime, realm, options);
+    let root!: NativeUiModel;
+    root = new NativeUiModel(this.runtime, realm, {
+      ...options,
+      onDispose: () => {
+        options.onDispose?.();
+        this._nativeRoots.delete(root);
+      }
+    });
     this._nativeRoots.add(root);
     return root;
   }
@@ -209,6 +234,7 @@ export class UiSystem {
       throw new Error('UI root requires a registered, live Realm2D.');
     const root = new ComponentRoot(this.runtime, realm, options);
     root.attachFocus(this._focus);
+    root.attachTick((cb) => this.onTick(cb));
     root.attachIcons((name) => {
       if (this._customIcons?.has(name)) return this._customIcons;
       return (this._defaultIcons ??= createDefaultIconAtlas(this.runtime.resources));
@@ -256,6 +282,7 @@ export class UiSystem {
     for (const root of [...this._roots]) run(() => root.dispose());
     this._roots.clear();
     for (const input of [...this._textInputs.values()]) run(() => input.dispose());
+    this._textInputs.clear();
     run(() => this._focus.dispose());
     if (this._defaultIcons) {
       const textureId = this._defaultIcons.sheet.textureId as TextureId;

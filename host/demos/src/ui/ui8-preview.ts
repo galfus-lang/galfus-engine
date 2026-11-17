@@ -84,7 +84,9 @@ export function createEditorPreview(runtime: MultiverseRuntime, targetId: Target
   const orbModel = realm.world.getComponent<Model3DComponent>(orb.entityId, 'Model3D')!;
   const rotation = quat.create();
   let time = 0;
+  let playing = true;
   const stopTick = runtime.on('tick', ({ dt }) => {
+    if (!playing) return;
     time += dt;
     quat.fromEuler(rotation, time * 0.45, time * 0.8, 0);
     cubeModel.setRotation(rotation);
@@ -100,6 +102,9 @@ export function createEditorPreview(runtime: MultiverseRuntime, targetId: Target
     cube,
     orb,
     blueCube,
+    setPlaying(value: boolean) {
+      playing = value;
+    },
     setTarget(target: TargetId) {
       runtime.multiverse.destroyInvocation(invocation);
       invocation = runtime.multiverse.createInvocation({

@@ -286,6 +286,12 @@ export class UiOverlayManager {
       this.registerPanels(root.root);
       this.update(popover);
       root.flush();
+      if (popover.focusTarget) {
+        this.runtime.platform.window.requestInputFocus(this.windowId as WindowId);
+        if (popover.focusTarget.requestFocus(this.windowId)) {
+          popover.focusTarget = undefined;
+        }
+      }
     } catch (error) {
       const index = this.stack.indexOf(popover);
       if (index >= 0) this.stack.splice(index, 1);

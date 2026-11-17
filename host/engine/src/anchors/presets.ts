@@ -351,7 +351,14 @@ export const SpringAnchorStrategy2D: AnchorStrategy2D = {
     const restLen = context.params?.restLength ?? 0;
     const st = getOrInit2D(local, tx, ty, context.params);
 
-    const dt = Math.min(context.dt > 0 ? context.dt : 1 / 60, 0.1);
+    if (context.dt === 0) {
+      mat2d.copy(outWorld, local);
+      outWorld[4] = st.x;
+      outWorld[5] = st.y;
+      return;
+    }
+
+    const dt = Math.min(context.dt !== undefined && context.dt > 0 ? context.dt : 1 / 60, 0.1);
     const dx = st.x - tx;
     const dy = st.y - ty;
     const dist = Math.hypot(dx, dy);
@@ -461,7 +468,15 @@ export const SpringAnchorStrategy3D: AnchorStrategy3D = {
     const restLen = context.params?.restLength ?? 0;
     const st = getOrInit3D(local, tx, ty, tz, context.params);
 
-    const dt = Math.min(context.dt > 0 ? context.dt : 1 / 60, 0.1);
+    if (context.dt === 0) {
+      mat4.copy(outWorld, local);
+      outWorld[12] = st.x;
+      outWorld[13] = st.y;
+      outWorld[14] = st.z;
+      return;
+    }
+
+    const dt = Math.min(context.dt !== undefined && context.dt > 0 ? context.dt : 1 / 60, 0.1);
     const dx = st.x - tx;
     const dy = st.y - ty;
     const dz = st.z - tz;

@@ -21,6 +21,7 @@ describe('ui6 selection controls', () => {
         const rect = scene.realm.getUiLayout(scene.root.handle, control.panel.id).absoluteRect;
         expect(rect[2]).toBeGreaterThan(0);
         expect(rect[3]).toBeGreaterThan(0);
+        expect(control.panel.resolvedStyle.kind.backgroundColor).toEqual([0, 0, 0, 0]);
       }
       expect(scene.checkbox.value).toBe(false);
       expect(scene.toggle.value).toBe(true);

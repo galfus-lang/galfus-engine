@@ -241,6 +241,7 @@ impl Realm for Realm2DContext {
             &self.ui_fonts,
         );
         for (ui, _) in self.uis.values_mut() {
+            ui.damage_regions.clear();
             for flags in ui.dirty_flags.values_mut() {
                 flags.remove(galfus_realm_2d_resources::ui::UiDirtyFlags::PAINT);
             }

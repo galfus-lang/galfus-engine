@@ -31,7 +31,7 @@ export class UiIcon {
         this.panel.setSpriteUvRect(uv);
       });
       root.interactionFor(parent.id).attachTarget(this.panel.id);
-      const stopTick = root.getRuntime().on('tick', ({ dt }) => {
+      const stopTick = root.onTick((dt) => {
         if (!this.panel.isAttached || root.syncState !== 'synced' || !this.animation.isPlaying)
           return;
         this.animation.update(dt);

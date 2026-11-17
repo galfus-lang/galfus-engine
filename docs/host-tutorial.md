@@ -571,7 +571,7 @@ You can execute the verified host demos locally at any time:
 # Run interactive desktop OS window demos:
 bun host:demo tutorial
 bun host:demo interaction
-bun host:demo text-input
+bun host:demo ui5
 bun host:demo trans-realm
 
 # Or run headless (CI / test environments):

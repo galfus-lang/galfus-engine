@@ -69,6 +69,7 @@ export async function runDemoAnim1(options: HostDemoOptions = {}): Promise<void>
     }).entityId;
     const cube3 = realm3d.createCube(1.5, matGreen, { position: [3.5, 0, 0] }).entityId;
 
+    realm2d.setShadowConfig({ ambient: 1.0 });
     realm2d.createCamera({ orthoScale: 768, cameraSlot: 0 }, { position: [0, 0] });
     const uiRoot = new UiRoot(runtime, realm2d, {
       width: 500,

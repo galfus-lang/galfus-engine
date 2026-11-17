@@ -22,8 +22,19 @@ describe('ui7 menus, dialogs and progress', () => {
       expect(
         scene.realm.getUiLayout(scene.root.handle, scene.progress.panel.id).absoluteRect[2]
       ).toBe(320);
+      const initialFillW = scene.realm.getUiLayout(scene.root.handle, scene.progress.fill.id)
+        .absoluteRect[2];
       scene.slider.setValue(75);
       expect(scene.progress.value).toBe(75);
+      advanceFrame(runtime, transport, 0.05);
+      const midFillW = scene.realm.getUiLayout(scene.root.handle, scene.progress.fill.id)
+        .absoluteRect[2];
+      expect(midFillW).toBeGreaterThan(initialFillW);
+      expect(midFillW).toBeLessThan(316 * 0.75);
+      advanceFrame(runtime, transport, 0.3);
+      const finalFillW = scene.realm.getUiLayout(scene.root.handle, scene.progress.fill.id)
+        .absoluteRect[2];
+      expect(finalFillW).toBeCloseTo(316 * 0.75, 1);
       scene.dispose();
     } finally {
       runtime.dispose();

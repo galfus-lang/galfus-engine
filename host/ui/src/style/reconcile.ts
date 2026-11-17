@@ -44,7 +44,7 @@ export function reconcileStyles(
       parent?.tokens ?? theme.tokens,
       theme
     );
-    node.resolved = next;
+    nodes.set(id, { ...node, resolved: next });
     if (previous && !sameUiValue(previous.kind, next.kind))
       updates.push({ type: 'setKind', id, kind: structuredClone(next.kind) });
     if (previous && !sameUiValue(previous.layout, next.layout))

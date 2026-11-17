@@ -144,52 +144,50 @@ const DEFAULT_THEME: UiTheme = {
     },
     checkbox: {
       base: {
-        backgroundColor: [0.1, 0.16, 0.23, 1],
-        borderColor: [0.55, 0.68, 0.8, 1],
-        borderWidth: [1, 1, 1, 1]
+        backgroundColor: [0, 0, 0, 0],
+        borderColor: [0, 0, 0, 0],
+        borderWidth: [0, 0, 0, 0],
+        borderRadius: [4, 4, 4, 4]
       },
       states: {
-        hover: { backgroundColor: [0.16, 0.25, 0.35, 1] },
-        checked: { backgroundColor: [0.12, 0.35, 0.48, 1] },
-        focusVisible: { borderColor: [0.65, 0.88, 1, 1], borderWidth: [2, 2, 2, 2] },
+        focusVisible: { borderColor: [0.45, 0.78, 1, 0.85], borderWidth: [1.5, 1.5, 1.5, 1.5] },
         disabled: { opacity: 0.5 }
       }
     },
     radio: {
       base: {
-        backgroundColor: [0.1, 0.16, 0.23, 1],
-        borderColor: [0.55, 0.68, 0.8, 1],
-        borderWidth: [1, 1, 1, 1]
+        backgroundColor: [0, 0, 0, 0],
+        borderColor: [0, 0, 0, 0],
+        borderWidth: [0, 0, 0, 0],
+        borderRadius: [4, 4, 4, 4]
       },
       states: {
-        hover: { backgroundColor: [0.16, 0.25, 0.35, 1] },
-        checked: { backgroundColor: [0.12, 0.35, 0.48, 1] },
-        focusVisible: { borderColor: [0.65, 0.88, 1, 1], borderWidth: [2, 2, 2, 2] },
+        focusVisible: { borderColor: [0.45, 0.78, 1, 0.85], borderWidth: [1.5, 1.5, 1.5, 1.5] },
         disabled: { opacity: 0.5 }
       }
     },
     radioGroup: { base: { backgroundColor: [0, 0, 0, 0] } },
     switch: {
       base: {
-        backgroundColor: [0.1, 0.16, 0.23, 1],
-        borderColor: [0.55, 0.68, 0.8, 1],
-        borderWidth: [1, 1, 1, 1]
+        backgroundColor: [0, 0, 0, 0],
+        borderColor: [0, 0, 0, 0],
+        borderWidth: [0, 0, 0, 0],
+        borderRadius: [4, 4, 4, 4]
       },
       states: {
-        hover: { backgroundColor: [0.16, 0.25, 0.35, 1] },
-        checked: { backgroundColor: [0.12, 0.35, 0.48, 1] },
-        focusVisible: { borderColor: [0.65, 0.88, 1, 1], borderWidth: [2, 2, 2, 2] },
+        focusVisible: { borderColor: [0.45, 0.78, 1, 0.85], borderWidth: [1.5, 1.5, 1.5, 1.5] },
         disabled: { opacity: 0.5 }
       }
     },
     slider: {
       base: {
-        backgroundColor: [0.08, 0.12, 0.18, 1],
-        borderColor: [0.55, 0.68, 0.8, 1],
-        borderWidth: [1, 1, 1, 1]
+        backgroundColor: [0, 0, 0, 0],
+        borderColor: [0, 0, 0, 0],
+        borderWidth: [0, 0, 0, 0],
+        borderRadius: [4, 4, 4, 4]
       },
       states: {
-        focusVisible: { borderColor: [0.65, 0.88, 1, 1], borderWidth: [2, 2, 2, 2] },
+        focusVisible: { borderColor: [0.45, 0.78, 1, 0.85], borderWidth: [1.5, 1.5, 1.5, 1.5] },
         disabled: { opacity: 0.5 }
       }
     },
@@ -216,11 +214,17 @@ const DEFAULT_THEME: UiTheme = {
     progressBar: {
       base: {
         backgroundColor: [0.08, 0.12, 0.18, 1],
-        borderColor: [0.45, 0.6, 0.72, 1],
-        borderWidth: [1, 1, 1, 1]
+        borderColor: [0.3, 0.44, 0.58, 1],
+        borderWidth: [1, 1, 1, 1],
+        borderRadius: [9, 9, 9, 9]
       }
     },
-    progressFill: { base: { backgroundColor: [0.25, 0.7, 0.9, 1] } }
+    progressFill: {
+      base: {
+        backgroundColor: [0.22, 0.62, 0.96, 1],
+        borderRadius: [7, 7, 7, 7]
+      }
+    }
   }
 };
 

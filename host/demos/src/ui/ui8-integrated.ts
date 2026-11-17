@@ -6,7 +6,9 @@ import {
   type WindowId
 } from '@galfus/engine';
 import { createUi, type UiPanelComponent } from '@galfus/ui';
-import { runDemoLoop } from '../common/loop';
+import { canExitAfterOverlays, runDemoLoop } from '../common/loop';
+import { canExitUi5 } from './ui5-text-fields';
+import { createEditorControls } from './ui8-controls';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
 import { createEditorPreview } from './ui8-preview';
 import { createEditorSplits } from './ui8-splits';
@@ -16,8 +18,6 @@ const colors = {
   background: [0.055, 0.067, 0.085, 1],
   chrome: [0.09, 0.106, 0.129, 1],
   surface: [0.105, 0.122, 0.149, 1],
-  elevated: [0.14, 0.16, 0.19, 1],
-  border: [0.2, 0.23, 0.27, 1],
   text: [0.88, 0.91, 0.94, 1],
   muted: [0.54, 0.6, 0.66, 1],
   accent: [0.3, 0.72, 0.73, 1]
@@ -28,57 +28,6 @@ const full = { type: 'percent' as const, value: 100 };
 
 function text(parent: UiPanelComponent, value: string, size = 12, color: Color = colors.text) {
   return parent.addText(value, size, { color });
-}
-
-function line(parent: UiPanelComponent, value: string, selected = false, indent = 0) {
-  const row = parent.addPanel(
-    { backgroundColor: selected ? [0.17, 0.3, 0.33, 1] : [0, 0, 0, 0] },
-    {
-      width: full,
-      height: exact(27),
-      direction: 'row',
-      alignItems: 'center',
-      padding: [0, 8, 0, 10 + indent]
-    }
-  );
-  text(row, value, 12, selected ? [0.77, 0.96, 0.94, 1] : colors.text);
-  return row;
-}
-
-function heading(parent: UiPanelComponent, label: string, trailing = '') {
-  const row = parent.addPanel(
-    { backgroundColor: colors.chrome },
-    {
-      width: full,
-      height: exact(35),
-      direction: 'row',
-      alignItems: 'center',
-      justifyContent: 'spaceBetween',
-      padding: [0, 12, 0, 12]
-    }
-  );
-  text(row, label, 11, colors.text);
-  if (trailing) text(row, trailing, 11, colors.muted);
-}
-
-function inspectorRow(parent: UiPanelComponent, label: string, value: string) {
-  const row = parent.addPanel(
-    {},
-    {
-      width: full,
-      height: exact(29),
-      direction: 'row',
-      alignItems: 'center',
-      justifyContent: 'spaceBetween',
-      padding: [0, 12, 0, 12]
-    }
-  );
-  text(row, label, 11, colors.muted);
-  const field = row.addPanel(
-    { backgroundColor: colors.elevated, borderRadius: [3, 3, 3, 3] },
-    { width: exact(108), height: exact(23), padding: [4, 7, 4, 7] }
-  );
-  text(field, value, 11);
 }
 
 /** Visual editor mockup containing a live 3D realm. */
@@ -139,7 +88,6 @@ export function createUi8Scene(
   );
   text(logo, 'G', 13, colors.background);
   const title = text(brand, 'GALFUS  /  EDITOR', 13);
-  text(header, 'File     Edit     View     Scene     Window', 12, colors.muted);
   text(header, 'My Game  /  Main Scene', 11, colors.muted);
 
   const toolbar = root.root.addPanel(
@@ -154,73 +102,29 @@ export function createUi8Scene(
       positionOffset: [0, 44]
     }
   );
-  text(toolbar, 'SCENE     Select     Move     Rotate     Scale', 11, colors.text);
-  const previewBadge = toolbar.addPanel(
-    { backgroundColor: [0.17, 0.35, 0.34, 1], borderRadius: [4, 4, 4, 4] },
-    {
-      width: exact(80),
-      height: exact(26),
-      alignItems: 'center',
-      justifyContent: 'center'
-    }
-  );
-  text(previewBadge, 'Preview', 11, [0.74, 0.94, 0.91, 1]);
 
-  const hierarchy = root.root.addPanel({ backgroundColor: colors.chrome, clip: true });
-  heading(hierarchy, 'HIERARCHY', '+');
-  line(hierarchy, 'v  Main Scene');
-  line(hierarchy, 'Camera', false, 15);
-  line(hierarchy, 'Directional Light', false, 15);
-  line(hierarchy, 'Player', true, 15);
-  line(hierarchy, 'Environment', false, 15);
-  line(hierarchy, 'Ground', false, 27);
-  line(hierarchy, 'Props', false, 27);
+  const hierarchy = root.root.addPanel(
+    { backgroundColor: colors.chrome, clip: true },
+    { direction: 'column', padding: [10, 8, 8, 8], gap: [0, 5] }
+  );
 
   const viewport = root.root.addSpritePanel({ textureId: renderTarget });
-  const inspector = root.root.addPanel({ backgroundColor: colors.chrome, clip: true });
-  heading(inspector, 'INSPECTOR', '...');
-  line(inspector, 'Player');
-  heading(inspector, 'TRANSFORM', 'v');
-  inspectorRow(inspector, 'Position', '0.0   1.2   0.0');
-  inspectorRow(inspector, 'Rotation', '0.0   0.0   0.0');
-  inspectorRow(inspector, 'Scale', '1.0   1.0   1.0');
-  heading(inspector, 'MESH RENDERER', 'v');
-  inspectorRow(inspector, 'Mesh', 'Cube');
-  inspectorRow(inspector, 'Layer', 'Default');
-  heading(inspector, 'RIGIDBODY 3D', 'v');
-  inspectorRow(inspector, 'Body type', 'Dynamic');
-  inspectorRow(inspector, 'Gravity', '1.0');
+  const inspector = root.root.addPanel(
+    { backgroundColor: colors.chrome, clip: true },
+    { direction: 'column', padding: [8, 8, 8, 8], gap: [0, 4] }
+  );
 
   const assets = root.root.addPanel(
     { backgroundColor: colors.surface, clip: true },
     {
       width: full,
       height: exact(142),
-      direction: 'column'
+      direction: 'column',
+      padding: [8, 10, 8, 10],
+      gap: [0, 4]
     }
   );
-  heading(assets, 'PROJECT    /    Assets', 'Search assets');
-  const assetRow = assets.addPanel(
-    {},
-    { direction: 'row', gap: [10, 0], padding: [12, 16, 12, 16] }
-  );
-  for (const [name, fill] of [
-    ['Scenes', [0.67, 0.53, 0.31, 1]],
-    ['Sprites', [0.67, 0.53, 0.31, 1]],
-    ['Materials', [0.67, 0.53, 0.31, 1]],
-    ['player.png', [0.28, 0.48, 0.48, 1]],
-    ['level.scene', [0.31, 0.42, 0.55, 1]]
-  ] as Array<[string, Color]>) {
-    const tile = assetRow.addPanel(
-      {},
-      { width: exact(82), direction: 'column', alignItems: 'center', gap: [0, 5] }
-    );
-    tile.addPanel(
-      { backgroundColor: fill, borderRadius: [5, 5, 5, 5] },
-      { width: exact(52), height: exact(42) }
-    );
-    text(tile, name, 10, colors.text);
-  }
+  assets.addText('PROJECT NOTES', 11);
   const status = root.root.addPanel(
     { backgroundColor: [0.07, 0.09, 0.11, 1] },
     {
@@ -251,18 +155,50 @@ export function createUi8Scene(
     type: 'collider',
     entityId: preview.blueCube.entityId
   });
-  const selectObject = (entityId: number, label: string) => {
-    for (const entity of [preview.cube.entityId, preview.orb.entityId, preview.blueCube.entityId]) {
-      const model = preview.realm.world.getComponent<Model3DComponent>(entity, 'Model3D')!;
-      const scale = entity === entityId ? 1.2 : 1;
-      model.setScale(scale, scale, scale);
-    }
-    statusText.setText(`Selected   •   ${label}`);
+  const objects = {
+    Cube: preview.cube.entityId,
+    Sphere: preview.orb.entityId,
+    'Blue cube': preview.blueCube.entityId
+  };
+  let selected: keyof typeof objects = 'Cube';
+  const names = { Cube: 'Cube', Sphere: 'Sphere', 'Blue cube': 'Blue cube' };
+  const setStatus = (message: string) => {
+    if (root.syncState === 'disposed') return;
+    statusText.setText(message);
     root.flush();
   };
-  cubeListener.on('click', () => selectObject(preview.cube.entityId, 'Cube'));
-  orbListener.on('click', () => selectObject(preview.orb.entityId, 'Sphere'));
-  blueListener.on('click', () => selectObject(preview.blueCube.entityId, 'Blue cube'));
+  const selectObject = (label: keyof typeof objects) => {
+    selected = label;
+    for (const entity of Object.values(objects)) {
+      const model = preview.realm.world.getComponent<Model3DComponent>(entity, 'Model3D')!;
+      model.setScale(1, 1, 1);
+    }
+    controls.updateSelection(label, names[label]);
+    setStatus(`Selected   •   ${label}`);
+  };
+  const manager = windowId === undefined ? undefined : ui.createOverlayManager(root, windowId);
+  const controls = createEditorControls({
+    ui,
+    manager,
+    header,
+    toolbar,
+    hierarchy,
+    inspector,
+    assets,
+    selectObject,
+    setScale: (scale) =>
+      preview.realm.world
+        .getComponent<Model3DComponent>(objects[selected], 'Model3D')!
+        .setScale(scale, scale, scale),
+    rename: (value) => {
+      names[selected] = value;
+    },
+    setPlaying: (value) => preview.setPlaying(value),
+    setStatus
+  });
+  cubeListener.on('click', () => selectObject('Cube'));
+  orbListener.on('click', () => selectObject('Sphere'));
+  blueListener.on('click', () => selectObject('Blue cube'));
   const splits = createEditorSplits(
     root.root,
     { hierarchy, viewport, inspector, assets },
@@ -299,6 +235,7 @@ export function createUi8Scene(
     root.root.setLayout({ ...root.root.layout, width: exact(width), height: exact(height) });
     status.setLayout({ ...status.layout, positionOffset: [0, height - 22] });
     splits.resize(width, height);
+    manager?.setViewport([0, 0, width, height]);
   };
   resize(size[0], size[1]);
   const stopResize =
@@ -330,6 +267,8 @@ export function createUi8Scene(
     title,
     header,
     toolbar,
+    manager,
+    controls,
     splits,
     hierarchy,
     viewport,
@@ -368,7 +307,10 @@ export async function runDemoUi8(options: HostDemoOptions = {}): Promise<void> {
       await runDemoLoop(session.runtime, {
         windowId: session.windowId,
         maxFrames: session.maxFrames,
-        exitKeys: ['escape', 'q']
+        exitKeys: ['escape', 'q'],
+        canExit: (event) =>
+          canExitAfterOverlays(event, scene.manager) &&
+          canExitUi5([scene.controls.name, scene.controls.notes], session.windowId, event)
       });
     } finally {
       scene.dispose();

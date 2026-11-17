@@ -26,6 +26,8 @@ export interface NativeUiOptions {
   readonly root?: Omit<UiNodeKindDesc, 'type'>;
   readonly layout?: Omit<UiLayoutStyleDesc, 'width' | 'height'>;
   readonly transform?: Transform2DProps;
+  readonly collider?: boolean;
+  readonly onDispose?: () => void;
 }
 
 /** A UI element handle. Geometry and tree ownership remain in the core. */
@@ -139,8 +141,11 @@ export class NativeUiPanel extends NativeUiElement {
 export class NativeUiModel {
   readonly root: NativeUiPanel;
   readonly handle: ReturnType<Realm2D['createUi']>;
+  readonly colliderId?: number;
   private nextId = 1;
   private disposed = false;
+  private readonly _onDispose?: () => void;
+  private readonly stopRealmObserver: () => void;
   private readonly listeners = new Map<number, InteractiveListener>();
   private readonly children = new Map<number, Set<number>>();
   private readonly parents = new Map<number, number>();
@@ -154,6 +159,9 @@ export class NativeUiModel {
     readonly realm: Realm2D,
     options: NativeUiOptions
   ) {
+    if (realm.isDisposed) throw new Error('Cannot create UI in a disposed realm.');
+    if (runtime.multiverse.getRealm(realm.realmId) !== realm)
+      throw new Error('UI root requires a realm registered with this runtime.');
     if (
       !Number.isFinite(options.width) ||
       options.width <= 0 ||
@@ -162,22 +170,35 @@ export class NativeUiModel {
     ) {
       throw new Error('UI width and height must be positive finite values.');
     }
+    this._onDispose = options.onDispose;
     const id = this.allocateId(options.rootId);
     this.handle = realm.createUi({}, options.transform);
-    this.root = new NativeUiPanel(this, id);
-    this.apply([
-      {
-        type: 'create',
-        id,
-        kind: { ...options.root, type: 'panel' },
-        layout: {
-          ...options.layout,
-          width: { type: 'exact', value: options.width },
-          height: { type: 'exact', value: options.height }
-        }
+    try {
+      if (options.collider !== false) {
+        this.colliderId = realm.addCollider(this.handle.entityId, {
+          type: 'rectangle',
+          halfExtents: [options.width / 2, options.height / 2]
+        });
       }
-    ]);
-    this.children.set(id, new Set());
+      this.root = new NativeUiPanel(this, id);
+      this.apply([
+        {
+          type: 'create',
+          id,
+          kind: { ...options.root, type: 'panel' },
+          layout: {
+            ...options.layout,
+            width: { type: 'exact', value: options.width },
+            height: { type: 'exact', value: options.height }
+          }
+        }
+      ]);
+      this.children.set(id, new Set());
+    } catch (err) {
+      realm.destroyUi(this.handle);
+      throw err;
+    }
+    this.stopRealmObserver = realm.onDispose(() => this.dispose());
   }
 
   get uiId(): number {
@@ -301,18 +322,28 @@ export class NativeUiModel {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.stopRealmObserver?.();
     for (const listener of this.listeners.values()) listener.dispose();
     this.listeners.clear();
     for (const id of this.transitions.keys()) this.clearTransitions(id);
     this.children.clear();
     this.parents.clear();
     this.realm.destroyUi(this.handle);
+    this._onDispose?.();
   }
 
   private allocateId(requested?: number): number {
+    if (requested === undefined) {
+      while (this.children.has(this.nextId)) this.nextId++;
+    }
     const id = requested ?? this.nextId;
     assertValidLogicalId(id, 'UI element ID');
-    this.nextId = Math.max(this.nextId, id + 1);
+    if (this.children.has(id)) {
+      throw new Error(`UI element ID ${id} is already in use.`);
+    }
+    if (requested === undefined || requested === this.nextId) {
+      this.nextId = id + 1;
+    }
     return id;
   }
 }

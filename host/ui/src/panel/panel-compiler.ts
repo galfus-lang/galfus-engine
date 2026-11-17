@@ -18,6 +18,7 @@ export function compilePanelVisual(
   clipRect?: [number, number, number, number]
 ): void {
   const { x, y, width, height } = rect;
+  if (width <= 0 || height <= 0) return;
   const bg = parseColorToRgba(style.fill, [0.06, 0.11, 0.18, 1]);
   const borderCol = parseBorderColor(style.stroke);
   const borderW = parseBorderWidth(style.strokeWidth);

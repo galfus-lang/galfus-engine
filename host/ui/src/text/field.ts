@@ -37,7 +37,7 @@ export abstract class UiTextField extends UiControl {
   readonly textNode: import('../components/component').UiTextComponent;
   private readonly visual: TextFieldVisual;
   private readonly runtime: MultiverseRuntime;
-  private readonly focusable: Focusable;
+  readonly focusable: Focusable;
   private readonly detach: () => void;
   private readonly stop: (() => void)[] = [];
   private readonly callbacks = new Map<UiTextFieldEvent, Set<UiTextFieldCallback>>();
@@ -182,11 +182,7 @@ export abstract class UiTextField extends UiControl {
       width: { type: 'exact', value: width },
       height: { type: 'exact', value: height }
     });
-    if (this.multiline)
-      this.textNode.setLayout({
-        ...this.textNode.layout,
-        width: { type: 'exact', value: width - 16 }
-      });
+    this.visual.setSize(width);
     return this;
   }
   on(type: UiTextFieldEvent, callback: UiTextFieldCallback): () => void {
@@ -260,6 +256,7 @@ export abstract class UiTextField extends UiControl {
   }
   override dispose(): void {
     this.remove();
+    this.cleanup();
   }
   private normalize(value: string): string {
     const lines = value.replace(/\r\n?/g, '\n');
@@ -323,6 +320,7 @@ export abstract class UiTextField extends UiControl {
       beforeDisplay = this.editor.displayValue;
     const before = this.editor.selection,
       beforeComposition = this.editor.composition;
+    this.visual.requestFollowCaret();
     action();
     if (this.editor.displayValue !== beforeDisplay) this.visual.setText(this.editor.displayValue);
     if (beforeValue !== this.value && this.options.validationMode === 'change') this.validate();

@@ -325,7 +325,7 @@ export class ComponentInteractions {
     return this.panels.get(id)?.isDisabled() ?? false;
   }
   afterDispatch(): void {
-    this.focus.afterDispatch();
+    // Focus afterDispatch is invoked once per frame by UiSystem
   }
   reconcile(committed = false): void {
     for (const [id, panel] of this.panels) {

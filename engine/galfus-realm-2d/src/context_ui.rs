@@ -21,6 +21,13 @@ use std::sync::Arc;
 /// Base reserved material ID for UI textured samplers.
 pub const UI_RESERVED_MATERIAL_BASE: u32 = RESERVED_RANGE_START + 1000;
 
+#[derive(Debug)]
+pub(crate) struct TexturedMaterialEntry {
+    pub(crate) mat_id: u32,
+    pub(crate) bind_group: wgpu::BindGroup,
+    pub(crate) view_identity: Option<(usize, u32, u32)>,
+}
+
 pub fn compute_ui_dimensions(ui: &Model2DUI) -> (f32, f32) {
     if let Some(root_id) = ui.root_id
         && let Some(layout) = ui.computed.get(&root_id)
@@ -54,7 +61,7 @@ pub fn compute_ui_dimensions(ui: &Model2DUI) -> (f32, f32) {
 
 pub struct UiManager2D {
     material_uniform_bufs: [Option<wgpu::Buffer>; 4],
-    textured_materials: HashMap<(u32, u32), (u32, wgpu::BindGroup)>,
+    pub(crate) textured_materials: HashMap<(u32, u32), TexturedMaterialEntry>,
     texture_sizes: HashMap<u32, [f32; 2]>,
     next_mat_id: u32,
     text_geometries: HashMap<u32, (u64, Handle<GpuVectorGeometry>)>,
@@ -128,9 +135,12 @@ impl UiManager2D {
     ) {
         // Ensure textured materials for quads and sprite panels
         self.texture_sizes.clear();
+        let mut active_keys = std::collections::HashSet::new();
         for (ui, _) in uis.values() {
             for quad in &ui.quads {
                 if let Some(tex_id) = quad.texture_id {
+                    let sampler_idx = quad.sampler_index.min(3);
+                    active_keys.insert((tex_id, sampler_idx));
                     self.ensure_textured_material(
                         device,
                         queue,
@@ -141,7 +151,7 @@ impl UiManager2D {
                         fallback_black,
                         textures,
                         tex_id,
-                        quad.sampler_index,
+                        sampler_idx,
                     );
                 }
             }
@@ -149,6 +159,8 @@ impl UiManager2D {
                 if let UiNodeKind::SpritePanel(ref s) = node.kind
                     && let Some(tex_id) = s.texture_id
                 {
+                    let sampler_idx = s.sampler_index.min(3);
+                    active_keys.insert((tex_id, sampler_idx));
                     if let Some(texture) = textures(tex_id) {
                         let size = texture.texture().size();
                         self.texture_sizes
@@ -164,11 +176,20 @@ impl UiManager2D {
                         fallback_black,
                         textures,
                         tex_id,
-                        s.sampler_index,
+                        sampler_idx,
                     );
                 }
             }
         }
+
+        // Evict textured materials no longer referenced by active UIs
+        self.textured_materials.retain(|key, entry| {
+            let keep = active_keys.contains(key);
+            if !keep {
+                material_bind_groups.remove(&entry.mat_id);
+            }
+            keep
+        });
 
         // Build and upload vector geometry (rounded panels, borders, text glyphs)
         for (&ui_id, (ui, _transform)) in uis {
@@ -348,16 +369,21 @@ impl UiManager2D {
         }
 
         // Export textured material bind groups to render map
-        for &(mat_id, ref bg) in self.textured_materials.values() {
+        for entry in self.textured_materials.values() {
             material_bind_groups
-                .entry(mat_id)
-                .or_insert_with(|| bg.clone());
+                .entry(entry.mat_id)
+                .or_insert_with(|| entry.bind_group.clone());
         }
     }
 
     pub(crate) fn get_geometry_by_u64(&self, raw: u64) -> Option<&GpuVectorGeometry> {
         let handle = Handle::from_u64(raw)?;
         self.geometry_pool.get(handle).ok()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn textured_material_count(&self) -> usize {
+        self.textured_materials.len()
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -376,25 +402,23 @@ impl UiManager2D {
     ) {
         let sampler_idx = sampler_index.min(3);
         let key = (tex_id, sampler_idx);
-        if !self.textured_materials.contains_key(&key) {
-            let u_buf = self.material_uniform_bufs[sampler_idx as usize].get_or_insert_with(|| {
-                let mat = galfus_realm_2d_resources::Material2D {
-                    texture_id: Some(0),
-                    sampler_index: sampler_idx,
-                    ..Default::default()
-                };
-                let buf = crate::gpu::create_gpu_buffer(
-                    device,
-                    &format!("galfus_ui_sampler_{sampler_idx}_mat_buf"),
-                    std::mem::size_of::<galfus_realm_2d_resources::Material2DUniform>() as u64,
-                    wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                );
-                queue.write_buffer(&buf, 0, bytemuck::bytes_of(&mat.build_uniform()));
-                buf
-            });
+        let current_view = textures(tex_id);
+        let view_identity = current_view.map(|v| {
+            let size = v.texture().size();
+            (
+                v as *const wgpu::TextureView as usize,
+                size.width,
+                size.height,
+            )
+        });
 
-            let mat_id = self.next_mat_id;
-            self.next_mat_id = self.next_mat_id.saturating_add(1);
+        if let Some(entry) = self.textured_materials.get_mut(&key) {
+            if entry.view_identity == view_identity {
+                return;
+            }
+            let u_buf = self.material_uniform_bufs[sampler_idx as usize]
+                .as_ref()
+                .unwrap();
             let mut slots = [None; 8];
             slots[0] = Some(tex_id);
             let bg = crate::gpu::create_material_bind_group_2d(
@@ -408,7 +432,49 @@ impl UiManager2D {
                 &slots,
                 textures,
             );
-            self.textured_materials.insert(key, (mat_id, bg));
+            entry.bind_group = bg;
+            entry.view_identity = view_identity;
+            return;
         }
+
+        let u_buf = self.material_uniform_bufs[sampler_idx as usize].get_or_insert_with(|| {
+            let mat = galfus_realm_2d_resources::Material2D {
+                texture_id: Some(0),
+                sampler_index: sampler_idx,
+                ..Default::default()
+            };
+            let buf = crate::gpu::create_gpu_buffer(
+                device,
+                &format!("galfus_ui_sampler_{sampler_idx}_mat_buf"),
+                std::mem::size_of::<galfus_realm_2d_resources::Material2DUniform>() as u64,
+                wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            );
+            queue.write_buffer(&buf, 0, bytemuck::bytes_of(&mat.build_uniform()));
+            buf
+        });
+
+        let mat_id = self.next_mat_id;
+        self.next_mat_id = self.next_mat_id.saturating_add(1);
+        let mut slots = [None; 8];
+        slots[0] = Some(tex_id);
+        let bg = crate::gpu::create_material_bind_group_2d(
+            device,
+            material_bgl,
+            samplers,
+            fallback_white,
+            fallback_normal,
+            fallback_black,
+            u_buf,
+            &slots,
+            textures,
+        );
+        self.textured_materials.insert(
+            key,
+            TexturedMaterialEntry {
+                mat_id,
+                bind_group: bg,
+                view_identity,
+            },
+        );
     }
 }

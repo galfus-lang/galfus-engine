@@ -81,7 +81,7 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
   }, 45000);
 
   it('runs all Realm 2D feature and animation demos headlessly', async () => {
-    const r2dIds = ['2d1', 'anim1'];
+    const r2dIds = ['2d1', 'anim1', 'anim2'];
     for (const id of r2dIds) {
       const demo = findDemo(id);
       expect(demo).toBeDefined();
@@ -90,16 +90,7 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
   }, 30000);
 
   it('runs all Host & Interaction and UI demos headlessly', async () => {
-    const hostIds = [
-      'tutorial',
-      'interaction',
-      'text-input',
-      'trans-realm',
-      'ui1',
-      'ui2',
-      'ui3',
-      'ui4'
-    ];
+    const hostIds = ['tutorial', 'interaction', 'trans-realm', 'ui1', 'ui2', 'ui3', 'ui4'];
     for (const id of hostIds) {
       const demo = findDemo(id);
       expect(demo).toBeDefined();

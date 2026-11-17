@@ -197,6 +197,9 @@ abstract class ColliderComponent<S extends ColliderShape2D | ColliderShape3D> im
     });
     return this;
   }
+  has(colliderId: number): boolean {
+    return this[colliderEntries].has(colliderId);
+  }
   remove(colliderId: number): boolean {
     return this[colliderEntries].delete(colliderId);
   }
@@ -209,6 +212,9 @@ export function getColliderEntries<S extends ColliderShape2D | ColliderShape3D>(
   component: ColliderComponent<S>
 ): IterableIterator<ColliderEntry<S>> {
   return component[colliderEntries].values();
+}
+export function hasCollider(component: ColliderComponent<any>, colliderId: number): boolean {
+  return component[colliderEntries].has(colliderId);
 }
 export class Collider2DComponent extends ColliderComponent<ColliderShape2D> {
   readonly type = 'Collider2D';

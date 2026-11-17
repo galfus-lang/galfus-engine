@@ -82,6 +82,17 @@ impl Default for UiFontLibrary {
 }
 
 impl UiFontLibrary {
+    /// Creates an empty font library without loading bundled fonts.
+    pub(crate) fn empty() -> Self {
+        Self {
+            database: Arc::new(fontdb::Database::new()),
+            default_family: String::new(),
+            groups: HashMap::new(),
+            families: HashMap::new(),
+            color_glyph_cache: Mutex::default(),
+        }
+    }
+
     /// Replaces a family only after validating all references and coordinates.
     pub(crate) fn set_family(&mut self, name: &str, family: UiFontFamily) -> Result<(), String> {
         if name.trim().is_empty() || name != name.trim() {

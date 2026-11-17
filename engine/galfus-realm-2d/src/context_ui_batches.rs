@@ -147,7 +147,7 @@ impl UiManager2D {
                                     let mat_id = self
                                         .textured_materials
                                         .get(&(tex_id, sampler_idx))
-                                        .map(|(id, _)| *id)
+                                        .map(|entry| entry.mat_id)
                                         .unwrap_or(0);
 
                                     let mut tint = sprite.tint_color;
@@ -287,7 +287,7 @@ impl UiManager2D {
                         let mat_id = self
                             .textured_materials
                             .get(&(tex_id, sampler_idx))
-                            .map(|(id, _)| *id)
+                            .map(|entry| entry.mat_id)
                             .unwrap_or(0);
 
                         batch_builder.push(PreparedItem2D {

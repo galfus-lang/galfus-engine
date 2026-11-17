@@ -340,6 +340,18 @@ export class Realm2DSyncSystem {
     return this._syncedUis.has(uiId);
   }
 
+  untrackUi(uiId: number): void {
+    this._syncedUis.delete(uiId);
+  }
+
+  isColliderSynced(colliderId: number): boolean {
+    return this._syncedColliders.has(colliderId);
+  }
+
+  untrackCollider(colliderId: number): void {
+    this._syncedColliders.delete(colliderId);
+  }
+
   /**
    * Disposes all tracked IDs on the engine when the realm is destroyed.
    */

@@ -1,7 +1,6 @@
 import Fuse from 'fuse.js';
 import type { DemoRunOptions } from './common/options';
 import { runInteractionDemo } from './host/interaction';
-import { runTextInputDemo } from './host/text-input';
 import { runTransRealmDemo } from './host/trans-realm';
 import { runTutorialDemo } from './host/tutorial';
 import { runDemoMv1 } from './multiverse/mv1-split';
@@ -18,6 +17,7 @@ import { runDemoPhys3d2 } from './physics/phys3d2-joints';
 import { runDemoPhys3d3 } from './physics/phys3d3-hinge';
 import { runDemoPhys3d4 } from './physics/phys3d4-forces';
 import { runDemoAnim1 } from './realm2d/anim1-transitions';
+import { runDemoAnim2 } from './realm2d/anim2-path';
 import { runDemo2d1 } from './realm2d/d2d1-shadows';
 import { runDemo2d2 } from './realm2d/d2d2-effects-particles';
 import { runDemo3d1 } from './realm3d/d3d1-orbit';
@@ -88,16 +88,6 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     description:
       'Interactive pointer routing, hover/drag states, focus rings, and cross-realm 2D/3D hit-testing.',
     run: runInteractionDemo
-  },
-  {
-    id: 'text-input',
-    aliases: ['text', 'caret', 'selection'],
-    title: 'Interactive Native Text Input & Shaping',
-    category: 'Host & Interaction',
-    tags: ['host', 'text', 'ui', 'input', 'clipboard', 'ime', 'font'],
-    description:
-      'Single-line and multi-line editable text fields with grapheme cluster shaping, selection, and clipboard.',
-    run: runTextInputDemo
   },
   {
     id: 'trans-realm',
@@ -472,6 +462,16 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     description:
       'Demonstrates Bounce, Elastic, Cubic, and Back easing curves across 3D transforms and 2D UI progress HUD with mid-flight retargeting.',
     run: runDemoAnim1
+  },
+  {
+    id: 'anim2',
+    aliases: ['path-follow', 'trajectory', 'spline-follow'],
+    title: 'Native Path Transitions & Spline Trajectories',
+    category: 'Realm 2D & Animation',
+    tags: ['animation', 'path', 'spline', 'bezier', 'follower', 'trajectory'],
+    description:
+      'Multi-segment 3D spline path follower (Lines, Quadratic, Cubic & Catmull-Rom Bézier curves) driving drone and orb trajectories with orient-to-path and reactive HUD.',
+    run: runDemoAnim2
   }
 ];
 

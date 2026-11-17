@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { UiCommandDesc } from '@galfus/transport-types';
 import { createBunTransport } from '@galfus/transport-bun';
-import { createRuntime } from '@galfus/engine';
+import { createRuntime, createSprite2D } from '@galfus/engine';
 import { setup } from '../../engine/test/interactive-fixture';
 import { advanceFrame } from '../../demos/test/test-helpers';
 import { mountComponentExample } from '../examples/component-root';
@@ -232,6 +232,46 @@ describe('core-backed component roots', () => {
       sample.remove();
       sample.dispose();
       ui.dispose();
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it('disposes immediately when its entity is destroyed via world.destroyEntity', () => {
+    const { runtime, realm } = setup();
+    try {
+      const ui = createUi(runtime);
+      const root = ui.createComponentRoot(realm, { width: 200, height: 100 });
+      expect(root.syncState).toBe('pending');
+      root.flush();
+      expect(root.syncState).toBe('synced');
+
+      realm.world.destroyEntity(root.handle.entityId);
+      expect(root.syncState).toBe('disposed');
+      expect(() => root.root.addPanel()).toThrow('UI component root is disposed.');
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  it('detects recycled entity and does not destroy the new component on dispose', () => {
+    const { runtime, realm } = setup();
+    try {
+      const ui = createUi(runtime);
+      const root = ui.createComponentRoot(realm, { width: 200, height: 100 });
+      const entityId = root.handle.entityId;
+
+      // Simulate external detachment/replacement of UI component
+      realm.world.detachComponent(entityId, 'Model2DUI');
+      realm.world.attachComponent(
+        entityId,
+        createSprite2D(realm.allocateResourceId(), { dimensions: [32, 32] })
+      );
+
+      // Disposing the root should NOT destroy the new entity / sprite
+      root.dispose();
+      expect(realm.world.isAlive(entityId)).toBe(true);
+      expect(realm.world.hasComponent(entityId, 'Sprite2D')).toBe(true);
     } finally {
       runtime.dispose();
     }

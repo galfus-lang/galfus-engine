@@ -36,7 +36,16 @@ export function createUi5Scene(
   const input = new UiInputText(ui, root.root, { value: 'office café', width: 420 });
   root.root.addText('Multiline text area', 15);
   const area = new UiTextArea(ui, root.root, {
-    value: 'Hello, world!\nOlá, mundo!\nПривет',
+    value: [
+      'Hello, world!',
+      'Olá, mundo!',
+      'Привет, мир!',
+      'こんにちは世界！',
+      'Line 5: Scroll with mouse wheel or drag the scrollbar.',
+      'Line 6: UTF-16 selection and caret tracking.',
+      'Line 7: Word wrap and multi-line navigation.',
+      'Line 8: Press Escape to blur, then Escape to exit.'
+    ].join('\n'),
     width: 520,
     height: 120
   });

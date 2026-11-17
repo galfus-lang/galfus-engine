@@ -315,10 +315,7 @@ For explicit text/byte conversions, each runtime defaults to UTF-8. Set `createR
 ## Pointer interaction
 
 Run `bun host:demo interaction` to try direct 2D and 3D interaction in a window.
-Run `bun host:demo text-input` to try multiple text fields and Tab/Shift+Tab focus.
-To test characters outside the bundled font, pass `--font /path/to/font.ttf` (TTF, OTF, or TTC).
-The demo draws the keyboard caret and selection for single-line text; positions inside a ligature
-are estimated because the current layout API does not expose ligature caret positions.
+Run `bun host:demo ui5` to try multiple text fields and Tab/Shift+Tab focus.
 For a bounded headless smoke test, use `bun host:demo interaction --headless --frames 10`.
 The host tutorial is available as `bun host:demo tutorial`, with the same headless option.
 Use `bun host:demo help` to list the available demos.

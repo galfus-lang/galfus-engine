@@ -4,6 +4,7 @@ import { sameUiValue } from '../style/resolve';
 
 /** Update staged and resolved data together so subsequent style reconciliation keeps the UV. */
 export function stageSpriteUv(
+  nodes: Map<number, StyledNode>,
   node: StyledNode,
   uvRect: [number, number, number, number],
   commands: UiCommandDesc[]
@@ -12,8 +13,13 @@ export function stageSpriteUv(
   if (uvRect.length !== 4 || !uvRect.every(Number.isFinite))
     throw new RangeError('Sprite UV requires four finite coordinates.');
   if (sameUiValue(node.kind.uvRect, uvRect)) return false;
-  node.kind.uvRect = [...uvRect];
-  node.resolved!.kind.uvRect = [...uvRect];
+  nodes.set(node.id, {
+    ...node,
+    kind: { ...node.kind, uvRect: [...uvRect] },
+    resolved: node.resolved
+      ? { ...node.resolved, kind: { ...node.resolved.kind, uvRect: [...uvRect] } }
+      : undefined
+  });
   commands.push({ type: 'setSpriteUvRect', id: node.id, uvRect: [...uvRect] });
   return true;
 }
