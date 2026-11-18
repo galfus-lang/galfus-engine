@@ -64,6 +64,9 @@ jobs:
       - name: Run Rust workspace tests
         run: cargo test --workspace
 
+      - name: Sync native binaries for Host tests
+        run: bun scripts/host-sync.ts --skip-wasm
+
       - name: Run Host unit tests
         run: bun test host/engine/test/
 
