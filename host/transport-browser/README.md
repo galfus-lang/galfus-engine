@@ -21,7 +21,7 @@ Browser and WebAssembly (WASM) transport backend for **Galfus Engine** running o
 - **Browser Audio Context**:
   - Bridges the host audio manager with the Web Audio API for spatial audio playback and positional attenuation.
 - **Factory API**:
-  - `createBrowserTransport(options?: BrowserTransportInitOptions): Promise<BrowserTransport>`
+  - `createBrowserTransport(options?: BrowserTransportOptions): Promise<GalfusTransport>`
   - Asynchronously compiles the WASM binary and returns an initialized transport ready for runtime consumption.
 
 ---
@@ -32,9 +32,7 @@ Browser and WebAssembly (WASM) transport backend for **Galfus Engine** running o
 import { createBrowserTransport } from '@galfus/transport-browser';
 
 // Initialize the browser WASM transport
-const transport = await createBrowserTransport({
-  canvas: document.getElementById('render-canvas') as HTMLCanvasElement
-});
+const transport = await createBrowserTransport();
 
-console.log('Browser transport ready:', transport.isReady);
+console.log('Browser transport initialized:', transport.isInitialized);
 ```

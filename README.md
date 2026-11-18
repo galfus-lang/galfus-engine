@@ -15,9 +15,9 @@ An application owns its lifecycle and decides when to process events, update its
 - **Host-Owned Lifecycle:** The host initializes, drives, and shuts down Galfus. No engine-owned application loop is imposed. Supports headless execution for server/CI.
 - **Native Shared Library:** `galfus-native` packages the native crates as a C-compatible dynamic library (`libgalfus_native.so`, `galfus.dll`, or `libgalfus_native.dylib`). Node-API exports are available when it is built with the `napi` feature.
 - **Host-Controlled Logical IDs:** The host controls logical IDs for all entities and resources. Galfus reserves the top 65,535 IDs (`4294901761..=4294967295` for `u32`) for internal engine resources.
-- **Fast-Path Raw Float Transforms:** Hot-path spatial updates bypass JSON serialization via direct raw float buffers:
+- **Fast-Path Raw Struct Transforms:** Hot-path spatial updates bypass JSON serialization via direct C-ABI structs:
   - **3D**: 10 floats (`[px, py, pz, rx, ry, rz, rw, sx, sy, sz]`)
-  - **2D**: 6 floats (`[px, py, rot, sx, sy, zLayer]`)
+  - **2D**: 5 floats + 2 integers (`[px, py, rot, sx, sy, zLayer, drawOrder]`)
 - **Pure Quaternions:** Rotations in the core and SDKs use unit quaternions `[x, y, z, w]` exclusively. The engine remains lean and unopinionated; host code performs any desired Euler conversions.
 - **Multiverse Render Graph:** Coordinates execution of Realms, Invocations, and Targets with topological DAG resolution, soft-cut cycle breaking, and texture binding validation.
 - **Responsive Viewport Anchors:** Invocations support CSS-like units (`vw`, `vh`, `px`) and anchored rectangles through `ViewportRect::full()` and `ViewportRect::anchored(...)`.
@@ -70,7 +70,7 @@ An application owns its lifecycle and decides when to process events, update its
 
 | Path                               | Description                                                                                                      |
 | :--------------------------------- | :--------------------------------------------------------------------------------------------------------------- |
-| `engine/galfus-core`               | Core types, ContentId, ShaderEffectTemplate, reserved ID policies.                                               |
+| `engine/galfus-core`               | Core types, ContentId, ShaderEffectTemplate, collision shapes, reserved ID policies.                             |
 | `engine/galfus-platform`           | Cross-platform windowing (`winit`), headless mode, flat event queues.                                            |
 | `engine/galfus-gpu-manager`        | Shared `wgpu` instance, device, queue, and texture/buffer management.                                            |
 | `engine/galfus-realm-core`         | Realm lifecycle trait (`id`, `kind`, `prepare`, `render`, `clear`, `destroy`, `referenced_texture_ids`).         |
@@ -79,10 +79,14 @@ An application owns its lifecycle and decides when to process events, update its
 | `engine/galfus-realm-2d-resources` | 2D domain models: sprites, shapes, 2D cameras, materials, particles.                                             |
 | `engine/galfus-realm-3d`           | 3D forward+ renderer, reverse-Z, shadow maps, SSAO, gizmos, portals.                                             |
 | `engine/galfus-realm-3d-resources` | 3D domain models: meshes, PBR materials, lights, cameras, particles, AABB.                                       |
-| `bindings/galfus-native`           | Unified C-ABI dynamic library (`libgalfus_native.so`).                                                           |
+| `engine/galfus-animation`          | Property transitions, easing curves, SLERP, path evaluation.                                                     |
+| `engine/galfus-physics`            | 2D and 3D rigid bodies, colliders, raycasting, and contact events via Rapier.                                    |
+| `bindings/galfus-native`           | Unified C-ABI dynamic library (`libgalfus_native.so`) and Node-API exports.                                      |
+| `bindings/galfus-browser`          | WebAssembly packaging and WebGPU surface binding for browsers.                                                   |
+| `host/`                            | High-level TypeScript ecosystem (`@galfus/engine`, `@galfus/ui`, `@galfus/demos`, `@galfus/gltf-loader`, etc.).  |
 | `scripts/codegen`                  | Multi-language code generator using the Strategy pattern.                                                        |
 | `sdk/`                             | Generated client SDKs (`sdk/c`, `sdk/csharp`, `sdk/python`, `sdk/lua`, `sdk/typescript`, `sdk/bun`, `sdk/node`). |
-| `scripts/demos`                    | Interactive realtime demonstration suite (3D PBR, SSAO, portals, 2D shadows, multiverse).                        |
+| `host/demos`                       | Interactive realtime demonstration suite (3D PBR, SSAO, portals, 2D shadows, multiverse).                        |
 
 ---
 
@@ -135,7 +139,10 @@ bun run test:ffi
 
 ```bash
 # Launch interactive demo launcher
-bun scripts/demos/main.ts
+bun demo
+
+# Or run directly via host package script
+bun host:demo
 ```
 
 ---

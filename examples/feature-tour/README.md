@@ -41,15 +41,15 @@ A guided, cross-binding demonstration proving the core capabilities of the Galfu
 
 You can run any SDK tour directly using the configured npm/bun scripts:
 
-| SDK         | Script Command                         | Direct Command                                                                 |
-| :---------- | :------------------------------------- | :----------------------------------------------------------------------------- |
-| **Bun**     | `bun run tour:bun` (or `bun run tour`) | `bun examples/feature-tour/runners/bun/index.ts`                               |
-| **Node.js** | `bun run tour:node`                    | `node examples/feature-tour/runners/node/index.ts`                             |
-| **Python**  | `bun run tour:python`                  | `python3 examples/feature-tour/runners/python/main.py`                         |
-| **LuaJIT**  | `bun run tour:lua`                     | `luajit examples/feature-tour/runners/lua/main.lua`                            |
-| **C99**     | `bun run tour:c`                       | `make -C examples/feature-tour/runners/c run`                                  |
-| **C#**      | `bun run tour:csharp`                  | `dotnet run --project examples/feature-tour/runners/csharp/FeatureTour.csproj` |
-| **Browser** | `bun run tour:browser`                 | `bun examples/feature-tour/runners/browser/index.ts`                           |
+| SDK         | Script Command                         | Direct Command                                                                               |
+| :---------- | :------------------------------------- | :------------------------------------------------------------------------------------------- |
+| **Bun**     | `bun run tour:bun` (or `bun run tour`) | `bun examples/feature-tour/runners/bun/index.ts`                                             |
+| **Node.js** | `bun run tour:node`                    | `bun examples/feature-tour/runners/node/index.ts` (or `node --experimental-strip-types ...`) |
+| **Python**  | `bun run tour:python`                  | `python3 examples/feature-tour/runners/python/main.py`                                       |
+| **LuaJIT**  | `bun run tour:lua`                     | `luajit examples/feature-tour/runners/lua/main.lua`                                          |
+| **C99**     | `bun run tour:c`                       | `make -C examples/feature-tour/runners/c run`                                                |
+| **C#**      | `bun run tour:csharp`                  | `dotnet run --project examples/feature-tour/runners/csharp/FeatureTour.csproj`               |
+| **Browser** | `bun run tour:browser`                 | `bun examples/feature-tour/runners/browser/index.ts`                                         |
 
 The Browser/WASM tour reuses the same shared runner, room schedule, 3D Realm, 2D Realm, Multiverse graph, and telemetry as the native SDKs. It renders both realms into one full-window canvas and updates the viewport automatically when that canvas changes size. Select **Enable Sound** once before reaching the audio room: browsers require a user gesture before Web Audio playback may begin.
 

@@ -37,7 +37,7 @@ import { createRuntime } from '@galfus/engine';
 import { loadGltfAsset } from '@galfus/gltf-loader';
 
 // Initialize engine and 3D Realm
-const transport = await createBunTransport({ targetFps: 60 });
+const transport = createBunTransport({ targetFps: 60 });
 const runtime = createRuntime(transport);
 const realm3d = runtime.createRealm3D(1);
 

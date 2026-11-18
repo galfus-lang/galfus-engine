@@ -16,8 +16,8 @@ High-performance native transport backend for **Bun** using direct FFI bindings 
   - Dynamically loads the pre-compiled `galfus-native` shared library.
   - Zero-copy C struct and pointer marshalling for high-frequency transforms.
 - **Factory API**:
-  - `createBunTransport(options?: TransportInitOptions): Promise<BunTransport>`
-  - Asynchronously initializes the native platform and display capabilities, returning a transport that is immediately `ready`.
+  - `createBunTransport(options?: TransportInitOptions): GalfusTransport`
+  - Synchronously initializes the native platform and display capabilities, returning an initialized transport instance.
 - **Target FPS & Loop Timing**:
   - Precision sleep-based microsecond loop timer supporting target frame rates (e.g. 60, 120 FPS).
   - Unclamped real `deltaMs` metrics.
@@ -31,13 +31,13 @@ High-performance native transport backend for **Bun** using direct FFI bindings 
 ```typescript
 import { createBunTransport } from '@galfus/transport-bun';
 
-// Create and initialize the transport backend
-const transport = await createBunTransport({
+// Create and initialize the transport backend synchronously
+const transport = createBunTransport({
   targetFps: 120,
   headless: false
 });
 
-// Access capabilities and engine bindings
-console.log('Capabilities:', transport.capabilities);
+// Access initialization status and engine bindings
+console.log('Transport initialized:', transport.isInitialized);
 transport.engine.multiverseCreateTarget(1, { kind: { type: 'window', windowId: 1 } });
 ```
