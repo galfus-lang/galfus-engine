@@ -16,8 +16,8 @@ Native transport backend for **Node.js** and Node-API environments using the com
   - Loads `galfus.node` dynamically from the local distribution or compiled targets.
   - ABI-stable cross-platform execution across Node.js versions without runtime recompilation.
 - **Factory API**:
-  - `createNodeTransport(options?: TransportInitOptions): Promise<NodeTransport>`
-  - Asynchronously verifies native platform initialization and returns a ready transport instance.
+  - `createNodeTransport(options?: TransportInitOptions): GalfusTransport`
+  - Synchronously verifies native platform initialization and returns an initialized transport instance.
 - **Precision Loop Management**:
   - Microsecond-accurate frame loop driver with unclamped delta tracking and cancellation tokens.
 - **Headless Mode**:
@@ -30,11 +30,11 @@ Native transport backend for **Node.js** and Node-API environments using the com
 ```typescript
 import { createNodeTransport } from '@galfus/transport-node';
 
-// Create ready transport instance
-const transport = await createNodeTransport({
+// Create ready transport instance synchronously
+const transport = createNodeTransport({
   targetFps: 60,
   headless: true
 });
 
-console.log('Node transport initialized:', transport.isReady);
+console.log('Node transport initialized:', transport.isInitialized);
 ```
