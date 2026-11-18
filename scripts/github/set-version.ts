@@ -154,11 +154,13 @@ async function updateHostPackageVersions(root: string, version: string): Promise
 }
 
 async function exportVersion(version: ReleaseVersion): Promise<void> {
+  const npmTag = version.channel === 'stable' ? 'latest' : version.channel;
   const output = process.env.GITHUB_OUTPUT;
   if (!output) {
     console.log(
       JSON.stringify({
-        tag: version.channel,
+        tag: npmTag,
+        channel: version.channel,
         version: version.version,
         packageVersion: version.packageVersion
       })
@@ -168,7 +170,7 @@ async function exportVersion(version: ReleaseVersion): Promise<void> {
 
   await appendFile(
     output,
-    `tag=${version.channel}\nversion=${version.version}\npackageVersion=${version.packageVersion}\n`
+    `tag=${npmTag}\nchannel=${version.channel}\nversion=${version.version}\npackageVersion=${version.packageVersion}\n`
   );
 }
 
