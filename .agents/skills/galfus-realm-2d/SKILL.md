@@ -26,7 +26,7 @@ The 2D camera manages view offset and zoom scale:
 const camera = realm2d.createCamera(
   {
     cameraSlot: 1, // Matches Multiverse Invocation
-    zoom: 1.0      // 1.0 = normal scale, >1.0 = zoom in, <1.0 = zoom out
+    orthoScale: 10.0 // Orthographic vertical view height in world units
   },
   {
     position: [0, 0] // Center of the 2D world
@@ -79,8 +79,8 @@ const light = realm2d.createLight(
   {
     color: [1.0, 0.85, 0.6], // Warm candlelight
     intensity: 2.5,
-    range: 12.0,             // Attenuation radius
-    lightRadius: 0.5,        // Light source core radius
+    range: 12.0, // Attenuation radius
+    lightRadius: 0.5, // Light source core radius
     castShadow: false,
     active: true
   },
@@ -102,10 +102,7 @@ const sheet = new SpriteSheet({
   frameHeight: 32
 });
 
-const spriteModel = realm2d.world.getComponent<Model2DComponent>(
-  playerSprite.entityId,
-  'Model2D'
-);
+const spriteModel = realm2d.world.getComponent<Model2DComponent>(playerSprite.entityId, 'Model2D');
 
 // Switch to frame 4 (0-indexed)
 const uv = sheet.getFrameUv(4);

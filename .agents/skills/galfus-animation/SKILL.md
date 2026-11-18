@@ -21,10 +21,7 @@ Galfus Engine provides a hardware-accelerated skeletal and keyframe animation sy
 Attach the animation evaluation system to your realm's ECS world:
 
 ```typescript
-import {
-  createAnimationSystem3D,
-  type AnimationPlayer3DComponent
-} from '@galfus/engine';
+import { createAnimationSystem3D, type AnimationPlayer3DComponent } from '@galfus/engine';
 
 // Register the animation system with the realm's ECS world
 const animSystem = createAnimationSystem3D(realm3d.world, realm3d);
@@ -83,9 +80,15 @@ const bounceTrack: KeyframeTrack = {
   interpolation: 'linear',
   timestamps: new Float32Array([0.0, 0.5, 1.0]),
   values: new Float32Array([
-    0, 0, 0,   // t = 0.0s: position [0, 0, 0]
-    0, 2, 0,   // t = 0.5s: position [0, 2, 0]
-    0, 0, 0    // t = 1.0s: position [0, 0, 0]
+    0,
+    0,
+    0, // t = 0.0s: position [0, 0, 0]
+    0,
+    2,
+    0, // t = 0.5s: position [0, 2, 0]
+    0,
+    0,
+    0 // t = 1.0s: position [0, 0, 0]
   ])
 };
 

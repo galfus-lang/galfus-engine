@@ -6,10 +6,11 @@ pub const REALM_3D_SHADER_TEMPLATE: &str = REALM_3D_SHADER;
 
 /// Returns the default compiled WGSL shader with passthrough surface effect.
 pub fn get_default_realm_3d_shader() -> String {
-    REALM_3D_SHADER.replace(
-        galfus_core::shader_effects::EFFECT_SNIPPET_PLACEHOLDER,
+    galfus_core::shader_effects::replace_effect_snippet(
+        REALM_3D_SHADER,
         crate::surface_effect::BUILTIN_SURFACE_PASSTHROUGH,
     )
+    .expect("Realm3D shader template must contain an effect snippet placeholder")
 }
 
 #[cfg(test)]

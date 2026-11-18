@@ -159,7 +159,7 @@ runtime.on('tick', ({ dt }) => {
   elapsed += dt;
 
   // Rotate around Y axis
-  const halfAngle = (elapsed * 2.0) * 0.5;
+  const halfAngle = elapsed * 2.0 * 0.5;
   model?.setRotation(0, Math.sin(halfAngle), 0, Math.cos(halfAngle));
 
   // Translate up and down

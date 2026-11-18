@@ -63,7 +63,10 @@ If the glTF file contains keyframe or skeletal animations, trigger them on the i
 
 ```typescript
 // List available animations
-console.log('Available clips:', modelFactory.animations.map((a) => a.name));
+console.log(
+  'Available clips:',
+  modelFactory.animations.map((a) => a.name)
+);
 
 // Play animation by name or index
 player.playAnimation('Walk', {
@@ -83,10 +86,7 @@ runtime.on('tick', ({ dt }) => {
 Galfus natively decompresses ZIP packages containing `.gltf`, external `.bin` buffers, and texture folders without extracting to disk:
 
 ```typescript
-const environmentFactory = await loadGltfAsset(
-  realm3d,
-  'assets/environments/sci-fi-lab.zip'
-);
+const environmentFactory = await loadGltfAsset(realm3d, 'assets/environments/sci-fi-lab.zip');
 
 const level = environmentFactory.instantiate();
 ```

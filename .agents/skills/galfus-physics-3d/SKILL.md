@@ -53,6 +53,7 @@ realm3d.addCollider(characterEntity, {
 ## 3. Creating Rigid Bodies
 
 Add rigid bodies to entities using `physics.addRigidBody`. Supported body types:
+
 - `'dynamic'`: Affected by gravity, forces, impulses, and collisions.
 - `'fixed'`: Immovable static level geometry (floors, walls, ramps).
 - `'kinematicPosition'` / `'kinematicVelocity'`: Moved programmatically without physical forces pushing back.
@@ -76,7 +77,7 @@ const crate = realm3d.createCube(1, crateMat, {
 realm3d.addCollider(crate, { type: 'box', halfExtents: [0.5, 0.5, 0.5] });
 physics.addRigidBody(crate, {
   type: 'dynamic',
-  mass: 5.0,        // Mass in kg
+  mass: 5.0, // Mass in kg
   restitution: 0.4, // Bounciness (0 = no bounce, 1 = perfectly elastic)
   friction: 0.6,
   linearDamping: 0.1,

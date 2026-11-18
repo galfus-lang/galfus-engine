@@ -264,8 +264,8 @@ impl ShadowPipeline3D {
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState {
                 // Reverse-Z: negative bias pushes occluder farther (closer to 0.0)
-                constant: -2,
-                slope_scale: -2.0,
+                constant: -3,
+                slope_scale: -3.5,
                 clamp: 0.0,
             },
         };

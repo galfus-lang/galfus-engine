@@ -113,6 +113,7 @@ for (const entityId of damageableEntities) {
 ### Creating Systems in the 4-Stage Pipeline
 
 Galfus executes systems in 4 ordered stages every frame:
+
 1. `'input'`: Processes incoming controller, keyboard, and pointer inputs.
 2. `'update'`: Primary gameplay logic, AI, physics, and state mutations.
 3. `'preRender'`: Spatial hierarchy updates, anchor resolution, and camera synchronization.

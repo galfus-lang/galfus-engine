@@ -174,9 +174,9 @@ pub fn render_shadow_depth_pass(
                 continue;
             }
             let pos = light_trans.position;
-            let range = light.range.max(0.1);
+            let range = light.range.max(0.25);
             let fov = 90.5f32.to_radians();
-            let proj = glam::camera::rh::proj::directx::perspective(fov, 1.0, range, 0.1);
+            let proj = glam::camera::rh::proj::directx::perspective(fov, 1.0, range, 0.2);
             let targets = [
                 (pos + glam::Vec3::X, glam::Vec3::NEG_Y),     // +X: 0
                 (pos + glam::Vec3::NEG_X, glam::Vec3::NEG_Y), // -X: 1

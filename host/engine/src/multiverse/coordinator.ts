@@ -52,6 +52,23 @@ export class MultiverseCoordinator {
   private readonly _boundRealms = new Set<RealmId>();
   private readonly _boundInvocations = new Set<InvocationId>();
   private readonly _boundBindings = new Map<RealmId, Map<string, number>>();
+  private _pendingWindowAttachments = 0;
+
+  private _attachWindow(engine: GalfusEngine, windowId: number): void {
+    const res = engine.multiverseAttachWindow?.(windowId);
+    if (res && typeof (res as Promise<void>).then === 'function') {
+      this._pendingWindowAttachments++;
+      (res as Promise<void>).then(
+        () => {
+          this._pendingWindowAttachments = Math.max(0, this._pendingWindowAttachments - 1);
+        },
+        (err) => {
+          this._pendingWindowAttachments = Math.max(0, this._pendingWindowAttachments - 1);
+          console.error(`[Multiverse] Failed to attach browser window ${windowId}:`, err);
+        }
+      );
+    }
+  }
 
   get presentationGraph(): PresentationGraphView {
     return this._presentation.view;
@@ -71,7 +88,7 @@ export class MultiverseCoordinator {
     for (const [targetId, desc] of this._targets) {
       if (this._boundTargets.has(targetId)) continue;
       if (desc.kind.type === 'window') {
-        engine.multiverseAttachWindow?.(desc.kind.windowId);
+        this._attachWindow(engine, desc.kind.windowId);
       }
       engine.multiverseCreateTarget(targetId, desc);
       this._boundTargets.add(targetId);
@@ -130,7 +147,7 @@ export class MultiverseCoordinator {
     const storedDesc = structuredClone(desc);
     if (this._engine) {
       if (desc.kind.type === 'window') {
-        this._engine.multiverseAttachWindow?.(desc.kind.windowId);
+        this._attachWindow(this._engine, desc.kind.windowId);
       }
       this._engine.multiverseCreateTarget(targetId, storedDesc);
       this._boundTargets.add(targetId);
@@ -492,9 +509,7 @@ export class MultiverseCoordinator {
     }
   }
 
-  /**
-   * Steps all registered realms through post-render stage (postRender) after dispatch.
-   */
+  /** Steps all registered realms through post-render stage (postRender) after dispatch. */
   stepRealmsPostRender(context: SystemContext): void {
     for (const realm of this._realms.values()) {
       if (typeof realm.postRender === 'function') {
@@ -503,18 +518,14 @@ export class MultiverseCoordinator {
     }
   }
 
-  /**
-   * Synchronizes all realm states into the native/WASM core.
-   */
+  /** Synchronizes all realm states into the native/WASM core. */
   syncRealms(context?: SystemContext): void {
     for (const realm of this._realms.values()) {
       (realm as any).sync(context);
     }
   }
 
-  /**
-   * Resolves responsive multiverse viewports and scheduling before dispatch.
-   */
+  /** Resolves responsive multiverse viewports and scheduling before dispatch. */
   resolve(): any {
     this.flushUpdates();
     this._purgeDeadPresentationSurfaces();
@@ -532,11 +543,9 @@ export class MultiverseCoordinator {
     });
   }
 
-  /**
-   * Dispatches the native multiverse rendering pass for all active invocations.
-   */
+  /** Dispatches the native multiverse rendering pass for all active invocations. */
   dispatch(frameId?: number, dt?: number): void {
-    if (!this._engine) return;
+    if (!this._engine || this._pendingWindowAttachments > 0) return;
     const schedule = this.resolve();
     this._presentation.stage(schedule, this._targets, this._presentationLinks.snapshot());
     try {
@@ -548,26 +557,16 @@ export class MultiverseCoordinator {
     }
   }
 
-  /**
-   * Queries the current active schedule of all realms, targets, and invocations.
-   */
+  /** Queries the current active schedule of all realms, targets, and invocations. */
   getSchedule(): MultiverseSchedule | undefined {
     return (this._engine as any)?.multiverseGetSchedule?.();
   }
 
-  /**
-   * Resets all invocations, targets, and realms.
-   */
+  /** Resets all invocations, targets, and realms. */
   reset(): void {
-    for (const invocationId of [...this._invocations.keys()]) {
-      this.destroyInvocation(invocationId);
-    }
-    for (const realm of [...this._realms.values()]) {
-      this.unregisterRealm(realm.realmId);
-    }
-    for (const targetId of [...this._targets.keys()]) {
-      this.destroyTarget(targetId);
-    }
+    for (const invocationId of [...this._invocations.keys()]) this.destroyInvocation(invocationId);
+    for (const realm of [...this._realms.values()]) this.unregisterRealm(realm.realmId);
+    for (const targetId of [...this._targets.keys()]) this.destroyTarget(targetId);
     this._realms.clear();
     this._targets.clear();
     this._invocations.clear();
@@ -578,11 +577,10 @@ export class MultiverseCoordinator {
     this._boundRealms.clear();
     this._boundInvocations.clear();
     this._boundBindings.clear();
+    this._pendingWindowAttachments = 0;
   }
 
-  /**
-   * Releases all multiverse resources.
-   */
+  /** Releases all multiverse resources. */
   dispose(): void {
     this.reset();
     this._presentation.dispose();

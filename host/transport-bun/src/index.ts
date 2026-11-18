@@ -23,6 +23,9 @@ export class BunTransport implements GalfusTransport {
   private _loopGeneration = 0;
   private _callback: FrameCallback | null = null;
   private _targetFps: number = DEFAULT_TARGET_FPS;
+  private readonly _onProcessExit = (): void => {
+    this.dispose();
+  };
 
   get engine(): GalfusEngine {
     if (this._isDisposed) {
@@ -68,10 +71,16 @@ export class BunTransport implements GalfusTransport {
       }
     }
     this._isInitialized = true;
+    if (typeof process !== 'undefined' && typeof process.once === 'function') {
+      process.once('exit', this._onProcessExit);
+    }
   }
 
   dispose(): void {
     if (this._isDisposed) return;
+    if (typeof process !== 'undefined' && typeof process.off === 'function') {
+      process.off('exit', this._onProcessExit);
+    }
     this.stopLoop();
     this._callback = null;
     if (this._isInitialized && this._engine) {

@@ -42,8 +42,12 @@ function locateLibrary(): string {
     return cwdAdjacent;
   }
 
-  // 3. Fallback to package dist directory (monorepo / local dev)
+  // 3. Fallback to script-adjacent or package dist directory (monorepo / local dev)
   const baseDir = typeof import.meta.dir === 'string' ? import.meta.dir : process.cwd();
+  const scriptAdjacent = resolve(baseDir, filename);
+  if (existsSync(scriptAdjacent)) {
+    return scriptAdjacent;
+  }
   const localDistPath = resolve(baseDir, '../../dist', platform, filename);
   if (existsSync(localDistPath)) {
     return localDistPath;
@@ -88,8 +92,12 @@ function locateAddon(): string {
     return cwdAdjacent;
   }
 
-  // 3. Fallback to package dist directory (monorepo / local dev)
+  // 3. Fallback to script-adjacent or package dist directory (monorepo / local dev)
   const baseDir = typeof import.meta.dir === 'string' ? import.meta.dir : dirname(fileURLToPath(import.meta.url));
+  const scriptAdjacent = resolve(baseDir, filename);
+  if (existsSync(scriptAdjacent)) {
+    return scriptAdjacent;
+  }
   const localDistPath = resolve(baseDir, '../../dist', platform, filename);
   if (existsSync(localDistPath)) {
     return localDistPath;

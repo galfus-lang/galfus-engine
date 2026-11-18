@@ -43,6 +43,7 @@
     "test:host": "bun test host",
     "demo": "bun scripts/host-sync.ts --skip-wasm && bun host/demos/src/main.ts",
     "host:sync": "bun scripts/host-sync.ts",
+    "host:link": "bun scripts/link-host.ts",
     "host:demo": "bun host/demos/src/main.ts",
     "gltf": "bun scripts/gltf-viewer.ts",
     "tour": "bun examples/feature-tour/runners/bun/index.ts",
