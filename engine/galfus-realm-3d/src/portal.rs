@@ -7,7 +7,7 @@ use galfus_realm_3d_resources::frustum::Frustum;
 use galfus_realm_3d_resources::geometry::Geometry3D;
 use galfus_realm_3d_resources::material::Material3D;
 use galfus_realm_3d_resources::transform::Transform3D;
-use glam::{Mat4, Quat, Vec3};
+use glam::{Quat, Vec3};
 
 use crate::collector::DrawCollector;
 use crate::types::{GpuInstancedModelEntry, GpuMeshBuffers, GpuModelEntry};
@@ -309,7 +309,7 @@ impl PortalPipeline3D {
         let refl_forward = f_cam - 2.0 * normal.dot(f_cam) * normal;
         let refl_up = u_cam - 2.0 * normal.dot(u_cam) * normal;
 
-        let refl_view = Mat4::look_to_rh(refl_pos, refl_forward, refl_up);
+        let refl_view = glam::camera::rh::view::look_to_mat4(refl_pos, refl_forward, refl_up);
         let refl_vp = camera.projection * refl_view;
 
         Camera3DUniform {
@@ -344,7 +344,7 @@ impl PortalPipeline3D {
         let f_portal = exit.rotation * (rot_y_180 * f_rel);
         let u_portal = exit.rotation * (rot_y_180 * u_rel);
 
-        let portal_view = Mat4::look_to_rh(p_portal, f_portal, u_portal);
+        let portal_view = glam::camera::rh::view::look_to_mat4(p_portal, f_portal, u_portal);
         let portal_vp = camera.projection * portal_view;
 
         Camera3DUniform {

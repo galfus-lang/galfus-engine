@@ -1,0 +1,5 @@
+test/
+scripts/
+examples/
+VALIDATION.md
+*.tsbuildinfo

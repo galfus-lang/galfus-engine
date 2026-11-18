@@ -5,9 +5,14 @@
 
 pub mod api;
 mod api_animation;
+pub mod api_effects;
 pub mod bloom;
 pub mod collector;
+pub mod collision_geometry;
 pub mod context;
+mod context_collision;
+pub mod context_hierarchy;
+pub mod context_physics;
 pub mod gizmo;
 pub mod light_cull;
 pub mod outline;
@@ -16,6 +21,7 @@ pub mod pipeline;
 pub mod portal;
 pub mod postprocess;
 pub mod realm_impl;
+pub(crate) mod realm_render;
 pub mod refraction;
 pub mod shader;
 pub mod shadow;

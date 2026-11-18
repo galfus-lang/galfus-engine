@@ -2,12 +2,15 @@ import { cancel, intro, isCancel, log, outro, select, spinner, text } from '@cla
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { scaffoldAgentFiles } from './skills';
 import {
   createGitIgnore,
+  createIndexHtml,
   createMainScript,
   createPackageJson,
   createReadme,
   createTsConfig,
+  createViteConfig,
   type ProjectConfig,
   type ProjectTemplate,
   type ProjectTransport,
@@ -66,6 +69,11 @@ export async function runInitCommand(
             value: 'node',
             label: 'Node.js (@galfus/transport-node)',
             hint: 'Node-API native addon'
+          },
+          {
+            value: 'browser',
+            label: 'Browser / Vite (@galfus/transport-browser)',
+            hint: 'WebGPU & WebAssembly with Vite dev server'
           }
         ]
       });
@@ -115,7 +123,7 @@ export async function runInitCommand(
     process.exit(1);
   }
 
-  const validTransports: ProjectTransport[] = ['bun', 'node'];
+  const validTransports: ProjectTransport[] = ['bun', 'node', 'browser'];
   if (!validTransports.includes(transport!)) {
     console.error(`Invalid transport: "${transport}". Available: ${validTransports.join(', ')}`);
     process.exit(1);
@@ -147,10 +155,17 @@ export async function runInitCommand(
     await createPackageJson(config, resolvedVersions),
     'utf-8'
   );
-  await writeFile(resolve(projectDir, 'tsconfig.json'), createTsConfig(), 'utf-8');
+  await writeFile(resolve(projectDir, 'tsconfig.json'), createTsConfig(config), 'utf-8');
   await writeFile(resolve(projectDir, '.gitignore'), createGitIgnore(), 'utf-8');
   await writeFile(resolve(projectDir, 'README.md'), createReadme(config), 'utf-8');
   await writeFile(resolve(projectDir, 'src/main.ts'), createMainScript(config), 'utf-8');
+
+  if (config.transport === 'browser') {
+    await writeFile(resolve(projectDir, 'index.html'), createIndexHtml(config), 'utf-8');
+    await writeFile(resolve(projectDir, 'vite.config.ts'), createViteConfig(), 'utf-8');
+  }
+
+  await scaffoldAgentFiles(projectDir, config);
 
   if (isInteractive) {
     log.success(`Created project "${name}" in ${projectDir}`);

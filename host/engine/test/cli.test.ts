@@ -43,10 +43,58 @@ describe('@galfus/engine CLI (galfus-engine init & build)', () => {
     expect(existsSync(resolve(projectRoot, 'src/main.ts'))).toBe(true);
     expect(existsSync(resolve(projectRoot, 'README.md'))).toBe(true);
     expect(existsSync(resolve(projectRoot, '.gitignore'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, 'AGENTS.md'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, '.agents/AGENTS.md'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, '.agents/skills/galfus-core/SKILL.md'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, '.agents/skills/galfus-realm-3d/SKILL.md'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, '.agents/skills/galfus-realm-2d/SKILL.md'))).toBe(true);
+    expect(
+      existsSync(resolve(projectRoot, '.agents/skills/galfus-realm-3d-helpers/SKILL.md'))
+    ).toBe(true);
+    expect(
+      existsSync(resolve(projectRoot, '.agents/skills/galfus-realm-2d-helpers/SKILL.md'))
+    ).toBe(true);
+    expect(existsSync(resolve(projectRoot, '.agents/skills/galfus-animation/SKILL.md'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, '.agents/skills/galfus-physics-3d/SKILL.md'))).toBe(
+      true
+    );
+    expect(existsSync(resolve(projectRoot, '.agents/skills/galfus-physics-2d/SKILL.md'))).toBe(
+      true
+    );
 
     const pkg = JSON.parse(readFileSync(resolve(projectRoot, 'package.json'), 'utf-8'));
     expect(pkg.dependencies['@galfus/engine']).not.toBe('^0.0.0');
     expect(pkg.dependencies['@galfus/transport-bun']).not.toBe('^0.0.0');
+  });
+
+  it('scaffolds a Vite browser game project with skills and agent guidelines', () => {
+    const initProc = spawnSync(
+      'bun',
+      [cliBin, 'init', 'starter-browser', '-t', '2d-scene', '--transport', 'browser', '-d', tmpDir],
+      { encoding: 'utf-8' }
+    );
+    expect(initProc.status).toBe(0);
+
+    const projectRoot = resolve(tmpDir, 'starter-browser');
+    expect(existsSync(resolve(projectRoot, 'package.json'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, 'tsconfig.json'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, 'index.html'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, 'vite.config.ts'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, 'src/main.ts'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, 'AGENTS.md'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, '.agents/AGENTS.md'))).toBe(true);
+    expect(existsSync(resolve(projectRoot, '.agents/skills/galfus-core/SKILL.md'))).toBe(true);
+
+    const pkg = JSON.parse(readFileSync(resolve(projectRoot, 'package.json'), 'utf-8'));
+    expect(pkg.scripts.dev).toBe('vite');
+    expect(pkg.scripts.build).toBe('vite build');
+    expect(pkg.dependencies['@galfus/transport-browser']).toBeDefined();
+    expect(pkg.devDependencies['vite']).toBeDefined();
+
+    const mainTs = readFileSync(resolve(projectRoot, 'src/main.ts'), 'utf-8');
+    expect(mainTs).toContain("import { createBrowserTransport } from '@galfus/transport-browser';");
+    expect(mainTs).toContain('await createBrowserTransport()');
+    expect(mainTs).toContain("canvasId: 'galfus-canvas'");
   });
 
   it('generates package.json with custom or dynamically resolved versions', async () => {
@@ -59,8 +107,6 @@ describe('@galfus/engine CLI (galfus-engine init & build)', () => {
       {
         '@galfus/engine': '^1.0.0',
         '@galfus/transport-node': '^1.0.0',
-        '@galfus/physics-3d': '^1.0.0',
-        '@galfus/physics-types': '^1.0.0',
         '@types/bun': '^1.0.0',
         typescript: '^5.0.0'
       }
@@ -69,8 +115,6 @@ describe('@galfus/engine CLI (galfus-engine init & build)', () => {
     const parsed = JSON.parse(pkgJson);
     expect(parsed.dependencies['@galfus/engine']).toBe('^1.0.0');
     expect(parsed.dependencies['@galfus/transport-node']).toBe('^1.0.0');
-    expect(parsed.dependencies['@galfus/physics-3d']).toBe('^1.0.0');
-    expect(parsed.dependencies['@galfus/physics-types']).toBe('^1.0.0');
     expect(parsed.devDependencies['typescript']).toBe('^5.0.0');
   });
 
@@ -107,5 +151,28 @@ describe('@galfus/engine CLI (galfus-engine init & build)', () => {
 
     expect(existsSync(execPath)).toBe(true);
     expect(existsSync(libPath)).toBe(true);
+  });
+
+  it('searches API docs with free text in Portuguese and English via api-search command', () => {
+    const gltfSearch = spawnSync('bun', [cliBin, 'api-search', 'como carregar gltf', '--json'], {
+      encoding: 'utf-8'
+    });
+    expect(gltfSearch.status).toBe(0);
+    const gltfResults = JSON.parse(gltfSearch.stdout);
+    expect(Array.isArray(gltfResults)).toBe(true);
+    expect(gltfResults.length).toBeGreaterThan(0);
+    expect(gltfResults[0].entry.module).toBe('@galfus/gltf-loader');
+    expect(gltfResults[0].entry.snippet).toContain('loadGltfAsset');
+
+    const ecsSearch = spawnSync(
+      'bun',
+      [cliBin, 'api-search', 'como criar sistema no ecs', '--json'],
+      { encoding: 'utf-8' }
+    );
+    expect(ecsSearch.status).toBe(0);
+    const ecsResults = JSON.parse(ecsSearch.stdout);
+    expect(ecsResults.length).toBeGreaterThan(0);
+    expect(ecsResults[0].entry.skill).toBe('galfus-core');
+    expect(ecsResults[0].entry.snippet).toContain('addSystem');
   });
 });

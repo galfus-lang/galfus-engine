@@ -6,7 +6,7 @@ A guided, cross-binding demonstration proving the core capabilities of the Galfu
 
 - **Split Viewports**:
   - **Upper 50vh**: `Realm3D` guided exhibition across 10 interactive rooms.
-  - **Lower 50vh**: `Realm2D` companion telemetry and status HUD panel rendered via GPU-tessellated SVG.
+  - **Lower 50vh**: `Realm2D` companion telemetry and status HUD panel rendered via native `Model2DUI`.
 - **Dual Path Following**:
   - `cameraPositionPath`: Traverses corridor and exhibits bound directly to `camera3DTransform`.
   - `cameraLookTargetPath`: Guides focus points toward room exhibits bound directly to `camera3DLookAt`.

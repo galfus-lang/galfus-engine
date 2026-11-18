@@ -1,5 +1,12 @@
-import { isKey, mat4, type Model3DComponent, quat, utils3D, vec3 } from '@galfus/engine';
-import { attachPhysics3D } from '@galfus/physics-3d';
+import {
+  attachPhysics3D,
+  isKey,
+  mat4,
+  type Model3DComponent,
+  quat,
+  utils3D,
+  vec3
+} from '@galfus/engine';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
 
@@ -13,8 +20,7 @@ export async function runDemoPhys3d4(options: HostDemoOptions = {}): Promise<voi
   try {
     const realm3d = runtime.createRealm3D();
     const physics = await attachPhysics3D(runtime, realm3d, {
-      gravity: [0, -9.81, 0],
-      interpolate: true
+      gravity: [0, -9.81, 0]
     });
 
     let camAngle = 0.45;
@@ -168,14 +174,14 @@ export async function runDemoPhys3d4(options: HostDemoOptions = {}): Promise<voi
       } else if (isKey(ev, 'r', 'KeyR')) {
         // Reset monolith and drone positions and orientations
         const mModel = realm3d.world.getComponent<Model3DComponent>(monolith, 'Model3D');
-        mModel?.setPosition(0, 2.5, 4.0);
         mModel?.setRotation(0, 0, 0, 1);
+        physics.setPosition(monolith, [0, 2.5, 4.0]);
         physics.setLinearVelocity(monolith, [0, 0, 0]);
         physics.setAngularVelocity(monolith, [0, 0, 0]);
 
         const dModel = realm3d.world.getComponent<Model3DComponent>(drone, 'Model3D');
-        dModel?.setPosition(3.5, 2.0, 0);
         dModel?.setRotation(0, 0, 0, 1);
+        physics.setPosition(drone, [3.5, 2.0, 0]);
         physics.setLinearVelocity(drone, [0, 0, 0]);
         physics.setAngularVelocity(drone, [0, 0, 0]);
 

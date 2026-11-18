@@ -4,7 +4,7 @@ mod browser_ime;
 #[cfg(all(target_arch = "wasm32", feature = "browser"))]
 mod browser_keyboard;
 #[cfg(all(target_arch = "wasm32", feature = "browser"))]
-mod browser_pointer;
+pub(crate) mod browser_pointer;
 pub mod event;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;

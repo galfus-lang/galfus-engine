@@ -8,6 +8,51 @@ import { createModel2D, type Model2DComponent } from '../src/realm2d/components'
 import { Realm3D } from '../src/realm3d/realm';
 
 describe('host collider components and spatial queries', () => {
+  it('synchronizes collider updates, deactivation and reactivation in both realms', () => {
+    const calls: { name: string; args: unknown[] }[] = [];
+    const engine = new Proxy(
+      {},
+      {
+        get:
+          (_target, name) =>
+          (...args: unknown[]) => {
+            calls.push({ name: String(name), args: structuredClone(args) });
+            return 0;
+          }
+      }
+    ) as GalfusEngine;
+    for (const dimension of [2, 3] as const) {
+      const realm = dimension === 2 ? new Realm2D(10) : new Realm3D(11);
+      realm.bindEngine(engine);
+      const entity = realm.createSpatialNode();
+      const id =
+        dimension === 2
+          ? (realm as Realm2D).addCollider(entity, { type: 'circle', radius: 1 })
+          : (realm as Realm3D).addCollider(entity, { type: 'sphere', radius: 1 });
+      const type = `Collider${dimension}D`;
+      const component = realm.world.getComponent<Collider2DComponent | Collider3DComponent>(
+        entity,
+        type
+      )!;
+      const update = (radius: number, active: boolean) => {
+        if (component instanceof Collider2DComponent)
+          component.set(id, { type: 'circle', radius }, { active });
+        else component.set(id, { type: 'sphere', radius }, { active });
+        realm.flush();
+      };
+      realm.flush();
+      realm.flush();
+      update(2, true);
+      update(2, false);
+      update(3, true);
+      const creates = calls.filter((call) => call.name === `realm${dimension}dCreateCollider`);
+      const destroys = calls.filter((call) => call.name === `realm${dimension}dDestroyCollider`);
+      expect(creates).toHaveLength(3);
+      expect(destroys).toHaveLength(1);
+      expect((creates[1]!.args[3] as { shape: { radius: number } }).shape.radius).toBe(2);
+      realm.dispose();
+    }
+  });
   it('queries colliders without cloning their shapes and protects public snapshots', () => {
     const realm2d = new Realm2D(1);
     const entity2d = realm2d.createSpatialNode();
@@ -149,11 +194,11 @@ describe('host collider components and spatial queries', () => {
       { type: 'rectangle', halfExtents: [1, 2] },
       { matrix: [1, 0, 0, 1, 4, 0], layer: 4 }
     );
-    expect(realm.queryPoint([12, 2]).map((h) => h.colliderId)).toEqual([circle]);
+    expect(realm.queryPoint([12, 2]).map((h: any) => h.colliderId)).toEqual([circle]);
     expect(realm.queryPoint([16, 2], 2)).toEqual([]);
     expect(realm.queryPoint([16, 2], 4)[0]?.colliderId).toBe(rect);
     const hits = realm.raycast([8, 2], [1, 0], 20);
-    expect(hits.map((h) => h.colliderId)).toEqual([circle, rect]);
+    expect(hits.map((h: any) => h.colliderId)).toEqual([circle, rect]);
     expect(hits[0]?.distance).toBeCloseTo(3);
     expect(hits[0]?.normal[0]).toBeCloseTo(-1);
     expect(hits[0]?.sensor).toBe(true);
@@ -172,10 +217,14 @@ describe('host collider components and spatial queries', () => {
       { matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 2, 1] }
     );
     const hits3d = realm3d.raycast([0, 0, 0], [0, 0, 1], 10);
-    expect(hits3d.map((h) => h.colliderId)).toEqual([sphere, plane]);
+    expect(hits3d.map((h: any) => h.colliderId)).toEqual([sphere, plane]);
     expect(hits3d[0]?.distance).toBeCloseTo(2);
     expect(hits3d[1]?.distance).toBeCloseTo(5);
-    const originalNormal: [number, number, number] = [...hits3d[0]!.normal];
+    const originalNormal: [number, number, number] = [
+      hits3d[0]!.normal[0],
+      hits3d[0]!.normal[1],
+      hits3d[0]!.normal[2]
+    ];
     realm3d.raycast([0, 0, 8], [0, 0, -1], 10);
     expect(hits3d[0]!.normal).toEqual(originalNormal);
     realm3d.reset();

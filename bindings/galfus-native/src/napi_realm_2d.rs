@@ -2,28 +2,40 @@
 
 use super::*;
 
-#[napi(js_name = "realm2dGetSvgTextLayout")]
-pub fn realm_2d_get_svg_text_layout(
-    env: Env,
-    realm_id: u32,
-    svg_id: u32,
-    element_id: String,
-) -> Result<JsUnknown> {
-    let value = crate::ffi_realm_2d_svg::svg_text_layout(realm_id, svg_id, &element_id)
-        .map_err(|error| Error::new(Status::GenericFailure, error))?;
-    env.to_js_value(&value)
+#[napi(js_name = "realm2dGetUiTextGeometry")]
+pub fn realm_2d_get_ui_text_geometry(realm_id: u32, ui_id: u32, element_id: u32) -> Result<String> {
+    ffi_string_result(
+        crate::ffi_realm_2d_ui::galfus_realm_2d_get_ui_text_geometry(realm_id, ui_id, element_id),
+    )
 }
 
-#[napi(js_name = "realm2dGetSvgElementRect")]
-pub fn realm_2d_get_svg_element_rect(
-    env: Env,
+#[napi(js_name = "realm2dGetRichTextGeometry")]
+pub fn realm_2d_get_rich_text_geometry(
     realm_id: u32,
-    svg_id: u32,
-    element_id: String,
-) -> Result<JsUnknown> {
-    let value = crate::ffi_realm_2d_svg::svg_element_rect(realm_id, svg_id, &element_id)
-        .map_err(|error| Error::new(Status::GenericFailure, error))?;
-    env.to_js_value(&value)
+    ui_id: u32,
+    element_id: u32,
+) -> Result<String> {
+    ffi_string_result(
+        crate::ffi_realm_2d_ui::galfus_realm_2d_get_rich_text_geometry(realm_id, ui_id, element_id),
+    )
+}
+
+#[napi(js_name = "realm2dGetRichTextClusters")]
+pub fn realm_2d_get_rich_text_clusters(
+    realm_id: u32,
+    ui_id: u32,
+    element_id: u32,
+) -> Result<String> {
+    ffi_string_result(
+        crate::ffi_realm_2d_ui::galfus_realm_2d_get_rich_text_clusters(realm_id, ui_id, element_id),
+    )
+}
+
+#[napi(js_name = "realm2dGetUiLayout")]
+pub fn realm_2d_get_ui_layout(realm_id: u32, ui_id: u32, element_id: u32) -> Result<String> {
+    ffi_string_result(crate::ffi_realm_2d_ui::galfus_realm_2d_get_ui_layout(
+        realm_id, ui_id, element_id,
+    ))
 }
 
 // Realm 2D
@@ -66,8 +78,9 @@ pub fn realm_2d_set_camera_transform(
     transform_val: JsUnknown,
 ) -> Result<()> {
     let desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
-    let native_tf: crate::ffi_native_structs::GalfusTransform2D =
-        galfus_realm_2d_resources::Transform2D::from(desc).into();
+    let native_tf = crate::ffi_native_structs::GalfusTransform2D::from(
+        galfus_realm_2d_resources::Transform2D::from(desc),
+    );
     check_ffi_res(unsafe {
         crate::ffi_realm_2d::galfus_realm_2d_set_camera_transform(realm_id, camera_id, &native_tf)
     })
@@ -102,55 +115,11 @@ pub fn realm_2d_set_light_transform(
     transform_val: JsUnknown,
 ) -> Result<()> {
     let desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
-    let native_tf: crate::ffi_native_structs::GalfusTransform2D =
-        galfus_realm_2d_resources::Transform2D::from(desc).into();
+    let native_tf = crate::ffi_native_structs::GalfusTransform2D::from(
+        galfus_realm_2d_resources::Transform2D::from(desc),
+    );
     check_ffi_res(unsafe {
         crate::ffi_realm_2d::galfus_realm_2d_set_light_transform(realm_id, light_id, &native_tf)
-    })
-}
-
-#[napi(js_name = "realm2dCreateSvg")]
-pub fn realm_2d_create_svg(
-    env: Env,
-    realm_id: u32,
-    svg_id: u32,
-    svg_val: JsUnknown,
-    transform_val: Option<JsUnknown>,
-) -> Result<()> {
-    let c_svg = js_to_c_string(&env, Some(svg_val))?
-        .ok_or_else(|| Error::new(Status::InvalidArg, "svg cannot be null"))?;
-    let c_tf = js_to_c_string(&env, transform_val)?;
-    check_ffi_res(unsafe {
-        crate::ffi_realm_2d_svg::galfus_realm_2d_create_svg(
-            realm_id,
-            svg_id,
-            c_svg.as_ptr(),
-            c_tf.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
-        )
-    })
-}
-
-#[napi(js_name = "realm2dSetSvgSource")]
-pub fn realm_2d_set_svg_source(realm_id: u32, svg_id: u32, source: String) -> Result<()> {
-    let c_source = std::ffi::CString::new(source)
-        .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
-    check_ffi_res(unsafe {
-        crate::ffi_realm_2d_svg::galfus_realm_2d_set_svg_source(realm_id, svg_id, c_source.as_ptr())
-    })
-}
-
-#[napi(js_name = "realm2dSetSvgTransform")]
-pub fn realm_2d_set_svg_transform(
-    env: Env,
-    realm_id: u32,
-    svg_id: u32,
-    transform_val: JsUnknown,
-) -> Result<()> {
-    let desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
-    let native_tf: crate::ffi_native_structs::GalfusTransform2D =
-        galfus_realm_2d_resources::Transform2D::from(desc).into();
-    check_ffi_res(unsafe {
-        crate::ffi_realm_2d_svg::galfus_realm_2d_set_svg_transform(realm_id, svg_id, &native_tf)
     })
 }
 
@@ -221,9 +190,116 @@ pub fn realm_2d_destroy_light(realm_id: u32, light_id: u32) -> Result<()> {
     ))
 }
 
-#[napi(js_name = "realm2dDestroySvg")]
-pub fn realm_2d_destroy_svg(realm_id: u32, svg_id: u32) -> Result<()> {
-    check_ffi_res(crate::ffi_realm_2d_svg::galfus_realm_2d_destroy_svg(
-        realm_id, svg_id,
+#[napi(js_name = "realm2dCreateCollider")]
+pub fn realm_2d_create_collider(
+    env: Env,
+    realm_id: u32,
+    collider_id: u32,
+    model_id: u32,
+    shape_val: JsUnknown,
+) -> Result<()> {
+    let c_str = js_to_c_string(&env, Some(shape_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "shape cannot be null"))?;
+    check_ffi_res(unsafe {
+        crate::ffi_interaction::galfus_realm_2d_create_collider(
+            realm_id,
+            collider_id,
+            model_id,
+            c_str.as_ptr(),
+        )
+    })
+}
+
+#[napi(js_name = "realm2dDestroyCollider")]
+pub fn realm_2d_destroy_collider(realm_id: u32, collider_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_interaction::galfus_realm_2d_destroy_collider(
+        realm_id,
+        collider_id,
+    ))
+}
+
+#[napi(js_name = "realm2dCreateUi")]
+pub fn realm_2d_create_ui(
+    env: Env,
+    realm_id: u32,
+    ui_id: u32,
+    desc_val: JsUnknown,
+    transform_val: Option<JsUnknown>,
+) -> Result<()> {
+    let c_desc = js_to_c_string(&env, Some(desc_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "desc cannot be null"))?;
+    let c_tf = js_to_c_string(&env, transform_val)?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_ui::galfus_realm_2d_create_ui(
+            realm_id,
+            ui_id,
+            c_desc.as_ptr(),
+            c_tf.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        )
+    })
+}
+
+#[napi(js_name = "realm2dSetUiContent")]
+pub fn realm_2d_set_ui_content(
+    env: Env,
+    realm_id: u32,
+    ui_id: u32,
+    desc_val: JsUnknown,
+) -> Result<()> {
+    let c_desc = js_to_c_string(&env, Some(desc_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "desc cannot be null"))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_ui::galfus_realm_2d_set_ui_content(realm_id, ui_id, c_desc.as_ptr())
+    })
+}
+
+#[napi(js_name = "realm2dApplyUiCommands")]
+pub fn realm_2d_apply_ui_commands(
+    env: Env,
+    realm_id: u32,
+    ui_id: u32,
+    commands_val: JsUnknown,
+) -> Result<()> {
+    let commands = js_to_c_string(&env, Some(commands_val))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "commands cannot be null"))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_ui::galfus_realm_2d_apply_ui_commands(
+            realm_id,
+            ui_id,
+            commands.as_ptr(),
+        )
+    })
+}
+
+#[napi(js_name = "realm2dSetUiTransform")]
+pub fn realm_2d_set_ui_transform(
+    env: Env,
+    realm_id: u32,
+    ui_id: u32,
+    transform_val: JsUnknown,
+) -> Result<()> {
+    let desc: crate::ffi_realm_2d_desc::Transform2DDesc = env.from_js_value(transform_val)?;
+    let native_tf = crate::ffi_native_structs::GalfusTransform2D::from(
+        galfus_realm_2d_resources::Transform2D::from(desc),
+    );
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_ui::galfus_realm_2d_set_ui_transform(realm_id, ui_id, &native_tf)
+    })
+}
+
+#[napi(js_name = "realm2dGetUiTransform")]
+pub fn realm_2d_get_ui_transform(env: Env, realm_id: u32, ui_id: u32) -> Result<JsUnknown> {
+    let mut native_tf = crate::ffi_native_structs::GalfusTransform2D::default();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_ui::galfus_realm_2d_get_ui_transform(realm_id, ui_id, &mut native_tf)
+    })?;
+    let tf: galfus_realm_2d_resources::Transform2D = native_tf.into();
+    env.to_js_value(&tf)
+}
+
+#[napi(js_name = "realm2dDestroyUi")]
+pub fn realm_2d_destroy_ui(realm_id: u32, ui_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_realm_2d_ui::galfus_realm_2d_destroy_ui(
+        realm_id, ui_id,
     ))
 }

@@ -6,7 +6,7 @@
  * - Assembles a 3D Realm with a floor plane, vibrant PBR materials, directional and point lighting
  * - Builds a Tank hierarchy (Base Cube + Rotating Turret Cylinder + Cannon Capsule + Constrained Floating Indicator)
  * - Employs a zero-GC persistent matrix cache with in-place anchor constraint callbacks
- * - Overlays a responsive 2D Realm HUD with dynamic SVG scoreboard and instructions
+ * - Overlays a responsive 2D Realm HUD with native Model2DUI scoreboard and instructions
  * - Keeps the window open and alive, smoothly animated at 60 FPS until closed or ESC is pressed
  */
 
@@ -22,6 +22,7 @@ import {
 import { presets2D } from '@galfus/engine/realm2d';
 import { presets3D } from '@galfus/engine/realm3d';
 import { createBunTransport } from '@galfus/transport-bun';
+import { Panel, UiRoot, UiText } from '@galfus/ui';
 import { type HostDemoOptions, resolveDemoOptions } from '../common/options';
 
 /** Synthesizes an audible, looping 16-bit PCM WAV audio waveform (sci-fi tank engine hum). */
@@ -287,26 +288,86 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
     { position: [0, 0] }
   );
 
-  const hudSvg = realm2D.createSvg(
-    {
-      source: `
-        <svg id="root" width="320" height="180" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
-          <rect width="320" height="180" rx="8" fill="#0d141e" stroke="#25384e" stroke-width="2"/>
-          <text x="16" y="32" font-family="sans-serif" font-size="14" font-weight="bold" fill="#00d8ff">GALFUS ENGINE</text>
-          <text x="16" y="52" font-family="sans-serif" font-size="11" fill="#7d9dbb">Host Layer Tutorial Demo</text>
-          <line x1="16" y1="62" x2="304" y2="62" stroke="#25384e" stroke-width="1"/>
-          <text id="txt-status" x="16" y="86" font-family="sans-serif" font-size="12" fill="#4ade80">● Status: Running (60 FPS)</text>
-          <text id="txt-hierarchy" x="16" y="108" font-family="sans-serif" font-size="11" fill="#cbd5e1">Hierarchy: Tank → Turret → Barrel</text>
-          <text id="txt-frame" x="16" y="130" font-family="sans-serif" font-size="11" fill="#94a3b8">Frame: 0</text>
-          <text x="16" y="156" font-family="sans-serif" font-size="10" fill="#64748b">Press [ESC] to Exit Window</text>
-        </svg>
-      `,
-      castShadow: false,
-      receiveShadow: false
-    },
-    { position: [0, 0] }
+  const uiRoot = new UiRoot(runtime, realm2D, {
+    width: 320,
+    height: 180
+  });
+
+  const hudCard = uiRoot.rootPanel
+    .setBackgroundColor([0.05, 0.08, 0.12, 0.95])
+    .setBorderColor([0.15, 0.22, 0.31, 1.0])
+    .setBorderWidth(2)
+    .setBorderRadius(8);
+
+  hudCard.addText(
+    new UiText({
+      text: 'GALFUS ENGINE',
+      fontSize: 14,
+      color: [0.0, 0.85, 1.0, 1.0],
+      x: 16,
+      y: 18
+    })
   );
-  console.log('      ✓ Live Interactive Vector SVG HUD registered');
+
+  hudCard.addText(
+    new UiText({
+      text: 'Host Layer Tutorial Demo',
+      fontSize: 11,
+      color: [0.49, 0.62, 0.73, 1.0],
+      x: 16,
+      y: 38
+    })
+  );
+
+  // Separator divider line
+  hudCard.addChild(
+    new Panel({
+      x: 16,
+      y: 56,
+      width: 288,
+      height: 1
+    }).setBackgroundColor([0.15, 0.22, 0.31, 1.0])
+  );
+
+  hudCard.addText(
+    new UiText({
+      text: '● Status: Running (60 FPS)',
+      fontSize: 12,
+      color: [0.29, 0.87, 0.5, 1.0],
+      x: 16,
+      y: 68
+    })
+  );
+
+  hudCard.addText(
+    new UiText({
+      text: 'Hierarchy: Tank → Turret → Barrel',
+      fontSize: 11,
+      color: [0.8, 0.84, 0.88, 1.0],
+      x: 16,
+      y: 92
+    })
+  );
+
+  const frameText = new UiText({
+    text: 'Frame: 0 | Time: 0.0s',
+    fontSize: 11,
+    color: [0.58, 0.64, 0.72, 1.0],
+    x: 16,
+    y: 114
+  });
+  hudCard.addText(frameText);
+
+  hudCard.addText(
+    new UiText({
+      text: 'Press [ESC] to Exit Window',
+      fontSize: 10,
+      color: [0.39, 0.45, 0.55, 1.0],
+      x: 16,
+      y: 142
+    })
+  );
+  console.log('      ✓ Live Interactive Native Model2DUI HUD registered');
 
   // 6. GPU Textures & Audio Setup
   console.log('[6/7] Initializing Shared Resources & Spatial Audio...');
@@ -411,13 +472,9 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
     // B) Update 3D spatial audio emitter position in real-time
     runtime.audio.setVoiceEmitterPosition(spatialVoice, Math.sin(turretAngle) * 2, 1.5, 0);
 
-    // C) Update HUD SVG text every 15 frames for high efficiency
+    // C) Update HUD UI text every 15 frames for high efficiency
     if (frameId % 15 === 0) {
-      realm2D.setSvgText(
-        hudSvg,
-        'txt-frame',
-        `Frame: ${frameId} | Time: ${(frameId * dt).toFixed(1)}s`
-      );
+      frameText.setText(`Frame: ${frameId} | Time: ${(frameId * dt).toFixed(1)}s`);
     }
 
     // D) If bounded frame count requested (e.g. CI testing), terminate when reached

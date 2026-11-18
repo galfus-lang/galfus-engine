@@ -5,7 +5,7 @@ export type BufferElementType = 'u8' | 'u32' | 'f32';
 
 /** Fixed C-layout values passed by pointer for hot-path APIs. */
 export type NativeStructName =
-  'Transform2D' | 'Transform3D' | 'CameraLookAt3D' | 'SpatialAudio' | 'EventBatch';
+  'Transform2D' | 'Transform3D' | 'CameraLookAt3D' | 'SpatialAudio' | 'PlatformEvent';
 
 export type DataType =
   | PrimitiveType
@@ -66,6 +66,7 @@ export type FieldType =
   | { ref: string }
   | { enum: string[] }
   | { array: FieldType }
+  | { map: FieldType }
   | { tuple: FieldType[] }
   | { literal: string | number }
   | { inline: Record<string, FieldSpec> };

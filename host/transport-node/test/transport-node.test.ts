@@ -1,7 +1,54 @@
+import { API_FUNCTIONS } from '../../../scripts/codegen/spec';
 import { describe, expect, it } from 'bun:test';
 import { createNodeTransport } from '../src/index';
 
 describe('@galfus/transport-node', () => {
+  it('exports every function declared by the shared SDK contract', () => {
+    const transport = createNodeTransport({ headless: true });
+    try {
+      const addon = (transport.engine as any)._addon;
+      const missing = API_FUNCTIONS.filter((fn) => typeof addon[fn.methodName] !== 'function').map(
+        (fn) => fn.methodName
+      );
+      expect(missing).toEqual([]);
+    } finally {
+      transport.dispose();
+    }
+  });
+
+  it('runs native physics and returns raw target sizes through Node-API', () => {
+    const transport = createNodeTransport({ headless: true });
+    try {
+      const engine = transport.engine;
+      engine.multiverseCreateTarget(90, { kind: { type: 'texture', width: 64, height: 48 } });
+      const width = new Uint32Array(1);
+      const height = new Uint32Array(1);
+      engine.multiverseGetTargetSizeRaw(90, width, height);
+      expect([width[0], height[0]]).toEqual([64, 48]);
+      engine.realm2dCreate(90);
+      engine.realm2dEnablePhysics(90, 0, -9.81);
+      engine.realm2dCreateShape(90, 1, { kind: 'circle', radius: 0.5 }, { position: [0, 5] });
+      engine.realm2dAttachRigidbody(90, 1, {
+        bodyType: 'dynamic',
+        mass: 1,
+        initialPosition: [0, 5],
+        initialRotation: 0
+      });
+      engine.realm2dCreateCollider(90, 2, 1, { shape: { type: 'circle', radius: 0.5 } });
+      const result = JSON.parse(engine.realm2dStepPhysics(90, 1 / 60));
+      expect(result.poses[0][0]).toBe(1);
+      expect(result.poses[0][2]).toBeLessThan(5);
+      const velocity = JSON.parse(
+        engine.realm2dBodyCommand(90, 1, JSON.stringify({ type: 'velocity' }))
+      );
+      expect(velocity.linear[1]).toBeLessThan(0);
+      engine.realm2dDestroy(90);
+      engine.multiverseDestroyTarget(90);
+    } finally {
+      transport.dispose();
+    }
+  });
+
   it('should initialize headless and retrieve capabilities using the local compiled addon', () => {
     const transport = createNodeTransport({ headless: true });
     expect(transport.isInitialized).toBe(true);
@@ -125,5 +172,29 @@ describe('@galfus/transport-node', () => {
     expect(framesReceived).toBeGreaterThanOrEqual(1);
 
     transport.dispose();
+  });
+
+  it('creates a 2D collider and queries it via Node-API', () => {
+    const transport = createNodeTransport({ headless: true });
+    try {
+      const engine = transport.engine;
+      engine.realm2dCreate(1);
+      engine.realm2dCreateShape(
+        1,
+        100,
+        { kind: 'rectangle', size: [50, 50] },
+        { position: [0, 0] }
+      );
+      engine.realm2dCreateCollider(1, 10, 100, {
+        shape: { type: 'rectangle', halfExtents: [25, 25] }
+      });
+      const hits = JSON.parse(engine.realm2dQueryPoint(1, 0, 0, 0xffffffff));
+      expect(hits.some((hit: any) => hit.modelId === 100 && hit.colliderId === 10)).toBe(true);
+      engine.realm2dDestroyCollider(1, 10);
+      engine.realm2dDestroyShape(1, 100);
+      engine.realm2dDestroy(1);
+    } finally {
+      transport.dispose();
+    }
   });
 });

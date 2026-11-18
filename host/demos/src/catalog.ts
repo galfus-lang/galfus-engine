@@ -1,7 +1,6 @@
 import Fuse from 'fuse.js';
 import type { DemoRunOptions } from './common/options';
 import { runInteractionDemo } from './host/interaction';
-import { runTextInputDemo } from './host/text-input';
 import { runTransRealmDemo } from './host/trans-realm';
 import { runTutorialDemo } from './host/tutorial';
 import { runDemoMv1 } from './multiverse/mv1-split';
@@ -18,9 +17,9 @@ import { runDemoPhys3d2 } from './physics/phys3d2-joints';
 import { runDemoPhys3d3 } from './physics/phys3d3-hinge';
 import { runDemoPhys3d4 } from './physics/phys3d4-forces';
 import { runDemoAnim1 } from './realm2d/anim1-transitions';
+import { runDemoAnim2 } from './realm2d/anim2-path';
 import { runDemo2d1 } from './realm2d/d2d1-shadows';
 import { runDemo2d2 } from './realm2d/d2d2-effects-particles';
-import { runDemo2d3 } from './realm2d/d2d3-svg';
 import { runDemo3d1 } from './realm3d/d3d1-orbit';
 import { runDemo3d2 } from './realm3d/d3d2-bones';
 import { runDemo3d3 } from './realm3d/d3d3-ssao-shadows';
@@ -32,12 +31,26 @@ import { runDemo3d8 } from './realm3d/d3d8-instancing';
 import { runDemo3d9 } from './realm3d/d3d9-sides-normals';
 import { runDemo3d10 } from './realm3d/d3d10-morph-targets';
 import { runDemo3d11 } from './realm3d/d3d11-imported-skybox';
+import { runDemoUi1 } from './ui/ui1-pointer-wheel-image';
+import { runDemoUi2 } from './ui/ui2-panels-layout';
+import { runDemoUi3 } from './ui/ui3-components';
+import { runDemoUi4 } from './ui/ui4-overlays';
+import { runDemoUi5 } from './ui/ui5-text-fields';
+import { runDemoUi6 } from './ui/ui6-selection-controls';
+import { runDemoUi7 } from './ui/ui7-menu-dialog-progress';
+import { runDemoUi8 } from './ui/ui8-integrated';
 
 export type DemoCategory =
-  'Host & Interaction' | 'Physics & Anchors' | 'Multiverse' | 'Realm 3D' | 'Realm 2D & Animation';
+  | 'Host & Interaction'
+  | 'UI'
+  | 'Physics & Anchors'
+  | 'Multiverse'
+  | 'Realm 3D'
+  | 'Realm 2D & Animation';
 
 export const DEMO_CATEGORIES: readonly DemoCategory[] = [
   'Host & Interaction',
+  'UI',
   'Physics & Anchors',
   'Multiverse',
   'Realm 3D',
@@ -77,16 +90,6 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     run: runInteractionDemo
   },
   {
-    id: 'text-input',
-    aliases: ['text', 'caret', 'selection'],
-    title: 'Interactive SVG Text Input & Shaping',
-    category: 'Host & Interaction',
-    tags: ['host', 'text', 'svg', 'input', 'clipboard', 'ime', 'font'],
-    description:
-      'Single-line and multi-line editable text fields with grapheme cluster shaping, selection, and clipboard.',
-    run: runTextInputDemo
-  },
-  {
     id: 'trans-realm',
     aliases: ['cross-realm', 'portal-ui'],
     title: 'Trans-Realm 3D-to-2D Screen Projection',
@@ -97,7 +100,93 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     run: runTransRealmDemo
   },
 
-  // 2. Physics & Anchors (5 demos)
+  // 2. UI (6 demos)
+  {
+    id: 'ui1',
+    aliases: ['ui-events', 'sprite-image', 'wheel'],
+    title: 'Native SpritePanel, Wheel & Engine Texture Lab',
+    category: 'UI',
+    tags: ['ui', 'sprite', 'pointer', 'wheel', 'scroll', 'image', 'textureId'],
+    description:
+      'Interactive Model2DUI SpritePanel receiving pointer and wheel scroll events, zooming/panning engine textures with nearest/linear sampling and 9-slice.',
+    run: runDemoUi1
+  },
+  {
+    id: 'ui2',
+    aliases: ['panels', 'split-group', 'scroll-panel', 'layout'],
+    title: 'Panels, SplitGroup, ScrollPanel & Layout Solver',
+    category: 'UI',
+    tags: ['ui', 'panel', 'split', 'sash', 'scroll', 'scrollbar', 'grid', 'flex', 'layout'],
+    description:
+      'Responsive Model2DUI panel hierarchy with horizontal/vertical SplitGroup sashes, ScrollPanel wheel/thumb scrolling, grid/flex layouts, and floating resizable panels.',
+    run: runDemoUi2
+  },
+
+  {
+    id: 'ui3',
+    aliases: ['ui-components', 'buttons'],
+    title: 'UI Components, Buttons & Toolbars',
+    category: 'UI',
+    tags: ['ui', 'button', 'toolbar', 'appbar', 'keyboard', 'theme'],
+    description:
+      'Core-backed buttons, nested button groups, app bar and toolbars with pointer and keyboard navigation.',
+    run: runDemoUi3
+  },
+
+  {
+    id: 'ui4',
+    aliases: ['overlays', 'popover', 'tooltip'],
+    title: 'Popovers, Tooltips & Nested Layers',
+    category: 'UI',
+    tags: ['ui', 'overlay', 'popover', 'tooltip', 'keyboard', 'focus'],
+    description:
+      'Anchored popovers and tooltips with nesting, focus restoration, pointer and keyboard dismissal.',
+    run: runDemoUi4
+  },
+
+  {
+    id: 'ui5',
+    aliases: ['ui-text-fields', 'ui-ime'],
+    title: 'UI Text Fields and IME',
+    category: 'UI',
+    tags: ['ui', 'text', 'selection', 'ime', 'keyboard'],
+    description:
+      'Single-line and multiline component text fields with selections, word navigation and IME.',
+    run: runDemoUi5
+  },
+
+  {
+    id: 'ui6',
+    aliases: ['ui-selection', 'ui-controls'],
+    title: 'UI Selection and Value Controls',
+    category: 'UI',
+    tags: ['ui', 'checkbox', 'radio', 'switch', 'slider', 'select'],
+    description:
+      'Checkbox, radio, switch, slider and select with keyboard and pointer interaction.',
+    run: runDemoUi6
+  },
+
+  {
+    id: 'ui7',
+    aliases: ['ui-menu', 'ui-dialog'],
+    title: 'UI Menus, Dialogs and Progress',
+    category: 'UI',
+    tags: ['ui', 'menu', 'dialog', 'progress'],
+    description: 'Nested menus, modal focus containment and progress indicators.',
+    run: runDemoUi7
+  },
+
+  {
+    id: 'ui8',
+    aliases: ['ui-integrated', 'ui-design-system'],
+    title: 'Game Editor UI',
+    category: 'UI',
+    tags: ['ui', 'editor', 'layout'],
+    description: 'Visual game editor mockup with an animated 3D scene, hierarchy and inspector.',
+    run: runDemoUi8
+  },
+
+  // 3. Physics & Anchors (5 demos)
   {
     id: 'anchor1',
     aliases: ['anchors', 'kinematic-anchors'],
@@ -163,9 +252,9 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     aliases: ['joints-2d', 'chains-2d'],
     title: '2D Physical Chains, Ropes, Springs & Telemetry HUD',
     category: 'Physics & Anchors',
-    tags: ['physics', '2d', 'joints', 'chain', 'rope', 'spring', 'svg'],
+    tags: ['physics', '2d', 'joints', 'chain', 'rope', 'spring', 'ui'],
     description:
-      '2D physical pendulum chain, rope tether, and spring oscillator with live velocity telemetry in a reactive SVG HUD.',
+      '2D physical pendulum chain, rope tether, and spring oscillator with live velocity telemetry in a reactive UI HUD.',
     run: runDemoPhys2d2
   },
   {
@@ -365,24 +454,24 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     run: runDemo2d2
   },
   {
-    id: '2d3',
-    aliases: ['svg', 'vector-hud'],
-    title: 'Reactive 2D Vector SVG & Live DOM Mutations',
-    category: 'Realm 2D & Animation',
-    tags: ['2d', 'svg', 'vector', 'hud', 'typography'],
-    description:
-      'Real-time GPU-rasterized SVG cards with live attribute/text mutation, theme switching, and 4-corner text alignment.',
-    run: runDemo2d3
-  },
-  {
     id: 'anim1',
     aliases: ['transitions', 'easing'],
-    title: 'Native Transitions, Easing Curves & Reactive SVG',
+    title: 'Native Transitions, Easing Curves & Reactive UI HUD',
     category: 'Realm 2D & Animation',
-    tags: ['animation', 'transitions', 'easing', 'retarget', 'svg'],
+    tags: ['animation', 'transitions', 'easing', 'retarget', 'ui'],
     description:
-      'Demonstrates Bounce, Elastic, Cubic, and Back easing curves across 3D transforms and 2D SVG attributes with mid-flight retargeting.',
+      'Demonstrates Bounce, Elastic, Cubic, and Back easing curves across 3D transforms and 2D UI progress HUD with mid-flight retargeting.',
     run: runDemoAnim1
+  },
+  {
+    id: 'anim2',
+    aliases: ['path-follow', 'trajectory', 'spline-follow'],
+    title: 'Native Path Transitions & Spline Trajectories',
+    category: 'Realm 2D & Animation',
+    tags: ['animation', 'path', 'spline', 'bezier', 'follower', 'trajectory'],
+    description:
+      'Multi-segment 3D spline path follower (Lines, Quadratic, Cubic & Catmull-Rom Bézier curves) driving drone and orb trajectories with orient-to-path and reactive HUD.',
+    run: runDemoAnim2
   }
 ];
 

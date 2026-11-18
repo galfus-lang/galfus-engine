@@ -412,12 +412,28 @@ pub enum GpuPresentMode {
 }
 
 impl GpuPresentMode {
-    pub fn to_wgpu(self) -> wgpu::PresentMode {
+    /// Resolves the best concrete `wgpu::PresentMode` supported by the surface capabilities.
+    ///
+    /// For `AutoVsync` and `Mailbox`, prefers `Mailbox` (low-latency tear-free VSync) when
+    /// supported by the adapter/surface, falling back to `Fifo`.
+    pub fn resolve(self, supported: &[wgpu::PresentMode]) -> wgpu::PresentMode {
         match self {
-            Self::AutoVsync => wgpu::PresentMode::AutoVsync,
-            Self::AutoNoVsync => wgpu::PresentMode::AutoNoVsync,
-            Self::Immediate => wgpu::PresentMode::Immediate,
-            Self::Mailbox => wgpu::PresentMode::Mailbox,
+            Self::AutoVsync | Self::Mailbox => {
+                if supported.contains(&wgpu::PresentMode::Mailbox) {
+                    wgpu::PresentMode::Mailbox
+                } else {
+                    wgpu::PresentMode::Fifo
+                }
+            }
+            Self::AutoNoVsync | Self::Immediate => {
+                if supported.contains(&wgpu::PresentMode::Immediate) {
+                    wgpu::PresentMode::Immediate
+                } else if supported.contains(&wgpu::PresentMode::Mailbox) {
+                    wgpu::PresentMode::Mailbox
+                } else {
+                    wgpu::PresentMode::Fifo
+                }
+            }
             Self::Fifo => wgpu::PresentMode::Fifo,
         }
     }

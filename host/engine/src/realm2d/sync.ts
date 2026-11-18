@@ -2,8 +2,19 @@
  * Realm 2D synchronization system syncing ECS state with core GalfusEngine.
  */
 
-import type { GalfusEngine, Material2DDesc, Transform2DDesc } from '@galfus/transport-types';
+import type {
+  ColliderShape2D,
+  GalfusEngine,
+  Material2DDesc,
+  Transform2DDesc
+} from '@galfus/transport-types';
 import type { AnchorMatrixCache } from '../anchors/cache';
+import {
+  type Collider2DComponent,
+  type ColliderEntry,
+  getColliderEntries,
+  type ColliderShape2D as HostColliderShape2D
+} from '../collision/components';
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';
 import { mat2d, vec2 } from '../math';
@@ -12,10 +23,10 @@ import type {
   Camera2DComponent,
   Light2DComponent,
   Model2DComponent,
+  Model2DUIComponent,
   ParticleEmitter2DComponent,
   Shape2DComponent,
-  Sprite2DComponent,
-  Svg2DComponent
+  Sprite2DComponent
 } from './components';
 
 const SCALE = vec2.create();
@@ -26,13 +37,16 @@ export class Realm2DSyncSystem {
   private readonly _syncedShapes = new Set<number>();
   private readonly _syncedLights = new Set<number>();
   private readonly _syncedCameras = new Set<number>();
-  private readonly _syncedSvgs = new Set<number>();
   private readonly _syncedEmitters = new Set<number>();
+  private readonly _syncedUis = new Set<number>();
+  private readonly _syncedColliders = new Map<
+    number,
+    { modelId: number; entry: ColliderEntry<HostColliderShape2D> }
+  >();
 
   constructor(
     readonly realmId: number,
-    readonly cache: AnchorMatrixCache,
-    private readonly onSvgChanged?: (svgId: number) => void
+    readonly cache: AnchorMatrixCache
   ) {}
 
   /**
@@ -67,6 +81,21 @@ export class Realm2DSyncSystem {
     engine: GalfusEngine,
     materials: ReadonlyMap<number, Material2DDesc> = new Map()
   ): void {
+    // Destroy stale colliders before their models: core model destruction also
+    // removes orphaned colliders, so reversing this order would destroy twice.
+    const liveColliders = new Set<number>();
+    for (const id of world.query('Collider2D')) {
+      const collider = world.getComponent<Collider2DComponent>(id, 'Collider2D');
+      if (!collider || !world.getComponent<Model2DComponent>(id, 'Model2D')) continue;
+      for (const entry of getColliderEntries(collider))
+        if (entry.active) liveColliders.add(entry.colliderId);
+    }
+    for (const colliderId of this._syncedColliders.keys()) {
+      if (!liveColliders.has(colliderId)) {
+        engine.realm2dDestroyCollider(this.realmId, colliderId);
+        this._syncedColliders.delete(colliderId);
+      }
+    }
     for (const [id, desc] of materials) {
       if (!this._syncedMaterials.has(id)) {
         engine.realm2dCreateMaterial(this.realmId, id, desc);
@@ -96,8 +125,14 @@ export class Realm2DSyncSystem {
         engine.realm2dCreateSprite(this.realmId, sprite.spriteId, sprite.desc, tf);
         this._syncedSprites.add(sprite.spriteId);
         sprite.isDirty = false;
-      } else if (isSpatialDirty) {
-        engine.realm2dSetSpriteTransform(this.realmId, sprite.spriteId, tf);
+        sprite.uvDirty = false;
+      } else {
+        if (sprite.uvDirty) {
+          const uv = sprite.desc.uvRect!;
+          engine.realm2dSetSpriteUvRect(this.realmId, sprite.spriteId, ...uv);
+          sprite.uvDirty = false;
+        }
+        if (isSpatialDirty) engine.realm2dSetSpriteTransform(this.realmId, sprite.spriteId, tf);
       }
     }
     for (const spriteId of this._syncedSprites) {
@@ -187,37 +222,7 @@ export class Realm2DSyncSystem {
       }
     }
 
-    // 5. Sync SVGs
-    const svgEntities = world.query('Svg2D');
-    const currentSvgs = new Set<number>();
-    for (const id of svgEntities) {
-      const svg = world.getComponent<Svg2DComponent>(id, 'Svg2D');
-      if (!svg) continue;
-      currentSvgs.add(svg.svgId);
-
-      const model = world.getComponent<Model2DComponent>(id, 'Model2D');
-      const tf = this.getResolvedTransform(world, id);
-      const isRegistered = this._syncedSvgs.has(svg.svgId);
-      const isSpatialDirty = model ? (model.flags & SpatialDirtyFlags.WorldDirty) !== 0 : false;
-
-      if (!isRegistered || svg.isDirty) {
-        engine.realm2dCreateSvg(this.realmId, svg.svgId, svg.desc, tf);
-        this.onSvgChanged?.(svg.svgId);
-        this._syncedSvgs.add(svg.svgId);
-        svg.isDirty = false;
-      } else if (isSpatialDirty) {
-        engine.realm2dSetSvgTransform(this.realmId, svg.svgId, tf);
-      }
-    }
-    for (const svgId of this._syncedSvgs) {
-      if (!currentSvgs.has(svgId)) {
-        engine.realm2dDestroySvg(this.realmId, svgId);
-        this.onSvgChanged?.(svgId);
-        this._syncedSvgs.delete(svgId);
-      }
-    }
-
-    // 6. Sync Particle Emitters
+    // 5. Sync Particle Emitters
     const emitterEntities = world.query('ParticleEmitter2D');
     const currentEmitters = new Set<number>();
     for (const id of emitterEntities) {
@@ -243,7 +248,82 @@ export class Realm2DSyncSystem {
       }
     }
 
-    // 7. Clear WorldDirty for all Model2D entities after all Core sync steps are complete
+    // 7. Sync UIs
+    const uiEntities = world.query('Model2DUI');
+    const currentUis = new Set<number>();
+    for (const id of uiEntities) {
+      const ui = world.getComponent<Model2DUIComponent>(id, 'Model2DUI');
+      if (!ui) continue;
+      currentUis.add(ui.uiId);
+
+      const model = world.getComponent<Model2DComponent>(id, 'Model2D');
+      const isSpatialDirty = model ? (model.flags & SpatialDirtyFlags.WorldDirty) !== 0 : false;
+      const tf = this.getResolvedTransform(world, id);
+      if (!this._syncedUis.has(ui.uiId)) {
+        engine.realm2dCreateUi(this.realmId, ui.uiId, ui.desc, tf);
+        this._syncedUis.add(ui.uiId);
+        ui.isDirty = false;
+      } else if (ui.isDirty) {
+        engine.realm2dSetUiContent(this.realmId, ui.uiId, ui.desc);
+        ui.isDirty = false;
+        if (isSpatialDirty) {
+          engine.realm2dSetUiTransform(this.realmId, ui.uiId, tf);
+        }
+      } else if (isSpatialDirty) {
+        engine.realm2dSetUiTransform(this.realmId, ui.uiId, tf);
+      }
+      while (ui.pendingCommands.length > 0) {
+        engine.realm2dApplyUiCommands(this.realmId, ui.uiId, ui.pendingCommands[0]!);
+        ui.pendingCommands.shift();
+      }
+    }
+    for (const uiId of this._syncedUis) {
+      if (!currentUis.has(uiId)) {
+        engine.realm2dDestroyUi(this.realmId, uiId);
+        this._syncedUis.delete(uiId);
+      }
+    }
+
+    // 8. Sync Colliders
+    const colliderEntities = world.query('Collider2D');
+    const currentColliders = new Set<number>();
+    for (const id of colliderEntities) {
+      const colliderComp = world.getComponent<Collider2DComponent>(id, 'Collider2D');
+      const model = world.getComponent<Model2DComponent>(id, 'Model2D');
+      if (!colliderComp || !model) continue;
+
+      for (const entry of getColliderEntries(colliderComp)) {
+        if (!entry.active) continue;
+        const previous = this._syncedColliders.get(entry.colliderId);
+        currentColliders.add(entry.colliderId);
+        if (!previous || previous.modelId !== model.modelId || previous.entry !== entry) {
+          let shapeDesc: ColliderShape2D;
+          if (entry.shape.type === 'rectangle') {
+            shapeDesc = { type: 'rectangle', halfExtents: entry.shape.halfExtents };
+          } else if (entry.shape.type === 'circle') {
+            shapeDesc = { type: 'circle', radius: entry.shape.radius };
+          } else {
+            shapeDesc = { type: 'polygon', vertices: entry.shape.vertices };
+          }
+          engine.realm2dCreateCollider(this.realmId, entry.colliderId, model.modelId, {
+            shape: shapeDesc,
+            localMatrix: [...entry.matrix],
+            sensor: entry.sensor ?? false,
+            layer: entry.layer,
+            mask: entry.mask
+          });
+          this._syncedColliders.set(entry.colliderId, { modelId: model.modelId, entry });
+        }
+      }
+    }
+    for (const colliderId of this._syncedColliders.keys()) {
+      if (!currentColliders.has(colliderId)) {
+        engine.realm2dDestroyCollider(this.realmId, colliderId);
+        this._syncedColliders.delete(colliderId);
+      }
+    }
+
+    // 8. Clear WorldDirty for all Model2D entities after all Core sync steps are complete
     for (const id of world.query('Model2D')) {
       const model = world.getComponent<Model2DComponent>(id, 'Model2D');
       if (model) {
@@ -252,12 +332,24 @@ export class Realm2DSyncSystem {
     }
   }
 
-  isSvgSynced(svgId: number): boolean {
-    return this._syncedSvgs.has(svgId);
-  }
-
   isEmitterSynced(emitterId: number): boolean {
     return this._syncedEmitters.has(emitterId);
+  }
+
+  isUiSynced(uiId: number): boolean {
+    return this._syncedUis.has(uiId);
+  }
+
+  untrackUi(uiId: number): void {
+    this._syncedUis.delete(uiId);
+  }
+
+  isColliderSynced(colliderId: number): boolean {
+    return this._syncedColliders.has(colliderId);
+  }
+
+  untrackCollider(colliderId: number): void {
+    this._syncedColliders.delete(colliderId);
   }
 
   /**
@@ -269,16 +361,22 @@ export class Realm2DSyncSystem {
       for (const id of this._syncedShapes) engine.realm2dDestroyShape(this.realmId, id);
       for (const id of this._syncedLights) engine.realm2dDestroyLight(this.realmId, id);
       for (const id of this._syncedCameras) engine.realm2dDestroyCamera(this.realmId, id);
-      for (const id of this._syncedSvgs) engine.realm2dDestroySvg(this.realmId, id);
       for (const id of this._syncedEmitters) engine.realm2dDestroyParticleEmitter(this.realmId, id);
+      for (const id of this._syncedUis) engine.realm2dDestroyUi(this.realmId, id);
       for (const id of this._syncedMaterials) engine.realm2dDestroyMaterial(this.realmId, id);
+      for (const id of this._syncedColliders.keys()) {
+        try {
+          engine.realm2dDestroyCollider(this.realmId, id);
+        } catch {}
+      }
     }
     this._syncedSprites.clear();
     this._syncedShapes.clear();
     this._syncedLights.clear();
     this._syncedCameras.clear();
-    this._syncedSvgs.clear();
     this._syncedEmitters.clear();
+    this._syncedUis.clear();
     this._syncedMaterials.clear();
+    this._syncedColliders.clear();
   }
 }

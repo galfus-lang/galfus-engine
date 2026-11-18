@@ -1,0 +1,231 @@
+name: Pre-Release Validation
+
+on:
+  push:
+    branches:
+      - pre-release/**
+      - rc/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-pre-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate Workspace & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+
+      - name: Generate SDKs
+        run: bun run codegen
+
+      - name: Build engine CLI
+        run: bun run build:cli
+
+      - name: Prepare formatting tools
+        run: bun prepare
+
+      - name: Validate formatting, file lengths, types, and Clippy
+        run: bun run validate
+
+      - name: Run Rust workspace tests
+        run: cargo test --workspace
+
+      - name: Sync native binaries for Host tests
+        run: bun scripts/host-sync.ts --skip-wasm
+
+      - name: Run Host unit tests
+        run: bun test host/engine/test/
+
+  build-native:
+    name: Verify native build ${{ matrix.alias }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            alias: linux-x64-gnu
+            extension: so
+            prefix: lib
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            alias: linux-arm64-gnu
+            extension: so
+            prefix: lib
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            alias: darwin-x64
+            extension: dylib
+            prefix: lib
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            alias: darwin-arm64
+            extension: dylib
+            prefix: lib
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            alias: windows-x64
+            extension: dll
+            prefix: ''
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            alias: windows-arm64
+            extension: dll
+            prefix: ''
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install native build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
+
+      - name: Build FFI library (release)
+        run: cargo build --locked --release --package galfus-native --target ${{ matrix.target }}
+
+      - name: Verify FFI binary exists
+        shell: bash
+        run: |
+          library="build/cargo-target/${{ matrix.target }}/release/${{ matrix.prefix }}galfus_native.${{ matrix.extension }}"
+          test -f "$library"
+
+      - name: Build Node-API library (release)
+        run: cargo build --locked --release --package galfus-native --features napi --target ${{ matrix.target }}
+
+      - name: Verify Node-API binary exists
+        shell: bash
+        run: |
+          library="build/cargo-target/${{ matrix.target }}/release/${{ matrix.prefix }}galfus_native.${{ matrix.extension }}"
+          test -f "$library"
+
+  build-browser:
+    name: Verify browser WASM build
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Build browser binding (release)
+        run: cargo build --locked --release --package galfus-browser --target wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen CLI
+        shell: bash
+        run: |
+          WASM_BINDGEN_VER=$(bun -e "const lock = await Bun.file('Cargo.lock').text(); const match = lock.match(/name = \"wasm-bindgen\"\\s+version = \"([^\"]+)\"/); console.log(match ? match[1] : '0.2.130');")
+          echo "Installing wasm-bindgen-cli matching compiled schema version: $WASM_BINDGEN_VER"
+          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VER"
+
+      - name: Verify wasm-bindgen web bindings generation
+        shell: bash
+        run: |
+          mkdir -p .tmp/wasm-verify
+          wasm-bindgen \
+            --target web \
+            --out-dir .tmp/wasm-verify \
+            --out-name galfus_browser \
+            build/cargo-target/wasm32-unknown-unknown/release/galfus_browser.wasm
+          test -f .tmp/wasm-verify/galfus_browser.js
+          test -f .tmp/wasm-verify/galfus_browser_bg.wasm
+          rm -rf .tmp/wasm-verify
+
+  verify-packages:
+    name: Dry-Run Package Tarballs
+    needs:
+      - build-native
+      - build-browser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Generate SDKs and build CLI
+        run: |
+          bun run codegen
+          bun run build:cli
+
+      - name: Dry-run npm pack on all host packages
+        shell: bash
+        run: |
+          for pkg in host/transport-types host/model-loader-types host/engine host/ui host/transport-bun host/transport-node host/transport-browser host/gltf-loader host/demos; do
+            echo "==> Verifying npm pack --dry-run for $pkg..."
+            (cd "$pkg" && npm pack --dry-run)
+          done

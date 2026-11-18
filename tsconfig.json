@@ -27,6 +27,7 @@
       "@galfus/transport-bun": ["./host/transport-bun/src/index.ts"],
       "@galfus/transport-node": ["./host/transport-node/src/index.ts"],
       "@galfus/transport-browser": ["./host/transport-browser/src/index.ts"],
+      "@galfus/ui": ["./host/ui/src/index.ts"],
       "@galfus/engine": ["./host/engine/src/index.ts"],
       "@galfus/engine/math": ["./host/engine/src/math/index.ts"],
       "@galfus/engine/ecs": ["./host/engine/src/ecs/index.ts"],

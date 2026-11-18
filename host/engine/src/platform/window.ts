@@ -52,6 +52,11 @@ export class WindowManager {
     };
   }
 
+  /** Returns whether a window is currently owned by this manager. */
+  isOpen(windowId: WindowId): boolean {
+    return this._openWindows.has(windowId);
+  }
+
   bindEngine(engine: GalfusEngine): void {
     this._engine = engine;
   }

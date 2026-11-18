@@ -9,9 +9,22 @@
     "url": "https://github.com/galfus-lang/galfus-engine.git",
     "directory": "host/demos"
   },
+  "bugs": {
+    "url": "https://github.com/galfus-lang/galfus-engine/issues"
+  },
+  "homepage": "https://github.com/galfus-lang/galfus-engine#readme",
+  "keywords": [
+    "galfus",
+    "game-engine",
+    "demos",
+    "ui",
+    "3d",
+    "2d",
+    "physics"
+  ],
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -25,13 +38,10 @@
   "dependencies": {
     "@clack/prompts": "^1.8.1",
     "@galfus/engine": "workspace:*",
-    "@galfus/physics-2d": "workspace:*",
-    "@galfus/physics-3d": "workspace:*",
-    "@galfus/physics-types": "workspace:*",
     "@galfus/transport-bun": "workspace:*",
     "@galfus/transport-types": "workspace:*",
+    "@galfus/ui": "workspace:*",
     "commander": "^15.0.0",
-    "fuse.js": "^7.5.0",
-    "unicode-segmenter": "0.17.3"
+    "fuse.js": "^7.5.0"
   }
 }

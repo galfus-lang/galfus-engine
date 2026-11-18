@@ -14,7 +14,7 @@
 #define INVOCATION_2D 101
 #define CAMERA_3D_ID 1
 #define CAMERA_2D_ID 1
-#define SVG_HUD_ID 1
+#define UI_HUD_ID 1
 #define PATH_CAMERA_POS_ID 401
 #define PATH_CAMERA_LOOK_ID 402
 #define SOUND_ID 501
@@ -287,42 +287,8 @@ static void build_skinned_mesh(Vertex3DRecord **out_verts, size_t *out_vert_coun
     *out_idx_count = idx_count;
 }
 
-static void escape_xml(const char *src, char *dst, size_t max_dst) {
-    if (!src || !dst || max_dst == 0)
-        return;
-    size_t d = 0;
-    for (size_t s = 0; src[s] != '\0' && d + 6 < max_dst; s++) {
-        switch (src[s]) {
-        case '&':
-            memcpy(dst + d, "&amp;", 5);
-            d += 5;
-            break;
-        case '<':
-            memcpy(dst + d, "&lt;", 4);
-            d += 4;
-            break;
-        case '>':
-            memcpy(dst + d, "&gt;", 4);
-            d += 4;
-            break;
-        case '"':
-            memcpy(dst + d, "&quot;", 6);
-            d += 6;
-            break;
-        case '\'':
-            memcpy(dst + d, "&apos;", 6);
-            d += 6;
-            break;
-        default:
-            dst[d++] = src[s];
-            break;
-        }
-    }
-    dst[d] = '\0';
-}
-
-static void render_hud_svg(char *out_buf, size_t max_len, int room_idx, float elapsed_secs,
-                           bool is_paused) {
+static void render_hud_ui(char *out_buf, size_t max_len, int room_idx, float elapsed_secs,
+                          bool is_paused) {
     float total_dur = 40.0f;
     float ratio = elapsed_secs / total_dur;
     if (ratio < 0.0f)
@@ -330,92 +296,58 @@ static void render_hud_svg(char *out_buf, size_t max_len, int room_idx, float el
     if (ratio > 1.0f)
         ratio = 1.0f;
     int progress_pct = (int)(ratio * 100.0f + 0.5f);
-    int bar_width = (int)(ratio * 440.0f + 0.5f);
+    int bar_width = (int)(ratio * 444.0f + 0.5f);
     if (bar_width < 6)
         bar_width = 6;
 
-    const char *badge = is_paused
-                            ? "<rect x=\"390\" y=\"20\" width=\"80\" height=\"24\" rx=\"6\" "
-                              "fill=\"#DC2626\"/><text x=\"430\" y=\"36\" "
-                              "font-family=\"sans-serif\" font-size=\"11\" font-weight=\"bold\" "
-                              "fill=\"#FFFFFF\" text-anchor=\"middle\">PAUSED</text>"
-                            : "<rect x=\"390\" y=\"20\" width=\"80\" height=\"24\" rx=\"6\" "
-                              "fill=\"#059669\"/><text x=\"430\" y=\"36\" "
-                              "font-family=\"sans-serif\" font-size=\"11\" font-weight=\"bold\" "
-                              "fill=\"#FFFFFF\" text-anchor=\"middle\">LIVE TOUR</text>";
-
     const char **telem = ROOM_TELEMETRY[room_idx];
-
-    char safe_cat[128], safe_name[128], safe_desc[256];
-    char safe_k0[64], safe_v0[128], safe_k1[64], safe_v1[128];
-    char safe_k2[64], safe_v2[128], safe_k3[64], safe_v3[128];
-
-    escape_xml(ROOM_CATEGORIES[room_idx], safe_cat, sizeof(safe_cat));
-    escape_xml(ROOM_NAMES[room_idx], safe_name, sizeof(safe_name));
-    escape_xml(ROOM_DESCRIPTIONS[room_idx], safe_desc, sizeof(safe_desc));
-    escape_xml(telem[0], safe_k0, sizeof(safe_k0));
-    escape_xml(telem[1], safe_v0, sizeof(safe_v0));
-    escape_xml(telem[2], safe_k1, sizeof(safe_k1));
-    escape_xml(telem[3], safe_v1, sizeof(safe_v1));
-    escape_xml(telem[4], safe_k2, sizeof(safe_k2));
-    escape_xml(telem[5], safe_v2, sizeof(safe_v2));
-    escape_xml(telem[6], safe_k3, sizeof(safe_k3));
-    escape_xml(telem[7], safe_v3, sizeof(safe_v3));
 
     snprintf(
         out_buf, max_len,
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 500 240\" width=\"500\" "
-        "height=\"240\">"
-        "<defs>"
-        "<linearGradient id=\"cardBg\" x1=\"0%%\" y1=\"0%%\" x2=\"0%%\" y2=\"100%%\">"
-        "<stop offset=\"0%%\" stop-color=\"#1E293B\"/><stop offset=\"100%%\" "
-        "stop-color=\"#0F172A\"/>"
-        "</linearGradient>"
-        "<linearGradient id=\"neonBar\" x1=\"0%%\" y1=\"0%%\" x2=\"100%%\" y2=\"0%%\">"
-        "<stop offset=\"0%%\" stop-color=\"#06B6D4\"/><stop offset=\"50%%\" "
-        "stop-color=\"#3B82F6\"/><stop offset=\"100%%\" stop-color=\"#8B5CF6\"/>"
-        "</linearGradient>"
-        "</defs>"
-        "<rect x=\"8\" y=\"8\" width=\"484\" height=\"224\" rx=\"14\" fill=\"url(#cardBg)\" "
-        "stroke=\"#38BDF8\" stroke-width=\"2\"/>"
-        "<path d=\"M 22 8 L 478 8\" stroke=\"#38BDF8\" stroke-width=\"3\" "
-        "stroke-linecap=\"round\"/>"
-        "<text x=\"28\" y=\"36\" font-family=\"sans-serif\" font-size=\"16\" font-weight=\"bold\" "
-        "fill=\"#FFFFFF\">Galfus Engine Feature Tour</text>"
-        "<rect x=\"230\" y=\"22\" width=\"90\" height=\"20\" rx=\"4\" fill=\"#334155\"/>"
-        "<text x=\"275\" y=\"36\" font-family=\"sans-serif\" font-size=\"10\" font-weight=\"bold\" "
-        "fill=\"#38BDF8\" text-anchor=\"middle\">C99 / Native</text>"
-        "%s"
-        "<rect x=\"28\" y=\"50\" width=\"130\" height=\"18\" rx=\"4\" fill=\"#0284C7\"/>"
-        "<text x=\"93\" y=\"63\" font-family=\"sans-serif\" font-size=\"10\" font-weight=\"bold\" "
-        "fill=\"#FFFFFF\" text-anchor=\"middle\">%s</text>"
-        "<text x=\"170\" y=\"65\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"bold\" "
-        "fill=\"#F8FAFC\">Room %d/10: %s</text>"
-        "<text x=\"28\" y=\"86\" font-family=\"sans-serif\" font-size=\"12\" "
-        "fill=\"#E2E8F0\">%s</text>"
-        "<rect x=\"28\" y=\"98\" width=\"444\" height=\"14\" rx=\"7\" fill=\"#334155\" "
-        "stroke=\"#475569\" stroke-width=\"1\"/>"
-        "<rect x=\"28\" y=\"98\" width=\"%d\" height=\"14\" rx=\"7\" fill=\"url(#neonBar)\"/>"
-        "<text x=\"472\" y=\"124\" font-family=\"sans-serif\" font-size=\"11\" "
-        "font-weight=\"bold\" fill=\"#94A3B8\" text-anchor=\"end\">%d%%%% (%.1fs / %.1fs)</text>"
-        "<rect x=\"24\" y=\"132\" width=\"452\" height=\"52\" rx=\"8\" fill=\"#1E293B\" "
-        "stroke=\"#475569\" stroke-width=\"1.5\"/>"
-        "<text font-family=\"monospace\" font-size=\"11\" fill=\"#CBD5E1\">"
-        "<tspan x=\"34\" y=\"156\">▸ %s: <tspan fill=\"#38BDF8\" "
-        "font-weight=\"bold\">%s</tspan></tspan>"
-        "<tspan x=\"34\" y=\"176\">▸ %s: <tspan fill=\"#38BDF8\" "
-        "font-weight=\"bold\">%s</tspan></tspan>"
-        "<tspan x=\"260\" y=\"156\">▸ %s: <tspan fill=\"#38BDF8\" "
-        "font-weight=\"bold\">%s</tspan></tspan>"
-        "<tspan x=\"260\" y=\"176\">▸ %s: <tspan fill=\"#38BDF8\" "
-        "font-weight=\"bold\">%s</tspan></tspan>"
-        "</text>"
-        "<text x=\"28\" y=\"210\" font-family=\"sans-serif\" font-size=\"11\" "
-        "fill=\"#94A3B8\">[Space]: Pause/Resume  |  [←/→]: Prev/Next Room  |  [R]: Restart  |  "
-        "[Esc]: Exit</text>"
-        "</svg>",
-        badge, safe_cat, room_idx + 1, safe_name, safe_desc, bar_width, progress_pct, elapsed_secs,
-        total_dur, safe_k0, safe_v0, safe_k1, safe_v1, safe_k2, safe_v2, safe_k3, safe_v3);
+        "{\"quads\":["
+        "{\"rect\":[8,8,484,224],\"backgroundColor\":[0.06,0.09,0.16,0.95],\"borderColor\":[0.22,0."
+        "74,0.97,1.0],\"borderWidth\":[2,2,2,2],\"borderRadius\":[14,14,14,14]},"
+        "{\"rect\":[22,8,456,3],\"backgroundColor\":[0.22,0.74,0.97,1.0],\"borderRadius\":[1.5,1.5,"
+        "1.5,1.5]},"
+        "{\"rect\":[230,18,90,20],\"backgroundColor\":[0.2,0.25,0.33,1.0],\"borderRadius\":[4,4,4,"
+        "4]},"
+        "{\"rect\":[390,18,80,22],\"backgroundColor\":%s,\"borderRadius\":[6,6,6,6]},"
+        "{\"rect\":[28,48,120,18],\"backgroundColor\":[0.01,0.52,0.78,1.0],\"borderRadius\":[4,4,4,"
+        "4]},"
+        "{\"rect\":[28,96,444,14],\"backgroundColor\":[0.2,0.25,0.33,1.0],\"borderColor\":[0.28,0."
+        "33,0.41,1.0],\"borderWidth\":[1,1,1,1],\"borderRadius\":[7,7,7,7]},"
+        "{\"rect\":[28,96,%d,14],\"backgroundColor\":[0.23,0.51,0.96,1.0],\"borderRadius\":[7,7,7,"
+        "7]},"
+        "{\"rect\":[24,132,452,52],\"backgroundColor\":[0.12,0.16,0.23,1.0],\"borderColor\":[0.28,"
+        "0.33,0.41,1.0],\"borderWidth\":[1,1,1,1],\"borderRadius\":[8,8,8,8]}"
+        "],"
+        "\"texts\":["
+        "{\"position\":[28,20],\"fontSize\":16,\"color\":[1.0,1.0,1.0,1.0],\"text\":\"Galfus "
+        "Engine Feature Tour\"},"
+        "{\"position\":[240,22],\"fontSize\":10,\"color\":[0.22,0.74,0.97,1.0],\"text\":\"C99 / "
+        "Native\"},"
+        "{\"position\":[%d,22],\"fontSize\":11,\"color\":[1.0,1.0,1.0,1.0],\"text\":\"%s\"},"
+        "{\"position\":[34,50],\"fontSize\":10,\"color\":[1.0,1.0,1.0,1.0],\"text\":\"%s\"},"
+        "{\"position\":[160,50],\"fontSize\":14,\"color\":[0.97,0.98,0.99,1.0],\"text\":\"Room "
+        "%d/10: %s\"},"
+        "{\"position\":[28,74],\"fontSize\":12,\"color\":[0.89,0.91,0.94,1.0],\"text\":\"%s\"},"
+        "{\"position\":[330,114],\"fontSize\":11,\"color\":[0.58,0.64,0.72,1.0],\"text\":\"%d%%%% "
+        "(%.1fs / %.1fs)\"},"
+        "{\"position\":[34,140],\"fontSize\":11,\"color\":[0.8,0.84,0.88,1.0],\"text\":\"▸ %s: "
+        "%s\"},"
+        "{\"position\":[34,160],\"fontSize\":11,\"color\":[0.8,0.84,0.88,1.0],\"text\":\"▸ %s: "
+        "%s\"},"
+        "{\"position\":[250,140],\"fontSize\":11,\"color\":[0.8,0.84,0.88,1.0],\"text\":\"▸ %s: "
+        "%s\"},"
+        "{\"position\":[250,160],\"fontSize\":11,\"color\":[0.8,0.84,0.88,1.0],\"text\":\"▸ %s: "
+        "%s\"},"
+        "{\"position\":[28,198],\"fontSize\":11,\"color\":[0.58,0.64,0.72,1.0],\"text\":\"[Space]: "
+        "Pause/Resume  |  [←/→]: Prev/Next Room  |  [R]: Restart  |  [Esc]: Exit\"}"
+        "]}",
+        is_paused ? "[0.86,0.15,0.15,1.0]" : "[0.02,0.59,0.41,1.0]", bar_width,
+        is_paused ? 408 : 402, is_paused ? "PAUSED" : "LIVE TOUR", ROOM_CATEGORIES[room_idx],
+        room_idx + 1, ROOM_NAMES[room_idx], ROOM_DESCRIPTIONS[room_idx], progress_pct, elapsed_secs,
+        total_dur, telem[0], telem[1], telem[2], telem[3], telem[4], telem[5], telem[6], telem[7]);
 }
 
 static void build_all_rooms(void) {
@@ -893,9 +825,9 @@ static double get_time_sec(void) {
 }
 
 static void apply_room(int r, float tour_clock, bool is_paused) {
-    char svg_buf[4096];
-    render_hud_svg(svg_buf, sizeof(svg_buf), r, tour_clock, is_paused);
-    galfus_realm_2d_set_svg_source(REALM_2D, SVG_HUD_ID, svg_buf);
+    char ui_buf[4096];
+    render_hud_ui(ui_buf, sizeof(ui_buf), r, tour_clock, is_paused);
+    galfus_realm_2d_set_ui_content(REALM_2D, UI_HUD_ID, ui_buf);
 
     if (r == 8) {
         galfus_multiverse_set_invocation_filters(INVOCATION_3D,
@@ -990,14 +922,10 @@ int main(int argc, char **argv) {
         free(wav_bytes);
     }
 
-    // SVG companion panel
-    char svg_buf[4096];
-    render_hud_svg(svg_buf, sizeof(svg_buf), 0, 0.0f, false);
-    GalfusTransform2D svg_tf = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0, 0};
-    galfus_realm_2d_create_svg(REALM_2D, SVG_HUD_ID, "{\"source\":\"<svg></svg>\"}",
-                               "{\"position\":[0,0]}");
-    galfus_realm_2d_set_svg_transform(REALM_2D, SVG_HUD_ID, &svg_tf);
-    galfus_realm_2d_set_svg_source(REALM_2D, SVG_HUD_ID, svg_buf);
+    // UI companion panel
+    char ui_buf[4096];
+    render_hud_ui(ui_buf, sizeof(ui_buf), 0, 0.0f, false);
+    galfus_realm_2d_create_ui(REALM_2D, UI_HUD_ID, ui_buf, "{\"position\":[0,0],\"scale\":[1,1]}");
 
     setup_camera_paths(0);
     printf("✔ Tour paths and rooms configured successfully!\n\n");
@@ -1019,53 +947,53 @@ int main(int argc, char **argv) {
             dt = 0.1f;
         last_time = now;
 
-        GalfusEventBatch batch;
-        if (galfus_platform_pump_events(&batch) == 0) {
-            for (uint32_t i = 0; i < batch.event_count; i++) {
-                const GalfusPlatformEvent *ev = &batch.events[i];
-                if (ev->kind == 1) {           // Window
-                    if (ev->event_type == 3) { // closeRequested
-                        running = false;
-                    } else if (ev->event_type == 1) { // resized
-                        galfus_multiverse_update_window_size(window_id, (uint32_t)ev->values[0],
-                                                             (uint32_t)ev->values[1]);
+        for (;;) {
+            GalfusPlatformEvent ev;
+            if (galfus_platform_pump_events(&ev) != 0 || ev.kind == 0)
+                break;
+            if (ev.kind == 1) {           // Window
+                if (ev.event_type == 3) { // closeRequested
+                    running = false;
+                } else if (ev.event_type == 1) { // resized
+                    galfus_multiverse_update_window_size(window_id, (uint32_t)ev.values[0],
+                                                         (uint32_t)ev.values[1]);
+                }
+            } else if (ev.kind == 3 && ev.event_type == 1) { // Keyboard input
+                bool is_pressed = (ev.flags & 1) != 0;
+                if (is_pressed) {
+                    char text0[81] = {0};
+                    char text1[81] = {0};
+                    if (ev.text0_length > 0 && ev.text0_length <= 80) {
+                        memcpy(text0, ev.text_bytes, ev.text0_length);
                     }
-                } else if (ev->kind == 3 && ev->event_type == 1) { // Keyboard input
-                    bool is_pressed = (ev->flags & 1) != 0;
-                    if (is_pressed && batch.text_data) {
-                        char text0[64] = {0};
-                        char text1[64] = {0};
-                        if (ev->text0_length > 0 && ev->text0_length < 63) {
-                            memcpy(text0, batch.text_data + ev->text0_offset, ev->text0_length);
-                        }
-                        if (ev->text1_length > 0 && ev->text1_length < 63) {
-                            memcpy(text1, batch.text_data + ev->text1_offset, ev->text1_length);
-                        }
+                    if (ev.text1_length > 0 &&
+                        (uint32_t)ev.text0_length + (uint32_t)ev.text1_length <= 80) {
+                        memcpy(text1, ev.text_bytes + ev.text0_length, ev.text1_length);
+                    }
 
-                        if (strcmp(text0, "Escape") == 0 || strcmp(text1, "Escape") == 0) {
-                            running = false;
-                        } else if (strcmp(text0, "Space") == 0 || strcmp(text1, " ") == 0 ||
-                                   strcmp(text1, "Space") == 0) {
-                            is_paused = !is_paused;
-                            if (!is_paused) {
-                                setup_camera_paths(current_room);
-                            }
-                            apply_room(current_room, tour_clock, is_paused);
-                            printf("[Tour] Playback %s\n", is_paused ? "PAUSED" : "RESUMED");
-                        } else if (strcmp(text0, "KeyR") == 0 || strcmp(text1, "r") == 0 ||
-                                   strcmp(text1, "R") == 0) {
-                            seek_room(0, &tour_clock, &current_room, is_paused);
-                        } else if (strcmp(text0, "ArrowRight") == 0 ||
-                                   strcmp(text1, "ArrowRight") == 0) {
-                            seek_room(current_room + 1, &tour_clock, &current_room, is_paused);
-                        } else if (strcmp(text0, "ArrowLeft") == 0 ||
-                                   strcmp(text1, "ArrowLeft") == 0) {
-                            seek_room(current_room - 1, &tour_clock, &current_room, is_paused);
+                    if (strcmp(text0, "Escape") == 0 || strcmp(text1, "Escape") == 0) {
+                        running = false;
+                    } else if (strcmp(text0, "Space") == 0 || strcmp(text1, " ") == 0 ||
+                               strcmp(text1, "Space") == 0) {
+                        is_paused = !is_paused;
+                        if (!is_paused) {
+                            setup_camera_paths(current_room);
                         }
+                        apply_room(current_room, tour_clock, is_paused);
+                        printf("[Tour] Playback %s\n", is_paused ? "PAUSED" : "RESUMED");
+                    } else if (strcmp(text0, "KeyR") == 0 || strcmp(text1, "r") == 0 ||
+                               strcmp(text1, "R") == 0) {
+                        seek_room(0, &tour_clock, &current_room, is_paused);
+                    } else if (strcmp(text0, "ArrowRight") == 0 ||
+                               strcmp(text1, "ArrowRight") == 0) {
+                        seek_room(current_room + 1, &tour_clock, &current_room, is_paused);
+                    } else if (strcmp(text0, "ArrowLeft") == 0 || strcmp(text1, "ArrowLeft") == 0) {
+                        seek_room(current_room - 1, &tour_clock, &current_room, is_paused);
                     }
                 }
             }
-            galfus_platform_release_event_batch(batch.batch_id);
+            if (!ev.has_more)
+                break;
         }
 
         anim_clock += dt;

@@ -158,33 +158,6 @@ pub enum AnimationTarget {
         realm_id: u32,
         emitter_id: u32,
     },
-    SvgTransform2D {
-        realm_id: u32,
-        svg_id: u32,
-    },
-    SvgOpacity {
-        realm_id: u32,
-        svg_id: u32,
-    },
-    SvgAttributeColor {
-        realm_id: u32,
-        svg_id: u32,
-        element_id: String,
-        attribute: String,
-    },
-    SvgAttributeScalar {
-        realm_id: u32,
-        svg_id: u32,
-        element_id: String,
-        attribute: String,
-    },
-    SvgAttributeVec2 {
-        realm_id: u32,
-        svg_id: u32,
-        element_id: String,
-        attribute: String,
-    },
-
     // === Multiverse Targets ===
     InvocationClearColor {
         invocation_id: u32,
@@ -197,6 +170,49 @@ pub enum AnimationTarget {
     },
     InvocationViewportSize {
         invocation_id: u32,
+    },
+
+    // === UI Targets ===
+    UiElementBackgroundColor {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+    UiElementBorderColor {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+    UiElementBorderSideColor {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+        side: u8,
+    },
+    UiElementBorderWidth {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+    UiElementBorderRadius {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+    UiElementOpacity {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+    UiElementPosition {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
+    },
+    UiElementSize {
+        realm_id: u32,
+        ui_id: u32,
+        element_id: u32,
     },
 
     // === Custom Channels ===

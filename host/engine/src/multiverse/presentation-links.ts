@@ -11,7 +11,7 @@ export interface PresentationLinksSnapshot {
 export class PresentationLinks {
   private readonly bindings = new Map<number, Map<string, PresentationBinding>>();
   private readonly byTarget = new Map<number, Set<PresentationBinding>>();
-  private readonly surfaces = new Map<number, Map<string, Set<number>>>();
+  private readonly surfaces = new Map<number, Map<string, Map<number, Set<number | null>>>>();
   private revision = 0;
   private cached?: PresentationLinksSnapshot;
 
@@ -79,19 +79,24 @@ export class PresentationLinks {
     }
     let entities = slots.get(surface.slot);
     if (!entities) {
-      entities = new Set();
+      entities = new Map();
       slots.set(surface.slot, entities);
     }
-    if (!entities.has(surface.entityId)) {
-      entities.add(surface.entityId);
+    let elements = entities.get(surface.entityId);
+    if (!elements) entities.set(surface.entityId, (elements = new Set()));
+    const element = surface.elementId ?? null;
+    if (!elements.has(element)) {
+      elements.add(element);
       this.changed();
     }
   }
   disconnectSurface(surface: PresentationSurface): void {
     const slots = this.surfaces.get(surface.realmId);
     const entities = slots?.get(surface.slot);
-    if (!entities?.delete(surface.entityId)) return;
-    if (!entities.size) slots!.delete(surface.slot);
+    const elements = entities?.get(surface.entityId);
+    if (!elements?.delete(surface.elementId ?? null)) return;
+    if (!elements.size) entities!.delete(surface.entityId);
+    if (!entities!.size) slots!.delete(surface.slot);
     if (!slots!.size) this.surfaces.delete(surface.realmId);
     this.changed();
   }
@@ -100,7 +105,7 @@ export class PresentationLinks {
     let purged = false;
     for (const [realmId, slots] of this.surfaces) {
       for (const [slot, entities] of slots) {
-        for (const entityId of [...entities]) {
+        for (const entityId of [...entities.keys()]) {
           if (!isAlive(realmId, entityId)) {
             entities.delete(entityId);
             purged = true;
@@ -117,7 +122,16 @@ export class PresentationLinks {
     const surfaces: PresentationSurface[] = [];
     for (const [realmId, slots] of this.surfaces)
       for (const [slot, entities] of slots)
-        for (const entityId of entities) surfaces.push(Object.freeze({ realmId, slot, entityId }));
+        for (const [entityId, elements] of entities)
+          for (const elementId of elements)
+            surfaces.push(
+              Object.freeze({
+                realmId,
+                slot,
+                entityId,
+                ...(elementId === null ? {} : { elementId })
+              })
+            );
     this.cached = Object.freeze({
       revision: this.revision,
       bindings: Object.freeze(this.getBindings()),

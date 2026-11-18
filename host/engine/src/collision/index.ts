@@ -3,6 +3,8 @@ export {
   Collider3DComponent,
   createCollider2D,
   createCollider3D,
+  getColliderEntries,
+  hasCollider,
   validatePoint,
   validateRay,
   type ColliderEntry,

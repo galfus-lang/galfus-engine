@@ -174,14 +174,47 @@ export class SystemPipeline<TWorld = unknown> {
   /**
    * Runs all systems registered in a specific stage in sorted order.
    * Safe against removal during iteration and isolates individual system exceptions.
+   * An optional `onPreInternal` hook is executed once when reaching internal priority
+   * systems (<= RESERVED_PRIORITY_ANCHOR_RESOLVE) or after all systems if none are internal.
    */
-  runStep(step: SystemStep, world: TWorld, context: SystemContext): void {
+  runStep(
+    step: SystemStep,
+    world: TWorld,
+    context: SystemContext,
+    onPreInternal?: () => void
+  ): void {
     const list = this._systems[step];
+    let internalTriggered = false;
     for (const entry of list) {
+      if (
+        onPreInternal &&
+        !internalTriggered &&
+        entry.priority <= RESERVED_PRIORITY_ANCHOR_RESOLVE
+      ) {
+        internalTriggered = true;
+        try {
+          onPreInternal();
+        } catch (err) {
+          console.error(
+            `[SystemPipeline] Error executing onPreInternal hook in stage '${step}':`,
+            err
+          );
+        }
+      }
       try {
         entry.fn(world, context);
       } catch (err) {
         console.error(`[SystemPipeline] Error executing system in stage '${step}':`, err);
+      }
+    }
+    if (onPreInternal && !internalTriggered) {
+      try {
+        onPreInternal();
+      } catch (err) {
+        console.error(
+          `[SystemPipeline] Error executing onPreInternal hook in stage '${step}':`,
+          err
+        );
       }
     }
   }

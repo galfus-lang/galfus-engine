@@ -29,6 +29,7 @@ function renderTsType(type: FieldType): string {
     const inner = renderTsType(type.array);
     return inner.includes(' ') || inner.includes('|') ? `(${inner})[]` : `${inner}[]`;
   }
+  if ('map' in type) return `Record<string, ${renderTsType(type.map)}>`;
   if ('inline' in type) {
     const fields = Object.entries(type.inline).map(([name, spec]) => {
       const opt = spec.optional ? '?' : '';
@@ -76,7 +77,7 @@ function renderDescriptor(desc: DescSpec): string {
 
 function mapParamTsType(type: DataType): string {
   if (isNativeStruct(type)) {
-    if (type.nativeStruct === 'EventBatch') return 'never';
+    if (type.nativeStruct === 'PlatformEvent') return 'never';
     return type.nativeStruct === 'SpatialAudio' ? 'SpatialAudio' : type.nativeStruct;
   }
   if (isBuffer(type)) {
@@ -230,7 +231,7 @@ export class TypeScriptStrategy implements CodegenStrategy {
         .map((p) => `${p.name}: ${mapParamTsType(p.type)}`)
         .join(', ');
       const baseReturnType = outStruct
-        ? outStruct === 'EventBatch'
+        ? outStruct === 'PlatformEvent'
           ? 'PlatformEvent[]'
           : outStruct === 'CameraLookAt3D'
             ? 'CameraLookAt3DStateDesc'

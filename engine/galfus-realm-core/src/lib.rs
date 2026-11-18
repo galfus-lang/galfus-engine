@@ -6,11 +6,16 @@
 //! This crate defines the abstract interface that the Multiverse uses to
 //! coordinate execution without depending on concrete implementations.
 
+pub mod collision;
 pub mod color_realm;
 pub mod error;
+pub mod hierarchy;
 pub mod realm;
 pub mod types;
 
+pub use collision::{
+    Collider2D, Collider3D, ColliderShape2D, ColliderShape3D, HitResult2D, HitResult3D, Ray3D,
+};
 pub use color_realm::ColorRealm;
 pub use error::{RealmError, RealmResult};
 pub use realm::Realm;

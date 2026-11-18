@@ -356,7 +356,17 @@ struct SurfaceOutput {
 };
 
 // --- Surface Effect Hook Snippet ---
-{{EFFECT_SNIPPET}}
+// {{EFFECT_SNIPPET_START}}
+fn surface_effect(in: SurfaceInput) -> SurfaceOutput {
+    var out: SurfaceOutput;
+    out.albedo = in.albedo;
+    out.emissive = in.emissive;
+    out.roughness = in.roughness;
+    out.metallic = in.metallic;
+    out.normal = in.world_normal;
+    return out;
+}
+// {{EFFECT_SNIPPET_END}}
 
 fn resolve_point_face(dir: vec3<f32>) -> u32 {
     let ad = abs(dir);
@@ -404,8 +414,8 @@ fn sample_shadow_layer(
 ) -> f32 {
     let slope = 1.0 - max(dot(normal, light_dir), 0.0);
     // Normal offset bias moves test point slightly along surface normal,
-    // anchoring shadows cleanly to model contact bases without Peter Panning.
-    let biased_pos = world_pos + normal * (0.008 + 0.012 * slope);
+    // preventing self-shadowing fringes on steep grazing faces without Peter Panning.
+    let biased_pos = world_pos + normal * (0.010 + 0.022 * slope);
     let shadow_mat = shadow_matrices[layer];
     let shadow_clip = shadow_mat * vec4<f32>(biased_pos, 1.0);
     if (shadow_clip.w <= 1e-5) {
@@ -416,14 +426,22 @@ fn sample_shadow_layer(
         return 1.0;
     }
     let shadow_uv = clamp(vec2<f32>(shadow_ndc.x * 0.5 + 0.5, -shadow_ndc.y * 0.5 + 0.5), vec2<f32>(0.0), vec2<f32>(1.0));
-    let bias = 0.00002 + 0.00004 * slope;
+    let bias = 0.00008 + 0.00022 * slope;
     let ref_depth = clamp(shadow_ndc.z - bias, 0.0, 1.0);
-    let texel = 1.0 / 2048.0;
-    let s0 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(-texel, -texel), i32(layer), ref_depth);
-    let s1 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(texel, -texel), i32(layer), ref_depth);
-    let s2 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(-texel, texel), i32(layer), ref_depth);
-    let s3 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(texel, texel), i32(layer), ref_depth);
-    return (s0 + s1 + s2 + s3) * 0.25;
+    // 3x3 Gaussian-tent PCF kernel paired with hardware bilinear comparison filtering.
+    // Shrinks filter radius on steep grazing slopes to avoid ridge bleed at cube edges.
+    let texel = mix(0.85, 0.35, slope) / 2048.0;
+    let layer_i = i32(layer);
+    let c00 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(-texel, -texel), layer_i, ref_depth);
+    let c10 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(0.0, -texel), layer_i, ref_depth);
+    let c20 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(texel, -texel), layer_i, ref_depth);
+    let c01 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(-texel, 0.0), layer_i, ref_depth);
+    let c11 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv, layer_i, ref_depth);
+    let c21 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(texel, 0.0), layer_i, ref_depth);
+    let c02 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(-texel, texel), layer_i, ref_depth);
+    let c12 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(0.0, texel), layer_i, ref_depth);
+    let c22 = textureSampleCompare(shadow_map, shadow_sampler, shadow_uv + vec2<f32>(texel, texel), layer_i, ref_depth);
+    return (c00 + c20 + c02 + c22 + (c10 + c01 + c21 + c12) * 2.0 + c11 * 4.0) * 0.0625;
 }
 
 fn shade_surface(in: VertexOutput, front_facing: bool) -> vec4<f32> {

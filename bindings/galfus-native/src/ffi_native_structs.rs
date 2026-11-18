@@ -92,6 +92,12 @@ impl From<Transform2D> for GalfusTransform2D {
     }
 }
 
+impl Default for GalfusTransform2D {
+    fn default() -> Self {
+        Transform2D::default().into()
+    }
+}
+
 /// Optional camera look-at state. `enabled` is zero or one; all other fields are always present.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]

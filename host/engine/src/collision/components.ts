@@ -33,7 +33,11 @@ export interface ColliderHit3D {
 }
 
 export interface ColliderOptions {
-  /** Local affine matrix, column-major, relative to the entity's Model. */
+  /**
+   * Local affine matrix, column-major, relative to the entity's Model.
+   * Spatial queries use the full matrix. Physics decomposes it into rotation and scale;
+   * shear and nonuniform scaling of curved shapes are approximated by Rapier primitives.
+   */
   matrix?: readonly number[];
   active?: boolean;
   sensor?: boolean;
@@ -193,6 +197,9 @@ abstract class ColliderComponent<S extends ColliderShape2D | ColliderShape3D> im
     });
     return this;
   }
+  has(colliderId: number): boolean {
+    return this[colliderEntries].has(colliderId);
+  }
   remove(colliderId: number): boolean {
     return this[colliderEntries].delete(colliderId);
   }
@@ -205,6 +212,9 @@ export function getColliderEntries<S extends ColliderShape2D | ColliderShape3D>(
   component: ColliderComponent<S>
 ): IterableIterator<ColliderEntry<S>> {
   return component[colliderEntries].values();
+}
+export function hasCollider(component: ColliderComponent<any>, colliderId: number): boolean {
+  return component[colliderEntries].has(colliderId);
 }
 export class Collider2DComponent extends ColliderComponent<ColliderShape2D> {
   readonly type = 'Collider2D';

@@ -3,7 +3,7 @@ import type { CodegenContext } from './strategy.ts';
 
 export function mapParamTsType(type: DataType): string {
   if (isNativeStruct(type)) {
-    if (type.nativeStruct === 'EventBatch') return 'never';
+    if (type.nativeStruct === 'PlatformEvent') return 'never';
     return type.nativeStruct === 'SpatialAudio' ? 'SpatialAudio' : type.nativeStruct;
   }
   if (isBuffer(type)) {
@@ -84,9 +84,9 @@ export function collectEngineTypes(context: CodegenContext): Set<string> {
     for (const p of fn.params) {
       if (isJson(p.type)) addType(p.type.json);
       if (isJsonArray(p.type)) addType(p.type.jsonArray);
-      if (isNativeStruct(p.type) && p.type.nativeStruct !== 'EventBatch')
+      if (isNativeStruct(p.type) && p.type.nativeStruct !== 'PlatformEvent')
         addType(p.type.nativeStruct === 'SpatialAudio' ? 'SpatialAudio' : p.type.nativeStruct);
-      if (p.out && isNativeStruct(p.type) && p.type.nativeStruct === 'EventBatch')
+      if (p.out && isNativeStruct(p.type) && p.type.nativeStruct === 'PlatformEvent')
         addType('PlatformEvent');
       if (p.out && isNativeStruct(p.type) && p.type.nativeStruct === 'CameraLookAt3D')
         addType('CameraLookAt3DStateDesc');
@@ -119,7 +119,7 @@ export function engineMethodLines(
       .map((p) => `${p.name}${p.optional ? '?' : ''}: ${mapParamTsType(p.type)}`)
       .join(', ');
     const retType = outStruct
-      ? outStruct === 'EventBatch'
+      ? outStruct === 'PlatformEvent'
         ? 'PlatformEvent[]'
         : outStruct === 'CameraLookAt3D'
           ? 'CameraLookAt3DStateDesc'
@@ -136,6 +136,25 @@ export function engineMethodLines(
       `      throw new GalfusError("${runtimeLabel} method not implemented: ${fn.methodName}");`
     );
     lines.push(`    }`);
+
+    if (
+      fn.methodName === 'platformGetWindowSizeRaw' ||
+      fn.methodName === 'multiverseGetTargetSizeRaw'
+    ) {
+      const id = fn.methodName === 'platformGetWindowSizeRaw' ? 'windowId' : 'targetId';
+      lines.push(`    const [width, height] = this._addon.${fn.methodName}(${id});`);
+      lines.push('    outWidth[0] = width; outHeight[0] = height;');
+      lines.push('  }');
+      continue;
+    }
+    if (fn.methodName === 'realm3dGetModelAabbRaw') {
+      lines.push('    const result = this._addon.realm3dGetModelAabbRaw(realmId, modelId);');
+      lines.push(
+        '    for (let i = 0; i < 3; i++) { outMin[i] = result[i]; outMax[i] = result[i + 3]; }'
+      );
+      lines.push('  }');
+      continue;
+    }
 
     // Prepare call args, parsing JSON strings to objects if passed as string
     const callArgs = fn.params

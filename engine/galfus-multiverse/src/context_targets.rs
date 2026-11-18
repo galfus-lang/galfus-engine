@@ -65,6 +65,8 @@ impl MultiverseContext {
             .ok_or(MultiverseError::TargetNotFound(target_id))?;
 
         if let TargetKind::Window { window_id } = desc.kind {
+            self.interaction.cancel_window(window_id);
+            self.interaction_frames.remove(&window_id);
             self.surfaces.remove(&window_id);
             self.window_sizes.remove(&window_id);
         }
@@ -101,6 +103,14 @@ impl MultiverseContext {
                 let _ = gpu.destroy_texture(entry.tex_a);
                 let _ = gpu.destroy_texture(entry.tex_b);
             }
+        }
+        for binding in self
+            .bindings
+            .iter()
+            .filter(|b| b.source_target_id == target_id)
+        {
+            self.interaction
+                .disconnect_slot(binding.realm_id, &binding.slot);
         }
         self.bindings.retain(|b| b.source_target_id != target_id);
         self.dirty = true;

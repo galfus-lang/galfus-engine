@@ -1,10 +1,51 @@
 import { describe, expect, it } from 'bun:test';
 import type { GalfusEngine, Transform2DDesc } from '@galfus/transport-types';
 import { createAnchor } from '../src/anchors/index';
-import { Model2DComponent } from '../src/realm2d/components';
+import { Model2DComponent, type Model2DUIComponent } from '../src/realm2d/components';
 import { Realm2D } from '../src/realm2d/realm';
 
 describe('Realm2D parity', () => {
+  it('returns the core-computed UI layout for the matching model', () => {
+    const calls: number[][] = [];
+    const engine = {
+      realm2dCreate: () => {},
+      realm2dDestroy: () => {},
+      realm2dGetUiLayout: (...args: number[]) => {
+        calls.push(args);
+        return JSON.stringify({
+          localRect: [1, 2, 3, 4],
+          absoluteRect: [5, 6, 3, 4],
+          clipRect: null,
+          accumulatedOpacity: 1,
+          contentSize: [3, 4]
+        });
+      },
+      realm2dGetRichTextClusters: () =>
+        JSON.stringify([{ start: 1, end: 3, rect: [5, 6, 10, 20], rightToLeft: false }]),
+      realm2dGetUiTextGeometry: () => JSON.stringify({ lines: [], clusters: [] })
+    } as unknown as GalfusEngine;
+    const realm = new Realm2D(7);
+    const ui = realm.createUi({});
+    expect(() => realm.getUiLayout(ui, 2)).toThrow('without a bound transport');
+    realm.bindEngine(engine);
+    expect(realm.getUiLayout(ui, 2).absoluteRect).toEqual([5, 6, 3, 4]);
+    const component = realm.world.getComponent<Model2DUIComponent>(ui.entityId, 'Model2DUI')!;
+    expect(() => realm.getRichTextClusters(ui, 2)).toThrow('pending changes');
+    component.isDirty = false;
+    expect(realm.getRichTextClusters(ui, 2)).toEqual([
+      { start: 1, end: 3, rect: [5, 6, 10, 20], rightToLeft: false }
+    ]);
+    expect(realm.getUiTextGeometry(ui, 2)).toEqual({ lines: [], clusters: [] });
+    realm.applyUiCommands(ui, [{ type: 'remove', id: 2 }]);
+    expect(() => realm.getRichTextClusters(ui, 2)).toThrow('pending changes');
+    expect(() => realm.getUiTextGeometry(ui, 2)).toThrow('pending changes');
+    expect(calls).toEqual([[7, ui.uiId, 2]]);
+    expect(() => realm.getUiLayout({ ...ui, uiId: ui.uiId + 1 }, 2)).toThrow(
+      'UI model does not exist'
+    );
+    realm.dispose();
+    expect(() => realm.getUiLayout(ui, 2)).toThrow('disposed');
+  });
   it('synchronizes and destroys materials across binding and reset', () => {
     const events: string[] = [];
     const engine = {

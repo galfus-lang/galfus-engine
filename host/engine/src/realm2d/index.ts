@@ -5,7 +5,10 @@ export * from './components';
 export * from './presets/index';
 export * as presets2D from './presets/index';
 export * from './realm';
+export * from './sprite-animation';
+export * from './sprite-sheet';
 export * from './sync';
+export * from './text-geometry';
 export * from './utils/index';
 export * as utils2D from './utils/index';
 

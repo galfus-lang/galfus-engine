@@ -78,3 +78,26 @@ pub use napi_realm_3d::*;
 #[path = "napi_realm_2d.rs"]
 mod napi_realm_2d;
 pub use napi_realm_2d::*;
+
+fn ffi_string_result(ptr: *mut std::os::raw::c_char) -> Result<String> {
+    if ptr.is_null() {
+        check_ffi_res(-1)?;
+        return Err(Error::new(
+            Status::GenericFailure,
+            "Native call returned null",
+        ));
+    }
+    let value = unsafe { std::ffi::CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned();
+    unsafe { crate::ffi::galfus_string_free(ptr) };
+    Ok(value)
+}
+
+#[path = "napi_hierarchy_physics.rs"]
+mod napi_hierarchy_physics;
+pub use napi_hierarchy_physics::*;
+
+#[path = "napi_realm_extra.rs"]
+mod napi_realm_extra;
+pub use napi_realm_extra::*;

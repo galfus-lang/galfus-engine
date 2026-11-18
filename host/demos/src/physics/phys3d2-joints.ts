@@ -1,11 +1,11 @@
 import {
+  attachPhysics3D,
   type EntityId,
   isKey,
   type Model3DComponent,
   presetsAnchor,
   utils3D
 } from '@galfus/engine';
-import { attachPhysics3D } from '@galfus/physics-3d';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
 import { createParticleAtlasTexture } from '../common/textures';
@@ -20,8 +20,7 @@ export async function runDemoPhys3d2(options: HostDemoOptions = {}): Promise<voi
   try {
     const realm3d = runtime.createRealm3D();
     const physics = await attachPhysics3D(runtime, realm3d, {
-      gravity: [0, -9.81, 0],
-      interpolate: true
+      gravity: [0, -9.81, 0]
     });
 
     const atlasData = createParticleAtlasTexture(64);

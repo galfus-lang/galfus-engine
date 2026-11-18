@@ -23,7 +23,7 @@ end
 local galfus = require("galfus")
 local json = require("json")
 local procedural = require("procedural")
-local panel_svg = require("panel_svg")
+local panel_ui = require("panel_ui")
 
 local TARGET_WINDOW = 1
 local REALM_3D = 10
@@ -32,7 +32,7 @@ local INVOCATION_3D = 100
 local INVOCATION_2D = 101
 local CAMERA_3D_ID = 1
 local CAMERA_2D_ID = 1
-local SVG_HUD_ID = 1
+local UI_HUD_ID = 1
 local PATH_CAMERA_POS_ID = 401
 local PATH_CAMERA_LOOK_ID = 402
 local SOUND_ID = 501
@@ -156,14 +156,14 @@ local function run_tour(max_frames)
         galfus.audio_load_sound(SOUND_ID, s_buf, s_len)
     end)
 
-    -- Companion SVG panel
+    -- Companion UI panel
     local initial_room = tour.rooms[1]
-    local initial_svg =
-        panel_svg.render_companion_panel_svg(tour, initial_room, 0.0, false, active_binding)
-    galfus.realm2d_create_svg(
+    local initial_ui =
+        panel_ui.render_companion_panel_ui(tour, initial_room, 0.0, false, active_binding)
+    galfus.realm2d_create_ui(
         REALM_2D,
-        SVG_HUD_ID,
-        string.format('{"source":%s}', json.encode(initial_svg)),
+        UI_HUD_ID,
+        json.encode(initial_ui),
         '{"position":[0,0],"scale":[1,1]}'
     )
 
@@ -240,14 +240,14 @@ local function run_tour(max_frames)
 
     local function update_hud()
         local active_room = tour.rooms[current_room_index + 1]
-        local updated_svg = panel_svg.render_companion_panel_svg(
+        local updated_ui = panel_ui.render_companion_panel_ui(
             tour,
             active_room,
             tour_clock,
             is_paused,
             active_binding
         )
-        galfus.realm2d_set_svg_source(REALM_2D, SVG_HUD_ID, updated_svg)
+        galfus.realm2d_set_ui_content(REALM_2D, UI_HUD_ID, json.encode(updated_ui))
     end
 
     local function apply_room_state(room_idx)

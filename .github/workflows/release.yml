@@ -39,6 +39,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
@@ -51,7 +52,7 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-format pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libvulkan1 mesa-vulkan-drivers
+          sudo apt-get install -y clang-format pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
 
       - name: Generate SDKs
         run: bun run codegen
@@ -59,11 +60,8 @@ jobs:
       - name: Prepare formatting tools
         run: bun prepare
 
-      - name: Check formatting
-        run: bun run format:check
-
-      - name: Check Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Validate formatting, file lengths, types, and Clippy
+        run: bun run validate
 
       - name: Run Rust tests
         run: cargo test --workspace
@@ -168,6 +166,8 @@ jobs:
           cp "build/cargo-target/${{ matrix.target }}/release/${library}" "${package_dir}/lib/galfus.node"
           cp -R sdk "${package_dir}/sdk"
           cp docs/release-package.md "${package_dir}/README.md"
+          cp engine/galfus-realm-2d/assets/LICENSE-NotoSans.txt "${package_dir}/LICENSE-NotoSans.txt"
+          cp engine/galfus-realm-2d/assets/LICENSE-NotoColorEmoji.txt "${package_dir}/LICENSE-NotoColorEmoji.txt"
 
           tar -C package -czf "dist/${package_name}.tar.gz" "${package_name}"
           bun scripts/github/create-md5.ts "dist/${package_name}.tar.gz"
@@ -235,6 +235,8 @@ jobs:
             --out-name galfus_browser \
             build/cargo-target/wasm32-unknown-unknown/release/galfus_browser.wasm
           cp docs/release-package.md "${package_dir}/README.md"
+          cp engine/galfus-realm-2d/assets/LICENSE-NotoSans.txt "${package_dir}/LICENSE-NotoSans.txt"
+          cp engine/galfus-realm-2d/assets/LICENSE-NotoColorEmoji.txt "${package_dir}/LICENSE-NotoColorEmoji.txt"
 
           tar -C package -czf "dist/${package_name}.tar.gz" "${package_name}"
           bun scripts/github/create-md5.ts "dist/${package_name}.tar.gz"
@@ -361,7 +363,7 @@ jobs:
         run: |
           tag="${{ steps.version.outputs.tag }}"
           echo "Publishing packages with tag: $tag (Trusted Publishing / Provenance enabled)"
-          for pkg in host/transport-types host/model-loader-types host/engine host/transport-bun host/transport-node host/transport-browser host/physics-types host/gltf-loader host/physics-2d host/physics-3d host/demos; do
+          for pkg in host/transport-types host/model-loader-types host/engine host/ui host/transport-bun host/transport-node host/transport-browser host/gltf-loader host/demos; do
             echo "==> Publishing $pkg..."
             (cd "$pkg" && npm publish --provenance --access public --tag "$tag")
           done

@@ -1,11 +1,11 @@
 import {
+  attachPhysics3D,
   type EntityId,
   isKey,
   type Model3DComponent,
   presetsAnchor,
   utils3D
 } from '@galfus/engine';
-import { attachPhysics3D } from '@galfus/physics-3d';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
 
@@ -19,8 +19,7 @@ export async function runDemoPhys3d3(options: HostDemoOptions = {}): Promise<voi
   try {
     const realm3d = runtime.createRealm3D();
     const physics = await attachPhysics3D(runtime, realm3d, {
-      gravity: [0, -9.81, 0],
-      interpolate: true
+      gravity: [0, -9.81, 0]
     });
 
     let camAngle = 0.35;
@@ -140,7 +139,7 @@ export async function runDemoPhys3d3(options: HostDemoOptions = {}): Promise<voi
     realm3d.hierarchy.attach(
       doorLeft,
       postLeft,
-      presetsAnchor.hinge({
+      presetsAnchor.angularSpring({
         axis: [0, 1, 0],
         limits: [-1.4, 1.4], // -80° to +80°
         targetAngle: 0,
@@ -168,7 +167,7 @@ export async function runDemoPhys3d3(options: HostDemoOptions = {}): Promise<voi
     realm3d.hierarchy.attach(
       doorRight,
       postRight,
-      presetsAnchor.hinge({
+      presetsAnchor.angularSpring({
         axis: [0, 1, 0],
         limits: [-1.4, 1.4], // -80° to +80°
         targetAngle: 0,
@@ -202,7 +201,7 @@ export async function runDemoPhys3d3(options: HostDemoOptions = {}): Promise<voi
     realm3d.hierarchy.attach(
       hatch,
       hatchFrame,
-      presetsAnchor.hinge({
+      presetsAnchor.angularSpring({
         axis: [1, 0, 0], // X-axis horizontal hinge
         limits: [0, 1.57], // 0° (flat) to 90° (downwards drop)
         targetAngle: 0,

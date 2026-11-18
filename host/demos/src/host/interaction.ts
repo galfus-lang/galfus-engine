@@ -1,4 +1,4 @@
-/** Interactive host demo for direct 2D, SVG, and 3D pointer targets. */
+/** Interactive host demo for direct 2D, UI, and 3D pointer targets. */
 import {
   type Camera2DComponent,
   createRuntime,
@@ -7,25 +7,10 @@ import {
   type TargetId,
   type WindowId
 } from '@galfus/engine';
+import { UiRoot } from '@galfus/ui';
 import { createBunTransport } from '@galfus/transport-bun';
 import { runDemoLoop } from '../common/loop';
 import { type HostDemoOptions, resolveDemoOptions } from '../common/options';
-
-const PANEL = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="360" viewBox="0 0 300 360">
-  <rect x="0" y="0" width="300" height="360" rx="12" fill="#101d2d"/>
-  <text x="20" y="35" fill="#f0f7ff" font-family="sans-serif" font-size="20" font-weight="bold">POINTER LAB</text>
-  <text x="20" y="58" fill="#9cb6cf" font-family="sans-serif" font-size="11">Hover and click each target</text>
-  <text x="20" y="85" fill="#72d9e9" font-family="sans-serif" font-size="12">SVG ELEMENT</text>
-  <rect id="svg-button" x="20" y="98" width="260" height="48" rx="8" fill="#246380"/>
-  <text x="38" y="127" fill="#ffffff" font-family="sans-serif" font-size="15">Click this SVG button</text>
-  <text x="20" y="174" fill="#72d9e9" font-family="sans-serif" font-size="12">2D COLLIDER</text>
-  <text x="110" y="220" fill="#dceafa" font-family="sans-serif" font-size="12">Click the circle</text>
-  <text x="20" y="250" fill="#9cb6cf" font-family="sans-serif" font-size="11">3D: click the objects on the left</text>
-  <text x="20" y="270" fill="#72d9e9" font-family="sans-serif" font-size="12">LAST EVENT</text>
-  <text id="status" x="20" y="293" fill="#ffffff" font-family="sans-serif" font-size="12">Move the pointer to begin</text>
-  <text id="count" x="20" y="315" fill="#9cb6cf" font-family="sans-serif" font-size="12">Clicks: 0</text>
-  <text x="20" y="344" fill="#758da5" font-family="sans-serif" font-size="10">ESC / Q to exit</text>
-</svg>`;
 
 /** Builds both viewports and returns the IDs needed to exercise the scene in tests. */
 export function createInteractionScene(
@@ -58,35 +43,31 @@ export function createInteractionScene(
     { kind: 'perspective', fovY: 50, near: 0.1, far: 100 },
     { position: [0, 0, 7] }
   );
-  realm3d.createLight(
-    { kind: 'point', color: [1, 1, 1], intensity: 40, range: 30 },
-    { position: [0, 4, 5] }
-  );
+  const camera3dModel = realm3d.world.getComponent<Model3DComponent>(camera3d.entityId, 'Model3D')!;
   const cubeMaterial = realm3d.createMaterial({
-    baseColor: [0.08, 0.65, 0.85, 1],
-    metallic: 0.25,
-    roughness: 0.4
+    baseColor: [0.95, 0.45, 0.25, 1],
+    roughness: 0.35,
+    metallic: 0.2
   }).materialId;
-  const sphereMaterial = realm3d.createMaterial({
-    baseColor: [0.95, 0.35, 0.2, 1],
-    metallic: 0.15,
-    roughness: 0.4
-  }).materialId;
-  const cube = realm3d.createCube(1.5, cubeMaterial, { position: [-1.1, 0, 0] });
-  const sphere = realm3d.createSphere(0.85, 16, 24, sphereMaterial, { position: [1.15, 0, 0] });
-  realm3d.addCollider(cube.entityId, { type: 'box', halfExtents: [0.75, 0.75, 0.75] });
-  realm3d.addCollider(sphere.entityId, { type: 'sphere', radius: 0.85 });
+  const cube = realm3d.createCube(1.6, cubeMaterial, { position: [-1.4, 0, 0] });
+  realm3d.addCollider(cube.entityId, { type: 'box', halfExtents: [0.8, 0.8, 0.8] });
 
-  const camera2d = realm2d.createCamera({ orthoScale: 460 });
+  const sphereMaterial = realm3d.createMaterial({
+    baseColor: [0.28, 0.62, 0.95, 1],
+    roughness: 0.25,
+    metallic: 0.65
+  }).materialId;
+  const sphere = realm3d.createSphere(1, 24, 32, sphereMaterial, { position: [1.4, 0, 0] });
+  realm3d.addCollider(sphere.entityId, { type: 'sphere', radius: 1 });
+
+  const camera2d = realm2d.createCamera({ orthoScale: 700 });
   const camera2dComponent = realm2d.world.getComponent<Camera2DComponent>(
     camera2d.entityId,
     'Camera2D'
-  )!;
-  const camera3dModel = realm3d.world.getComponent<Model3DComponent>(camera3d.entityId, 'Model3D')!;
+  );
   const resize = (width: number, height: number) => {
-    if (width <= 0 || height <= 0) return;
-    const scale = Math.max(390, (320 * height) / (width * 0.44));
-    if (camera2dComponent.desc.orthoScale !== scale) {
+    const scale = Math.max(360, (360 * Math.max(width * 0.44, 300)) / 300);
+    if (camera2dComponent) {
       camera2dComponent.desc.orthoScale = scale;
       camera2dComponent.isDirty = true;
     }
@@ -99,8 +80,109 @@ export function createInteractionScene(
       if (event.windowId === windowId && event.type === 'resized')
         resize(event.width, event.height);
     });
+
   realm2d.setShadowConfig({ ambient: 1 });
-  const svg = realm2d.createSvg({ source: PANEL, castShadow: false, receiveShadow: false });
+
+  // Native Model2DUI Pointer Lab card
+  const uiRoot = new UiRoot(runtime, realm2d, {
+    width: 300,
+    height: 360,
+    position: [0, 0]
+  });
+  uiRoot.rootPanel.setBackgroundColor([16 / 255, 29 / 255, 45 / 255, 1.0]).setBorderRadius(12);
+
+  uiRoot.addText({
+    text: 'POINTER LAB',
+    fontSize: 20,
+    color: [240 / 255, 247 / 255, 1.0, 1.0],
+    x: 20,
+    y: 18
+  });
+  uiRoot.addText({
+    text: 'Hover and click each target',
+    fontSize: 11,
+    color: [156 / 255, 182 / 255, 207 / 255, 1.0],
+    x: 20,
+    y: 44
+  });
+  uiRoot.addText({
+    text: 'UI BUTTON',
+    fontSize: 12,
+    color: [114 / 255, 217 / 255, 233 / 255, 1.0],
+    x: 20,
+    y: 72
+  });
+
+  const buttonPanel = uiRoot.addPanel({
+    id: 'ui-button',
+    x: 20,
+    y: 98,
+    width: 260,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: [36 / 255, 99 / 255, 128 / 255, 1.0]
+  });
+  buttonPanel.addText({
+    text: 'Click this UI button',
+    fontSize: 15,
+    color: [1.0, 1.0, 1.0, 1.0],
+    x: 18,
+    y: 14
+  });
+
+  uiRoot.addText({
+    text: '2D COLLIDER',
+    fontSize: 12,
+    color: [114 / 255, 217 / 255, 233 / 255, 1.0],
+    x: 20,
+    y: 160
+  });
+  uiRoot.addText({
+    text: 'Click the circle',
+    fontSize: 12,
+    color: [220 / 255, 234 / 255, 250 / 255, 1.0],
+    x: 110,
+    y: 208
+  });
+  uiRoot.addText({
+    text: '3D: click the objects on the left',
+    fontSize: 11,
+    color: [156 / 255, 182 / 255, 207 / 255, 1.0],
+    x: 20,
+    y: 238
+  });
+  uiRoot.addText({
+    text: 'LAST EVENT',
+    fontSize: 12,
+    color: [114 / 255, 217 / 255, 233 / 255, 1.0],
+    x: 20,
+    y: 258
+  });
+
+  const statusText = uiRoot.addText({
+    text: 'Move the pointer to begin',
+    fontSize: 12,
+    color: [1.0, 1.0, 1.0, 1.0],
+    x: 20,
+    y: 280
+  });
+
+  const countText = uiRoot.addText({
+    text: 'Clicks: 0',
+    fontSize: 12,
+    color: [156 / 255, 182 / 255, 207 / 255, 1.0],
+    x: 20,
+    y: 302
+  });
+
+  uiRoot.addText({
+    text: 'ESC / Q to exit',
+    fontSize: 10,
+    color: [117 / 255, 141 / 255, 165 / 255, 1.0],
+    x: 20,
+    y: 332
+  });
+
   const circleMaterial = realm2d.createMaterial({
     baseColor: [0.2, 0.82, 0.62, 1],
     surfaceType: 'opaque'
@@ -123,47 +205,28 @@ export function createInteractionScene(
     if (windowId !== undefined)
       runtime.platform.window.setCursorIcon(windowId, hovered ? 'pointer' : 'default');
   };
-  const status = (text: string) => realm2d.setSvgText(svg, 'status', text);
+  const status = (text: string) => statusText.setText(text);
   const clicked = (name: string) => {
     clicks++;
     status(`Clicked: ${name}`);
-    realm2d.setSvgText(svg, 'count', `Clicks: ${clicks}`);
+    countText.setText(`Clicks: ${clicks}`);
     console.log(`[interaction] ${name}: click ${clicks}`);
   };
 
-  const button = runtime.interactive(realm2d.realmId, {
-    type: 'svg',
-    svgId: svg.svgId,
-    elementId: 'svg-button'
-  });
   const transition = { duration: 0.2, easing: 'easeOutQuad' as const };
-  const buttonNormal = {
-    type: 'vec4' as const,
-    value: [36 / 255, 99 / 255, 128 / 255, 1] as [number, number, number, number]
-  };
-  const buttonHover = {
-    type: 'vec4' as const,
-    value: [57 / 255, 165 / 255, 195 / 255, 1] as [number, number, number, number]
-  };
-  let buttonTransition: ReturnType<typeof runtime.animation.createTransition> | undefined;
-  button.on('hover', () => {
+  const buttonNormal = [36 / 255, 99 / 255, 128 / 255, 1] as [number, number, number, number];
+  const buttonHover = [57 / 255, 165 / 255, 195 / 255, 1] as [number, number, number, number];
+
+  buttonPanel.on('hover', () => {
     setCursor(true);
-    status('Hover: SVG button');
-    buttonTransition ??= runtime.animation.createTransition(buttonNormal, transition, {
-      kind: 'svgAttributeColor',
-      realmId: realm2d.realmId,
-      svgId: svg.svgId,
-      elementId: 'svg-button',
-      attribute: 'fill'
-    });
-    runtime.animation.transitionTo(buttonTransition, buttonHover, transition);
+    status('Hover: UI button');
+    buttonPanel.setBackgroundColor(buttonHover);
   });
-  button.on('leave', () => {
+  buttonPanel.on('leave', () => {
     setCursor(false);
-    if (buttonTransition !== undefined)
-      runtime.animation.transitionTo(buttonTransition, buttonNormal, transition);
+    buttonPanel.setBackgroundColor(buttonNormal);
   });
-  button.on('click', () => clicked('SVG button'));
+  buttonPanel.on('click', () => clicked('UI button'));
 
   const circleListener = runtime.interactive(realm2d.realmId, {
     type: 'collider',
@@ -196,7 +259,19 @@ export function createInteractionScene(
     });
     listener.on('click', () => clicked(name));
   }
-  return { realm2d, realm3d, svg, circle, cube, sphere };
+  return {
+    realm2d,
+    realm3d,
+    uiRoot,
+    buttonPanel,
+    statusText,
+    countText,
+    circle,
+    cube,
+    sphere,
+    clicked,
+    status
+  };
 }
 
 export type InteractionDemoOptions = HostDemoOptions;
@@ -221,11 +296,15 @@ export async function runInteractionDemo(options: InteractionDemoOptions = {}): 
     console.log(
       headless
         ? '[interaction] Running headless smoke test.'
-        : '[interaction] Hover and click the 3D objects, SVG button and 2D circle. Press Esc to exit.'
+        : '[interaction] Hover and click the 3D objects, UI button and 2D circle. Press Esc to exit.'
     );
 
     await runDemoLoop(runtime, { windowId, maxFrames, exitKeys: ['escape', 'q'] });
   } finally {
     runtime.dispose();
   }
+}
+
+if (import.meta.main) {
+  await runInteractionDemo();
 }

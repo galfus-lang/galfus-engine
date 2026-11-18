@@ -423,3 +423,31 @@ pub fn realm_3d_create_portal(realm_id: u32, portal_id: u32, portal_val: JsUnkno
         )
     })
 }
+
+#[wasm_bindgen(js_name = "realm3dCreateCollider")]
+pub fn realm_3d_create_collider(
+    realm_id: u32,
+    collider_id: u32,
+    model_id: u32,
+    shape_val: JsUnknown,
+) -> Result<()> {
+    let env = Env;
+    let c_str = js_to_c_string(&env, Some(shape_val))?
+        .ok_or_else(|| Error::from_reason(Status::InvalidArg, "shape cannot be null"))?;
+    check_ffi_res(unsafe {
+        crate::ffi_interaction::galfus_realm_3d_create_collider(
+            realm_id,
+            collider_id,
+            model_id,
+            c_str.as_ptr(),
+        )
+    })
+}
+
+#[wasm_bindgen(js_name = "realm3dDestroyCollider")]
+pub fn realm_3d_destroy_collider(realm_id: u32, collider_id: u32) -> Result<()> {
+    check_ffi_res(crate::ffi_interaction::galfus_realm_3d_destroy_collider(
+        realm_id,
+        collider_id,
+    ))
+}

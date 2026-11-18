@@ -123,6 +123,64 @@ runtime.multiverse.createInvocation({
 runtime.start();
 ```
 
+`realm2d.setSpriteUvRect(entityId, [u0, v0, u1, v1])` changes only an
+existing sprite's UV rectangle on the next synchronization. Coordinates must
+be finite; values outside `[0, 1]` and reversed endpoints are supported for
+texture repetition and flipping. The host accepts the entity ID and resolves
+the sprite's logical core ID.
+
+`SpriteSheet` describes a borrowed texture and maps named or numbered frames
+to UV rectangles. Grid dimensions, margins, and spacing are specified in pixels:
+
+```typescript
+const sheet = new SpriteSheet({
+  textureId,
+  textureSize: [128, 64],
+  grid: {
+    columns: 4,
+    rows: 2,
+    frameSize: [32, 32],
+    names: { idle: 0, selected: 5 }
+  }
+});
+
+sheet.applyToSprite(realm2d, spriteEntityId, 'selected');
+sheet.applyToPanel(nativeSpritePanel, 0);
+```
+
+For irregular atlases, provide `frames: [{ name, rect: [x, y, width, height] }]`
+instead of `grid`. Sprite materials and sprite panels must already reference
+the sheet's texture. A sheet does not create or dispose the texture; the caller
+must supply its actual dimensions and keep it alive in the same runtime for as
+long as it is used. `applyToPanel` supports both native and host-side SpritePanel
+handles.
+
+`SpriteAnimation` plays sheet frames on any target that accepts UV updates.
+States select their resting frames; transitions are keyed by `source|destination`:
+
+```typescript
+const animation = new SpriteAnimation({
+  sheet,
+  setUvRect: (uv) => realm2d.setSpriteUvRect(spriteEntityId, uv),
+  states: { off: 0, on: 7 },
+  initialState: 'off',
+  transitions: {
+    'off|on': { frames: [3, 4, 5, 6], frameDuration: 0.05 },
+    'on|off': { frames: [6, 5, 4, 3], frameDuration: 0.05 }
+  }
+});
+runtime.on('tick', ({ dt }) => animation.update(dt)); // seconds
+animation.setState('on');
+```
+
+For a sprite panel, use `setUvRect: (uv) => panel.setSpriteUvRect(uv)`
+(or `panel.setUvRect(uv)` for the host-side panel). A missing transition changes
+the state immediately. Interrupting a transition uses its destination as the
+source of the next transition. `play({ frames, frameDuration }, { loop: true })`
+also supports standalone clips, and `pause`, `resume`, and `stop` control playback.
+The application owns the tick subscription and must stop updating a player when
+its target is disposed. Sheet texture ownership remains with the application.
+
 ### 4. Frame Lifecycle & Loops
 
 The engine provides two loop hooks:
@@ -136,7 +194,7 @@ The engine provides two loop hooks:
 
 1. **ECS as Single Source of Truth**:
    - Entities hold spatial `Model3D` or `Model2D` components.
-   - Renderables (`Mesh3D`, `Sprite2D`, `Shape2D`, `Svg2D`) attach directly to the model entity.
+   - Renderables (`Mesh3D`, `Sprite2D`, `Shape2D`) attach directly to the model entity.
    - Assets (`Geometry`, `Material`, `Texture`) are managed in resource registries outside the ECS and survive entity destruction.
 
 2. **Anchor Graph (`origin` / `target`)**:
@@ -161,7 +219,55 @@ The engine provides two loop hooks:
 
 2D materials are realm-owned resources. `Realm2D.createMaterial` returns a logical ID and queues the material for the next sync or `flush()`, even if the realm is not yet bound to an engine. `destroyMaterial(id)` queues its removal without destroying entities that reference it. `reset()` and `dispose()` release the realm's materials.
 
-The Multiverse maintains a host-side `presentationGraph` rooted at targets of open windows. It is populated from the renderer's resolved schedule and published after a successful dispatch. `getWindow(windowId)` is unavailable before the first successful dispatch or after the window closes; otherwise it exposes an immutable snapshot of reachable targets, invocations, resolved viewports, render order and texture-binding candidates. The last snapshot remains available while paused and when a dispatch fails. Unchanged schedules and links reuse the existing snapshot. A texture binding alone is a candidate, not a traversable surface; future interaction code must validate and maintain surface mappings. Cycle edges sampled from the previous frame are exposed as `softCutEdges`.
+The Multiverse maintains a host-side `presentationGraph` rooted at targets of open windows. It is populated from the renderer's resolved schedule and published after a successful dispatch. `getWindow(windowId)` is unavailable before the first successful dispatch or after the window closes; otherwise it exposes an immutable snapshot of reachable targets, invocations, resolved viewports, render order and texture-binding candidates. The last snapshot remains available while paused and when a dispatch fails. Unchanged schedules and links reuse the existing snapshot. A texture binding alone is a candidate, not a traversable surface. Cycle edges sampled from the previous frame are exposed as `softCutEdges`.
+
+To forward pointer hits through a textured sprite, bind its source target and
+connect the sprite entity and collider. The host resolves the entity to the
+core model ID; `flipY` adapts the collider's upward Y axis to texture coordinates.
+The returned function disconnects the surface and should be called before its
+entity, texture binding, or target is destroyed.
+
+```typescript
+runtime.multiverse.bindTargetTexture({
+  realmId: realm2d.realmId,
+  slot: 'viewport',
+  sourceTargetId
+});
+const disconnect = runtime.interaction.connectSurface({
+  realmId: realm2d.realmId,
+  entityId: spriteEntityId,
+  colliderId,
+  slot: 'viewport',
+  flipY: true
+});
+// Later: disconnect();
+```
+
+For a core-backed ModelUI, connect an individual `SpritePanel` after committing
+the UI tree. Its `textureId` must be the bound texture target ID, and the UI
+model must have a collider. The host resolves its entity and collider IDs:
+
+```typescript
+root.flush();
+runtime.multiverse.bindTargetTexture({
+  realmId: realm2d.realmId,
+  slot: 'panel',
+  sourceTargetId
+});
+const disconnectPanel = runtime.interaction.connectUiSurface({
+  realmId: realm2d.realmId,
+  uiId: root.uiId,
+  elementId: spritePanel.id,
+  slot: 'panel'
+});
+// Call disconnectPanel() before removing the element or unbinding the texture.
+```
+
+The presented layout and texture coordinates determine the routed position.
+`stretch`, `contain`, and `cover` are supported; `contain` margins do not
+forward. `nineSlice` is rejected. A hit that does not reach an object inside
+the target remains on the SpritePanel. Like other presentation surfaces, the
+source target and input routing use the last successfully presented frame.
 
 2D objects are drawn back to front by `zLayer`, then `drawOrder`, then logical resource ID. Set distinct layers or draw orders when overlap must remain independent of resource creation order. Changing `Model2DComponent.zLayer` or `drawOrder` is synchronized on the next frame.
 
@@ -200,46 +306,21 @@ off();
 
 Selection offsets, when supplied, use UTF-16 code units within the preedit text. The browser does not expose this selection in composition events. The browser input bridge takes DOM focus and releases it on disable or focus loss; enable it from a user interaction when the browser requires a user gesture.
 
-`textInput` is the committed text stream; `input.text` and `imeCommit.text` remain available as raw platform details. Text editors should insert from `textInput` only to avoid processing the same text twice. `TextEditor` stores Unicode text and grapheme-aware selection; `applyTextKeyboardEvent` maps the normalized keyboard stream to the editor.
-
-`runtime.textInput(realmId, { svgId, elementId, hitAreaId, value, tabIndex })` binds an editor to an SVG text element and a focusable SVG hit area. `hitAreaId` defaults to `elementId`; use a separate visible hit area when the text can be empty. The `value` option defaults to an empty string and replaces the element's existing children. The returned input supports `requestFocus`, `blur`, `setValue`, `setSelection`, `selectAll`, `on`, `off`, and `dispose`. It updates the SVG with the IME preview while retaining the committed `value`. Automatic caret and selection rendering, pointer-based text selection, candidate positioning, clipboard integration, and full native/browser IME parity are not yet implemented.
-
-Focusable pointer targets can be registered with `runtime.focusable(realmId, target, { tabIndex })`. Call `requestFocus(windowId)`, `blur(windowId)`, and `dispose()` on the returned target; subscribe to `focus` and `blur` with `on`. `runtime.getFocused(windowId)` reports the focused target. Tab and Shift+Tab navigate registered targets in direct, successfully submitted window presentations. A negative `tabIndex` excludes a target from Tab navigation but permits explicit focus. Browser keyboard delivery still depends on platform focus and must not be interpreted as complete SVG text input support.
-
-`SvgTextDecorations` updates an existing SVG rectangle for a caret and either rectangles or a path for selection spans. It accepts `cursorColor` and `selectionColor`; its caller must provide viewport-space geometry. Automatic cursor placement, pointer selection, and blinking are not provided by this low-level utility.
-
-`runtime.svg.getTextLayout(realmId, svgId, elementId)` returns shaped cluster metrics on demand.
-The result contains normalized text chunks, cluster byte ranges within those UTF-8 chunks,
-advances, ascent and descent, text direction, and affine transforms in SVG viewport coordinates.
-The host caches the result until the SVG or font data changes; missing or non-rendered text
-returns `undefined`. SVG whitespace normalization may change chunk text from the original source,
-and a cluster can contain multiple graphemes, so these metrics alone do not yet define every
-editor caret position. Empty text is not currently returned by the SVG parser.
+`textInput` is the committed text stream; `input.text` and `imeCommit.text` remain available as raw platform details. Text editors should insert from `textInput` only to avoid processing the same text twice. High-level focus management (`Focusable`, `FocusManager`), Unicode text editing (`TextEditor`, `applyTextKeyboardEvent`), and text inputs (`TextInput`) are provided by `@galfus/ui` via `createUi(runtime)`.
 
 For explicit text/byte conversions, each runtime defaults to UTF-8. Set `createRuntime(transport, { charset: 'shift_jis' })` or call `runtime.textEncoding.setCharset('windows-1252')`, then use `runtime.textEncoding.encode(text)` and `decode(bytes)`. This setting does not restrict or recode editor strings or change the platform ABI. Unknown charsets throw; invalid bytes and characters not representable in the chosen charset are replaced according to the codec.
 
 ---
 
-## SVG element bounds
-
-`runtime.svg.getRect(realmId, svgId, elementId)` returns the geometric bounds of an SVG
-element or `undefined` if it cannot be found. The result is expressed in the SVG viewport's
-coordinates (top-left origin, Y down), before the entity transform. `viewportWidth` and
-`viewportHeight` describe that coordinate space. Bounds are cached and refreshed after SVG
-edits, font changes, re-creation, and native attribute animations.
-
 ## Pointer interaction
 
-Run `bun host:demo interaction` to try direct 2D, SVG, and 3D interaction in a window.
-Run `bun host:demo text-input` to try multiple SVG text fields and Tab/Shift+Tab focus.
-To test characters outside the bundled font, pass `--font /path/to/font.ttf` (TTF, OTF, or TTC).
-The demo draws the keyboard caret and selection for single-line text; positions inside a ligature
-are estimated because the current layout API does not expose ligature caret positions.
+Run `bun host:demo interaction` to try direct 2D and 3D interaction in a window.
+Run `bun host:demo ui5` to try multiple text fields and Tab/Shift+Tab focus.
 For a bounded headless smoke test, use `bun host:demo interaction --headless --frames 10`.
 The host tutorial is available as `bun host:demo tutorial`, with the same headless option.
 Use `bun host:demo help` to list the available demos.
 
-For an entity with a `Collider2D` or `Collider3D`, or for an SVG element in a 2D realm:
+For an entity with a `Collider2D` or `Collider3D`:
 
 ```ts
 const listener = runtime.interactive(realmId, { type: 'collider', entityId });
@@ -249,7 +330,7 @@ unsubscribe();
 listener.dispose();
 ```
 
-Use `{ type: 'svg', svgId, elementId }` for an SVG element. The supported event types are
+The supported event types are
 `hover`, `leave`, `move`, `down`, `up`, `click`, `cancel`, `pressmove`, and `pressup`.
 `pressmove` and `pressup` go to the target originally pressed even when the pointer is no
 longer over it, as long as the platform continues delivering pointer events; `cancel` ends

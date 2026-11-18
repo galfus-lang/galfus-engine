@@ -1,10 +1,16 @@
 export type ProjectTemplate = '3d-scene' | '2d-scene' | 'physics';
-export type ProjectTransport = 'bun' | 'node';
+export type ProjectTransport = 'bun' | 'node' | 'browser';
 
 export interface ProjectConfig {
   name: string;
   template: ProjectTemplate;
   transport: ProjectTransport;
+}
+
+export function getTransportPackageName(transport: ProjectTransport): string {
+  if (transport === 'bun') return '@galfus/transport-bun';
+  if (transport === 'node') return '@galfus/transport-node';
+  return '@galfus/transport-browser';
 }
 
 export async function fetchLatestPackageVersion(
@@ -40,13 +46,13 @@ export async function resolveProjectVersions(
   config: ProjectConfig,
   customVersions?: Record<string, string>
 ): Promise<Record<string, string>> {
-  const pkgs = [
-    '@galfus/engine',
-    config.transport === 'bun' ? '@galfus/transport-bun' : '@galfus/transport-node',
-    ...(config.template === 'physics' ? ['@galfus/physics-3d', '@galfus/physics-types'] : []),
-    '@types/bun',
-    'typescript'
-  ];
+  const transportName = getTransportPackageName(config.transport);
+  const pkgs =
+    config.transport === 'browser'
+      ? ['@galfus/engine', transportName, 'typescript', 'vite']
+      : config.transport === 'node'
+        ? ['@galfus/engine', transportName, '@types/bun', 'tsx', 'typescript']
+        : ['@galfus/engine', transportName, '@types/bun', 'typescript'];
 
   const results: Record<string, string> = { ...customVersions };
   const toFetch = pkgs.filter((pkg) => !results[pkg]);
@@ -72,21 +78,43 @@ export async function createPackageJson(
   resolvedVersions?: Record<string, string>
 ): Promise<string> {
   const versions = resolvedVersions ?? (await resolveProjectVersions(config));
-
-  const transportName =
-    config.transport === 'bun' ? '@galfus/transport-bun' : '@galfus/transport-node';
+  const transportName = getTransportPackageName(config.transport);
 
   const transportDep = {
     [transportName]: versions[transportName] ?? 'latest'
   };
 
-  const physicsDeps =
-    config.template === 'physics'
-      ? {
-          '@galfus/physics-3d': versions['@galfus/physics-3d'] ?? 'latest',
-          '@galfus/physics-types': versions['@galfus/physics-types'] ?? 'latest'
-        }
-      : {};
+  if (config.transport === 'browser') {
+    const pkg = {
+      name: config.name,
+      version: '0.1.0',
+      description: `Game built with Galfus Engine (${config.template})`,
+      type: 'module',
+      scripts: {
+        dev: 'vite',
+        build: 'vite build',
+        preview: 'vite preview'
+      },
+      dependencies: {
+        '@galfus/engine': versions['@galfus/engine'] ?? 'latest',
+        ...transportDep
+      },
+      devDependencies: {
+        typescript: versions['typescript'] ?? 'latest',
+        vite: versions['vite'] ?? 'latest'
+      }
+    };
+
+    return JSON.stringify(pkg, null, 2) + '\n';
+  }
+
+  const devDeps: Record<string, string> = {
+    '@types/bun': versions['@types/bun'] ?? 'latest',
+    typescript: versions['typescript'] ?? 'latest'
+  };
+  if (config.transport === 'node') {
+    devDeps.tsx = versions['tsx'] ?? 'latest';
+  }
 
   const pkg = {
     name: config.name,
@@ -95,24 +123,40 @@ export async function createPackageJson(
     type: 'module',
     main: 'src/main.ts',
     scripts: {
-      dev: config.transport === 'bun' ? 'bun src/main.ts' : 'node src/main.ts',
+      dev: config.transport === 'bun' ? 'bun src/main.ts' : 'tsx src/main.ts',
       build: 'galfus-engine build'
     },
     dependencies: {
       '@galfus/engine': versions['@galfus/engine'] ?? 'latest',
-      ...transportDep,
-      ...physicsDeps
+      ...transportDep
     },
-    devDependencies: {
-      '@types/bun': versions['@types/bun'] ?? 'latest',
-      typescript: versions['typescript'] ?? 'latest'
-    }
+    devDependencies: devDeps
   };
 
   return JSON.stringify(pkg, null, 2) + '\n';
 }
 
-export function createTsConfig(): string {
+export function createTsConfig(config?: ProjectConfig): string {
+  if (config?.transport === 'browser') {
+    const tsconfig = {
+      compilerOptions: {
+        target: 'ESNext',
+        module: 'ESNext',
+        lib: ['ESNext', 'DOM', 'DOM.Iterable'],
+        moduleResolution: 'bundler',
+        strict: true,
+        skipLibCheck: true,
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+        forceConsistentCasingInFileNames: true,
+        noEmit: true
+      },
+      include: ['src/**/*', 'vite.config.ts']
+    };
+
+    return JSON.stringify(tsconfig, null, 2) + '\n';
+  }
+
   const tsconfig = {
     compilerOptions: {
       target: 'ESNext',
@@ -131,11 +175,94 @@ export function createTsConfig(): string {
   return JSON.stringify(tsconfig, null, 2) + '\n';
 }
 
+export function createViteConfig(): string {
+  return [
+    "import { defineConfig } from 'vite';",
+    '',
+    'export default defineConfig({',
+    '  build: {',
+    "    target: 'esnext'",
+    '  },',
+    '  optimizeDeps: {',
+    "    exclude: ['@galfus/transport-browser']",
+    '  },',
+    '  server: {',
+    '    fs: {',
+    '      strict: false',
+    '    }',
+    '  }',
+    '});',
+    ''
+  ].join('\n');
+}
+
+export function createIndexHtml(config: ProjectConfig): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${config.name}</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0d1117;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #galfus-canvas {
+        width: 1280px;
+        height: 720px;
+        max-width: 100vw;
+        max-height: 100vh;
+        display: block;
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="galfus-canvas" width="1280" height="720" tabindex="0"></canvas>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+`;
+}
+
 export function createGitIgnore(): string {
   return ['node_modules/', 'dist/', '.DS_Store', '*.log', '.tmp/', ''].join('\n');
 }
 
 export function createReadme(config: ProjectConfig): string {
+  if (config.transport === 'browser') {
+    return `# ${config.name}
+
+A high-performance WebGPU & WebAssembly game built with **Galfus Engine** and **Vite**.
+
+## Getting Started
+
+### 1. Run Development Server
+\`\`\`bash
+bun run dev
+# or: npm run dev
+\`\`\`
+
+### 2. Build for Production
+Bundle your game and WebAssembly assets into \`dist/\`:
+\`\`\`bash
+bun run build
+# or: npm run build
+\`\`\`
+
+### 3. AI Agent Skills
+This project includes pre-configured Galfus Engine skills in \`.agents/skills/\` and instructions in \`AGENTS.md\` so AI coding agents understand Galfus APIs out of the box.
+`;
+  }
+
   return `# ${config.name}
 
 A high-performance standalone game built with **Galfus Engine**.
@@ -161,6 +288,9 @@ galfus-engine build --target windows-x64 --out dist
 Output in \`dist/\`:
 - Executable binary (\`${config.name}\` or \`${config.name}.exe\`)
 - Native engine dynamic library (\`libgalfus_native.so\`, \`galfus_native.dll\`, or \`galfus.node\`)
+
+### 3. AI Agent Skills
+This project includes pre-configured Galfus Engine skills in \`.agents/skills/\` and instructions in \`AGENTS.md\` so AI coding agents understand Galfus APIs out of the box.
 `;
 }
 
@@ -168,10 +298,18 @@ export function createMainScript(config: ProjectConfig): string {
   const transportImport =
     config.transport === 'bun'
       ? `import { createBunTransport } from '@galfus/transport-bun';`
-      : `import { createNodeTransport } from '@galfus/transport-node';`;
+      : config.transport === 'node'
+        ? `import { createNodeTransport } from '@galfus/transport-node';`
+        : `import { createBrowserTransport } from '@galfus/transport-browser';`;
 
   const transportInstantiation =
-    config.transport === 'bun' ? `createBunTransport()` : `createNodeTransport()`;
+    config.transport === 'bun'
+      ? `createBunTransport()`
+      : config.transport === 'node'
+        ? `createNodeTransport()`
+        : `await createBrowserTransport()`;
+
+  const canvasOption = config.transport === 'browser' ? `,\n    canvasId: 'galfus-canvas'` : '';
 
   if (config.template === '3d-scene') {
     return `${transportImport}
@@ -186,7 +324,7 @@ async function main() {
   const windowId = runtime.platform.window.create({
     title: '${config.name}',
     size: [1280, 720],
-    resizable: true
+    resizable: true${canvasOption}
   });
   const targetId = runtime.multiverse.createTarget({
     kind: { type: 'window', windowId }
@@ -195,7 +333,7 @@ async function main() {
   // Setup camera
   const camPos: [number, number, number] = [0, 3, 6];
   const camTarget: [number, number, number] = [0, 0, 0];
-  const camera = realm3d.createCamera(
+  realm3d.createCamera(
     { fovY: 60, near: 0.1, far: 100, cameraSlot: 1 },
     { position: camPos, rotation: utils3D.quatFromLookAt(camPos, camTarget) }
   );
@@ -253,14 +391,14 @@ async function main() {
   const windowId = runtime.platform.window.create({
     title: '${config.name}',
     size: [1280, 720],
-    resizable: true
+    resizable: true${canvasOption}
   });
   const targetId = runtime.multiverse.createTarget({
     kind: { type: 'window', windowId }
   });
 
   // 2D Camera
-  realm2d.createCamera({ cameraSlot: 1, zoom: 1.0 }, { position: [0, 0] });
+  realm2d.createCamera({ cameraSlot: 1, orthoScale: 10.0 }, { position: [0, 0] });
 
   // 2D Sprite and Light
   const mat = realm2d.createMaterial({ baseColor: [0.2, 0.8, 0.6, 1] }).materialId;
@@ -305,19 +443,18 @@ main().catch(console.error);
 
   // Physics template
   return `${transportImport}
-import { createRuntime, utils3D } from '@galfus/engine';
-import { attachPhysics3D } from '@galfus/physics-3d';
+import { attachPhysics3D, createRuntime, utils3D } from '@galfus/engine';
 
 async function main() {
   const transport = ${transportInstantiation};
   const runtime = createRuntime(transport);
   const realm3d = runtime.createRealm3D();
-  const physics = await attachPhysics3D(runtime, realm3d, { gravity: [0, -9.81, 0], interpolate: true });
+  const physics = await attachPhysics3D(runtime, realm3d, { gravity: [0, -9.81, 0] });
 
   const windowId = runtime.platform.window.create({
     title: '${config.name}',
     size: [1280, 720],
-    resizable: true
+    resizable: true${canvasOption}
   });
   const targetId = runtime.multiverse.createTarget({
     kind: { type: 'window', windowId }

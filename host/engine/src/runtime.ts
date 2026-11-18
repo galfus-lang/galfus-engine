@@ -7,12 +7,12 @@ import {
   type FrameTiming,
   GalfusLoopError,
   type GalfusTransport,
-  type LoopOptions
+  type LoopOptions,
+  type PlatformEvent
 } from '@galfus/transport-types';
 import { AnimationCoordinator } from './animation/coordinator';
 import { AudioManager } from './audio/manager';
 import type { SystemContext } from './ecs/system';
-import { FocusManager } from './interaction/focus';
 import { InteractiveSystem } from './interaction/system';
 import type { InteractiveTarget } from './interaction/types';
 import { MultiverseCoordinator } from './multiverse/coordinator';
@@ -23,14 +23,12 @@ import { Realm3D } from './realm3d/realm';
 import { storeCameraLookAt } from './realm3d/resource-ids';
 import { ResourceManager } from './resources/manager';
 import { TextEncoding } from './text/encoding';
-import { TextInput, type TextInputOptions } from './text/input';
-import type { Focusable } from './interaction/focus';
+import { DebugLatencyTracker } from './debug/latency-tracker';
 import {
   type FixedTickTiming,
   IdAllocator,
   type RuntimeEventListener,
-  type RuntimeEventType,
-  type WindowId
+  type RuntimeEventType
 } from './types';
 
 /**
@@ -55,36 +53,17 @@ export class MultiverseRuntime {
   readonly audio = new AudioManager();
   readonly animation = new AnimationCoordinator();
   readonly textEncoding: TextEncoding;
-  private readonly _interactive = new InteractiveSystem(this.multiverse);
-  private readonly _textInputs = new Map<Focusable, TextInput>();
-  private readonly _focus = new FocusManager(
-    this._interactive,
-    () => this.multiverse.presentationGraph.getWindowIds(),
-    (windowId, enabled) => this.platform.window.setTabCapture(windowId as WindowId, enabled),
-    (windowId) => this.platform.window.requestInputFocus(windowId as WindowId)
-  );
-  readonly svg = {
-    getRect: (realmId: number, svgId: number, elementId: string) => {
-      const realm = this.multiverse.getRealm(realmId);
-      return realm instanceof Realm2D ? realm.getSvgElementRect(svgId, elementId) : undefined;
-    },
-    getTextLayout: (realmId: number, svgId: number, elementId: string) => {
-      const realm = this.multiverse.getRealm(realmId);
-      return realm instanceof Realm2D ? realm.getSvgTextLayout(svgId, elementId) : undefined;
-    }
-  };
+  readonly interaction = new InteractiveSystem(this.multiverse);
   private readonly _realmIdAllocator = new IdAllocator<RealmId>(1);
   private readonly _eventListeners = new Map<RuntimeEventType, Set<(event: any) => void>>();
   private _animationUnsubscribe: (() => void) | null = null;
   private readonly _refreshAnimatedTarget = (target: AnimationTarget): void => {
     if (!('realmId' in target)) return;
     const realm = this.multiverse.getRealm(target.realmId);
-    if (realm instanceof Realm2D && 'svgId' in target) {
-      realm.invalidateSvgCache(target.svgId);
-    } else if (
+    if (
       realm instanceof Realm3D &&
       target.kind === 'camera3DLookAt' &&
-      this._interactive.usesRealm(realm.realmId)
+      this.interaction.usesRealm(realm.realmId)
     ) {
       const lookAt = realm.getCameraLookAt(target.cameraId);
       if (lookAt)
@@ -117,8 +96,7 @@ export class MultiverseRuntime {
       if (opened) this.multiverse.windowOpened(windowId);
       else {
         this.multiverse.windowClosed(windowId);
-        this._focus.windowClosed(windowId);
-        this._interactive.windowClosed(windowId);
+        this.interaction.windowClosed(windowId);
       }
     });
     if (transport.isDisposed) {
@@ -219,67 +197,7 @@ export class MultiverseRuntime {
 
   /** Registers a pointer-interactive target in a realm. */
   interactive(realmId: number, target: InteractiveTarget) {
-    return this._interactive.interactive(realmId, target);
-  }
-
-  /** Registers a pointer target for per-window focus and keyboard navigation. */
-  focusable(realmId: number, target: InteractiveTarget, options: { tabIndex?: number } = {}) {
-    if (options.tabIndex !== undefined && !Number.isSafeInteger(options.tabIndex))
-      throw new RangeError('tabIndex must be a safe integer.');
-    return this._focus.register(this._interactive.interactive(realmId, target), options.tabIndex);
-  }
-
-  /** Returns the target focused in a window, if any. */
-  getFocused(windowId: number) {
-    return this._focus.getFocused(windowId);
-  }
-
-  /** Binds editable text to an SVG element and its interactive hit area. */
-  textInput(realmId: number, options: TextInputOptions): TextInput {
-    if (!options.elementId || options.hitAreaId === '')
-      throw new Error('SVG element IDs must not be empty.');
-    const realm = this.multiverse.getRealm(realmId);
-    if (!(realm instanceof Realm2D) || realm.isDisposed)
-      throw new Error(`Text input realm ${realmId} is not a registered Realm2D.`);
-    for (const input of this._textInputs.values()) {
-      const target = input.focusable.listener.target;
-      if (
-        input.focusable.realmId === realmId &&
-        input.svgId === options.svgId &&
-        input.elementId === options.elementId
-      )
-        throw new Error('An input is already registered for this SVG text element.');
-      if (
-        input.focusable.realmId === realmId &&
-        target.type === 'svg' &&
-        target.svgId === options.svgId &&
-        target.elementId === (options.hitAreaId ?? options.elementId)
-      )
-        throw new Error('An input is already registered for this SVG hit area.');
-    }
-    const focusable = this.focusable(
-      realmId,
-      {
-        type: 'svg',
-        svgId: options.svgId,
-        elementId: options.hitAreaId ?? options.elementId
-      },
-      { tabIndex: options.tabIndex }
-    );
-    try {
-      const input = new TextInput(
-        realm,
-        { ...options },
-        focusable,
-        (id, enabled) => this.platform.window.setImeAllowed(id as WindowId, enabled),
-        () => this._textInputs.delete(focusable)
-      );
-      this._textInputs.set(focusable, input);
-      return input;
-    } catch (error) {
-      focusable.dispose();
-      throw error;
-    }
+    return this.interaction.interactive(realmId, target);
   }
 
   /**
@@ -369,9 +287,7 @@ export class MultiverseRuntime {
     try {
       this.stop();
       this.clearListeners();
-      for (const input of this._textInputs.values()) input.dispose();
-      this._focus.dispose();
-      this._interactive.dispose();
+      this.interaction.dispose();
       this._elapsedSeconds = 0;
       this._frameId = 0;
       this._fixedAccumulator = 0;
@@ -425,9 +341,7 @@ export class MultiverseRuntime {
       this.stop();
       this._state = 'disposing';
       this.clearListeners();
-      for (const input of this._textInputs.values()) input.dispose();
-      this._focus.dispose();
-      this._interactive.dispose();
+      this.interaction.dispose();
       if (this._animationUnsubscribe) {
         this._animationUnsubscribe();
         this._animationUnsubscribe = null;
@@ -452,45 +366,48 @@ export class MultiverseRuntime {
     // 1. Advance frameId and elapsed simulation time exactly once
     this._frameId = timing.frameId;
     this._elapsedSeconds += timing.dt;
+    DebugLatencyTracker.setFrameId(timing.frameId);
 
-    // 2. Pump platform events internally
-    const platformEvents = this.platform.pumpEvents();
+    // 2. Pump platform events internally (separated into structural window pass and urgent input pass)
+    const rawEvents = this.platform.pumpEvents();
+    const platformEvents = coalescePlatformEvents(rawEvents);
     if (platformEvents.length > 0) {
       const platformListeners = this._eventListeners.get('platform');
-      for (const event of platformEvents) {
-        if (event.kind === 'pointer') {
-          this._interactive.handle(event);
-          this._focus.handlePointer(event);
-        }
-        if (event.kind === 'keyboard') {
-          this._focus.handleKeyboard(event);
-          const focused = this._focus.getFocused(event.windowId);
-          if (focused) this._textInputs.get(focused)?.handleKeyboard(event);
-        }
-        if (event.kind === 'window' && event.type === 'focusChanged')
-          this._focus.windowFocusChanged(event.windowId, event.focused);
-        // Auto-synchronize window swapchain size in Multiverse on resize
-        if (event.kind === 'window' && event.type === 'resized') {
-          this.platform.window.updateSize(event.windowId as any, event.width, event.height);
-        }
-
-        // Dispatch to kind listeners ('window', 'pointer', 'keyboard', 'gamepad')
+      const dispatchCommon = (event: PlatformEvent) => {
         const kindListeners = this._eventListeners.get(event.kind as RuntimeEventType);
         if (kindListeners && kindListeners.size > 0) {
           for (const listener of kindListeners) {
             listener(event);
           }
         }
-
-        // Forward through platform coordinator
         this.platform.dispatch(event);
-
-        // Dispatch to generic 'platform' listeners
         if (platformListeners && platformListeners.size > 0) {
           for (const listener of platformListeners) {
             listener(event);
           }
         }
+      };
+
+      // Pass 2a: Structural window events first
+      for (const event of platformEvents) {
+        if (event.kind !== 'window') continue;
+        this.interaction.handleWindow(event);
+        if (event.type === 'resized') {
+          this.platform.window.updateSize(event.windowId as any, event.width, event.height);
+        }
+        dispatchCommon(event);
+      }
+
+      // Pass 2b: Urgent input events (pointer, keyboard, gamepad)
+      for (const event of platformEvents) {
+        if (event.kind === 'window') continue;
+        DebugLatencyTracker.recordInput(timing.frameId, event);
+        if (event.kind === 'pointer') {
+          this.interaction.handle(event);
+        } else if (event.kind === 'keyboard') {
+          this.interaction.handleKeyboard(event);
+        }
+        dispatchCommon(event);
       }
     }
 
@@ -529,6 +446,7 @@ export class MultiverseRuntime {
 
     // 5. Step animations (this also pumps animation events and triggers registered listeners)
     this.animation.step(timing.dt);
+    this.interaction.tick(timing.dt);
 
     // 6. Prepare ECS context
     const context: SystemContext = {
@@ -546,13 +464,43 @@ export class MultiverseRuntime {
 
     // 9. Resolve multiverse schedule and dispatch to GPU
     this.multiverse.dispatch(timing.frameId, timing.dt);
-    this._interactive.afterDispatch();
-    this._focus.afterDispatch();
-    for (const [focusable, input] of this._textInputs) if (focusable.isDisposed) input.dispose();
+    DebugLatencyTracker.recordDispatch(timing.frameId);
+    this.interaction.afterDispatch();
 
     // 10. Step post-render stage: postRender (metrics, cleanups) AFTER dispatch
     this.multiverse.stepRealmsPostRender(context);
   }
+}
+
+/**
+ * Coalesces consecutive pointer move events for the same window and pointer within a single tick,
+ * accumulating deltas while retaining the most recent position.
+ */
+function coalescePlatformEvents(events: PlatformEvent[]): PlatformEvent[] {
+  if (events.length <= 1) return events;
+  const result: PlatformEvent[] = [];
+  for (const event of events) {
+    if (event.kind === 'pointer' && event.type === 'move') {
+      const prev = result[result.length - 1];
+      if (
+        prev &&
+        prev.kind === 'pointer' &&
+        prev.type === 'move' &&
+        prev.windowId === event.windowId &&
+        prev.pointerId === event.pointerId
+      ) {
+        result[result.length - 1] = {
+          ...prev,
+          position: event.position,
+          delta: [prev.delta[0] + event.delta[0], prev.delta[1] + event.delta[1]],
+          pressure: event.pressure
+        };
+        continue;
+      }
+    }
+    result.push(event);
+  }
+  return result;
 }
 
 /**

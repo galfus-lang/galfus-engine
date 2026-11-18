@@ -21,7 +21,7 @@ Single native shared library packaging boundary and C-compatible ABI for host FF
 - **Comprehensive API Coverage**:
   - Platform & Windowing: `galfus_platform_init`, `galfus_window_create`, `galfus_platform_pump_events`.
   - Multiverse Orchestration: `galfus_multiverse_create_target`, `galfus_multiverse_create_invocation`, `galfus_multiverse_resolve`, `galfus_multiverse_dispatch`.
-  - 2D Realm, Shapes, Particles & Reactive SVG: `galfus_realm_2d_create_svg`, `galfus_realm_2d_set_svg_attribute`, `galfus_realm_2d_set_svg_text`, `galfus_realm_2d_remove_svg_attribute`.
+  - 2D Realm: sprites, shapes, particles, UI, and spatial queries.
   - 3D Realm, Meshes, PBR, Shadows & SSAO: `galfus_realm_3d_create_model`, `galfus_realm_3d_create_light`, `galfus_realm_3d_set_environment`.
 - **Automated Multi-Language SDK Generation**:
   - Feeds the strategy-pattern codegen engine to automatically output:

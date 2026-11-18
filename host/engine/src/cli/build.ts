@@ -141,7 +141,8 @@ export async function runBuildCommand(options: BuildOptions = {}): Promise<void>
   mkdirSync(outDir, { recursive: true });
 
   const isWindows = target.startsWith('windows');
-  const binName = isWindows ? `${baseName}.exe` : baseName;
+  const binName =
+    transport === 'node' ? `${baseName}.mjs` : isWindows ? `${baseName}.exe` : baseName;
   const outBinaryPath = join(outDir, binName);
 
   // 1. Compile game executable
@@ -156,9 +157,8 @@ export async function runBuildCommand(options: BuildOptions = {}): Promise<void>
     }
   } else {
     // Node transport bundling
-    const bundlePath = join(outDir, `${baseName}.cjs`);
-    console.log(`[galfus-engine build] Bundling Node.js script: ${bundlePath}`);
-    const proc = spawnSync('bun', ['build', entry, '--target=node', '--outfile', bundlePath], {
+    console.log(`[galfus-engine build] Bundling Node.js script: ${outBinaryPath}`);
+    const proc = spawnSync('bun', ['build', entry, '--target=node', '--outfile', outBinaryPath], {
       stdio: 'inherit',
       cwd: projectRoot
     });

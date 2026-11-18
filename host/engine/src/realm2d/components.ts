@@ -6,10 +6,11 @@
 import type {
   Camera2DDesc,
   Light2DDesc,
+  Model2DUIDesc,
   ParticleEmitter2DDesc,
   Shape2DDesc,
   Sprite2DDesc,
-  Svg2DDesc
+  UiCommandDesc
 } from '@galfus/transport-types';
 import type { Component } from '../ecs/component';
 import { mat2d, type Mat2d, vec2, type Vec2 } from '../math/index';
@@ -159,6 +160,7 @@ export interface Sprite2DComponent extends Component {
   readonly spriteId: number;
   desc: Sprite2DDesc;
   isDirty: boolean;
+  uvDirty: boolean;
 }
 
 export function createSprite2D(spriteId: number, desc: Sprite2DDesc): Sprite2DComponent {
@@ -166,7 +168,8 @@ export function createSprite2D(spriteId: number, desc: Sprite2DDesc): Sprite2DCo
     type: 'Sprite2D',
     spriteId,
     desc,
-    isDirty: true
+    isDirty: true,
+    uvDirty: false
   };
 }
 
@@ -218,22 +221,6 @@ export function createCamera2D(cameraId: number, desc: Camera2DDesc): Camera2DCo
   };
 }
 
-export interface Svg2DComponent extends Component {
-  readonly type: 'Svg2D';
-  readonly svgId: number;
-  desc: Svg2DDesc;
-  isDirty: boolean;
-}
-
-export function createSvg2D(svgId: number, desc: Svg2DDesc): Svg2DComponent {
-  return {
-    type: 'Svg2D',
-    svgId,
-    desc,
-    isDirty: true
-  };
-}
-
 export interface ParticleEmitter2DComponent extends Component {
   readonly type: 'ParticleEmitter2D';
   readonly emitterId: number;
@@ -250,5 +237,23 @@ export function createParticleEmitter2D(
     emitterId,
     desc,
     isDirty: true
+  };
+}
+
+export interface Model2DUIComponent extends Component {
+  readonly type: 'Model2DUI';
+  readonly uiId: number;
+  desc: Model2DUIDesc;
+  isDirty: boolean;
+  readonly pendingCommands: UiCommandDesc[][];
+}
+
+export function createModel2DUI(uiId: number, desc: Model2DUIDesc): Model2DUIComponent {
+  return {
+    type: 'Model2DUI',
+    uiId,
+    desc,
+    isDirty: true,
+    pendingCommands: []
   };
 }

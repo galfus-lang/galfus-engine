@@ -33,7 +33,7 @@ namespace FeatureTourRunner
         const uint INVOCATION_2D = 101;
         const uint CAMERA_3D_ID = 1;
         const uint CAMERA_2D_ID = 1;
-        const uint SVG_HUD_ID = 1;
+        const uint UI_HUD_ID = 1;
         const uint PATH_CAMERA_POS_ID = 401;
         const uint PATH_CAMERA_LOOK_ID = 402;
         const uint SOUND_ID = 501;
@@ -107,55 +107,86 @@ namespace FeatureTourRunner
             return text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
         }
 
-        static string RenderHudSvg(TourConfig tour, TourRoom room, float elapsedSecs, bool isPaused)
+        static string RenderHudUi(TourConfig tour, TourRoom room, float elapsedSecs, bool isPaused)
         {
             float totalDur = tour.Duration;
             float ratio = Math.Clamp(elapsedSecs / totalDur, 0.0f, 1.0f);
             int progressPct = (int)Math.Round(ratio * 100.0f);
-            int barWidth = Math.Max(6, (int)Math.Round(ratio * 440.0f));
+            int barWidth = Math.Max(6, (int)Math.Round(ratio * 444.0f));
+
+            var quads = new List<object>
+            {
+                new {
+                    rect = new[] { 8, 8, 484, 224 },
+                    backgroundColor = new[] { 0.06f, 0.09f, 0.16f, 0.95f },
+                    borderColor = new[] { 0.22f, 0.74f, 0.97f, 1.0f },
+                    borderWidth = new[] { 2, 2, 2, 2 },
+                    borderRadius = new[] { 14, 14, 14, 14 }
+                },
+                new {
+                    rect = new[] { 22, 8, 456, 3 },
+                    backgroundColor = new[] { 0.22f, 0.74f, 0.97f, 1.0f },
+                    borderRadius = new[] { 1.5f, 1.5f, 1.5f, 1.5f }
+                },
+                new {
+                    rect = new[] { 230, 18, 90, 20 },
+                    backgroundColor = new[] { 0.2f, 0.25f, 0.33f, 1.0f },
+                    borderRadius = new[] { 4, 4, 4, 4 }
+                },
+                new {
+                    rect = new[] { 390, 18, 80, 22 },
+                    backgroundColor = isPaused ? new[] { 0.86f, 0.15f, 0.15f, 1.0f } : new[] { 0.02f, 0.59f, 0.41f, 1.0f },
+                    borderRadius = new[] { 6, 6, 6, 6 }
+                },
+                new {
+                    rect = new[] { 28, 48, 120, 18 },
+                    backgroundColor = new[] { 0.01f, 0.52f, 0.78f, 1.0f },
+                    borderRadius = new[] { 4, 4, 4, 4 }
+                },
+                new {
+                    rect = new[] { 28, 96, 444, 14 },
+                    backgroundColor = new[] { 0.2f, 0.25f, 0.33f, 1.0f },
+                    borderColor = new[] { 0.28f, 0.33f, 0.41f, 1.0f },
+                    borderWidth = new[] { 1, 1, 1, 1 },
+                    borderRadius = new[] { 7, 7, 7, 7 }
+                },
+                new {
+                    rect = new[] { 28, 96, barWidth, 14 },
+                    backgroundColor = new[] { 0.23f, 0.51f, 0.96f, 1.0f },
+                    borderRadius = new[] { 7, 7, 7, 7 }
+                },
+                new {
+                    rect = new[] { 24, 132, 452, 52 },
+                    backgroundColor = new[] { 0.12f, 0.16f, 0.23f, 1.0f },
+                    borderColor = new[] { 0.28f, 0.33f, 0.41f, 1.0f },
+                    borderWidth = new[] { 1, 1, 1, 1 },
+                    borderRadius = new[] { 8, 8, 8, 8 }
+                }
+            };
+
+            var texts = new List<object>
+            {
+                new { position = new[] { 28, 20 }, fontSize = 16, color = new[] { 1f, 1f, 1f, 1f }, text = tour.Title },
+                new { position = new[] { 240, 22 }, fontSize = 10, color = new[] { 0.22f, 0.74f, 0.97f, 1f }, text = "C# / Native" },
+                new { position = new[] { isPaused ? 408 : 402, 22 }, fontSize = 11, color = new[] { 1f, 1f, 1f, 1f }, text = isPaused ? "PAUSED" : "LIVE TOUR" },
+                new { position = new[] { 34, 50 }, fontSize = 10, color = new[] { 1f, 1f, 1f, 1f }, text = room.Category },
+                new { position = new[] { 160, 50 }, fontSize = 14, color = new[] { 0.97f, 0.98f, 0.99f, 1f }, text = $"Room {room.RoomIndex + 1}/{tour.Rooms.Count}: {room.Name}" },
+                new { position = new[] { 28, 74 }, fontSize = 12, color = new[] { 0.89f, 0.91f, 0.94f, 1f }, text = room.Description },
+                new { position = new[] { 330, 114 }, fontSize = 11, color = new[] { 0.58f, 0.64f, 0.72f, 1f }, text = $"{progressPct}% ({elapsedSecs:F1}s / {totalDur:F1}s)" }
+            };
+
             var telemetry = new List<KeyValuePair<string, JsonElement>>(room.Telemetry);
-            string telemetryLines = "";
             for (int index = 0; index < Math.Min(4, telemetry.Count); index++)
             {
                 var entry = telemetry[index];
-                int x = index < 2 ? 34 : 260;
-                int y = 156 + (index % 2) * 20;
-                telemetryLines += $"<tspan x=\"{x}\" y=\"{y}\">▸ {EscapeXml(entry.Key)}: <tspan fill=\"#38BDF8\" font-weight=\"bold\">{EscapeXml(entry.Value.ToString())}</tspan></tspan>";
+                int x = index < 2 ? 34 : 250;
+                int y = 140 + (index % 2) * 20;
+                texts.Add(new { position = new[] { x, y }, fontSize = 11, color = new[] { 0.8f, 0.84f, 0.88f, 1f }, text = $"▸ {entry.Key}: {entry.Value}" });
             }
 
-            string badge = isPaused
-                ? "<rect x=\"390\" y=\"20\" width=\"80\" height=\"24\" rx=\"6\" fill=\"#DC2626\"/><text x=\"430\" y=\"36\" font-family=\"sans-serif\" font-size=\"11\" font-weight=\"bold\" fill=\"#FFFFFF\" text-anchor=\"middle\">PAUSED</text>"
-                : "<rect x=\"390\" y=\"20\" width=\"80\" height=\"24\" rx=\"6\" fill=\"#059669\"/><text x=\"430\" y=\"36\" font-family=\"sans-serif\" font-size=\"11\" font-weight=\"bold\" fill=\"#FFFFFF\" text-anchor=\"middle\">LIVE TOUR</text>";
+            texts.Add(new { position = new[] { 28, 198 }, fontSize = 11, color = new[] { 0.58f, 0.64f, 0.72f, 1f }, text = "[Space]: Pause/Resume  |  [←/→]: Prev/Next Room  |  [R]: Restart  |  [Esc]: Exit" });
 
-            return $@"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 500 240"" width=""500"" height=""240"">
-  <defs>
-    <linearGradient id=""cardBg"" x1=""0%"" y1=""0%"" x2=""0%"" y2=""100%"">
-      <stop offset=""0%"" stop-color=""#1E293B""/>
-      <stop offset=""100%"" stop-color=""#0F172A""/>
-    </linearGradient>
-    <linearGradient id=""neonBar"" x1=""0%"" y1=""0%"" x2=""100%"" y2=""0%"">
-      <stop offset=""0%"" stop-color=""#06B6D4""/>
-      <stop offset=""50%"" stop-color=""#3B82F6""/>
-      <stop offset=""100%"" stop-color=""#8B5CF6""/>
-    </linearGradient>
-  </defs>
-  <rect x=""8"" y=""8"" width=""484"" height=""224"" rx=""14"" fill=""url(#cardBg)"" stroke=""#38BDF8"" stroke-width=""2""/>
-  <path d=""M 22 8 L 478 8"" stroke=""#38BDF8"" stroke-width=""3"" stroke-linecap=""round""/>
-  <text x=""28"" y=""36"" font-family=""sans-serif"" font-size=""16"" font-weight=""bold"" fill=""#FFFFFF"">{EscapeXml(tour.Title)}</text>
-  <rect x=""230"" y=""22"" width=""90"" height=""20"" rx=""4"" fill=""#334155""/>
-  <text x=""275"" y=""36"" font-family=""sans-serif"" font-size=""10"" font-weight=""bold"" fill=""#38BDF8"" text-anchor=""middle"">C# / Native</text>
-  {badge}
-  <rect x=""28"" y=""50"" width=""130"" height=""18"" rx=""4"" fill=""#0284C7""/>
-  <text x=""93"" y=""63"" font-family=""sans-serif"" font-size=""10"" font-weight=""bold"" fill=""#FFFFFF"" text-anchor=""middle"">{EscapeXml(room.Category)}</text>
-  <text x=""170"" y=""65"" font-family=""sans-serif"" font-size=""14"" font-weight=""bold"" fill=""#F8FAFC"">Room {room.RoomIndex + 1}/{tour.Rooms.Count}: {EscapeXml(room.Name)}</text>
-  <text x=""28"" y=""86"" font-family=""sans-serif"" font-size=""12"" fill=""#E2E8F0"">{EscapeXml(room.Description)}</text>
-  <rect x=""28"" y=""98"" width=""444"" height=""14"" rx=""7"" fill=""#334155"" stroke=""#475569"" stroke-width=""1""/>
-  <rect x=""28"" y=""98"" width=""{barWidth}"" height=""14"" rx=""7"" fill=""url(#neonBar)""/>
-  <text x=""472"" y=""124"" font-family=""sans-serif"" font-size=""11"" font-weight=""bold"" fill=""#94A3B8"" text-anchor=""end"">{progressPct}% ({elapsedSecs:F1}s / {totalDur:F1}s)</text>
-  <rect x=""24"" y=""132"" width=""452"" height=""52"" rx=""8"" fill=""#1E293B"" stroke=""#475569"" stroke-width=""1.5""/>
-  <text font-family=""monospace"" font-size=""11"" fill=""#CBD5E1"">{telemetryLines}</text>
-  <text x=""28"" y=""210"" font-family=""sans-serif"" font-size=""11"" fill=""#94A3B8"">[Space]: Pause/Resume  |  [←/→]: Prev/Next Room  |  [R]: Restart  |  [Esc]: Exit</text>
-</svg>";
+            return JsonSerializer.Serialize(new { quads, texts });
         }
 
         static void BuildAllRooms(GalfusEngine galfus, TourConfig tour)
@@ -459,8 +490,8 @@ namespace FeatureTourRunner
         static void ApplyRoom(GalfusEngine galfus, TourConfig tour, int roomIndex, float tourClock, bool isPaused)
         {
             TourRoom room = tour.Rooms[roomIndex];
-            string svg = RenderHudSvg(tour, room, tourClock, isPaused);
-            galfus.Realm2dSetSvgSource(REALM_2D, SVG_HUD_ID, svg);
+            string ui = RenderHudUi(tour, room, tourClock, isPaused);
+            galfus.Realm2dSetUiContent(REALM_2D, UI_HUD_ID, ui);
 
             if (room.Id == "effects")
                 galfus.MultiverseSetInvocationFilters(INVOCATION_3D, "[\"chromaticAberration\",\"vignette\"]");
@@ -537,12 +568,9 @@ namespace FeatureTourRunner
                 wavHandle.Free();
             }
 
-            // SVG HUD companion
-            string initSvg = RenderHudSvg(tour, firstRoom, 0.0f, false);
-            var svgTf = new GalfusTransform2D { scale_x = 1.0f, scale_y = 1.0f };
-            galfus.Realm2dCreateSvg(REALM_2D, SVG_HUD_ID, "{\"source\":\"<svg></svg>\"}", null);
-            galfus.Realm2dSetSvgTransform(REALM_2D, SVG_HUD_ID, svgTf);
-            galfus.Realm2dSetSvgSource(REALM_2D, SVG_HUD_ID, initSvg);
+            // UI HUD companion
+            string initUi = RenderHudUi(tour, firstRoom, 0.0f, false);
+            galfus.Realm2dCreateUi(REALM_2D, UI_HUD_ID, initUi, "{\"position\":[0,0],\"scale\":[1,1]}");
 
             SetupCameraPaths(galfus, tour, 0);
             Console.WriteLine("✔ Tour paths and rooms configured successfully!\n");

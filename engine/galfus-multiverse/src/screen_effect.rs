@@ -64,7 +64,11 @@ struct ScreenInput {
 };
 
 // --- User Screen Effect Snippet ---
-{{EFFECT_SNIPPET}}
+// {{EFFECT_SNIPPET_START}}
+fn screen_effect(in: ScreenInput) -> vec4<f32> {
+    return in.color;
+}
+// {{EFFECT_SNIPPET_END}}
 
 // --- Multiverse Fragment Hook ---
 @fragment

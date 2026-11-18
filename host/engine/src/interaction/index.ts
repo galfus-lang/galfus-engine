@@ -1,9 +1,10 @@
 export { InteractiveListener } from './listener';
-export { Focusable } from './focus';
-export type { FocusEvent, FocusEventType, FocusCallback } from './focus';
+export { InteractiveSystem } from './system';
 export type {
   InteractiveCallback,
   InteractiveEvent,
   InteractiveEventType,
+  InteractiveObserver,
   InteractiveTarget
 } from './types';
+export type { UiSurfaceOptions } from './ui-surface';

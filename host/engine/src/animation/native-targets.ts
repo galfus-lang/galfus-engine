@@ -9,14 +9,7 @@ export class NativeTargetTracker {
     this.observer = observer;
   }
   private set(map: Map<number, AnimationTarget>, id: number, target?: AnimationTarget): void {
-    if (
-      target &&
-      (target.kind === 'svgAttributeScalar' ||
-        target.kind === 'svgAttributeVec2' ||
-        target.kind === 'svgAttributeColor' ||
-        target.kind === 'camera3DLookAt')
-    )
-      map.set(id, { ...target });
+    if (target && target.kind === 'camera3DLookAt') map.set(id, { ...target });
     else map.delete(id);
   }
   transition(id: number, target?: AnimationTarget): void {

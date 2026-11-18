@@ -56,6 +56,100 @@ pub trait Realm: RealmThreadBound + 'static {
         Vec::new()
     }
 
+    /// Performs a 2D hit test against colliders in the realm using a world coordinate point.
+    fn pick_2d(
+        &self,
+        _camera_slot: Option<u32>,
+        _world_pos: glam::Vec2,
+    ) -> Option<crate::collision::HitResult2D> {
+        None
+    }
+
+    /// Performs a 3D raycast picking hit test against colliders in the realm.
+    fn pick_3d(
+        &self,
+        _camera_slot: Option<u32>,
+        _ray: crate::collision::Ray3D,
+    ) -> Option<crate::collision::HitResult3D> {
+        None
+    }
+
+    /// Converts a viewport position to world coordinates for 2D picking.
+    fn viewport_point_2d(
+        &self,
+        _camera_slot: Option<u32>,
+        _position: glam::Vec2,
+        _size: glam::Vec2,
+    ) -> Option<glam::Vec2> {
+        None
+    }
+
+    /// Builds a world-space picking ray and its maximum distance for a viewport position.
+    fn viewport_ray_3d(
+        &self,
+        _camera_slot: Option<u32>,
+        _position: glam::Vec2,
+        _size: glam::Vec2,
+    ) -> Option<(crate::collision::Ray3D, f32)> {
+        None
+    }
+
+    /// Picks a ray with a maximum distance.
+    fn pick_3d_with_limit(
+        &self,
+        camera_slot: Option<u32>,
+        ray: crate::collision::Ray3D,
+        max_distance: f32,
+    ) -> Option<crate::collision::HitResult3D> {
+        self.pick_3d(camera_slot, ray)
+            .filter(|hit| hit.distance <= max_distance)
+    }
+
+    /// Returns whether a collider still exists and is eligible for interaction.
+    fn has_interactive_collider(&self, _model_id: u32, _collider_id: u32) -> bool {
+        false
+    }
+
+    /// Whether a model's sub-element remains eligible in this presented snapshot.
+    fn has_interactive_element(&self, _model_id: u32, _element_id: u32) -> bool {
+        false
+    }
+
+    /// Returns the texture of a supported UI presentation surface, if present.
+    fn ui_surface_texture(&self, _model_id: u32, _element_id: u32) -> Option<u32> {
+        None
+    }
+
+    /// Maps a world-space hit to a UI surface's sampled texture coordinates.
+    fn ui_surface_uv(
+        &self,
+        _model_id: u32,
+        _element_id: u32,
+        _world_point: glam::Vec2,
+        _texture_size: [u32; 2],
+    ) -> Option<glam::Vec2> {
+        None
+    }
+
+    /// Applies a pointer wheel delta to a UI element and its scrollable ancestors.
+    fn scroll_ui_element(&mut self, _model_id: u32, _element_id: u32, _delta: [f32; 2]) {}
+
+    /// Returns whether a collider is registered on a model, including inactive colliders.
+    fn has_collider(&self, model_id: u32, collider_id: u32) -> bool {
+        self.has_interactive_collider(model_id, collider_id)
+    }
+
+    /// Returns whether a collider supplies usable UV coordinates for a presentation surface.
+    fn supports_interaction_surface(&self, _model_id: u32, _collider_id: u32) -> bool {
+        false
+    }
+
+    /// Captures immutable collider and camera state for a successfully presented frame.
+    /// Realms without interaction can return `None`.
+    fn snapshot_interaction(&self) -> Option<Box<dyn Realm>> {
+        None
+    }
+
     /// Returns a reference for downcasting to a concrete Realm type.
     fn as_any(&self) -> &dyn std::any::Any;
 

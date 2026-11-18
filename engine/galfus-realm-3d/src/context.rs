@@ -23,6 +23,22 @@ pub(crate) fn not_found(realm_id: u32, kind: &str, id: u32) -> RealmError {
     RealmError::ResourceNotFound(realm_id, format!("{kind} {id} not found"))
 }
 
+pub(crate) fn validate_morph_weights(
+    weights: &[f32],
+    target_count: usize,
+) -> galfus_realm_core::error::RealmResult<()> {
+    if !weights.is_empty() && weights.len() != target_count {
+        return Err(RealmError::Internal(format!(
+            "Morph weight count {} does not match geometry target count {target_count}",
+            weights.len()
+        )));
+    }
+    if weights.iter().any(|weight| !weight.is_finite()) {
+        return Err(RealmError::Internal("Morph weights must be finite".into()));
+    }
+    Ok(())
+}
+
 /// Autonomous 3D Realm managing 3D scenes, entities, Reverse-Z rendering, and lighting.
 pub struct Realm3DContext {
     pub id: u32,
@@ -43,6 +59,10 @@ pub struct Realm3DContext {
     pub(crate) gizmos: crate::gizmo::GizmoSystem3D,
     pub emitters: BTreeMap<u32, (ParticleEmitter3D, Transform3D, ParticleEmitterState3D)>,
     pub portals: BTreeMap<u32, galfus_realm_3d_resources::portal::Portal3D>,
+    pub colliders: BTreeMap<u32, galfus_realm_core::Collider3D>,
+    pub model_transforms: BTreeMap<u32, Transform3D>,
+    pub hierarchy: galfus_realm_core::hierarchy::HierarchyGraph3D,
+    pub physics: Option<galfus_physics::PhysicsWorld3D>,
     pub(crate) particle_renderer: Option<crate::particle::ParticleRenderer3D>,
     pub(crate) particle_alpha_instances: Vec<Particle3DInstance>,
     pub(crate) particle_additive_instances: Vec<Particle3DInstance>,
@@ -73,6 +93,10 @@ impl Realm3DContext {
             instanced_models: BTreeMap::new(),
             lights: BTreeMap::new(),
             environment: EnvironmentRealm3D::default(),
+            colliders: BTreeMap::new(),
+            model_transforms: BTreeMap::new(),
+            hierarchy: galfus_realm_core::hierarchy::HierarchyGraph3D::new(),
+            physics: None,
             pipeline: None,
             shadow_pipeline: None,
             shadow_map: None,
@@ -107,6 +131,12 @@ impl Realm3DContext {
         self.materials.clear();
         self.geometries.clear();
         self.models.clear();
+        self.colliders.clear();
+        self.model_transforms.clear();
+        self.hierarchy.clear();
+        if let Some(p) = self.physics.as_mut() {
+            p.clear();
+        }
         self.instanced_models.clear();
         self.lights.clear();
         self.emitters.clear();

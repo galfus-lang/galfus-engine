@@ -185,26 +185,33 @@ export const platformFunctions: FunctionSpec[] = [
   {
     cName: 'galfus_platform_pump_events',
     methodName: 'platformPumpEvents',
-    doc: 'Pumps platform input events into a fixed-layout batch; its pointers expire on release or shutdown.',
+    doc: 'Pumps platform events one fixed-size 128-byte struct at a time until has_more is zero.',
     params: [
       {
-        name: 'outBatch',
-        type: { nativeStruct: 'EventBatch' },
-        doc: 'Caller-owned output event batch.',
+        name: 'outEvent',
+        type: { nativeStruct: 'PlatformEvent' },
+        doc: 'Caller-owned 128-byte output platform event struct.',
         out: true
       }
     ],
     returnType: 'i32'
   },
   {
-    cName: 'galfus_platform_release_event_batch',
-    methodName: 'platformReleaseEventBatch',
-    doc: 'Releases an event batch and invalidates its native pointer ranges.',
+    cName: 'galfus_platform_get_clipboard_text',
+    methodName: 'platformGetClipboardText',
+    doc: 'Reads the current plain-text content from the platform clipboard.',
+    params: [],
+    returnType: 'string'
+  },
+  {
+    cName: 'galfus_platform_set_clipboard_text',
+    methodName: 'platformSetClipboardText',
+    doc: 'Writes plain-text content to the platform clipboard.',
     params: [
       {
-        name: 'batchId',
-        type: 'u64',
-        doc: 'Batch identifier returned by platformPumpEvents.'
+        name: 'text',
+        type: 'string',
+        doc: 'Plain-text content to store in the clipboard'
       }
     ],
     returnType: 'i32'

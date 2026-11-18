@@ -49,6 +49,10 @@ pub struct BrowserWindow {
     #[cfg(all(target_arch = "wasm32", feature = "browser"))]
     tab_capture: Rc<std::cell::Cell<bool>>,
     #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+    focused: Rc<std::cell::Cell<bool>>,
+    #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+    clipboard: Rc<RefCell<String>>,
+    #[cfg(all(target_arch = "wasm32", feature = "browser"))]
     input_events: Rc<RefCell<Vec<crate::event::PlatformEvent>>>,
 }
 
@@ -56,7 +60,11 @@ impl BrowserWindow {
     /// Constructs a browser canvas representation from configuration.
     pub fn new(config: &WindowConfig) -> PlatformResult<Self> {
         #[cfg(all(target_arch = "wasm32", feature = "browser"))]
-        return Self::new_with_events(config, Rc::new(RefCell::new(Vec::new())));
+        return Self::new_with_events(
+            config,
+            Rc::new(RefCell::new(Vec::new())),
+            Rc::new(RefCell::new(String::new())),
+        );
         #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
         Self::new_with_events(config)
     }
@@ -66,6 +74,7 @@ impl BrowserWindow {
         #[cfg(all(target_arch = "wasm32", feature = "browser"))] input_events: Rc<
             RefCell<Vec<crate::event::PlatformEvent>>,
         >,
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))] clipboard: Rc<RefCell<String>>,
     ) -> PlatformResult<Self> {
         let canvas_id = config
             .canvas_id
@@ -96,6 +105,10 @@ impl BrowserWindow {
             pointer: None,
             #[cfg(all(target_arch = "wasm32", feature = "browser"))]
             tab_capture: Rc::new(std::cell::Cell::new(false)),
+            #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+            focused: Rc::new(std::cell::Cell::new(false)),
+            #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+            clipboard,
             #[cfg(all(target_arch = "wasm32", feature = "browser"))]
             input_events,
         };
@@ -166,6 +179,8 @@ impl BrowserWindow {
                     self.ime = Some(super::browser_ime::BrowserIme::new(
                         self.id,
                         Rc::clone(&self.tab_capture),
+                        Rc::clone(&self.focused),
+                        Rc::clone(&self.clipboard),
                         Rc::clone(&self.input_events),
                     )?);
                 }
@@ -313,11 +328,19 @@ impl BrowserWindow {
 
     /// Returns whether the canvas currently has focus.
     pub fn is_focused(&self) -> bool {
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        return self.focused.get();
+        #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
         true
     }
 
     /// Focuses the canvas DOM element.
-    pub fn focus(&self) {}
+    pub fn focus(&self) {
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        if let Some(canvas) = &self.canvas {
+            let _ = canvas.unchecked_ref::<web_sys::HtmlElement>().focus();
+        }
+    }
 
     /// User attention on web.
     pub fn request_user_attention(&self, _attention: Option<UserAttentionType>) {}
@@ -443,10 +466,20 @@ impl BrowserWindow {
             })?;
         observer.observe(&observed_element);
 
+        let initial_focused = document.active_element().is_some_and(|active| {
+            active.id() == self.canvas_id
+                || active
+                    .get_attribute("data-galfus-ime")
+                    .is_some_and(|id| id.parse::<u32>().ok() == Some(self.id))
+        });
+        self.focused.set(initial_focused);
+
         self.pointer = Some(super::browser_pointer::BrowserPointer::new(
             self.id,
             &canvas,
             Rc::clone(&self.tab_capture),
+            Rc::clone(&self.focused),
+            Rc::clone(&self.clipboard),
             Rc::clone(&self.input_events),
         )?);
         self.canvas = Some(canvas);

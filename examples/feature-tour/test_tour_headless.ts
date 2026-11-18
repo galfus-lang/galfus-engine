@@ -166,6 +166,6 @@ galfus.multiverseDestroyTarget(TARGET_ID);
 
 console.log('==> [Test] Testing runFeatureTour loop (headless 10 frames)...');
 const { runFeatureTour } = await import('./tour_runner.ts');
-await runFeatureTour({ headless: true, maxFrames: 10, fixedDelta: 0.016 });
+await runFeatureTour({ engine: new GalfusBun(), headless: true, maxFrames: 10, fixedDelta: 0.016 });
 
 console.log('✔ Headless smoke test completed with 100% success!\n');

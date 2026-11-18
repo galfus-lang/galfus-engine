@@ -11,8 +11,8 @@ pub mod particle;
 pub mod shadow;
 pub mod shape;
 pub mod sprite;
-pub mod svg;
 pub mod transform;
+pub mod ui;
 
 pub use camera::{Camera2D, Camera2DUniform};
 pub use light::{Light2D, Light2DUniform};
@@ -23,5 +23,5 @@ pub use particle::{
 pub use shadow::{Occluder2D, OccluderEdge2D, OccluderSilhouette2D, Shadow2DConfig};
 pub use shape::{Shape2D, ShapeKind2D};
 pub use sprite::Sprite2D;
-pub use svg::{Svg2D, Svg2DDesc, SvgDocument};
 pub use transform::Transform2D;
+pub use ui::{Model2DUI, UiQuad2D, UiText2D};

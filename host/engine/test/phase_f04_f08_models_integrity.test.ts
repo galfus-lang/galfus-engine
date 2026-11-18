@@ -130,7 +130,7 @@ describe('Phase F04 to F08 — Compact Spatial Models & ECS Integrity', () => {
       }).not.toThrow();
     });
 
-    it('prohibits attaching 2D visuals (Sprite2D, Shape2D, Svg2D) without Model2DComponent', () => {
+    it('prohibits attaching 2D visuals (Sprite2D, Shape2D) without Model2DComponent', () => {
       const world = new EcsWorld();
       const entity = world.createEntity();
       const sprite = createSprite2D(1, { dimensions: [32, 32] });

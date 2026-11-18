@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 galfus-core.workspace = true
 glam.workspace = true
+rhai.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 wgpu.workspace = true

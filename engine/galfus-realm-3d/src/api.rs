@@ -6,28 +6,11 @@ use galfus_realm_3d_resources::geometry::{Geometry3D, MorphTarget3D};
 use galfus_realm_3d_resources::light::Light3D;
 use galfus_realm_3d_resources::material::Material3D;
 use galfus_realm_3d_resources::model::{InstanceData3D, InstancedModel3D, Model3D};
-use galfus_realm_3d_resources::particle::{ParticleEmitter3D, ParticleEmitterState3D};
-use galfus_realm_3d_resources::portal::Portal3D;
 use galfus_realm_3d_resources::transform::Transform3D;
 use galfus_realm_core::error::RealmResult;
 
-use crate::context::{Realm3DContext, not_found};
+use crate::context::{Realm3DContext, not_found, validate_morph_weights};
 use crate::types::validate_id;
-
-fn validate_morph_weights(weights: &[f32], target_count: usize) -> RealmResult<()> {
-    if !weights.is_empty() && weights.len() != target_count {
-        return Err(galfus_realm_core::error::RealmError::Internal(format!(
-            "Morph weight count {} does not match geometry target count {target_count}",
-            weights.len()
-        )));
-    }
-    if weights.iter().any(|weight| !weight.is_finite()) {
-        return Err(galfus_realm_core::error::RealmError::Internal(
-            "Morph weights must be finite".into(),
-        ));
-    }
-    Ok(())
-}
 
 impl Realm3DContext {
     /// Registers or updates a `Camera3D` with its `Transform3D`.
@@ -212,6 +195,22 @@ impl Realm3DContext {
             .unwrap_or_default();
         self.models
             .insert(id, (model, transform, aabb, None, None, None));
+        if let Some(spatial) = self.model_transforms.get_mut(&id) {
+            *spatial = transform;
+        }
+        if let Some(physics) = self.physics.as_mut()
+            && physics.has_rigid_body(id)
+            && !physics.is_body_dynamic(id)
+        {
+            physics.set_rigid_body_pose(
+                id,
+                &galfus_realm_core::hierarchy::Pose3D {
+                    position: transform.position,
+                    rotation: transform.rotation,
+                    scale: transform.scale,
+                },
+            );
+        }
         self.bones_dirty |= self.model_bones.contains_key(&id);
         self.dirty = true;
         Ok(())
@@ -293,11 +292,34 @@ impl Realm3DContext {
 
     /// Updates the transform of an existing `Model3D`.
     pub fn set_model_transform(&mut self, id: u32, transform: Transform3D) -> RealmResult<()> {
+        #[cfg(debug_assertions)]
+        if std::env::var_os("GALFUS_DEBUG_LATENCY").is_some() {
+            eprintln!(
+                "[RUST-MODEL3D-TRANSFORM] id={id} pos={:?}",
+                transform.position
+            );
+        }
         let entry = self
             .models
             .get_mut(&id)
             .ok_or_else(|| not_found(self.id, "Model", id))?;
         entry.1 = transform;
+        if let Some(spatial) = self.model_transforms.get_mut(&id) {
+            *spatial = transform;
+        }
+        if let Some(physics) = self.physics.as_mut()
+            && physics.has_rigid_body(id)
+            && !physics.is_body_dynamic(id)
+        {
+            physics.set_rigid_body_pose(
+                id,
+                &galfus_realm_core::hierarchy::Pose3D {
+                    position: transform.position,
+                    rotation: transform.rotation,
+                    scale: transform.scale,
+                },
+            );
+        }
         self.dirty = true;
         Ok(())
     }
@@ -306,7 +328,7 @@ impl Realm3DContext {
     pub fn get_model_transform(&self, id: u32) -> RealmResult<Transform3D> {
         self.models
             .get(&id)
-            .map(|entry| entry.1)
+            .map(|e| e.1)
             .ok_or_else(|| not_found(self.id, "Model", id))
     }
 
@@ -314,7 +336,7 @@ impl Realm3DContext {
     pub fn get_camera_transform(&self, id: u32) -> RealmResult<Transform3D> {
         self.cameras
             .get(&id)
-            .map(|entry| entry.1)
+            .map(|e| e.1)
             .ok_or_else(|| not_found(self.id, "Camera", id))
     }
 
@@ -417,10 +439,12 @@ impl Realm3DContext {
         self.bones_dirty |= self.model_bones.remove(&id).is_some();
         self.models
             .remove(&id)
-            .map(|_| {
-                self.dirty = true;
-            })
-            .ok_or_else(|| not_found(self.id, "Model", id))
+            .ok_or_else(|| not_found(self.id, "Model", id))?;
+        if !self.model_transforms.contains_key(&id) {
+            self.destroy_colliders_by_model_3d(id);
+        }
+        self.dirty = true;
+        Ok(())
     }
 
     /// Destroys an existing `InstancedModel3D`.
@@ -498,97 +522,5 @@ impl Realm3DContext {
     pub fn set_environment(&mut self, environment: EnvironmentRealm3D) {
         self.environment = environment;
         self.dirty = true;
-    }
-
-    /// Creates or updates a 3D particle emitter.
-    pub fn create_particle_emitter(
-        &mut self,
-        id: u32,
-        emitter: ParticleEmitter3D,
-        transform: Transform3D,
-    ) -> RealmResult<()> {
-        validate_id(id)?;
-        self.emitters
-            .insert(id, (emitter, transform, ParticleEmitterState3D::new()));
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Sets the transform of an existing 3D particle emitter.
-    pub fn set_particle_emitter_transform(
-        &mut self,
-        id: u32,
-        transform: Transform3D,
-    ) -> RealmResult<()> {
-        let entry = self
-            .emitters
-            .get_mut(&id)
-            .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))?;
-        entry.1 = transform;
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Triggers an immediate burst of particles on an emitter.
-    pub fn particle_emitter_burst(&mut self, id: u32, count: u32) -> RealmResult<()> {
-        let (emitter, transform, state) = self
-            .emitters
-            .get_mut(&id)
-            .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))?;
-        state.burst(emitter, count, transform.position, transform.rotation);
-        Ok(())
-    }
-
-    /// Destroys an existing 3D particle emitter.
-    pub fn destroy_particle_emitter(&mut self, id: u32) -> RealmResult<()> {
-        self.emitters
-            .remove(&id)
-            .map(|_| {
-                self.dirty = true;
-            })
-            .ok_or_else(|| not_found(self.id, "ParticleEmitter", id))
-    }
-
-    /// Registers or updates a 3D optical portal or planar mirror.
-    pub fn create_portal(&mut self, id: u32, portal: Portal3D) -> RealmResult<()> {
-        validate_id(id)?;
-        self.portals.insert(id, portal);
-        self.prune_portal_pipelines();
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Sets whether an existing portal is active.
-    pub fn set_portal_active(&mut self, id: u32, active: bool) -> RealmResult<()> {
-        self.portals
-            .get_mut(&id)
-            .ok_or_else(|| not_found(self.id, "Portal", id))?
-            .active = active;
-        self.prune_portal_pipelines();
-        self.dirty = true;
-        Ok(())
-    }
-
-    /// Destroys an existing portal.
-    pub fn destroy_portal(&mut self, id: u32) -> RealmResult<()> {
-        self.portals
-            .remove(&id)
-            .ok_or_else(|| not_found(self.id, "Portal", id))?;
-        self.prune_portal_pipelines();
-        Ok(())
-    }
-
-    /// Queues debug gizmo drawing primitives.
-    pub fn draw_line(&mut self, s: glam::Vec3, e: glam::Vec3, c: glam::Vec4) {
-        self.gizmos.draw_line(s, e, c);
-    }
-    pub fn draw_aabb(&mut self, min: glam::Vec3, max: glam::Vec3, c: glam::Vec4) {
-        self.gizmos.draw_aabb(min, max, c);
-    }
-    pub fn draw_polyline(&mut self, pts: &[glam::Vec3], c: glam::Vec4, cl: bool) {
-        self.gizmos.draw_polyline(pts, c, cl);
-    }
-    pub fn clear_gizmos(&mut self) {
-        self.gizmos.clear();
     }
 }

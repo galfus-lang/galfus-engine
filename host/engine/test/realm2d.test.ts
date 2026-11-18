@@ -4,6 +4,30 @@ import { createAnchor } from '../src/anchors/index';
 import { Realm2D } from '../src/realm2d/index';
 
 describe('@galfus/engine > Realm2D', () => {
+  it('packages font files and configures ordered families', () => {
+    const realm = new Realm2D(21);
+    let packageBytes: Uint8Array | undefined;
+    let family: unknown;
+    const engine = {
+      realm2dCreate: () => {},
+      realm2dRegisterFontGroup: (id: number, name: string, bytes: Uint8Array, length: number) => {
+        expect(id).toBe(21);
+        expect(name).toBe('Example');
+        expect(length).toBe(bytes.length);
+        packageBytes = bytes;
+      },
+      realm2dSetFontFamily: (id: number, json: string) => {
+        expect(id).toBe(21);
+        family = JSON.parse(json);
+      }
+    } as unknown as GalfusEngine;
+    realm.bindEngine(engine);
+    realm.registerFontGroup('Example', [new Uint8Array([1, 2]), new Uint8Array([3])]);
+    expect([...packageBytes!]).toEqual([2, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 1, 2, 3]);
+    realm.setFontFamily({ name: 'display', groups: ['Example'], axes: { wght: 500 } });
+    expect(family).toEqual({ name: 'display', groups: ['Example'], axes: { wght: 500 } });
+    expect(() => realm.registerFontGroup('Empty', [])).toThrow();
+  });
   it('creates entities and synchronizes them to GalfusEngine with resolved anchors', () => {
     const realm = new Realm2D(10);
     const calls: string[] = [];
@@ -69,7 +93,7 @@ describe('@galfus/engine > Realm2D', () => {
     expect(calls).toContain('realm2dDestroy:10');
   });
 
-  it('supports 2D particles, dynamic SVG manipulation, polar shadows, and materials', () => {
+  it('supports 2D particles, UI models, polar shadows, and materials', () => {
     const realm = new Realm2D(15);
     const calls: string[] = [];
 
@@ -84,13 +108,11 @@ describe('@galfus/engine > Realm2D', () => {
       realm2dDestroyParticleEmitter: () => {},
       realm2dParticleEmitterBurst: (r: number, e: number, c: number) =>
         calls.push(`burst:${r}:${e}:${c}`),
-      realm2dSetSvgSource: (r: number, s: number) => calls.push(`svgSource:${r}:${s}`),
-      realm2dSetSvgAttribute: (r: number, s: number, el: string, n: string, v: string) =>
-        calls.push(`svgAttr:${r}:${s}:${el}:${n}=${v}`),
-      realm2dRemoveSvgAttribute: (r: number, s: number, el: string, n: string) =>
-        calls.push(`svgRemoveAttr:${r}:${s}:${el}:${n}`),
-      realm2dSetSvgText: (r: number, s: number, el: string, t: string) =>
-        calls.push(`svgText:${r}:${s}:${el}:${t}`),
+      realm2dCreateUi: (r: number, u: number) => calls.push(`createUi:${r}:${u}`),
+      realm2dSetUiContent: (r: number, u: number) => calls.push(`setUiContent:${r}:${u}`),
+      realm2dSetUiTransform: () => {},
+      realm2dApplyUiCommands: (r: number, u: number) => calls.push(`applyUiCommands:${r}:${u}`),
+      realm2dDestroyUi: (r: number, u: number) => calls.push(`destroyUi:${r}:${u}`),
       realm2dSetShadowConfig: () => calls.push('setShadowConfig'),
       realm2dLoadFontData: () => 'Roboto',
       realm2dCreateMaterial: (r: number, m: number) => calls.push(`createMat:${r}:${m}`),
@@ -103,11 +125,13 @@ describe('@galfus/engine > Realm2D', () => {
     realm.createParticleEmitter({ maxParticles: 50, spawnRate: 5 });
     realm.particleEmitterBurst(1, 15);
 
-    // 2. SVG manipulation
-    realm.setSvgSource(2, '<svg></svg>');
-    realm.setSvgAttribute(2, 'rect1', 'fill', 'red');
-    realm.removeSvgAttribute(2, 'rect1', 'stroke');
-    realm.setSvgText(2, 'label1', 'Score: 100');
+    // 2. UI model
+    const uiHandle = realm.createUi({
+      quads: [{ rect: [0, 0, 100, 100] }]
+    });
+    realm.applyUiCommands(uiHandle, [
+      { type: 'setLayout', id: 1, layout: { width: { type: 'exact', value: 200 } } }
+    ]);
 
     // 3. Shadow config, font loading, materials
     realm.setShadowConfig({ ambient: 0.2, lightRadius: 10 });
@@ -115,19 +139,17 @@ describe('@galfus/engine > Realm2D', () => {
     expect(fontName).toBe('Roboto');
 
     const matId = realm.createMaterial({ shaderEffect: 'glow' });
-    expect(matId).toBe(2);
+    expect(matId).toBe(3);
 
     // 4. Sync
     realm.sync({ time: 0, dt: 0.016, frameId: 1, engine: mockEngine });
 
     expect(calls).toContain('createEmitter:15:1');
     expect(calls).toContain('burst:15:1:15');
-    expect(calls).toContain('svgSource:15:2');
-    expect(calls).toContain('svgAttr:15:2:rect1:fill=red');
-    expect(calls).toContain('svgRemoveAttr:15:2:rect1:stroke');
-    expect(calls).toContain('svgText:15:2:label1:Score: 100');
+    expect(calls).toContain('createUi:15:2');
+    expect(calls).toContain('applyUiCommands:15:2');
     expect(calls).toContain('setShadowConfig');
-    expect(calls).toContain('createMat:15:2');
+    expect(calls).toContain('createMat:15:3');
 
     realm.dispose();
   });

@@ -127,4 +127,28 @@ describe('@galfus/transport-bun', () => {
 
     transport.dispose();
   });
+
+  it('creates a 2D collider and queries it via FFI', () => {
+    const transport = createBunTransport({ headless: true });
+    try {
+      const engine = transport.engine;
+      engine.realm2dCreate(1);
+      engine.realm2dCreateShape(
+        1,
+        100,
+        { kind: 'rectangle', size: [50, 50] },
+        { position: [0, 0] }
+      );
+      engine.realm2dCreateCollider(1, 10, 100, {
+        shape: { type: 'rectangle', halfExtents: [25, 25] }
+      });
+      const hits = JSON.parse(engine.realm2dQueryPoint(1, 0, 0, 0xffffffff));
+      expect(hits.some((hit: any) => hit.modelId === 100 && hit.colliderId === 10)).toBe(true);
+      engine.realm2dDestroyCollider(1, 10);
+      engine.realm2dDestroyShape(1, 100);
+      engine.realm2dDestroy(1);
+    } finally {
+      transport.dispose();
+    }
+  });
 });

@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import { runBuildCommand } from './build';
 import { runInitCommand } from './init';
+import { runApiSearchCommand } from './search';
 
 export function createCli(): Command {
   const program = new Command();
@@ -15,7 +16,7 @@ export function createCli(): Command {
     .command('init [project-name]')
     .description('Initialize a new Galfus Engine game project')
     .option('-t, --template <template>', 'Starter template (3d-scene, 2d-scene, physics)')
-    .option('--transport <transport>', 'Runtime transport (bun or node)')
+    .option('--transport <transport>', 'Runtime transport (bun, node, or browser)')
     .option('-d, --directory <dir>', 'Target directory to create the project in')
     .action(async (name, opts) => {
       try {
@@ -42,6 +43,25 @@ export function createCli(): Command {
         await runBuildCommand(opts);
       } catch (err) {
         console.error(`Build failed:`, err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('api-search <query...>')
+    .description('Search Galfus Engine API documentation and code snippets')
+    .option('-l, --limit <number>', 'Maximum number of results to display', '3')
+    .option('-u, --update', 'Refresh local search index from remote documentation')
+    .option('--json', 'Output search results as JSON')
+    .action(async (queryParts: string[], opts) => {
+      try {
+        await runApiSearchCommand(queryParts, {
+          limit: Number(opts.limit ?? 3),
+          update: Boolean(opts.update),
+          json: Boolean(opts.json)
+        });
+      } catch (err) {
+        console.error(`API search failed:`, err instanceof Error ? err.message : String(err));
         process.exit(1);
       }
     });

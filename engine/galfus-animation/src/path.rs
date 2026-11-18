@@ -26,7 +26,7 @@ pub enum PathValueType {
     Position2D,
 }
 
-/// Declarative SVG-like path motion commands with individual duration and easing.
+/// Declarative path motion commands with individual duration and easing.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum PathCommand {
@@ -183,7 +183,7 @@ pub struct PathFollowInstance {
 }
 
 impl PathFollowInstance {
-    /// Compiles a new path follow instance from declarative SVG-like path commands.
+    /// Compiles a new path follow instance from declarative path commands.
     pub fn new(id: u32, commands: Vec<PathCommand>, config: PathFollowConfig) -> Self {
         let (segments, total_dur, is_3d) = compile_commands(&commands, &config);
 

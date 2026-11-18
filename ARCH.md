@@ -245,7 +245,7 @@ The high-level TypeScript engine layer builds on top of `@galfus/transport-*` wi
 
 1. **ECS as Source of Truth**:
    - Entities hold spatial `Model3D` or `Model2D` components representing contiguous local transforms and resolved world matrices.
-   - Renderable visuals (`Mesh3D`, `Sprite2D`, `Shape2D`, `Svg2D`) require a Model component on the same entity and consume its spatial pose.
+   - Renderable visuals (`Mesh3D`, `Sprite2D`, `Shape2D`) require a Model component on the same entity and consume its spatial pose.
    - Assets (`Geometry`, `Material`, `Texture`) are stored in realm/global resource registries outside the ECS and survive entity destruction.
 2. **Anchor Hierarchy Graph**:
    - Explicit `origin` (dependent) and `target` (reference) terminology with \(O(1)\) reverse index lookup.

@@ -2,8 +2,19 @@
  * Realm 3D synchronization system syncing ECS state and resource registries with core GalfusEngine.
  */
 
-import type { GalfusEngine, Model3DDesc, Transform3D } from '@galfus/transport-types';
+import type {
+  ColliderShape3D,
+  GalfusEngine,
+  Model3DDesc,
+  Transform3D
+} from '@galfus/transport-types';
 import type { AnchorMatrixCache } from '../anchors/cache';
+import {
+  type Collider3DComponent,
+  type ColliderEntry,
+  getColliderEntries,
+  type ColliderShape3D as HostColliderShape3D
+} from '../collision/components';
 import type { EntityId } from '../ecs/entity';
 import type { EcsWorld } from '../ecs/world';
 import { mat4, quat, vec3 } from '../math/index';
@@ -39,6 +50,10 @@ export class Realm3DSyncSystem {
   private readonly _syncedEmitters = new Set<number>();
   private readonly _syncedPortals = new Set<number>();
   private readonly _syncedInstancedModels = new Set<number>();
+  private readonly _syncedColliders = new Map<
+    number,
+    { modelId: number; entry: ColliderEntry<HostColliderShape3D> }
+  >();
   private readonly _transformCache = new Map<EntityId, Transform3D>();
 
   constructor(
@@ -397,7 +412,66 @@ export class Realm3DSyncSystem {
       }
     }
 
-    // 9. Clear WorldDirty for all Model3D entities after all Core sync steps are complete
+    // 9. Sync Colliders
+    const colliderEntities = world.query('Collider3D');
+    const currentColliders = new Set<number>();
+    for (const id of colliderEntities) {
+      const colliderComp = world.getComponent<Collider3DComponent>(id, 'Collider3D');
+      const model = world.getComponent<Model3DComponent>(id, 'Model3D');
+      if (!colliderComp || !model) continue;
+
+      for (const entry of getColliderEntries(colliderComp)) {
+        if (!entry.active) continue;
+        const previous = this._syncedColliders.get(entry.colliderId);
+        if (
+          entry.shape.type !== 'box' &&
+          entry.shape.type !== 'sphere' &&
+          entry.shape.type !== 'cylinder' &&
+          entry.shape.type !== 'capsule' &&
+          entry.shape.type !== 'plane'
+        )
+          continue;
+        currentColliders.add(entry.colliderId);
+        if (!previous || previous.modelId !== model.modelId || previous.entry !== entry) {
+          let shapeDesc: ColliderShape3D;
+          if (entry.shape.type === 'box') {
+            shapeDesc = { type: 'box', halfExtents: entry.shape.halfExtents };
+          } else if (entry.shape.type === 'sphere') {
+            shapeDesc = { type: 'sphere', radius: entry.shape.radius };
+          } else if (entry.shape.type === 'cylinder') {
+            shapeDesc = {
+              type: 'cylinder',
+              radius: entry.shape.radius,
+              halfHeight: entry.shape.halfHeight
+            };
+          } else if (entry.shape.type === 'capsule') {
+            shapeDesc = {
+              type: 'capsule',
+              radius: entry.shape.radius,
+              halfHeight: entry.shape.halfHeight
+            };
+          } else {
+            shapeDesc = { type: 'rectangle', halfExtents: entry.shape.halfExtents };
+          }
+          engine.realm3dCreateCollider(this.realmId, entry.colliderId, model.modelId, {
+            shape: shapeDesc,
+            localMatrix: [...entry.matrix],
+            sensor: entry.sensor ?? false,
+            layer: entry.layer,
+            mask: entry.mask
+          });
+          this._syncedColliders.set(entry.colliderId, { modelId: model.modelId, entry });
+        }
+      }
+    }
+    for (const colliderId of this._syncedColliders.keys()) {
+      if (!currentColliders.has(colliderId)) {
+        engine.realm3dDestroyCollider(this.realmId, colliderId);
+        this._syncedColliders.delete(colliderId);
+      }
+    }
+
+    // 10. Clear WorldDirty for all Model3D entities after all Core sync steps are complete
     for (const id of modelEntities) {
       const model = world.getComponent<Model3DComponent>(id, 'Model3D');
       if (model) {
@@ -428,6 +502,11 @@ export class Realm3DSyncSystem {
       for (const id of this._syncedPortals) engine.realm3dDestroyPortal(this.realmId, id);
       for (const id of this._syncedInstancedModels)
         engine.realm3dDestroyInstancedModel(this.realmId, id);
+      for (const id of this._syncedColliders.keys()) {
+        try {
+          engine.realm3dDestroyCollider(this.realmId, id);
+        } catch {}
+      }
     }
     this._syncedModels.clear();
     this._syncedLights.clear();
@@ -437,6 +516,7 @@ export class Realm3DSyncSystem {
     this._syncedEmitters.clear();
     this._syncedPortals.clear();
     this._syncedInstancedModels.clear();
+    this._syncedColliders.clear();
     this._transformCache.clear();
   }
 }

@@ -13,7 +13,7 @@ Foundational, domain-neutral primitives, generational handles, and identity vali
 
 - **Type-Safe Generational Handles**: Generates and validates handles with generational stamping, preventing use-after-free bugs when resources are recycled.
 - **Logical ID Range Enforcer**:
-  - Strictly reserves the highest 65,535 IDs (`4294901761..=4294967295` for `u32`) for internal engine infrastructure (such as dynamic SVG materials, synthetic gizmos, and fallback textures).
+  - Strictly reserves the highest 65,535 IDs (`4294901761..=4294967295` for `u32`) for internal engine infrastructure (such as synthetic gizmos, and fallback textures).
   - Validates all host-supplied IDs at crate boundaries, rejecting reserved range violations before commands reach the renderer.
 - **Fast Content Fingerprinting**: Computes 64-bit deterministic hash fingerprints for dynamic WGSL shader snippets and composite pipeline states.
 - **Zero Heavy Dependencies**: Completely decoupled from graphics APIs, windowing libraries, and file I/O, compiling in milliseconds and forming the base of the entire dependency graph.

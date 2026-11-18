@@ -102,6 +102,25 @@ export class PlatformCoordinator {
   }
 
   /**
+   * Reads plain-text content from the platform clipboard.
+   */
+  getClipboardText(): string {
+    if (this._engine && typeof this._engine.platformGetClipboardText === 'function') {
+      return this._engine.platformGetClipboardText();
+    }
+    return '';
+  }
+
+  /**
+   * Writes plain-text content to the platform clipboard.
+   */
+  setClipboardText(text: string): void {
+    if (this._engine && typeof this._engine.platformSetClipboardText === 'function') {
+      this._engine.platformSetClipboardText(text);
+    }
+  }
+
+  /**
    * Disposes platform resources and closes active windows.
    */
   dispose(): void {

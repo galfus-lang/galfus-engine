@@ -382,43 +382,95 @@ pub unsafe extern "C" fn galfus_window_set_icon(
     }
 }
 
-/// Pumps pending platform events into a stable fixed-layout batch.
+/// Pumps pending platform events and writes the next 128-byte `GalfusPlatformEvent` record into `out_event`.
 ///
-/// The returned pointers remain valid until `galfus_platform_release_event_batch` is called or
-/// platform shutdown, whichever happens first.
+/// - If `out_event.kind == 0`, no events were available.
+/// - If `out_event.has_more == 1`, more events remain queued in the current cycle and the caller
+///   should invoke `galfus_platform_pump_events` again until `has_more == 0`.
 ///
 /// # Safety
 ///
-/// `out_batch` must be a non-null, valid pointer to writable `GalfusEventBatch` storage.
+/// `out_event` must be a non-null, valid pointer to writable `GalfusPlatformEvent` storage (128 bytes).
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_platform_pump_events(
-    out_batch: *mut crate::ffi_event_batch::GalfusEventBatch,
+    out_event: *mut crate::ffi_event_batch::GalfusPlatformEvent,
 ) -> i32 {
-    if out_batch.is_null() {
+    if out_event.is_null() {
         set_last_error("Null pointer passed to platform_pump_events");
         return -1;
     }
-    match with_context_mut(|ctx| ctx.pump_events().map_err(|error| error.to_string())) {
-        Ok(events) => {
-            let batch = crate::ffi_event_batch::store_event_batch(events);
-            // SAFETY: The pointer was checked above and points to one caller-owned output struct.
-            unsafe { *out_batch = batch };
-            0
+    if !crate::ffi_event_batch::has_pending_events() {
+        match with_context_mut(|ctx| ctx.pump_events().map_err(|error| error.to_string())) {
+            Ok(events) => crate::ffi_event_batch::enqueue_events(events),
+            Err(error) => {
+                set_last_error(&error);
+                return -1;
+            }
         }
-        Err(error) => {
-            set_last_error(&error);
-            -1
+    }
+    let next = crate::ffi_event_batch::pop_next_event();
+    // SAFETY: `out_event` was checked for null above and points to caller-owned `GalfusPlatformEvent` storage.
+    unsafe { *out_event = next };
+    0
+}
+
+/// Returns the full UTF-8 bytes for an overflowed event text field (0, 1, or 2).
+/// The borrowed pointer is valid on this thread until the next event is pumped or shutdown.
+///
+/// # Safety
+/// `out_length` must point to writable `u32` storage. Do not free the returned pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_platform_event_text(slot: u32, out_length: *mut u32) -> *const u8 {
+    if out_length.is_null() {
+        set_last_error("Null event text length pointer");
+        return std::ptr::null();
+    }
+    match crate::ffi_event_batch::current_text(slot as usize) {
+        Some((ptr, length)) => {
+            unsafe { *out_length = length };
+            ptr
+        }
+        None => {
+            unsafe { *out_length = 0 };
+            set_last_error("No overflow text for the current event or invalid field");
+            std::ptr::null()
         }
     }
 }
 
-/// Releases a platform event batch and invalidates all pointers in its view.
+/// Returns the current text stored in the platform clipboard as a newly allocated C string, or null on failure.
 #[unsafe(no_mangle)]
-pub extern "C" fn galfus_platform_release_event_batch(batch_id: u64) -> i32 {
-    match crate::ffi_event_batch::release_event_batch(batch_id) {
+pub extern "C" fn galfus_platform_get_clipboard_text() -> *mut c_char {
+    let result = with_context_mut(|ctx| ctx.get_clipboard_text().map_err(|e| e.to_string()));
+    match result {
+        Ok(text) => to_c_string(&text),
+        Err(e) => {
+            set_last_error(&e);
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Replaces the text stored in the platform clipboard. Returns 0 on success, -1 on failure.
+///
+/// # Safety
+/// `text` must be a valid, null-terminated UTF-8 string pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_platform_set_clipboard_text(text: *const c_char) -> i32 {
+    let text_str = match unsafe { from_c_str(text) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+
+    let result =
+        with_context_mut(|ctx| ctx.set_clipboard_text(text_str).map_err(|e| e.to_string()));
+    match result {
         Ok(()) => 0,
-        Err(error) => {
-            set_last_error(&error);
+        Err(e) => {
+            set_last_error(&e);
             -1
         }
     }

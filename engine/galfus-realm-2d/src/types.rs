@@ -90,7 +90,7 @@ pub struct BatchRange2D {
 // Re-export common uniforms for convenience
 pub use galfus_realm_2d_resources::{
     Camera2D, Camera2DUniform, EmissionShape2D, Light2D, Light2DUniform, Material2D,
-    Material2DUniform, Occluder2D, OccluderEdge2D, OccluderSilhouette2D, Particle2D,
+    Material2DUniform, Model2DUI, Occluder2D, OccluderEdge2D, OccluderSilhouette2D, Particle2D,
     ParticleEmitter2D, ParticleEmitterState2D, Shadow2DConfig, Shape2D, ShapeKind2D, Sprite2D,
-    SurfaceType2D, Transform2D, compute_particle_matrix,
+    SurfaceType2D, Transform2D, UiQuad2D, UiText2D, compute_particle_matrix,
 };

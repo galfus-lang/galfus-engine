@@ -1,4 +1,6 @@
 import { chromium } from '@playwright/test';
+import { API_FUNCTIONS } from './codegen/spec';
+import { BROWSER_SPRITE_UV_SMOKE } from './test-browser-sprite-uv';
 import { existsSync } from 'fs';
 import { mkdir, rm } from 'fs/promises';
 import { homedir } from 'os';
@@ -85,14 +87,25 @@ async function main(): Promise<void> {
     '--outfile',
     resolve(testDir, 'text-encoding.js')
   ]);
+  await Bun.write(
+    resolve(testDir, 'font-variable.ttf'),
+    Bun.file(resolve(rootDir, 'engine/galfus-realm-2d/tests/fixtures/NotoSans-Variable-subset.ttf'))
+  );
+  await Bun.write(
+    resolve(testDir, 'host-integration.ts'),
+    `export { createRuntime } from '../../host/engine/src/runtime';
+export { SpriteSheet } from '../../host/engine/src/realm2d/sprite-sheet';
+export { createUi, TextEditor, UiInputText } from '../../host/ui/src/index';
+`
+  );
   run([
     'bun',
     'build',
-    'host/engine/src/runtime.ts',
+    resolve(testDir, 'host-integration.ts'),
     '--target',
     'browser',
     '--outfile',
-    resolve(testDir, 'host-runtime.js')
+    resolve(testDir, 'host-integration.js')
   ]);
 
   await Bun.write(
@@ -109,8 +122,8 @@ async function main(): Promise<void> {
     <script type="module">
       import init, * as wasm from './pkg/galfus_browser.js';
       import { initializeGalfusBrowser } from './galfus-sdk.js';
-      import { TextEditor, TextEncoding } from './text-encoding.js';
-      import { createRuntime } from './host-runtime.js';
+      import { TextEncoding } from './text-encoding.js';
+      import { createRuntime, SpriteSheet, createUi, TextEditor, UiInputText } from './host-integration.js';
 
       let galfus;
       let windowId;
@@ -132,15 +145,34 @@ async function main(): Promise<void> {
           if (sample.value !== '') throw new Error('Unicode grapheme parity failed');
         }
         galfus = await initializeGalfusBrowser({ ...wasm, default: init });
+        const expectedExports = ${JSON.stringify(API_FUNCTIONS.map((fn) => fn.methodName).filter((name) => !name.startsWith('audio') && name !== 'getLastError'))};
+        const missingExports = expectedExports.filter((name) => typeof wasm[name] !== 'function');
+        if (missingExports.length) throw new Error('Missing WASM exports: ' + missingExports.join(', '));
         galfus.platformInit();
         galfus.realm2dCreate(77);
-        galfus.realm2dCreateSvg(77, 1, {
-          source: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><text id="text" x="3" y="20">A é אב</text></svg>'
-        }, { position: [0, 0] });
-        const browserLayout = galfus.realm2dGetSvgTextLayout(77, 1, 'text').layout;
-        if (!browserLayout || browserLayout.chunks[0] !== 'A é אב' || !browserLayout.clusters.some((cluster) => cluster.rightToLeft)) {
-          throw new Error('Browser SVG text cluster layout failed');
+${BROWSER_SPRITE_UV_SMOKE}        const font = new Uint8Array(await (await fetch('./font-variable.ttf')).arrayBuffer());
+        const fontPackage = new Uint8Array(8 + font.length);
+        const fontHeader = new DataView(fontPackage.buffer);
+        fontHeader.setUint32(0, 1, true);
+        fontHeader.setUint32(4, font.length, true);
+        fontPackage.set(font, 8);
+        galfus.realm2dRegisterFontGroup(77, 'Variable', fontPackage, fontPackage.length);
+        galfus.realm2dSetFontFamily(77, JSON.stringify({ name: 'display', groups: ['Variable'] }));
+        let blockedRemoval = false;
+        try { galfus.realm2dRemoveFontGroup(77, 'Variable'); } catch { blockedRemoval = true; }
+        if (!blockedRemoval) throw new Error('A referenced font group was removed');
+        galfus.realm2dRemoveFontFamily(77, 'display');
+        galfus.realm2dRemoveFontGroup(77, 'Variable');
+        galfus.realm2dEnablePhysics(77, 0, -9.81);
+        galfus.realm2dCreateShape(77, 1, { kind: 'circle', radius: 0.5 }, { position: [0, 5] });
+        galfus.realm2dAttachRigidbody(77, 1, { bodyType: 'dynamic', mass: 1, initialPosition: [0, 5], initialRotation: 0 });
+        galfus.realm2dCreateCollider(77, 2, 1, { shape: { type: 'circle', radius: 0.5 } });
+        const physicsStep = JSON.parse(galfus.realm2dStepPhysics(77, 1 / 60));
+        if (physicsStep.poses[0]?.[0] !== 1 || physicsStep.poses[0]?.[2] >= 5) {
+          throw new Error('Browser physics binding did not advance the body');
         }
+        const velocity = JSON.parse(galfus.realm2dBodyCommand(77, 1, JSON.stringify({ type: 'velocity' })));
+        if (velocity.linear[1] >= 0) throw new Error('Browser physics command returned an invalid velocity');
         galfus.realm2dDestroy(77);
         windowId = galfus.windowCreate({
           id: 42,
@@ -236,6 +268,15 @@ async function main(): Promise<void> {
         galfus.windowSetImeCursorArea(windowId, 40, 50, 2, 20);
         const input = document.activeElement;
         if (!(input instanceof HTMLTextAreaElement)) throw new Error('IME input was not focused');
+        window.galfusImeTest = { pump: () => galfus.platformPumpEvents(), reset: () => { galfus.windowSetImeAllowed(windowId, 0); galfus.platformPumpEvents(); galfus.windowSetImeAllowed(windowId, 1); }, resume: null };
+        document.body.dataset.imeReady = 'true';
+        await new Promise((resolve) => { window.galfusImeTest.resume = resolve; });
+        const canvasBounds = canvas.getBoundingClientRect();
+        const expectedImeX = canvasBounds.left + 40 * canvasBounds.width / canvas.width;
+        const expectedImeY = canvasBounds.top + 50 * canvasBounds.height / canvas.height;
+        if (Math.abs(parseFloat(input.style.left) - expectedImeX) > 0.01 || Math.abs(parseFloat(input.style.top) - expectedImeY) > 0.01) {
+          throw new Error('IME candidate area did not follow canvas scaling');
+        }
         input.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
         input.dispatchEvent(new CompositionEvent('compositionupdate', { data: 'かな' }));
         input.dispatchEvent(new InputEvent('input', { inputType: 'insertCompositionText', data: 'かな', isComposing: true }));
@@ -245,6 +286,16 @@ async function main(): Promise<void> {
         if (imeEvents.map((event) => event.type).join(',') !== 'imeEnabled,imePreedit,imePreedit,imeCommit,textInput' || imeEvents[1].text !== 'かな' || imeEvents[3].text !== '漢字' || imeEvents[4].text !== '漢字') {
           throw new Error('IME composition events were not delivered in order');
         }
+        input.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
+        input.value = '😀x';
+        input.setSelectionRange(2, 3);
+        input.dispatchEvent(new InputEvent('input', { inputType: 'insertCompositionText', data: '😀x', isComposing: true }));
+        const preeditSelection = galfus.platformPumpEvents().find((event) => event.type === 'imePreedit');
+        if (preeditSelection?.text !== '😀x' || preeditSelection.selection?.join(',') !== '2,3') {
+          throw new Error('IME preedit selection did not preserve UTF-16 offsets');
+        }
+        input.dispatchEvent(new CompositionEvent('compositionend', { data: '' }));
+        galfus.platformPumpEvents();
         galfus.windowSetTabCapture(windowId, 1);
         const imeTab = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', cancelable: true });
         input.dispatchEvent(imeTab);
@@ -268,6 +319,12 @@ async function main(): Promise<void> {
         const inserted = galfus.platformPumpEvents().filter((event) => event.type === 'textInput');
         if (inserted.length !== 2 || inserted[0].text !== 'a' || inserted[1].text !== 'text pasted') {
           throw new Error('Committed keyboard and paste input were not delivered');
+        }
+        const clipboard = new DataTransfer();
+        clipboard.setData('text/plain', 'clipboard text');
+        input.dispatchEvent(new ClipboardEvent('paste', { clipboardData: clipboard, cancelable: true }));
+        if (!galfus.platformPumpEvents().some((event) => event.type === 'textInput' && event.text === 'clipboard text')) {
+          throw new Error('Clipboard paste was not delivered');
         }
         galfus.windowSetImeAllowed(windowId, 0);
         if (!galfus.platformPumpEvents().some((event) => event.type === 'imeDisabled')) {
@@ -299,13 +356,23 @@ async function main(): Promise<void> {
           windowSetTabCapture: (_id, enabled) => galfus.windowSetTabCapture(windowId, enabled),
           windowRequestInputFocus: () => galfus.windowRequestInputFocus(windowId),
           windowSetImeAllowed: (_id, enabled) => galfus.windowSetImeAllowed(windowId, enabled),
-          realm2dGetSvgElementRect: () => ({ rect: { x: 0, y: 0, width: 100, height: 100, viewportWidth: 100, viewportHeight: 100 } })
         }, { get: (target, key) => key in target ? target[key] : () => {} });
         let frame;
         const transport = { engine, isInitialized: true, isDisposed: false, isRunning: false, startLoop: (callback) => { frame = callback; }, stopLoop: () => {}, dispose: () => {} };
         const runtime = createRuntime(transport);
+        const ui = createUi(runtime);
         const hostWindow = runtime.platform.window.create();
         const realm = runtime.createRealm2D(1);
+        const themed = ui.createComponentRoot(realm, { width: 120, height: 40, theme: { tokens: { colors: { ink: [0.1, 0.2, 0.3, 1] } } } });
+        const themedPanel = themed.root.addPanel();
+        themedPanel.setStyle({ color: { token: 'colors.ink' } });
+        const themedLabel = themedPanel.addText('Theme');
+        themed.flush();
+        if (themedLabel.resolvedStyle.kind.color.join(',') !== '0.1,0.2,0.3,1') throw new Error('Browser theme inheritance failed');
+        themed.patchTheme({ tokens: { colors: { ink: [0.4, 0.5, 0.6, 1] } } });
+        themed.flush();
+        if (themedLabel.resolvedStyle.kind.color.join(',') !== '0.4,0.5,0.6,1') throw new Error('Browser theme update failed');
+        themed.dispose();
         realm.createCamera({ orthoScale: 10 });
         const hostTarget = runtime.multiverse.createTarget({ kind: { type: 'window', windowId: hostWindow } });
         runtime.multiverse.createInvocation({ realmId: 1, targetId: hostTarget });
@@ -313,40 +380,32 @@ async function main(): Promise<void> {
         const second = realm.createSpatialNode({ position: [1, 0] });
         realm.addCollider(first, { type: 'circle', radius: 0.5 });
         realm.addCollider(second, { type: 'circle', radius: 0.5 });
-        const firstFocus = runtime.focusable(1, { type: 'collider', entityId: first });
-        const secondFocus = runtime.focusable(1, { type: 'collider', entityId: second });
+        const firstFocus = ui.focusable(1, { type: 'collider', entityId: first });
+        const secondFocus = ui.focusable(1, { type: 'collider', entityId: second });
         runtime.start();
         let frameId = 0;
         const tick = () => frame({ frameId: ++frameId, timeMs: frameId * 16, deltaMs: 16, dt: 0.016, fps: 62.5 });
         tick();
-        const hitFirst = { pointerType: 'mouse', pointerId: 1, clientX: canvasRect.left + 355, clientY: canvasRect.top + 225, button: 0 };
-        canvas.dispatchEvent(new PointerEvent('pointermove', hitFirst));
-        canvas.dispatchEvent(new PointerEvent('pointerdown', hitFirst));
-        tick();
-        if (runtime.getFocused(hostWindow) !== firstFocus) throw new Error('Browser pointer did not focus the host target');
-        const captured = [];
-        firstFocus.listener.on('pressmove', () => captured.push('move'));
-        firstFocus.listener.on('pressup', () => captured.push('up'));
-        const outsideFirst = { ...hitFirst, clientX: canvasRect.left + 700 };
-        canvas.dispatchEvent(new PointerEvent('pointermove', outsideFirst));
-        canvas.dispatchEvent(new PointerEvent('pointerup', outsideFirst));
-        tick();
-        if (captured.join(',') !== 'move,up') throw new Error('Browser pressed target did not receive movement and release outside its hit area');
+        if (!firstFocus.requestFocus(hostWindow)) throw new Error('Could not focus the host target');
         const hostTab = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', cancelable: true });
         canvas.dispatchEvent(hostTab);
         tick();
-        if (!hostTab.defaultPrevented || runtime.getFocused(hostWindow) !== secondFocus) throw new Error('Browser Tab did not advance host focus');
-        const svg = realm.createSvg({ source: '<svg/>', dimensions: [4, 4] });
-        const textInput = runtime.textInput(1, { svgId: svg.svgId, elementId: 'text', value: 'a' });
+        if (!hostTab.defaultPrevented || ui.getFocused(hostWindow) !== secondFocus) throw new Error('Browser Tab did not advance host focus');
+        const fieldRoot = ui.createComponentRoot(realm, { width: 300, height: 80, windowId: hostWindow });
+        const textInput = new UiInputText(ui, fieldRoot.root, { value: 'a' });
+        fieldRoot.flush();
         tick();
-        if (!textInput.requestFocus(hostWindow) || document.activeElement !== input) throw new Error('SVG input did not activate the browser IME');
+        if (!textInput.requestFocus(hostWindow) || document.activeElement !== input) throw new Error('Text input did not activate the browser IME');
+        window.galfusHostImeTest = { tick, snapshot: () => ({ value: textInput.value, displayValue: textInput.displayValue, composition: textInput.composition }), reset: () => textInput.setValue('a'), selectEmoji: () => { textInput.setValue('a😀b'); textInput.setSelection(1, 3); }, resume: null };
+        document.body.dataset.hostImeReady = 'true';
+        await new Promise((resolve) => { window.galfusHostImeTest.resume = resolve; });
         input.dispatchEvent(new CompositionEvent('compositionstart', { data: '' }));
         input.dispatchEvent(new CompositionEvent('compositionupdate', { data: 'かな' }));
         tick();
-        if (textInput.value !== 'a' || textInput.displayValue !== 'aかな') throw new Error('SVG input did not display the IME preview');
+        if (textInput.value !== 'a' || textInput.displayValue !== 'aかな') throw new Error('Text input did not display the IME preview');
         input.dispatchEvent(new CompositionEvent('compositionend', { data: '仮名' }));
         tick();
-        if (textInput.value !== 'a仮名') throw new Error('SVG input did not commit the IME text');
+        if (textInput.value !== 'a仮名') throw new Error('Text input did not commit the IME text');
         textInput.dispose();
         runtime.dispose();
         galfus.windowClose(windowId);
@@ -404,7 +463,109 @@ async function main(): Promise<void> {
   page.on('pageerror', (error) => pageErrors.push(error));
 
   try {
-    await page.goto(`http://127.0.0.1:${server.port}`);
+    await page.goto(`http://127.0.0.1:${server.port}`, { waitUntil: 'commit' });
+    await page.waitForFunction(
+      () => document.body.dataset.imeReady === 'true' || document.body.dataset.status === 'failed',
+      undefined,
+      { timeout: 30_000 }
+    );
+    const earlyFailure = await page.evaluate(() => document.body.dataset.error);
+    if (earlyFailure) throw new Error(earlyFailure);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.imeSetComposition', { text: '😀x', selectionStart: 2, selectionEnd: 3 });
+    const preedit = await page.evaluate(() => (window as any).galfusImeTest.pump());
+    if (!preedit.some((event: any) => event.type === 'imePreedit' && event.text === '😀x')) {
+      throw new Error(`Chromium IME preedit was not delivered: ${JSON.stringify(preedit)}`);
+    }
+    if (
+      !preedit.some(
+        (event: any) =>
+          event.type === 'imePreedit' &&
+          event.text === '😀x' &&
+          event.selection?.join(',') === '2,3'
+      )
+    ) {
+      throw new Error(
+        `Chromium IME UTF-16 selection was not delivered: ${JSON.stringify(preedit)}`
+      );
+    }
+    await cdp.send('Input.insertText', { text: '仮名' });
+    const commit = await page.evaluate(() => (window as any).galfusImeTest.pump());
+    const committed = commit.filter((event: any) => event.type === 'textInput');
+    if (
+      committed.length !== 1 ||
+      committed[0].text !== '仮名' ||
+      !commit.some((event: any) => event.type === 'imeCommit' && event.text === '仮名')
+    ) {
+      throw new Error(
+        `Chromium IME commit was not delivered exactly once: ${JSON.stringify(commit)}`
+      );
+    }
+    await page.evaluate(() => {
+      (window as any).galfusImeTest.reset();
+      (window as any).galfusImeTest.resume();
+    });
+    await page.waitForFunction(
+      () =>
+        document.body.dataset.hostImeReady === 'true' || document.body.dataset.status === 'failed',
+      undefined,
+      { timeout: 30_000 }
+    );
+    const hostFailure = await page.evaluate(() => document.body.dataset.error);
+    if (hostFailure) throw new Error(hostFailure);
+    await cdp.send('Input.imeSetComposition', { text: '😀x', selectionStart: 2, selectionEnd: 3 });
+    const preview = await page.evaluate(() => {
+      const test = (window as any).galfusHostImeTest;
+      test.tick();
+      return test.snapshot();
+    });
+    if (
+      preview.value !== 'a' ||
+      preview.displayValue !== 'a😀x' ||
+      preview.composition?.selection?.join(',') !== '2,3'
+    ) {
+      throw new Error(`Host IME preview or selection was incorrect: ${JSON.stringify(preview)}`);
+    }
+    await cdp.send('Input.insertText', { text: '仮名' });
+    const hostCommit = await page.evaluate(() => {
+      const test = (window as any).galfusHostImeTest;
+      test.tick();
+      return test.snapshot();
+    });
+    if (hostCommit.value !== 'a仮名' || hostCommit.composition)
+      throw new Error(`Host IME commit was incorrect: ${JSON.stringify(hostCommit)}`);
+    await page.evaluate(() => (window as any).galfusHostImeTest.selectEmoji());
+    await cdp.send('Input.imeSetComposition', { text: 'かな', selectionStart: 1, selectionEnd: 1 });
+    const selectedPreview = await page.evaluate(() => {
+      const test = (window as any).galfusHostImeTest;
+      test.tick();
+      return test.snapshot();
+    });
+    if (selectedPreview.value !== 'a😀b' || selectedPreview.displayValue !== 'aかなb')
+      throw new Error(`IME selection preview was incorrect: ${JSON.stringify(selectedPreview)}`);
+    await cdp.send('Input.imeSetComposition', { text: '', selectionStart: 0, selectionEnd: 0 });
+    const cancelled = await page.evaluate(() => {
+      const test = (window as any).galfusHostImeTest;
+      test.tick();
+      return test.snapshot();
+    });
+    if (cancelled.value !== 'a😀b' || cancelled.displayValue !== 'a😀b' || cancelled.composition)
+      throw new Error(`IME cancellation was incorrect: ${JSON.stringify(cancelled)}`);
+    await cdp.send('Input.imeSetComposition', { text: 'かな', selectionStart: 1, selectionEnd: 1 });
+    await cdp.send('Input.insertText', { text: '漢' });
+    const replacement = await page.evaluate(() => {
+      const test = (window as any).galfusHostImeTest;
+      test.tick();
+      return test.snapshot();
+    });
+    if (replacement.value !== 'a漢b')
+      throw new Error(`IME replacement was incorrect: ${JSON.stringify(replacement)}`);
+    await cdp.detach();
+    await page.evaluate(() => {
+      const test = (window as any).galfusHostImeTest;
+      test.reset();
+      test.resume();
+    });
     await page.waitForFunction(() => document.body.dataset.status !== undefined, undefined, {
       timeout: 30_000
     });

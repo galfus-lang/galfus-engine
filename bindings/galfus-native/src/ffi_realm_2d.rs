@@ -3,7 +3,7 @@
 use std::ffi::c_char;
 
 use galfus_realm_2d::Realm2DContext;
-use galfus_realm_2d_resources::{Light2D, Transform2D};
+use galfus_realm_2d_resources::Light2D;
 
 use crate::ffi::{from_c_str, set_last_error};
 use crate::ffi_native_structs::GalfusTransform2D;
@@ -32,18 +32,6 @@ pub extern "C" fn galfus_realm_2d_destroy(realm_id: u32) -> i32 {
             set_last_error(&e);
             -1
         }
-    }
-}
-
-unsafe fn parse_transform_2d(transform_json: *const c_char) -> Result<Transform2D, String> {
-    match unsafe { crate::ffi::from_c_str_optional(transform_json) } {
-        Ok(Some(s)) => {
-            let d: Transform2DDesc =
-                serde_json::from_str(s).map_err(|e| format!("Invalid Transform2DDesc: {e}"))?;
-            Ok(d.into())
-        }
-        Ok(None) => Ok(Transform2D::default()),
-        Err(e) => Err(e),
     }
 }
 
@@ -203,6 +191,32 @@ pub unsafe extern "C" fn galfus_realm_2d_create_sprite(
         Ok(()) => 0,
         Err(e) => {
             set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Updates the UV rectangle of an existing Sprite in the 2D Realm.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_2d_set_sprite_uv_rect(
+    realm_id: u32,
+    sprite_id: u32,
+    u0: f32,
+    v0: f32,
+    u1: f32,
+    v1: f32,
+) -> i32 {
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm2DContext>(realm_id)
+            .ok_or_else(|| format!("Realm2D #{realm_id} not found"))?;
+        realm
+            .set_sprite_uv_rect(sprite_id, [u0, v0, u1, v1])
+            .map_err(|error| error.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(error) => {
+            set_last_error(&error);
             -1
         }
     }
