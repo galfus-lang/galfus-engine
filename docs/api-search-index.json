@@ -57,7 +57,7 @@
       "escala"
     ],
     "summary": "Attach the animation evaluation system to your realm's ECS world:",
-    "snippet": "import {\n  createAnimationSystem3D,\n  type AnimationPlayer3DComponent\n} from '@galfus/engine';\n\n// Register the animation system with the realm's ECS world\nconst animSystem = createAnimationSystem3D(realm3d.world, realm3d);\nrealm3d.world.addSystem(animSystem);"
+    "snippet": "import { createAnimationSystem3D, type AnimationPlayer3DComponent } from '@galfus/engine';\n\n// Register the animation system with the realm's ECS world\nconst animSystem = createAnimationSystem3D(realm3d.world, realm3d);\nrealm3d.world.addSystem(animSystem);"
   },
   {
     "id": "galfus-animation#creating-attaching-an-animation-player",
@@ -325,7 +325,7 @@
       "escala"
     ],
     "summary": "You can also construct `AnimationClip` instances manually in code:",
-    "snippet": "import type { AnimationClip, KeyframeTrack } from '@galfus/engine';\n\nconst bounceTrack: KeyframeTrack = {\n  targetEntity: cube.entityId,\n  path: 'translation',\n  interpolation: 'linear',\n  timestamps: new Float32Array([0.0, 0.5, 1.0]),\n  values: new Float32Array([\n    0, 0, 0,   // t = 0.0s: position [0, 0, 0]\n    0, 2, 0,   // t = 0.5s: position [0, 2, 0]\n    0, 0, 0    // t = 1.0s: position [0, 0, 0]\n  ])\n};\n\nconst bounceClip: AnimationClip = {\n  name: 'Bounce',\n  duration: 1.0,\n  tracks: [bounceTrack]\n};\n\nplayer.addClip(bounceClip);\nplayer.play('Bounce', 'repeat');"
+    "snippet": "import type { AnimationClip, KeyframeTrack } from '@galfus/engine';\n\nconst bounceTrack: KeyframeTrack = {\n  targetEntity: cube.entityId,\n  path: 'translation',\n  interpolation: 'linear',\n  timestamps: new Float32Array([0.0, 0.5, 1.0]),\n  values: new Float32Array([\n    0,\n    0,\n    0, // t = 0.0s: position [0, 0, 0]\n    0,\n    2,\n    0, // t = 0.5s: position [0, 2, 0]\n    0,\n    0,\n    0 // t = 1.0s: position [0, 0, 0]\n  ])\n};\n\nconst bounceClip: AnimationClip = {\n  name: 'Bounce',\n  duration: 1.0,\n  tracks: [bounceTrack]\n};\n\nplayer.addClip(bounceClip);\nplayer.play('Bounce', 'repeat');"
   },
   {
     "id": "galfus-core#runtime-initialization",
@@ -1698,7 +1698,7 @@
       "escala"
     ],
     "summary": "Add rigid bodies to entities using `physics.addRigidBody`. Supported body types: - `'dynamic'`: Affected by gravity, forces, impulses, and collisions. - `'fixed'`: Immovable static level geometry (floors, walls, ramps).",
-    "snippet": "// Static ground floor\nconst floor = realm3d.createCube(1, floorMat, {\n  position: [0, -0.5, 0],\n  scale: [20, 1, 20]\n}).entityId;\n\nrealm3d.addCollider(floor, { type: 'box', halfExtents: [10, 0.5, 10] });\nphysics.addRigidBody(floor, { type: 'fixed', friction: 0.7 });\n\n// Dynamic falling crate\nconst crate = realm3d.createCube(1, crateMat, {\n  position: [0, 8, 0],\n  scale: [1, 1, 1]\n}).entityId;\n\nrealm3d.addCollider(crate, { type: 'box', halfExtents: [0.5, 0.5, 0.5] });\nphysics.addRigidBody(crate, {\n  type: 'dynamic',\n  mass: 5.0,        // Mass in kg\n  restitution: 0.4, // Bounciness (0 = no bounce, 1 = perfectly elastic)\n  friction: 0.6,\n  linearDamping: 0.1,\n  angularDamping: 0.2\n});"
+    "snippet": "// Static ground floor\nconst floor = realm3d.createCube(1, floorMat, {\n  position: [0, -0.5, 0],\n  scale: [20, 1, 20]\n}).entityId;\n\nrealm3d.addCollider(floor, { type: 'box', halfExtents: [10, 0.5, 10] });\nphysics.addRigidBody(floor, { type: 'fixed', friction: 0.7 });\n\n// Dynamic falling crate\nconst crate = realm3d.createCube(1, crateMat, {\n  position: [0, 8, 0],\n  scale: [1, 1, 1]\n}).entityId;\n\nrealm3d.addCollider(crate, { type: 'box', halfExtents: [0.5, 0.5, 0.5] });\nphysics.addRigidBody(crate, {\n  type: 'dynamic',\n  mass: 5.0, // Mass in kg\n  restitution: 0.4, // Bounciness (0 = no bounce, 1 = perfectly elastic)\n  friction: 0.6,\n  linearDamping: 0.1,\n  angularDamping: 0.2\n});"
   },
   {
     "id": "galfus-physics-3d#applying-impulses-forces",
@@ -2002,7 +2002,7 @@
       "escala"
     ],
     "summary": "The 2D camera manages view offset and zoom scale:",
-    "snippet": "const camera = realm2d.createCamera(\n  {\n    cameraSlot: 1,    // Matches Multiverse Invocation\n    orthoScale: 10.0  // Orthographic vertical view height in world units\n  },\n  {\n    position: [0, 0] // Center of the 2D world\n  }\n);"
+    "snippet": "const camera = realm2d.createCamera(\n  {\n    cameraSlot: 1, // Matches Multiverse Invocation\n    orthoScale: 10.0 // Orthographic vertical view height in world units\n  },\n  {\n    position: [0, 0] // Center of the 2D world\n  }\n);"
   },
   {
     "id": "galfus-realm-2d#materials-textures",
@@ -2197,7 +2197,7 @@
       "escala"
     ],
     "summary": "`Realm2D` includes hardware-accelerated 2D lighting with smooth distance attenuation:",
-    "snippet": "const light = realm2d.createLight(\n  {\n    color: [1.0, 0.85, 0.6], // Warm candlelight\n    intensity: 2.5,\n    range: 12.0,             // Attenuation radius\n    lightRadius: 0.5,        // Light source core radius\n    castShadow: false,\n    active: true\n  },\n  {\n    position: [0, 2.0]\n  }\n);"
+    "snippet": "const light = realm2d.createLight(\n  {\n    color: [1.0, 0.85, 0.6], // Warm candlelight\n    intensity: 2.5,\n    range: 12.0, // Attenuation radius\n    lightRadius: 0.5, // Light source core radius\n    castShadow: false,\n    active: true\n  },\n  {\n    position: [0, 2.0]\n  }\n);"
   },
   {
     "id": "galfus-realm-2d#sprite-sheets-uv-animation",
@@ -2274,7 +2274,7 @@
       "tilemap"
     ],
     "summary": "For pixel art, tilemaps, or animated character frames, use `SpriteSheet` to calculate sub-rectangle UVs:",
-    "snippet": "const sheet = new SpriteSheet({\n  textureWidth: 256,\n  textureHeight: 256,\n  frameWidth: 32,\n  frameHeight: 32\n});\n\nconst spriteModel = realm2d.world.getComponent<Model2DComponent>(\n  playerSprite.entityId,\n  'Model2D'\n);\n\n// Switch to frame 4 (0-indexed)\nconst uv = sheet.getFrameUv(4);\nspriteModel?.setUvOffset(uv.u, uv.v, uv.width, uv.height);"
+    "snippet": "const sheet = new SpriteSheet({\n  textureWidth: 256,\n  textureHeight: 256,\n  frameWidth: 32,\n  frameHeight: 32\n});\n\nconst spriteModel = realm2d.world.getComponent<Model2DComponent>(playerSprite.entityId, 'Model2D');\n\n// Switch to frame 4 (0-indexed)\nconst uv = sheet.getFrameUv(4);\nspriteModel?.setUvOffset(uv.u, uv.v, uv.width, uv.height);"
   },
   {
     "id": "galfus-realm-2d#transforming-2d-entities-in-the-tick-loop",
@@ -3170,7 +3170,7 @@
       "escala"
     ],
     "summary": "Access the ECS `Model3DComponent` to update translation, rotation, and scale per frame:",
-    "snippet": "const model = realm3d.world.getComponent<Model3DComponent>(cube.entityId, 'Model3D');\n\nlet elapsed = 0;\nruntime.on('tick', ({ dt }) => {\n  elapsed += dt;\n\n  // Rotate around Y axis\n  const halfAngle = (elapsed * 2.0) * 0.5;\n  model?.setRotation(0, Math.sin(halfAngle), 0, Math.cos(halfAngle));\n\n  // Translate up and down\n  model?.setPosition(0, 1.0 + Math.sin(elapsed * 3.0) * 0.5, 0);\n});"
+    "snippet": "const model = realm3d.world.getComponent<Model3DComponent>(cube.entityId, 'Model3D');\n\nlet elapsed = 0;\nruntime.on('tick', ({ dt }) => {\n  elapsed += dt;\n\n  // Rotate around Y axis\n  const halfAngle = elapsed * 2.0 * 0.5;\n  model?.setRotation(0, Math.sin(halfAngle), 0, Math.cos(halfAngle));\n\n  // Translate up and down\n  model?.setPosition(0, 1.0 + Math.sin(elapsed * 3.0) * 0.5, 0);\n});"
   },
   {
     "id": "galfus-realm-3d-helpers#loading-a-gltf-glb-asset",
@@ -3395,7 +3395,7 @@
       "escala"
     ],
     "summary": "If the glTF file contains keyframe or skeletal animations, trigger them on the instance:",
-    "snippet": "// List available animations\nconsole.log('Available clips:', modelFactory.animations.map((a) => a.name));\n\n// Play animation by name or index\nplayer.playAnimation('Walk', {\n  loop: true,\n  speed: 1.0,\n  crossFadeDuration: 0.2 // Smooth transition\n});\n\n// Update animation playback in the tick loop\nruntime.on('tick', ({ dt }) => {\n  player.update(dt);\n});"
+    "snippet": "// List available animations\nconsole.log(\n  'Available clips:',\n  modelFactory.animations.map((a) => a.name)\n);\n\n// Play animation by name or index\nplayer.playAnimation('Walk', {\n  loop: true,\n  speed: 1.0,\n  crossFadeDuration: 0.2 // Smooth transition\n});\n\n// Update animation playback in the tick loop\nruntime.on('tick', ({ dt }) => {\n  player.update(dt);\n});"
   },
   {
     "id": "galfus-realm-3d-helpers#loading-zip-model-archives",
@@ -3470,7 +3470,7 @@
       "escala"
     ],
     "summary": "Galfus natively decompresses ZIP packages containing `.gltf`, external `.bin` buffers, and texture folders without extracting to disk:",
-    "snippet": "const environmentFactory = await loadGltfAsset(\n  realm3d,\n  'assets/environments/sci-fi-lab.zip'\n);\n\nconst level = environmentFactory.instantiate();"
+    "snippet": "const environmentFactory = await loadGltfAsset(realm3d, 'assets/environments/sci-fi-lab.zip');\n\nconst level = environmentFactory.instantiate();"
   },
   {
     "id": "galfus-realm-3d-helpers#custom-material-overrides",

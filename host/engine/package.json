@@ -64,7 +64,6 @@
   "dependencies": {
     "@clack/prompts": "^1.8.1",
     "@galfus/transport-types": "workspace:*",
-    "commander": "^15.0.0",
-    "iconv-lite": "^0.7.3"
+    "commander": "^15.0.0"
   }
 }
