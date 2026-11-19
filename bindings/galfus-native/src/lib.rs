@@ -1,6 +1,7 @@
 pub mod ffi;
 pub mod ffi_animation;
 pub mod ffi_audio;
+pub mod ffi_diagnostics;
 pub mod ffi_event_batch;
 pub mod ffi_hierarchy_physics_2d;
 pub mod ffi_hierarchy_physics_3d;
@@ -31,6 +32,7 @@ pub mod wasm_shim;
 pub use ffi::*;
 pub use ffi_animation::*;
 pub use ffi_audio::*;
+pub use ffi_diagnostics::*;
 pub use ffi_hierarchy_physics_2d::*;
 pub use ffi_hierarchy_physics_3d::*;
 pub use ffi_interaction::*;

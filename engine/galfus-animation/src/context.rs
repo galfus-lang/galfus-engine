@@ -2,22 +2,84 @@
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
+use galfus_core::diagnostics::{self, DriftWarning, MemoryCategoryStats, MetricCounter, tags};
 use galfus_core::id::validate_host_logical_id;
 use galfus_multiverse::MultiverseContext;
+use serde::Serialize;
 
 use crate::applier::apply_target_value;
 use crate::error::{AnimationError, AnimationResult};
 use crate::events::AnimationEvent;
 use crate::path::{PathCommand, PathFollowConfig, PathFollowInstance, PathFollowState};
 use crate::target::AnimationTarget;
-use crate::transition::{TransitionConfig, TransitionInstance, TransitionState};
+use crate::transition::{TransitionConfig, TransitionInstance, TransitionState, TransitionStatus};
 use crate::value::AnimValue;
+
+/// Diagnostic statistics for [`AnimationContext`].
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnimationDiagnosticsStats {
+    pub transitions_total: usize,
+    pub transitions_completed: usize,
+    pub path_follows_total: usize,
+    pub path_follows_completed: usize,
+    pub target_locks_len: usize,
+    pub custom_channels_len: usize,
+    pub event_queue_len: usize,
+    pub event_queue_cap: usize,
+    pub estimated_cpu_bytes: u64,
+}
+
+impl AnimationDiagnosticsStats {
+    pub fn memory_category(&self) -> MemoryCategoryStats {
+        MemoryCategoryStats::new(
+            "animation",
+            "animation",
+            self.estimated_cpu_bytes,
+            0,
+            self.estimated_cpu_bytes,
+            self.transitions_total + self.path_follows_total + self.custom_channels_len,
+        )
+    }
+
+    pub fn drift_warnings(&self) -> Vec<DriftWarning> {
+        let mut warnings = Vec::new();
+        let completed = self.transitions_completed + self.path_follows_completed;
+        if completed > 0 {
+            warnings.push(DriftWarning {
+                category: "animation".to_string(),
+                metric: "completedAnimationsRetained".to_string(),
+                expected: 0,
+                actual: completed as u64,
+                delta: completed as i64,
+                message: format!(
+                    "{completed} completed transitions/path_follows remain retained in AnimationContext"
+                ),
+            });
+        }
+        warnings
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum AnimationOwner {
+    Transition(u32),
+    PathFollow(u32),
+}
+
+impl AnimationOwner {
+    fn id(self) -> u32 {
+        match self {
+            Self::Transition(id) | Self::PathFollow(id) => id,
+        }
+    }
+}
 
 /// Autonomous animation manager coordinating transitions, state queries, and event pumping.
 pub struct AnimationContext {
     pub(crate) transitions: BTreeMap<u32, TransitionInstance>,
     pub(crate) path_follows: BTreeMap<u32, PathFollowInstance>,
-    pub(crate) target_locks: HashMap<AnimationTarget, u32>,
+    pub(crate) target_locks: HashMap<AnimationTarget, AnimationOwner>,
     pub(crate) custom_channels: HashMap<u32, AnimValue>,
     pub(crate) event_queue: VecDeque<AnimationEvent>,
 }
@@ -62,13 +124,14 @@ impl AnimationContext {
 
     /// Binds an existing transition to an entity property target with conflict locking.
     pub fn bind_target(&mut self, id: u32, target: AnimationTarget) -> AnimationResult<()> {
+        let owner = AnimationOwner::Transition(id);
         // Prevent concurrent transitions from writing to the same destination property
-        if let Some(&owner_id) = self.target_locks.get(&target)
-            && owner_id != id
+        if let Some(&existing) = self.target_locks.get(&target)
+            && existing != owner
         {
             return Err(AnimationError::TargetConflict {
                 target: format!("{target:?}"),
-                owner_id,
+                owner_id: existing.id(),
             });
         }
 
@@ -84,7 +147,7 @@ impl AnimationContext {
             self.target_locks.remove(old_target);
         }
 
-        self.target_locks.insert(target.clone(), id);
+        self.target_locks.insert(target.clone(), owner);
         instance.target = Some(target);
         Ok(())
     }
@@ -132,6 +195,9 @@ impl AnimationContext {
         if let Some(instance) = self.transitions.remove(&id) {
             if let Some(ref target) = instance.target {
                 self.target_locks.remove(target);
+                if let AnimationTarget::CustomChannel { channel_id } = target {
+                    self.custom_channels.remove(channel_id);
+                }
             }
             Ok(())
         } else {
@@ -141,6 +207,7 @@ impl AnimationContext {
 
     /// Advances all transitions and path followers by delta time `dt` seconds and collects triggered events.
     pub fn step(&mut self, dt: f32) {
+        let _span = diagnostics::SpanGuard::new(tags::ANIMATION, "animation.step");
         for instance in self.transitions.values_mut() {
             if let Some(event) = instance.step(dt) {
                 Self::push_event_to_queue(&mut self.event_queue, event);
@@ -156,6 +223,7 @@ impl AnimationContext {
     fn push_event_to_queue(queue: &mut VecDeque<AnimationEvent>, event: AnimationEvent) {
         if queue.len() >= Self::DEFAULT_MAX_EVENT_QUEUE_SIZE {
             queue.pop_front();
+            diagnostics::counter_add(MetricCounter::AnimationEventEvictions, 1);
         }
         queue.push_back(event);
     }
@@ -170,6 +238,7 @@ impl AnimationContext {
         &mut self,
         multiverse: &mut MultiverseContext,
     ) -> AnimationResult<()> {
+        let _span = diagnostics::SpanGuard::new(tags::ANIMATION, "animation.apply");
         for instance in self.transitions.values() {
             if let Some(ref target) = instance.target {
                 apply_target_value(
@@ -223,12 +292,13 @@ impl AnimationContext {
         id: u32,
         target: AnimationTarget,
     ) -> AnimationResult<()> {
-        if let Some(&owner_id) = self.target_locks.get(&target)
-            && owner_id != id
+        let owner = AnimationOwner::PathFollow(id);
+        if let Some(&existing) = self.target_locks.get(&target)
+            && existing != owner
         {
             return Err(AnimationError::TargetConflict {
                 target: format!("{target:?}"),
-                owner_id,
+                owner_id: existing.id(),
             });
         }
 
@@ -243,7 +313,7 @@ impl AnimationContext {
             self.target_locks.remove(old_target);
         }
 
-        self.target_locks.insert(target.clone(), id);
+        self.target_locks.insert(target.clone(), owner);
         instance.target = Some(target);
         Ok(())
     }
@@ -276,11 +346,48 @@ impl AnimationContext {
         if let Some(instance) = self.path_follows.remove(&id) {
             if let Some(ref target) = instance.target {
                 self.target_locks.remove(target);
+                if let AnimationTarget::CustomChannel { channel_id } = target {
+                    self.custom_channels.remove(channel_id);
+                }
             }
             Ok(())
         } else {
             Err(AnimationError::PathFollowNotFound(id))
         }
+    }
+
+    /// Removes all transitions and path followers that have reached `Completed` status,
+    /// releasing their target locks and custom channels. Returns the number of pruned instances.
+    pub fn prune_completed(&mut self) -> usize {
+        let completed_t: Vec<u32> = self
+            .transitions
+            .iter()
+            .filter(|(_, inst)| inst.state().status == TransitionStatus::Completed)
+            .map(|(&id, _)| id)
+            .collect();
+        let completed_p: Vec<u32> = self
+            .path_follows
+            .iter()
+            .filter(|(_, inst)| inst.state().status == TransitionStatus::Completed)
+            .map(|(&id, _)| id)
+            .collect();
+        let count = completed_t.len() + completed_p.len();
+        for id in completed_t {
+            let _ = self.destroy_transition(id);
+        }
+        for id in completed_p {
+            let _ = self.destroy_path_follow(id);
+        }
+        count
+    }
+
+    /// Clears all transitions, path followers, locks, custom channels, and queued events.
+    pub fn clear(&mut self) {
+        self.transitions.clear();
+        self.path_follows.clear();
+        self.target_locks.clear();
+        self.custom_channels.clear();
+        self.event_queue.clear();
     }
 
     /// Drains and returns all queued animation lifecycle events.
@@ -306,5 +413,38 @@ impl AnimationContext {
     /// Clears all custom channels.
     pub fn clear_custom_channels(&mut self) {
         self.custom_channels.clear();
+    }
+
+    /// Returns diagnostic statistics for this animation context.
+    pub fn diagnostic_stats(&self) -> AnimationDiagnosticsStats {
+        let transitions_completed = self
+            .transitions
+            .values()
+            .filter(|t| t.state().status == TransitionStatus::Completed)
+            .count();
+        let path_follows_completed = self
+            .path_follows
+            .values()
+            .filter(|p| p.state().status == TransitionStatus::Completed)
+            .count();
+        let estimated_cpu_bytes = (self.transitions.len()
+            * std::mem::size_of::<(u32, TransitionInstance)>()
+            + self.path_follows.len() * std::mem::size_of::<(u32, PathFollowInstance)>()
+            + self.target_locks.capacity() * std::mem::size_of::<(AnimationTarget, u32)>()
+            + self.custom_channels.capacity() * std::mem::size_of::<(u32, AnimValue)>()
+            + self.event_queue.capacity() * std::mem::size_of::<AnimationEvent>())
+            as u64;
+
+        AnimationDiagnosticsStats {
+            transitions_total: self.transitions.len(),
+            transitions_completed,
+            path_follows_total: self.path_follows.len(),
+            path_follows_completed,
+            target_locks_len: self.target_locks.len(),
+            custom_channels_len: self.custom_channels.len(),
+            event_queue_len: self.event_queue.len(),
+            event_queue_cap: self.event_queue.capacity(),
+            estimated_cpu_bytes,
+        }
     }
 }

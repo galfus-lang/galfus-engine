@@ -51,6 +51,16 @@ impl MultiverseInteractionSystem {
     pub fn cancel_window(&mut self, window_id: u32) {
         self.inner.cancel_window(window_id);
     }
+    pub fn diagnostic_counts(&self) -> (usize, usize, usize, usize, usize) {
+        let (pointers, queued_events, queued_events_cap) = self.inner.diagnostic_counts();
+        (
+            self.surfaces.len(),
+            self.ui_surfaces.len(),
+            pointers,
+            queued_events,
+            queued_events_cap,
+        )
+    }
     pub(crate) fn reconcile(
         &mut self,
         frames: &HashMap<u32, std::sync::Arc<crate::context_interaction::InteractionFrame>>,

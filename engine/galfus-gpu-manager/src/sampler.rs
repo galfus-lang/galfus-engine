@@ -20,6 +20,18 @@ impl GpuSampler {
     }
 }
 
+use galfus_core::diagnostics::{self, MetricCounter};
+use galfus_core::handle::PoolStats;
+use serde::Serialize;
+
+/// Diagnostic statistics for [`SamplerManager`].
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SamplerManagerStats {
+    pub pool: PoolStats,
+    pub cache_len: usize,
+}
+
 /// Registry and cache for GPU Samplers.
 pub struct SamplerManager {
     pool: GenerationalPool<GpuSampler>,
@@ -40,6 +52,14 @@ impl SamplerManager {
         }
     }
 
+    /// Returns diagnostic statistics for this sampler manager.
+    pub fn diagnostic_stats(&self) -> SamplerManagerStats {
+        SamplerManagerStats {
+            pool: self.pool.stats(),
+            cache_len: self.cache.len(),
+        }
+    }
+
     /// Retrieves an existing cached sampler matching the descriptor, or creates a new one.
     pub fn get_or_create(
         &mut self,
@@ -51,8 +71,10 @@ impl SamplerManager {
             .get(desc)
             .filter(|h| self.pool.get(h.cast()).is_ok())
         {
+            diagnostics::counter_add(MetricCounter::GpuSamplerCacheHit, 1);
             return Ok(handle);
         }
+        diagnostics::counter_add(MetricCounter::GpuSamplerCacheMiss, 1);
 
         let wgpu_desc = wgpu::SamplerDescriptor {
             label: desc.label.as_deref(),

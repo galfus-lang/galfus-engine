@@ -190,7 +190,7 @@ pub struct OutlinePipeline3D {
     composite_bgl: wgpu::BindGroupLayout,
     params_buffer: wgpu::Buffer,
     sampler: wgpu::Sampler,
-    texture: Option<(wgpu::Texture, wgpu::TextureView, UVec2)>,
+    pub(crate) texture: Option<(wgpu::Texture, wgpu::TextureView, UVec2)>,
     bind_group: Option<wgpu::BindGroup>,
 }
 

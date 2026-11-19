@@ -1,7 +1,20 @@
 use std::num::NonZeroU32;
 
+use serde::Serialize;
+
 use crate::error::{CoreError, CoreResult};
 use crate::handle::typed::Handle;
+
+/// Diagnostic statistics for a [`GenerationalPool`].
+#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PoolStats {
+    pub active_count: usize,
+    pub slots_len: usize,
+    pub slots_capacity: usize,
+    pub vacant_count: usize,
+    pub estimated_cpu_bytes: u64,
+}
 
 enum Slot<T> {
     Occupied {
@@ -61,10 +74,22 @@ impl<T> GenerationalPool<T> {
         self.active_count == 0
     }
 
+    /// Returns diagnostic occupancy and estimated backing-vector CPU bytes for this pool.
+    #[inline]
+    pub fn stats(&self) -> PoolStats {
+        let slots_len = self.slots.len();
+        let slots_capacity = self.slots.capacity();
+        PoolStats {
+            active_count: self.active_count,
+            slots_len,
+            slots_capacity,
+            vacant_count: slots_len.saturating_sub(self.active_count),
+            estimated_cpu_bytes: (slots_capacity * std::mem::size_of::<Slot<T>>()) as u64,
+        }
+    }
+
     /// Inserts a new value into the pool, returning its strongly typed `Handle<T>`.
     pub fn insert(&mut self, value: T) -> CoreResult<Handle<T>> {
-        self.active_count += 1;
-
         if let Some(free_slot_idx) = self.free_head {
             let slot = self
                 .slots
@@ -82,6 +107,7 @@ impl<T> GenerationalPool<T> {
                         value,
                         generation: current_gen,
                     };
+                    self.active_count += 1;
                     Ok(Handle::new(free_slot_idx, current_gen, self.namespace))
                 }
                 Slot::Occupied { .. } => Err(CoreError::InvalidHandle {
@@ -96,6 +122,7 @@ impl<T> GenerationalPool<T> {
                 value,
                 generation: initial_gen,
             });
+            self.active_count += 1;
             Ok(Handle::new(slot_idx, initial_gen, self.namespace))
         }
     }

@@ -72,6 +72,24 @@ pub struct UiManager2D {
     node_upload_counts: HashMap<(u32, u32), u64>,
 }
 
+impl UiManager2D {
+    pub(crate) fn diagnostic_counts(&self) -> (usize, usize, usize, u32, u64, usize) {
+        let geom_gpu_bytes: u64 = self
+            .geometry_pool
+            .iter()
+            .map(|(_, g)| g.vertex_buffer.size().saturating_add(g.index_buffer.size()))
+            .sum();
+        (
+            self.node_geometries.len(),
+            self.text_geometries.len(),
+            self.textured_materials.len(),
+            self.next_mat_id,
+            geom_gpu_bytes,
+            self.geometry_pool.len(),
+        )
+    }
+}
+
 impl Default for UiManager2D {
     fn default() -> Self {
         Self {
@@ -368,11 +386,10 @@ impl UiManager2D {
             }
         }
 
-        // Export textured material bind groups to render map
+        // Export textured material bind groups to render map (always overwrite so
+        // refreshed/resized TextureViews replace stale BindGroups instead of pinning them).
         for entry in self.textured_materials.values() {
-            material_bind_groups
-                .entry(entry.mat_id)
-                .or_insert_with(|| entry.bind_group.clone());
+            material_bind_groups.insert(entry.mat_id, entry.bind_group.clone());
         }
     }
 

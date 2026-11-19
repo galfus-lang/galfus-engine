@@ -31,6 +31,8 @@ pub(crate) fn execute_frame(
             &mut ctx.target_history_textures,
             &mut ctx.scratch_textures,
             &mut ctx.taa_history,
+            &mut ctx.ping_pong_texture,
+            &mut ctx.smaa_intermediates,
             gpu,
             &schedule,
             default_aa,
@@ -590,6 +592,8 @@ pub(crate) fn execute_frame(
         surface_tex.present();
         presented_windows.push(window_id);
     }
+
+    executor_resources::poll_after_frame(ctx.gpu_manager.as_ref(), !presented_windows.is_empty());
 
     Ok(presented_windows)
 }

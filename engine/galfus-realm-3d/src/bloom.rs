@@ -118,6 +118,7 @@ fn fs_apply(in: VertexOutput) -> @location(0) vec4<f32> {
 struct BloomMip {
     _texture: wgpu::Texture,
     view: wgpu::TextureView,
+    bind_group: wgpu::BindGroup,
     width: u32,
     height: u32,
 }
@@ -331,7 +332,7 @@ impl BloomPipeline3D {
             cache: None,
         });
 
-        let mips = create_mips(device, width, height);
+        let mips = create_mips(device, &layout, &sampler, &params_buffer, width, height);
 
         Self {
             extract_pipeline,
@@ -351,8 +352,23 @@ impl BloomPipeline3D {
         if self.size == (width, height) {
             return;
         }
-        self.mips = create_mips(device, width, height);
+        self.mips = create_mips(
+            device,
+            &self.layout,
+            &self.sampler,
+            &self.params_buffer,
+            width,
+            height,
+        );
         self.size = (width, height);
+    }
+
+    /// Returns estimated VRAM bytes held by the bloom mip pyramid (Rgba16Float = 8 Bpp).
+    pub(crate) fn estimated_vram_bytes(&self) -> u64 {
+        self.mips
+            .iter()
+            .map(|m| u64::from(m.width) * u64::from(m.height) * 8)
+            .sum()
     }
 
     fn create_pass_bg(&self, device: &wgpu::Device, view: &wgpu::TextureView) -> wgpu::BindGroup {
@@ -429,7 +445,6 @@ impl BloomPipeline3D {
 
         // 2. Progressive Downsample (mips[0] -> mips[1] -> ... -> mips[num_mips - 1])
         for i in 0..(num_mips - 1) {
-            let bg = self.create_pass_bg(device, &self.mips[i].view);
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Bloom Downsample Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -447,13 +462,12 @@ impl BloomPipeline3D {
                 multiview_mask: None,
             });
             rpass.set_pipeline(&self.downsample_pipeline);
-            rpass.set_bind_group(0, &bg, &[]);
+            rpass.set_bind_group(0, &self.mips[i].bind_group, &[]);
             rpass.draw(0..3, 0..1);
         }
 
         // 3. Progressive Upsample with Additive Accumulation (mips[N-1] -> ... -> mips[0])
         for i in (0..(num_mips - 1)).rev() {
-            let bg = self.create_pass_bg(device, &self.mips[i + 1].view);
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Bloom Upsample Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -471,13 +485,12 @@ impl BloomPipeline3D {
                 multiview_mask: None,
             });
             rpass.set_pipeline(&self.upsample_pipeline);
-            rpass.set_bind_group(0, &bg, &[]);
+            rpass.set_bind_group(0, &self.mips[i + 1].bind_group, &[]);
             rpass.draw(0..3, 0..1);
         }
 
         // 4. Final Additive Composite onto destination target
         {
-            let bg = self.create_pass_bg(device, &self.mips[0].view);
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Bloom Apply Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -495,13 +508,20 @@ impl BloomPipeline3D {
                 multiview_mask: None,
             });
             rpass.set_pipeline(&self.apply_pipeline);
-            rpass.set_bind_group(0, &bg, &[]);
+            rpass.set_bind_group(0, &self.mips[0].bind_group, &[]);
             rpass.draw(0..3, 0..1);
         }
     }
 }
 
-fn create_mips(device: &wgpu::Device, width: u32, height: u32) -> Vec<BloomMip> {
+fn create_mips(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+    params_buffer: &wgpu::Buffer,
+    width: u32,
+    height: u32,
+) -> Vec<BloomMip> {
     let mut mips = Vec::with_capacity(4);
     let mut cur_w = (width / 2).max(1);
     let mut cur_h = (height / 2).max(1);
@@ -523,9 +543,28 @@ fn create_mips(device: &wgpu::Device, width: u32, height: u32) -> Vec<BloomMip> 
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Bloom Mip BG"),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
         mips.push(BloomMip {
             _texture: texture,
             view,
+            bind_group,
             width: cur_w,
             height: cur_h,
         });

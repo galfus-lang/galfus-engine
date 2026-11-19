@@ -43,6 +43,7 @@ impl MultiverseContext {
         realm
             .clear()
             .map_err(|e| MultiverseError::RealmError(realm_id, e.to_string()))?;
+        self.interaction.disconnect_realm(realm_id);
         self.dirty = true;
         Ok(())
     }
@@ -103,6 +104,7 @@ impl MultiverseContext {
 
     fn reset_after_realm_shutdown(&mut self) -> MultiverseResult<()> {
         self.interaction_frames.clear();
+        let _ = self.interaction.poll_events();
         let mut target_ids: Vec<u32> = self.targets.keys().copied().collect();
         target_ids.sort_unstable();
         for target_id in target_ids {

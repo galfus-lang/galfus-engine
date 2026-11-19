@@ -531,6 +531,10 @@ impl MultiverseContext {
 
     /// Resolves and returns the execution schedule, caching the result until the graph is mutated.
     pub fn resolve(&mut self) -> MultiverseResult<&MultiverseSchedule> {
+        let _s = galfus_core::galfus_span!(
+            galfus_core::diagnostics::tags::FRAME,
+            "multiverse.resolve_schedule"
+        );
         if self.dirty || self.cached_schedule.is_none() {
             // Validate that if any realm references a Target ID as texture, a TargetTextureBinding exists
             for (&realm_id, realm) in &self.realms {
@@ -573,9 +577,7 @@ impl MultiverseContext {
 
     /// Dispatches a frame by preparing realms and rendering active invocations and connectors in scheduled order.
     pub fn dispatch(&mut self, frame_id: u64, delta_time: f32) -> MultiverseResult<()> {
-        let presented_windows = crate::executor::execute_frame(self, frame_id, delta_time)?;
-        self.publish_interaction_frame(&presented_windows);
-        Ok(())
+        crate::context_diagnostics::dispatch_instrumented(self, frame_id, delta_time)
     }
 
     /// Sets the global Anti-Aliasing mode for the Multiverse.

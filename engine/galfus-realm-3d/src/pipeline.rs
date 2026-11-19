@@ -77,7 +77,7 @@ pub struct Pipeline3D {
     pub fallback_black_view: wgpu::TextureView,
     _fallback_textures: (wgpu::Texture, wgpu::Texture, wgpu::Texture),
     pub target_format: wgpu::TextureFormat,
-    standard_pipelines: HashMap<
+    pub(crate) standard_pipelines: HashMap<
         (
             PrimitiveTopology3D,
             SurfacePipelineState,
@@ -86,7 +86,7 @@ pub struct Pipeline3D {
         ),
         wgpu::RenderPipeline,
     >,
-    custom_pipelines: HashMap<
+    pub(crate) custom_pipelines: HashMap<
         (
             u64,
             PrimitiveTopology3D,
@@ -476,19 +476,22 @@ impl Pipeline3D {
             return;
         };
         let hash = composed.content_id.as_u64();
+        let mut compiled_shader: Option<wgpu::ShaderModule> = None;
         for topology in PrimitiveTopology3D::ALL {
             let side = effective_side(topology, side);
             for &instanced in &[false, true] {
                 let key = (hash, topology, surface_state, side, instanced);
                 self.custom_pipelines.entry(key).or_insert_with(|| {
-                    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                        label: Some("Realm3D Custom Surface Shader"),
-                        source: wgpu::ShaderSource::Wgsl(composed.source.clone().into()),
+                    let shader = compiled_shader.get_or_insert_with(|| {
+                        device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                            label: Some("Realm3D Custom Surface Shader"),
+                            source: wgpu::ShaderSource::Wgsl(composed.source.clone().into()),
+                        })
                     });
                     create_3d_render_pipeline(
                         device,
                         &self.pipeline_layout,
-                        &shader,
+                        shader,
                         self.target_format,
                         RenderPipelineOptions3D {
                             topology,

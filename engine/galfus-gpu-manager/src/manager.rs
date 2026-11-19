@@ -1,12 +1,26 @@
 use crate::GpuShared;
-use crate::bind_group::{BindGroupManager, BindResourceHandle};
-use crate::buffer::BufferManager;
+use crate::bind_group::{BindGroupManager, BindGroupManagerStats, BindResourceHandle};
+use crate::buffer::{BufferManager, BufferManagerStats};
 use crate::context::GpuContext;
 use crate::error::GpuResult;
-use crate::layout::LayoutManager;
-use crate::pipeline::PipelineManager;
-use crate::sampler::SamplerManager;
-use crate::texture::TextureManager;
+use crate::layout::{LayoutManager, LayoutManagerStats};
+use crate::pipeline::{PipelineManager, PipelineManagerStats};
+use crate::sampler::{SamplerManager, SamplerManagerStats};
+use crate::texture::{TextureManager, TextureManagerStats};
+use galfus_core::diagnostics::MemoryCategoryStats;
+use serde::Serialize;
+
+/// Aggregated diagnostic statistics for [`GpuManager`].
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuManagerDiagnostics {
+    pub buffers: BufferManagerStats,
+    pub textures: TextureManagerStats,
+    pub samplers: SamplerManagerStats,
+    pub layouts: LayoutManagerStats,
+    pub bind_groups: BindGroupManagerStats,
+    pub pipelines: PipelineManagerStats,
+}
 
 /// Unified coordinator aggregating GPU context, resource registries, and pipeline managers.
 pub struct GpuManager {
@@ -160,6 +174,16 @@ impl GpuManager {
         self.textures.destroy_texture(handle)
     }
 
+    /// Destroys an explicit texture view after invalidating bind groups that reference it.
+    pub fn destroy_texture_view(
+        &mut self,
+        handle: crate::handle::GpuTextureViewHandle,
+    ) -> GpuResult<()> {
+        self.bind_groups
+            .destroy_referencing(BindResourceHandle::TextureView(handle));
+        self.textures.destroy_view(handle)
+    }
+
     /// Destroys a buffer after invalidating bind groups that reference it.
     pub fn destroy_buffer(&mut self, handle: crate::handle::GpuBufferHandle) -> GpuResult<()> {
         self.bind_groups
@@ -172,5 +196,89 @@ impl GpuManager {
         self.bind_groups
             .destroy_referencing(BindResourceHandle::Sampler(handle));
         self.samplers.destroy(handle)
+    }
+
+    /// Returns diagnostic statistics across all GPU resource registries.
+    pub fn diagnostic_stats(&self) -> GpuManagerDiagnostics {
+        GpuManagerDiagnostics {
+            buffers: self.buffers.diagnostic_stats(),
+            textures: self.textures.diagnostic_stats(),
+            samplers: self.samplers.diagnostic_stats(),
+            layouts: self.layouts.diagnostic_stats(),
+            bind_groups: self.bind_groups.diagnostic_stats(),
+            pipelines: self.pipelines.diagnostic_stats(),
+        }
+    }
+
+    /// Returns per-category memory reservations owned by this GPU manager.
+    pub fn memory_categories(&self) -> Vec<MemoryCategoryStats> {
+        let stats = self.diagnostic_stats();
+        vec![
+            MemoryCategoryStats::new(
+                "gpu.buffers",
+                "gpu.buffers",
+                stats.buffers.pool.estimated_cpu_bytes,
+                stats.buffers.total_gpu_bytes,
+                stats
+                    .buffers
+                    .pool
+                    .estimated_cpu_bytes
+                    .saturating_add(stats.buffers.total_gpu_bytes),
+                stats.buffers.pool.active_count,
+            ),
+            MemoryCategoryStats::new(
+                "gpu.textures",
+                "gpu.textures",
+                stats
+                    .textures
+                    .textures_pool
+                    .estimated_cpu_bytes
+                    .saturating_add(stats.textures.views_pool.estimated_cpu_bytes),
+                stats.textures.estimated_vram_bytes,
+                stats
+                    .textures
+                    .textures_pool
+                    .estimated_cpu_bytes
+                    .saturating_add(stats.textures.views_pool.estimated_cpu_bytes)
+                    .saturating_add(stats.textures.estimated_vram_bytes),
+                stats.textures.textures_pool.active_count,
+            ),
+            MemoryCategoryStats::new(
+                "gpu.bind_groups",
+                "gpu.bind_groups",
+                stats.bind_groups.pool.estimated_cpu_bytes,
+                0,
+                stats.bind_groups.pool.estimated_cpu_bytes,
+                stats.bind_groups.pool.active_count,
+            ),
+            MemoryCategoryStats::new(
+                "gpu.samplers",
+                "gpu",
+                stats.samplers.pool.estimated_cpu_bytes,
+                0,
+                stats.samplers.pool.estimated_cpu_bytes,
+                stats.samplers.pool.active_count,
+            ),
+            MemoryCategoryStats::new(
+                "gpu.pipelines",
+                "gpu.pipelines",
+                stats
+                    .pipelines
+                    .shaders_pool
+                    .estimated_cpu_bytes
+                    .saturating_add(stats.pipelines.render_pipelines_pool.estimated_cpu_bytes)
+                    .saturating_add(stats.pipelines.compute_pipelines_pool.estimated_cpu_bytes),
+                0,
+                stats
+                    .pipelines
+                    .shaders_pool
+                    .estimated_cpu_bytes
+                    .saturating_add(stats.pipelines.render_pipelines_pool.estimated_cpu_bytes)
+                    .saturating_add(stats.pipelines.compute_pipelines_pool.estimated_cpu_bytes),
+                stats.pipelines.render_pipelines_pool.active_count
+                    + stats.pipelines.compute_pipelines_pool.active_count
+                    + stats.pipelines.shaders_pool.active_count,
+            ),
+        ]
     }
 }

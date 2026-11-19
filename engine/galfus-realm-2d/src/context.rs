@@ -136,6 +136,7 @@ impl Realm for Realm2DContext {
         }
         self.uis.clear();
         self.ui_manager.clear();
+        self.ui_fonts.clear_color_glyph_cache();
         self.materials.clear();
         self.lights.clear();
         self.emitters.clear();
@@ -156,6 +157,8 @@ impl Realm for Realm2DContext {
     }
 
     fn prepare(&mut self, ctx: &RealmPrepareContext<'_>) -> RealmResult<()> {
+        let _s =
+            galfus_core::galfus_span!(galfus_core::diagnostics::tags::REALM_2D, "realm2d.prepare");
         self.total_time += ctx.delta_time;
         if !self.hierarchy.is_empty() {
             self.solve_hierarchy(ctx.delta_time);
@@ -206,25 +209,7 @@ impl Realm for Realm2DContext {
         }
 
         // Pre-solve UI layout before syncing GPU vector geometry
-        for (ui, _) in self.uis.values_mut() {
-            let layout_flags = galfus_realm_2d_resources::ui::UiDirtyFlags::LAYOUT
-                | galfus_realm_2d_resources::ui::UiDirtyFlags::TEXT_MEASURE
-                | galfus_realm_2d_resources::ui::UiDirtyFlags::HIERARCHY
-                | galfus_realm_2d_resources::ui::UiDirtyFlags::CLIP_TRANSFORM;
-            if ui.root_id.is_some()
-                && (ui.computed.is_empty()
-                    || ui.dirty_flags.values().any(|f| f.0 & layout_flags != 0))
-            {
-                let (w, h) = crate::context_ui::compute_ui_dimensions(ui);
-                crate::ui_layout::solve_ui_layout(
-                    ui,
-                    &self.ui_fonts,
-                    &self.ui_fonts.default_family,
-                    w,
-                    h,
-                );
-            }
-        }
+        crate::context_diagnostics::solve_dirty_ui_layouts(&mut self.uis, &self.ui_fonts);
 
         // Sync UIs
         self.ui_manager.sync_gpu(
@@ -371,6 +356,8 @@ impl Realm for Realm2DContext {
     }
 
     fn render(&mut self, ctx: &RealmInvocationContext<'_>) -> RealmResult<()> {
+        let _s =
+            galfus_core::galfus_span!(galfus_core::diagnostics::tags::REALM_2D, "realm2d.render");
         let device = ctx.device;
         let queue = ctx.queue;
 
@@ -586,6 +573,9 @@ impl Realm for Realm2DContext {
     }
     fn snapshot_interaction(&self) -> Option<Box<dyn Realm>> {
         self.build_interaction_snapshot()
+    }
+    fn diagnostic_report(&self) -> Option<galfus_core::diagnostics::RealmDiagnosticReport> {
+        Some(self.build_diagnostic_report())
     }
     fn as_any(&self) -> &dyn std::any::Any {
         self

@@ -18,7 +18,8 @@ const MODULE_SOURCES = [
   'napi_realm_3d.rs',
   'napi_realm_2d.rs',
   'napi_hierarchy_physics.rs',
-  'napi_realm_extra.rs'
+  'napi_realm_extra.rs',
+  'napi_diagnostics.rs'
 ];
 
 /** Hand-written functions that replace generated ones (see `wasm_attach.rs`). */

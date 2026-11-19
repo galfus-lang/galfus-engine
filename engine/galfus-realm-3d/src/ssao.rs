@@ -38,6 +38,7 @@ pub struct SsaoPipeline3D {
     pub raw_view: wgpu::TextureView,
     pub blurred_texture: wgpu::Texture,
     pub blurred_view: wgpu::TextureView,
+    pub apply_bind_group: wgpu::BindGroup,
     pub sampler: wgpu::Sampler,
     pub size: (u32, u32),
 }
@@ -227,6 +228,21 @@ impl SsaoPipeline3D {
             mult_blend,
         );
 
+        let apply_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("SSAO Apply Bind Group"),
+            layout: &apply_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&blurred_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
         Self {
             ssao_pipeline,
             blur_pipeline,
@@ -240,6 +256,7 @@ impl SsaoPipeline3D {
             raw_view,
             blurred_texture,
             blurred_view,
+            apply_bind_group,
             sampler,
             size: (width, height),
         }
@@ -251,6 +268,20 @@ impl SsaoPipeline3D {
             let (raw_texture, raw_view) = create_target(device, width, height, "SSAO Raw");
             let (blurred_texture, blurred_view) =
                 create_target(device, width, height, "SSAO Blurred");
+            self.apply_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("SSAO Apply Bind Group"),
+                layout: &self.apply_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&blurred_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                ],
+            });
             self.raw_texture = raw_texture;
             self.raw_view = raw_view;
             self.blurred_texture = blurred_texture;
@@ -372,21 +403,6 @@ impl SsaoPipeline3D {
         }
 
         // Pass 3: Multiplicative Apply onto Scene Color
-        let apply_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("SSAO Apply Bind Group"),
-            layout: &self.apply_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&self.blurred_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-            ],
-        });
-
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("SSAO Apply Pass"),
@@ -405,7 +421,7 @@ impl SsaoPipeline3D {
                 multiview_mask: None,
             });
             pass.set_pipeline(&self.apply_pipeline);
-            pass.set_bind_group(0, &apply_bg, &[]);
+            pass.set_bind_group(0, &self.apply_bind_group, &[]);
             pass.draw(0..3, 0..1);
         }
     }

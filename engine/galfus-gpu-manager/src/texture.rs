@@ -66,6 +66,12 @@ impl GpuTextureView {
     }
 }
 
+#[path = "texture_diagnostics.rs"]
+mod texture_diagnostics;
+pub use texture_diagnostics::TextureManagerStats;
+use texture_diagnostics::estimate_texture_vram_bytes;
+
+use galfus_core::diagnostics::{self, tags};
 use galfus_core::id::validate_host_logical_id;
 use std::collections::HashMap;
 
@@ -75,6 +81,7 @@ pub struct TextureManager {
     views: GenerationalPool<GpuTextureView>,
     views_by_texture: HashMap<GpuTextureHandle, Vec<GpuTextureViewHandle>>,
     logical_map: HashMap<u32, GpuTextureHandle>,
+    estimated_vram_bytes: u64,
 }
 
 impl Default for TextureManager {
@@ -116,6 +123,7 @@ impl TextureManager {
             views: GenerationalPool::new(NAMESPACE_TEXTURE_VIEW),
             views_by_texture: HashMap::new(),
             logical_map: HashMap::new(),
+            estimated_vram_bytes: 0,
         }
     }
 
@@ -181,6 +189,19 @@ impl TextureManager {
             .expect("new texture handle must remain valid")
             .default_view = Some(view_handle);
 
+        let est_bytes = estimate_texture_vram_bytes(desc);
+        self.estimated_vram_bytes = self.estimated_vram_bytes.saturating_add(est_bytes);
+        galfus_core::galfus_trace!(
+            tags::TEXTURES | tags::MEMORY,
+            "create_texture {}x{}x{} {:?} est_bytes={} total_vram={}",
+            desc.width,
+            desc.height,
+            desc.depth_or_layers,
+            desc.format,
+            est_bytes,
+            self.estimated_vram_bytes
+        );
+
         Ok(tex_handle)
     }
 
@@ -195,6 +216,7 @@ impl TextureManager {
     ) -> GpuResult<GpuTextureHandle> {
         let mut upload_desc = desc.clone();
         let decoded_storage: Option<Vec<u8>> = if is_encoded_image(data) {
+            let _decode_span = diagnostics::SpanGuard::new(tags::TEXTURES, "gpu.texture_decode");
             let img = image::load_from_memory(data).map_err(|e| {
                 GpuError::InvalidArgument(format!("Failed to auto-decode image: {e}"))
             })?;
@@ -238,6 +260,7 @@ impl TextureManager {
         let handle = self.create_texture(device, &upload_desc)?;
         let entry = self.get_texture(handle)?;
 
+        let _upload_span = diagnostics::SpanGuard::new(tags::TEXTURES, "gpu.texture_upload");
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &entry.texture,
@@ -323,6 +346,14 @@ impl TextureManager {
         }
         self.logical_map
             .retain(|_, mapped_handle| *mapped_handle != handle);
+        let est_bytes = estimate_texture_vram_bytes(&entry.desc);
+        self.estimated_vram_bytes = self.estimated_vram_bytes.saturating_sub(est_bytes);
+        galfus_core::galfus_trace!(
+            tags::TEXTURES | tags::MEMORY,
+            "destroy_texture est_bytes={} total_vram={}",
+            est_bytes,
+            self.estimated_vram_bytes
+        );
         entry.texture.destroy();
         Ok(())
     }
@@ -432,6 +463,7 @@ impl TextureManager {
         let bytes_per_row = width
             .checked_mul(bytes_per_pixel)
             .ok_or_else(|| GpuError::InvalidArgument("Texture row byte size overflow".into()))?;
+        let _upload_span = diagnostics::SpanGuard::new(tags::TEXTURES, "gpu.texture_upload");
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &tex.texture,

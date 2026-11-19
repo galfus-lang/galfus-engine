@@ -182,6 +182,14 @@ impl TileAtlas2DArray {
 
     /// Repacks all alive regions to resolve fragmentation, emitting relocation events.
     pub fn repack(&mut self) -> Vec<AtlasRelocation> {
+        let _span = galfus_core::diagnostics::SpanGuard::new(
+            galfus_core::diagnostics::tags::TEXTURES,
+            "gpu.atlas_repack",
+        );
+        galfus_core::diagnostics::counter_add(
+            galfus_core::diagnostics::MetricCounter::GpuAtlasRepackCount,
+            1,
+        );
         struct RepackItem {
             index: u32,
             old_layer: u32,
@@ -233,7 +241,11 @@ impl TileAtlas2DArray {
                     slot.rect_tiles = (new_x, new_y, item.w, item.h);
                 }
             } else {
-                self.slots[item.index as usize].alive = false;
+                let slot = &mut self.slots[item.index as usize];
+                slot.alive = false;
+                slot.generation = slot.generation.wrapping_add(1);
+                self.free_slots.push(item.index);
+                self.free_tiles_total += item.w * item.h;
             }
         }
 

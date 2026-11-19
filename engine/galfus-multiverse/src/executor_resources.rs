@@ -48,6 +48,20 @@ pub(crate) struct PostprocessResourceRequest {
     pub needs_ping_pong: bool,
 }
 
+pub(crate) fn poll_after_frame(gpu_manager: Option<&GpuManager>, has_swapchain: bool) {
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(gpu) = gpu_manager {
+        let poll_type = if has_swapchain {
+            wgpu::PollType::Poll
+        } else {
+            wgpu::PollType::wait_indefinitely()
+        };
+        let _ = gpu.device().poll(poll_type);
+    }
+    #[cfg(target_arch = "wasm32")]
+    let _ = (gpu_manager, has_swapchain);
+}
+
 /// Frees temporal resources no longer referenced by the resolved frame schedule.
 pub(crate) fn prune_temporal_resources(
     target_history_textures: &mut HashMap<u32, TextureBinding>,
@@ -78,10 +92,19 @@ pub(crate) fn prune_temporal_resources(
 }
 
 /// Prunes frame-temporal resources using the active resolved schedule.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn prune_resources_for_schedule(
     target_history_textures: &mut HashMap<u32, TextureBinding>,
     scratch_textures: &mut HashMap<u32, (GpuTextureHandle, GpuTextureViewHandle, UVec2)>,
     taa_history: &mut HashMap<u32, TaaHistoryEntry>,
+    ping_pong_texture: &mut Option<(GpuTextureHandle, GpuTextureViewHandle, UVec2)>,
+    smaa_intermediates: &mut Option<(
+        GpuTextureHandle,
+        GpuTextureViewHandle,
+        GpuTextureHandle,
+        GpuTextureViewHandle,
+        UVec2,
+    )>,
     gpu: &mut GpuManager,
     schedule: &MultiverseSchedule,
     default_aa: AntiAliasingMode,
@@ -104,6 +127,22 @@ pub(crate) fn prune_resources_for_schedule(
         .filter(|step| invocation_uses_taa(step, default_aa))
         .map(|step| step.invocation_id)
         .collect();
+    let any_smaa = schedule
+        .target_blocks
+        .iter()
+        .flat_map(|block| &block.invocations)
+        .any(|step| {
+            step.anti_aliasing.unwrap_or(default_aa) == AntiAliasingMode::Smaa
+                || step
+                    .filters
+                    .iter()
+                    .any(|f| matches!(f, InvocationFilter::Smaa))
+        });
+    let any_ping_pong = schedule
+        .target_blocks
+        .iter()
+        .flat_map(|block| &block.invocations)
+        .any(|step| step.filters.len() > 1);
 
     prune_temporal_resources(
         target_history_textures,
@@ -114,6 +153,13 @@ pub(crate) fn prune_resources_for_schedule(
         &active_invocation_ids,
         &taa_invocation_ids,
     )?;
+    if !any_smaa && let Some((edge_tex, _, weight_tex, _, _)) = smaa_intermediates.take() {
+        gpu.destroy_texture(edge_tex)?;
+        gpu.destroy_texture(weight_tex)?;
+    }
+    if !any_ping_pong && let Some((pp_tex, _, _)) = ping_pong_texture.take() {
+        gpu.destroy_texture(pp_tex)?;
+    }
     Ok(soft_cut_sources)
 }
 

@@ -27,15 +27,15 @@ pub struct PhysicsWorld2D {
     pub ccd_solver: CCDSolver,
 
     // Entity mapping
-    entity_to_body: HashMap<u32, RigidBodyHandle>,
-    body_to_entity: HashMap<RigidBodyHandle, u32>,
-    body_descs: HashMap<u32, RigidBodyDesc2D>,
-    entity_joints: HashMap<u32, ImpulseJointHandle>,
-    entity_to_colliders: HashMap<u32, Vec<ColliderHandle>>,
-    collider_to_entity: HashMap<ColliderHandle, (u32, u32)>, // (entity_id, collider_id)
+    pub(crate) entity_to_body: HashMap<u32, RigidBodyHandle>,
+    pub(crate) body_to_entity: HashMap<RigidBodyHandle, u32>,
+    pub(crate) body_descs: HashMap<u32, RigidBodyDesc2D>,
+    pub(crate) entity_joints: HashMap<u32, ImpulseJointHandle>,
+    pub(crate) entity_to_colliders: HashMap<u32, Vec<ColliderHandle>>,
+    pub(crate) collider_to_entity: HashMap<ColliderHandle, (u32, u32)>, // (entity_id, collider_id)
 
     // Events
-    contact_events: Vec<PhysicsContactEvent>,
+    pub(crate) contact_events: Vec<PhysicsContactEvent>,
 }
 
 impl Default for PhysicsWorld2D {
@@ -72,6 +72,8 @@ impl PhysicsWorld2D {
 
     /// Advances the physics simulation by `dt` seconds and returns the step result.
     pub fn step(&mut self, dt: f32) -> PhysicsStepResult2D {
+        let _s =
+            galfus_core::galfus_span!(galfus_core::diagnostics::tags::PHYSICS, "physics2d.step");
         self.integration_parameters.dt = dt.clamp(1e-4, 0.1);
 
         let physics_hooks = ();
@@ -245,6 +247,11 @@ impl PhysicsWorld2D {
         if let Some(handle) = self.entity_to_body.remove(&entity_id) {
             self.body_to_entity.remove(&handle);
             self.body_descs.remove(&entity_id);
+            if let Some(colliders) = self.entity_to_colliders.remove(&entity_id) {
+                for ch in colliders {
+                    self.collider_to_entity.remove(&ch);
+                }
+            }
             self.entity_joints.retain(|_, joint| {
                 self.impulse_joint_set
                     .get(*joint)
@@ -278,6 +285,9 @@ impl PhysicsWorld2D {
                 && let Some(cols) = self.entity_to_colliders.get_mut(&eid)
             {
                 cols.retain(|&c| c != h);
+                if cols.is_empty() {
+                    self.entity_to_colliders.remove(&eid);
+                }
             }
             self.collider_set.remove(
                 h,
@@ -528,6 +538,7 @@ impl PhysicsWorld2D {
 
     /// Removes an impulse joint by handle.
     pub fn remove_joint(&mut self, handle: ImpulseJointHandle) -> bool {
+        self.entity_joints.retain(|_, &mut j| j != handle);
         self.impulse_joint_set.remove(handle, true).is_some()
     }
 
@@ -576,21 +587,5 @@ impl PhysicsWorld2D {
     /// Checks if an entity has an active rigid body.
     pub fn has_rigid_body(&self, entity_id: u32) -> bool {
         self.entity_to_body.contains_key(&entity_id)
-    }
-
-    /// Clears the physics world.
-    pub fn clear(&mut self) {
-        self.entity_to_body.clear();
-        self.body_to_entity.clear();
-        self.body_descs.clear();
-        self.entity_joints.clear();
-        self.entity_to_colliders.clear();
-        self.collider_to_entity.clear();
-        self.rigid_body_set = RigidBodySet::new();
-        self.collider_set = ColliderSet::new();
-        self.soft_body_set = SoftBodySet::new();
-        self.impulse_joint_set = ImpulseJointSet::new();
-        self.multibody_joint_set = MultibodyJointSet::new();
-        self.contact_events.clear();
     }
 }

@@ -454,6 +454,7 @@ impl PlatformContext {
     /// Pumps platform events on demand, collecting and returning normalized events.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn pump_events(&mut self) -> PlatformResult<Vec<PlatformEvent>> {
+        let _s = context_diagnostics::pump_events_span();
         self.ensure_main_thread()?;
         self.reap_finished_audio_voices();
 
@@ -526,6 +527,7 @@ impl PlatformContext {
     /// On browser, returns empty or collected events from DOM listeners.
     #[cfg(target_arch = "wasm32")]
     pub fn pump_events(&mut self) -> PlatformResult<Vec<PlatformEvent>> {
+        let _span = context_diagnostics::pump_events_span();
         self.reap_finished_audio_voices();
         #[cfg(feature = "browser")]
         return Ok(crate::event::coalesce_platform_events(std::mem::take(
@@ -535,6 +537,10 @@ impl PlatformContext {
         Ok(Vec::new())
     }
 }
+
+#[path = "context_diagnostics.rs"]
+mod context_diagnostics;
+pub use context_diagnostics::PlatformDiagnosticsStats;
 
 #[path = "context_events.rs"]
 mod context_events;

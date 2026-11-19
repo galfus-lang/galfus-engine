@@ -9,6 +9,7 @@
 //! - Compiles deterministic execution schedules via [`resolve`](MultiverseContext::resolve) and dispatches them via [`dispatch`](MultiverseContext::dispatch).
 
 pub mod context;
+pub mod context_diagnostics;
 pub mod context_interaction;
 pub mod error;
 pub(crate) mod executor;

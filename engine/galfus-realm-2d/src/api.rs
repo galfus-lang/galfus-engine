@@ -246,6 +246,11 @@ impl Realm2DContext {
         self.sprites.remove(&sprite_id).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("Sprite {sprite_id}"))
         })?;
+        self.model_transforms.remove(&sprite_id);
+        self.hierarchy.remove_entity(sprite_id);
+        if let Some(ref mut physics) = self.physics {
+            physics.remove_rigid_body(sprite_id);
+        }
         self.remove_orphaned_model_colliders_2d(sprite_id);
         self.shadow_manager.mark_dirty();
         self.dirty = true;
@@ -257,6 +262,11 @@ impl Realm2DContext {
         self.shapes.remove(&shape_id).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("Shape {shape_id}"))
         })?;
+        self.model_transforms.remove(&shape_id);
+        self.hierarchy.remove_entity(shape_id);
+        if let Some(ref mut physics) = self.physics {
+            physics.remove_rigid_body(shape_id);
+        }
         self.remove_orphaned_model_colliders_2d(shape_id);
         self.shadow_manager.mark_dirty();
         self.dirty = true;
@@ -500,6 +510,11 @@ impl Realm2DContext {
         self.uis.remove(&ui_id).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("Model2DUI {ui_id}"))
         })?;
+        self.model_transforms.remove(&ui_id);
+        self.hierarchy.remove_entity(ui_id);
+        if let Some(ref mut physics) = self.physics {
+            physics.remove_rigid_body(ui_id);
+        }
         self.ui_manager.on_ui_removed(ui_id);
         self.remove_orphaned_model_colliders_2d(ui_id);
         self.dirty = true;

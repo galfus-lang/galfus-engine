@@ -40,6 +40,16 @@ pub struct RefractionPipeline3D {
 }
 
 impl RefractionPipeline3D {
+    /// Returns estimated VRAM bytes held by the refraction capture texture.
+    pub(crate) fn estimated_vram_bytes(&self) -> u64 {
+        let bpp: u64 = match self.format {
+            wgpu::TextureFormat::Rgba16Float => 8,
+            wgpu::TextureFormat::Rgba32Float => 16,
+            _ => 4,
+        };
+        u64::from(self.size.0) * u64::from(self.size.1) * bpp
+    }
+
     pub fn new(
         device: &wgpu::Device,
         target_format: wgpu::TextureFormat,

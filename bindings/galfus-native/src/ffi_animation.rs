@@ -438,7 +438,7 @@ pub extern "C" fn galfus_animation_pump_events() -> *mut c_char {
         Ok(json) => to_c_string(&json),
         Err(e) => {
             set_last_error(&e);
-            to_c_string("[]")
+            std::ptr::null_mut()
         }
     }
 }

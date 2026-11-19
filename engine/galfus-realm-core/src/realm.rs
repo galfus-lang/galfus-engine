@@ -150,6 +150,12 @@ pub trait Realm: RealmThreadBound + 'static {
         None
     }
 
+    /// Returns a diagnostic report (resource counts, per-category memory breakdown,
+    /// and drift warnings) for this realm.
+    fn diagnostic_report(&self) -> Option<galfus_core::diagnostics::RealmDiagnosticReport> {
+        None
+    }
+
     /// Returns a reference for downcasting to a concrete Realm type.
     fn as_any(&self) -> &dyn std::any::Any;
 

@@ -9,6 +9,7 @@ pub mod batch;
 pub mod collision_geometry;
 pub mod context;
 mod context_collision;
+mod context_diagnostics;
 pub mod context_hierarchy;
 pub mod context_physics;
 mod context_shadows;

@@ -16,7 +16,7 @@ pub(super) struct NodeGeometry {
     layout: UiComputedLayout,
     z_layer: f32,
     dimensions: [f32; 2],
-    fonts: Arc<fontdb::Database>,
+    fonts: Option<Arc<fontdb::Database>>,
     family: String,
     pub(super) back: Option<Handle<GpuVectorGeometry>>,
     pub(super) front: Option<Handle<GpuVectorGeometry>>,
@@ -76,13 +76,17 @@ impl UiManager2D {
             let key = (ui_id, id);
             active.insert(key);
             let mut existing = self.node_geometries.remove(&key);
+            let is_text_node = matches!(node.kind, UiNodeKind::Text(_) | UiNodeKind::RichText(_));
             if existing.as_ref().is_some_and(|old| {
                 same_vector_geometry(&old.kind, &node.kind)
                     && old.layout == *layout
                     && old.z_layer == node.z_layer
                     && old.dimensions == [dimensions.0, dimensions.1]
-                    && (!matches!(node.kind, UiNodeKind::Text(_) | UiNodeKind::RichText(_))
-                        || (Arc::ptr_eq(&old.fonts, &fonts.database)
+                    && (!is_text_node
+                        || (old
+                            .fonts
+                            .as_ref()
+                            .is_some_and(|db| Arc::ptr_eq(db, &fonts.database))
                             && old.family == fonts.default_family))
             }) {
                 self.node_geometries.insert(key, existing.unwrap());
@@ -225,8 +229,12 @@ impl UiManager2D {
                         layout: layout.clone(),
                         z_layer: node.z_layer,
                         dimensions: [dimensions.0, dimensions.1],
-                        fonts: fonts.database.clone(),
-                        family: fonts.default_family.clone(),
+                        fonts: is_text_node.then(|| fonts.database.clone()),
+                        family: if is_text_node {
+                            fonts.default_family.clone()
+                        } else {
+                            String::new()
+                        },
                         back: back_handle,
                         front: front_handle,
                     },

@@ -76,6 +76,15 @@ pub struct FilterPassDesc<'a> {
 }
 
 impl PostProcessor {
+    pub(crate) fn diagnostic_counts(&self) -> (usize, usize, usize, usize) {
+        (
+            self.pipelines.len(),
+            self.custom_shaders.len(),
+            self.smaa_pipelines.len(),
+            self.taa_pipelines.len(),
+        )
+    }
+
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let samplers = galfus_gpu_manager::StandardSamplers::new(device);
         let (white_tex, fallback_white_view) = create_1x1_texture(

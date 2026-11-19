@@ -380,7 +380,9 @@ impl CompareFunction {
 }
 
 /// Description for creating a GPU sampler.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+/// Note: `label` is intentionally excluded from `PartialEq`/`Eq`/`Hash` so identical
+/// sampler configurations with different debug labels reuse the same cached `wgpu::Sampler`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GpuSamplerDesc {
     pub label: Option<String>,
@@ -397,6 +399,32 @@ pub struct GpuSamplerDesc {
     #[serde(default)]
     pub mipmap_filter: FilterMode,
     pub compare: Option<CompareFunction>,
+}
+
+impl PartialEq for GpuSamplerDesc {
+    fn eq(&self, other: &Self) -> bool {
+        self.address_mode_u == other.address_mode_u
+            && self.address_mode_v == other.address_mode_v
+            && self.address_mode_w == other.address_mode_w
+            && self.mag_filter == other.mag_filter
+            && self.min_filter == other.min_filter
+            && self.mipmap_filter == other.mipmap_filter
+            && self.compare == other.compare
+    }
+}
+
+impl Eq for GpuSamplerDesc {}
+
+impl std::hash::Hash for GpuSamplerDesc {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.address_mode_u.hash(state);
+        self.address_mode_v.hash(state);
+        self.address_mode_w.hash(state);
+        self.mag_filter.hash(state);
+        self.min_filter.hash(state);
+        self.mipmap_filter.hash(state);
+        self.compare.hash(state);
+    }
 }
 
 /// Normalized surface presentation mode.

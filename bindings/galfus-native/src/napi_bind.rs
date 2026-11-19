@@ -101,3 +101,7 @@ pub use napi_hierarchy_physics::*;
 #[path = "napi_realm_extra.rs"]
 mod napi_realm_extra;
 pub use napi_realm_extra::*;
+
+#[path = "napi_diagnostics.rs"]
+mod napi_diagnostics;
+pub use napi_diagnostics::*;

@@ -99,6 +99,33 @@ impl HierarchyGraph3D {
         self.anchors.len()
     }
 
+    /// Returns diagnostic statistics for this 3D hierarchy graph.
+    pub fn diagnostic_stats(&self) -> super::HierarchyDiagnosticsStats {
+        let mut rhai_scripts_len = 0usize;
+        let mut physics_managed_len = 0usize;
+        let mut script_bytes = 0usize;
+        for anchor in self.anchors.values() {
+            if anchor.ast.is_some() {
+                rhai_scripts_len += 1;
+            }
+            if anchor.managed_by_physics {
+                physics_managed_len += 1;
+            }
+            if let HierarchyConstraint3D::Script { source } = &anchor.constraint {
+                script_bytes += source.capacity();
+            }
+        }
+        let estimated_cpu_bytes = (self.anchors.capacity()
+            * std::mem::size_of::<(u32, AnchorNode3D)>()
+            + script_bytes) as u64;
+        super::HierarchyDiagnosticsStats {
+            anchors_len: self.anchors.len(),
+            rhai_scripts_len,
+            physics_managed_len,
+            estimated_cpu_bytes,
+        }
+    }
+
     /// Resolves world transforms for all entities in topological order.
     pub fn solve(
         &mut self,
@@ -107,6 +134,10 @@ impl HierarchyGraph3D {
         dt: f32,
         time: f32,
     ) {
+        let _span = galfus_core::diagnostics::SpanGuard::new(
+            galfus_core::diagnostics::tags::HIERARCHY,
+            "hierarchy3d.solve",
+        );
         let mut visiting = HashSet::new();
         let mut resolved = HashSet::new();
 
