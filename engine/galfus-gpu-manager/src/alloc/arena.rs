@@ -284,6 +284,14 @@ impl BufferArena {
     }
 
     fn grow_to_fit(&mut self, required_bytes: u64) {
+        let _span = galfus_core::diagnostics::SpanGuard::new(
+            galfus_core::diagnostics::tags::BUFFERS,
+            "gpu.arena_grow",
+        );
+        galfus_core::diagnostics::counter_add(
+            galfus_core::diagnostics::MetricCounter::GpuArenaGrowCount,
+            1,
+        );
         let mut new_cap = (self.capacity * 2).max(1024);
         while new_cap < required_bytes {
             new_cap = new_cap.saturating_mul(2);

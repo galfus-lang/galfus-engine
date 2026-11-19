@@ -29,13 +29,26 @@ impl GpuBuffer {
     }
 }
 
+use galfus_core::diagnostics::{self, tags};
+use galfus_core::handle::PoolStats;
 use galfus_core::id::validate_host_logical_id;
+use serde::Serialize;
 use std::collections::HashMap;
+
+/// Diagnostic statistics for [`BufferManager`].
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BufferManagerStats {
+    pub pool: PoolStats,
+    pub logical_map_len: usize,
+    pub total_gpu_bytes: u64,
+}
 
 /// Registry and allocator for GPU Buffers.
 pub struct BufferManager {
     pool: GenerationalPool<GpuBuffer>,
     logical_map: HashMap<u32, GpuBufferHandle>,
+    total_gpu_bytes: u64,
 }
 
 impl Default for BufferManager {
@@ -49,6 +62,16 @@ impl BufferManager {
         Self {
             pool: GenerationalPool::new(NAMESPACE_BUFFER),
             logical_map: HashMap::new(),
+            total_gpu_bytes: 0,
+        }
+    }
+
+    /// Returns diagnostic statistics for this buffer manager.
+    pub fn diagnostic_stats(&self) -> BufferManagerStats {
+        BufferManagerStats {
+            pool: self.pool.stats(),
+            logical_map_len: self.logical_map.len(),
+            total_gpu_bytes: self.total_gpu_bytes,
         }
     }
 
@@ -73,6 +96,14 @@ impl BufferManager {
         };
 
         let handle = self.pool.insert(gpu_buffer)?;
+        self.total_gpu_bytes = self.total_gpu_bytes.saturating_add(desc.size);
+        galfus_core::galfus_trace!(
+            tags::BUFFERS | tags::MEMORY,
+            "create_buffer size={} label={:?} total_gpu_bytes={}",
+            desc.size,
+            desc.label,
+            self.total_gpu_bytes
+        );
         Ok(handle.cast::<BufferResource>())
     }
 
@@ -120,6 +151,7 @@ impl BufferManager {
                 entry.size, end
             )));
         }
+        let _span = diagnostics::SpanGuard::new(tags::BUFFERS, "gpu.buffer_write");
         queue.write_buffer(&entry.buffer, offset, data);
         Ok(())
     }
@@ -145,6 +177,13 @@ impl BufferManager {
             })?;
         self.logical_map
             .retain(|_, mapped_handle| *mapped_handle != handle);
+        self.total_gpu_bytes = self.total_gpu_bytes.saturating_sub(entry.size);
+        galfus_core::galfus_trace!(
+            tags::BUFFERS | tags::MEMORY,
+            "destroy_buffer size={} total_gpu_bytes={}",
+            entry.size,
+            self.total_gpu_bytes
+        );
         entry.buffer.destroy();
         Ok(())
     }

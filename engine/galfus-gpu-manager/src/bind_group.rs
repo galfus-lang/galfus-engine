@@ -46,6 +46,19 @@ pub(crate) enum BindResourceHandle {
     Sampler(GpuSamplerHandle),
 }
 
+use galfus_core::diagnostics::{self, MetricCounter};
+use galfus_core::handle::PoolStats;
+use serde::Serialize;
+
+/// Diagnostic statistics for [`BindGroupManager`].
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BindGroupManagerStats {
+    pub pool: PoolStats,
+    pub dependencies_len: usize,
+    pub dependents_len: usize,
+}
+
 /// Registry and constructor for GPU Bind Groups.
 pub struct BindGroupManager {
     pool: GenerationalPool<wgpu::BindGroup>,
@@ -65,6 +78,15 @@ impl BindGroupManager {
             pool: GenerationalPool::new(NAMESPACE_BIND_GROUP),
             dependencies: HashMap::new(),
             dependents: HashMap::new(),
+        }
+    }
+
+    /// Returns diagnostic statistics for this bind group manager.
+    pub fn diagnostic_stats(&self) -> BindGroupManagerStats {
+        BindGroupManagerStats {
+            pool: self.pool.stats(),
+            dependencies_len: self.dependencies.len(),
+            dependents_len: self.dependents.len(),
         }
     }
 
@@ -166,6 +188,10 @@ impl BindGroupManager {
 
     pub(crate) fn destroy_referencing(&mut self, resource: BindResourceHandle) {
         if let Some(dependent_handles) = self.dependents.remove(&resource) {
+            diagnostics::counter_add(
+                MetricCounter::GpuBindGroupCascadeDestroyed,
+                dependent_handles.len() as u64,
+            );
             for handle in dependent_handles {
                 let _ = self.destroy(handle);
             }

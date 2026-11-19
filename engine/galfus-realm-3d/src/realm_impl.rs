@@ -27,6 +27,10 @@ impl Realm for Realm3DContext {
     }
 
     fn prepare(&mut self, ctx: &RealmPrepareContext<'_>) -> RealmResult<()> {
+        let _prep_span = galfus_core::diagnostics::SpanGuard::new(
+            galfus_core::diagnostics::tags::REALM_3D,
+            "realm3d.prepare",
+        );
         let device = ctx.device;
         let queue = ctx.queue;
         self.total_time += ctx.delta_time;
@@ -214,6 +218,10 @@ impl Realm for Realm3DContext {
             }
         }
         Some(Box::new(snapshot))
+    }
+
+    fn diagnostic_report(&self) -> Option<galfus_core::diagnostics::RealmDiagnosticReport> {
+        Some(self.build_diagnostic_report())
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

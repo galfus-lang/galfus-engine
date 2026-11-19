@@ -355,6 +355,14 @@ impl BloomPipeline3D {
         self.size = (width, height);
     }
 
+    /// Returns estimated VRAM bytes held by the bloom mip pyramid (Rgba16Float = 8 Bpp).
+    pub(crate) fn estimated_vram_bytes(&self) -> u64 {
+        self.mips
+            .iter()
+            .map(|m| u64::from(m.width) * u64::from(m.height) * 8)
+            .sum()
+    }
+
     fn create_pass_bg(&self, device: &wgpu::Device, view: &wgpu::TextureView) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Bloom Pass BG"),

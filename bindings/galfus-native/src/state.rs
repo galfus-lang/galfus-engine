@@ -207,3 +207,104 @@ where
         }
     })
 }
+
+/// Collects a full pull-on-demand diagnostic snapshot without lazily initializing
+/// any uninitialized thread-local contexts.
+pub fn collect_diagnostics_snapshot(
+    tag_filter: u64,
+) -> galfus_core::diagnostics::DiagnosticsSnapshot {
+    use galfus_core::diagnostics::{
+        self, DiagnosticsSnapshot, DriftWarning, MemoryBreakdown, MemoryCategoryStats, tags,
+    };
+
+    let mut categories: Vec<MemoryCategoryStats> = Vec::new();
+    let mut drift_warnings: Vec<DriftWarning> = Vec::new();
+
+    let (context_alive, platform_json) = CONTEXT.with(|cell| {
+        let borrow = cell.borrow();
+        if let Some(ctx) = borrow.as_ref() {
+            let stats = ctx.diagnostic_stats();
+            categories.extend(stats.memory_categories());
+            drift_warnings.extend(stats.drift_warnings());
+            (true, serde_json::to_value(&stats).unwrap_or_default())
+        } else {
+            (false, serde_json::Value::Null)
+        }
+    });
+
+    let (multiverse_alive, multiverse_json) = MULTIVERSE.with(|cell| {
+        let borrow = cell.borrow();
+        if let Some(mv) = borrow.as_ref() {
+            let report = mv.diagnostic_report();
+            categories.extend(report.memory_categories.clone());
+            drift_warnings.extend(report.drift_warnings.clone());
+            (true, serde_json::to_value(&report).unwrap_or_default())
+        } else {
+            (false, serde_json::Value::Null)
+        }
+    });
+
+    let (animation_alive, animation_json) = ANIMATION.with(|cell| {
+        let borrow = cell.borrow();
+        if let Some(anim) = borrow.as_ref() {
+            let stats = anim.diagnostic_stats();
+            categories.push(stats.memory_category());
+            drift_warnings.extend(stats.drift_warnings());
+            (true, serde_json::to_value(&stats).unwrap_or_default())
+        } else {
+            (false, serde_json::Value::Null)
+        }
+    });
+
+    let (pending_len, pending_cap, current_text_bytes) =
+        crate::ffi_event_batch::event_batch_diagnostics();
+    let ffi_events_bytes = (pending_cap * 160 + current_text_bytes) as u64;
+    categories.push(MemoryCategoryStats::new(
+        "ffi.events",
+        "ffi",
+        ffi_events_bytes,
+        0,
+        ffi_events_bytes,
+        pending_len,
+    ));
+
+    let counters = diagnostics::counters_snapshot();
+    if counters.ffi_cstring_live > 0 {
+        drift_warnings.push(DriftWarning {
+            category: "ffi".to_string(),
+            metric: "ffiCStringLive".to_string(),
+            expected: 0,
+            actual: counters.ffi_cstring_live,
+            delta: counters.ffi_cstring_live as i64,
+            message: format!(
+                "{} CStrings allocated by FFI have not been freed via galfus_string_free",
+                counters.ffi_cstring_live
+            ),
+        });
+    }
+
+    let enabled_mask = diagnostics::enabled_tags_mask();
+    DiagnosticsSnapshot {
+        frame_index: counters.frame_count,
+        timestamp_ms: diagnostics::now_ms(),
+        enabled_tags: tags::mask_to_names(enabled_mask),
+        memory: MemoryBreakdown::from_categories(categories),
+        counters,
+        timings: diagnostics::timings_snapshot(tag_filter),
+        drift_warnings,
+        resources: serde_json::json!({
+            "tls": {
+                "contextAlive": context_alive,
+                "multiverseAlive": multiverse_alive,
+                "animationAlive": animation_alive,
+                "pendingEventsLen": pending_len,
+                "pendingEventsCap": pending_cap,
+                "currentTextBytes": current_text_bytes,
+            },
+            "platform": platform_json,
+            "multiverse": multiverse_json,
+            "animation": animation_json,
+        }),
+        recent_logs: diagnostics::recent_logs(64),
+    }
+}

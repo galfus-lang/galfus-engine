@@ -131,6 +131,10 @@ fn cull_mode(topology: PrimitiveTopology3D, side: MaterialSide3D) -> Option<wgpu
 mod pipeline_render;
 use pipeline_render::{create_1x1_texture, create_3d_render_pipeline};
 impl Pipeline3D {
+    pub fn diagnostic_counts(&self) -> (usize, usize) {
+        (self.standard_pipelines.len(), self.custom_pipelines.len())
+    }
+
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,

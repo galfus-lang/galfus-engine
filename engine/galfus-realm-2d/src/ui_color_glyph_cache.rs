@@ -14,7 +14,6 @@ pub(crate) struct ColorGlyphCache {
     entries: HashMap<Key, (Arc<UiColorGlyph>, u64)>,
     bytes: usize,
     tick: u64,
-    #[cfg(test)]
     hits: usize,
 }
 
@@ -30,10 +29,7 @@ impl ColorGlyphCache {
         self.tick = self.tick.saturating_add(1);
         if let Some((cached, last_used)) = self.entries.get_mut(&key) {
             *last_used = self.tick;
-            #[cfg(test)]
-            {
-                self.hits += 1;
-            }
+            self.hits += 1;
             return Some(Arc::clone(cached));
         }
         let value = Arc::new(rasterize(face, glyph, size)?);
@@ -63,7 +59,6 @@ impl ColorGlyphCache {
         self.bytes = 0;
     }
 
-    #[cfg(test)]
     pub(crate) fn stats(&self) -> (usize, usize, usize) {
         (self.entries.len(), self.bytes, self.hits)
     }

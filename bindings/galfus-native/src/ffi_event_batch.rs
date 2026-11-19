@@ -376,6 +376,20 @@ pub(crate) fn clear_pending_events() {
     CURRENT_TEXT.with(|text| *text.borrow_mut() = None);
 }
 
+/// Returns `(pending_len, pending_capacity, current_text_bytes)` for diagnostics.
+pub(crate) fn event_batch_diagnostics() -> (usize, usize, usize) {
+    let (len, cap) = PENDING_EVENTS.with(|q| {
+        let q = q.borrow();
+        (q.len(), q.capacity())
+    });
+    let text_bytes = CURRENT_TEXT.with(|t| {
+        t.borrow()
+            .as_ref()
+            .map_or(0, |arr| arr.iter().map(String::capacity).sum())
+    });
+    (len, cap, text_bytes)
+}
+
 /// The pointer is valid on the current thread until the next event is popped or shutdown.
 pub(crate) fn current_text(slot: usize) -> Option<(*const u8, u32)> {
     CURRENT_TEXT.with(|current| {

@@ -22,7 +22,17 @@ pub(crate) fn set_last_error(err: &str) {
 /// Helper converting a Rust string into a newly allocated C string pointer.
 pub(crate) fn to_c_string(s: &str) -> *mut c_char {
     match CString::new(s) {
-        Ok(c_str) => c_str.into_raw(),
+        Ok(c_str) => {
+            galfus_core::diagnostics::counter_add(
+                galfus_core::diagnostics::MetricCounter::FfiCStringAlloc,
+                1,
+            );
+            galfus_core::diagnostics::counter_add(
+                galfus_core::diagnostics::MetricCounter::FfiCStringOutboundBytes,
+                (s.len() + 1) as u64,
+            );
+            c_str.into_raw()
+        }
         Err(_) => std::ptr::null_mut(),
     }
 }
@@ -103,7 +113,17 @@ pub extern "C" fn galfus_get_last_error() -> *mut c_char {
     LAST_ERROR.with(|cell| {
         cell.borrow_mut()
             .take()
-            .map(CString::into_raw)
+            .map(|c_str| {
+                galfus_core::diagnostics::counter_add(
+                    galfus_core::diagnostics::MetricCounter::FfiCStringAlloc,
+                    1,
+                );
+                galfus_core::diagnostics::counter_add(
+                    galfus_core::diagnostics::MetricCounter::FfiCStringOutboundBytes,
+                    c_str.as_bytes_with_nul().len() as u64,
+                );
+                c_str.into_raw()
+            })
             .unwrap_or(std::ptr::null_mut())
     })
 }
@@ -115,6 +135,10 @@ pub extern "C" fn galfus_get_last_error() -> *mut c_char {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_string_free(ptr: *mut c_char) {
     if !ptr.is_null() {
+        galfus_core::diagnostics::counter_add(
+            galfus_core::diagnostics::MetricCounter::FfiCStringFree,
+            1,
+        );
         // SAFETY: reclaimed string was previously allocated via CString::into_raw.
         unsafe { drop(CString::from_raw(ptr)) };
     }

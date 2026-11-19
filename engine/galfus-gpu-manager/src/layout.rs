@@ -142,6 +142,15 @@ pub struct BindGroupLayoutDesc {
     pub entries: Vec<BindGroupLayoutEntryDesc>,
 }
 
+use galfus_core::diagnostics::{self, MetricCounter};
+
+/// Diagnostic statistics for [`LayoutManager`].
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutManagerStats {
+    pub bind_group_layouts_len: usize,
+}
+
 /// Manager and cache for `BindGroupLayout` and `PipelineLayout` objects.
 pub struct LayoutManager {
     bind_group_layouts: HashMap<Vec<BindGroupLayoutEntryDesc>, GpuShared<wgpu::BindGroupLayout>>,
@@ -160,29 +169,39 @@ impl LayoutManager {
         }
     }
 
+    /// Returns diagnostic statistics for this layout manager.
+    pub fn diagnostic_stats(&self) -> LayoutManagerStats {
+        LayoutManagerStats {
+            bind_group_layouts_len: self.bind_group_layouts.len(),
+        }
+    }
+
     /// Retrieves an existing cached `BindGroupLayout` or compiles and caches a new one.
     pub fn get_or_create_bind_group_layout(
         &mut self,
         device: &wgpu::Device,
         desc: &BindGroupLayoutDesc,
     ) -> GpuShared<wgpu::BindGroupLayout> {
-        self.bind_group_layouts
-            .entry(desc.entries.clone())
-            .or_insert_with(|| {
-                let wgpu_entries: Vec<wgpu::BindGroupLayoutEntry> = desc
-                    .entries
-                    .iter()
-                    .map(BindGroupLayoutEntryDesc::to_wgpu)
-                    .collect();
+        if let Some(existing) = self.bind_group_layouts.get(&desc.entries) {
+            diagnostics::counter_add(MetricCounter::GpuLayoutCacheHit, 1);
+            return existing.clone();
+        }
+        diagnostics::counter_add(MetricCounter::GpuLayoutCacheMiss, 1);
+        let wgpu_entries: Vec<wgpu::BindGroupLayoutEntry> = desc
+            .entries
+            .iter()
+            .map(BindGroupLayoutEntryDesc::to_wgpu)
+            .collect();
 
-                GpuShared::new(
-                    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                        label: desc.label.as_deref(),
-                        entries: &wgpu_entries,
-                    }),
-                )
-            })
-            .clone()
+        let created = GpuShared::new(device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
+                label: desc.label.as_deref(),
+                entries: &wgpu_entries,
+            },
+        ));
+        self.bind_group_layouts
+            .insert(desc.entries.clone(), created.clone());
+        created
     }
 
     /// Creates a `PipelineLayout` referencing a sequence of bind group layouts.

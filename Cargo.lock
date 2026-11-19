@@ -841,8 +841,11 @@ name = "galfus-core"
 version = "0.0.0"
 dependencies = [
  "glam 0.33.12",
+ "log",
  "serde",
+ "serde_json",
  "thiserror 2.0.21",
+ "web-sys",
 ]
 
 [[package]]

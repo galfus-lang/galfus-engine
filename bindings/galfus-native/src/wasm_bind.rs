@@ -77,3 +77,7 @@ pub use wasm_hierarchy_physics::*;
 #[path = "wasm_realm_extra.rs"]
 mod wasm_realm_extra;
 pub use wasm_realm_extra::*;
+
+#[path = "wasm_diagnostics.rs"]
+mod wasm_diagnostics;
+pub use wasm_diagnostics::*;

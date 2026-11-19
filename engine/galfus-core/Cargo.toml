@@ -8,3 +8,8 @@ license.workspace = true
 thiserror.workspace = true
 glam.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { workspace = true, features = ["Window", "Performance"] }

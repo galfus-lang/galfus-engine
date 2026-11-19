@@ -14,6 +14,10 @@ impl Realm3DContext {
         &mut self,
         ctx: &RealmInvocationContext<'_>,
     ) -> RealmResult<()> {
+        let _render_span = galfus_core::diagnostics::SpanGuard::new(
+            galfus_core::diagnostics::tags::REALM_3D,
+            "realm3d.render",
+        );
         let device = ctx.device;
         let queue = ctx.queue;
 

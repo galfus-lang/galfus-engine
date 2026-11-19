@@ -48,6 +48,20 @@ struct DerivedPipelineKey {
     cache_key: DerivedPipelineCacheKey,
 }
 
+use galfus_core::diagnostics::{self, MetricCounter, tags};
+use galfus_core::handle::PoolStats;
+use serde::Serialize;
+
+/// Diagnostic statistics for [`PipelineManager`].
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineManagerStats {
+    pub shaders_pool: PoolStats,
+    pub render_pipelines_pool: PoolStats,
+    pub compute_pipelines_pool: PoolStats,
+    pub derived_render_cache_len: usize,
+}
+
 /// Registry and compiler for Shaders and GPU Pipelines.
 pub struct PipelineManager {
     shaders: GenerationalPool<wgpu::ShaderModule>,
@@ -72,6 +86,16 @@ impl PipelineManager {
         }
     }
 
+    /// Returns diagnostic statistics for this pipeline manager.
+    pub fn diagnostic_stats(&self) -> PipelineManagerStats {
+        PipelineManagerStats {
+            shaders_pool: self.shaders.stats(),
+            render_pipelines_pool: self.render_pipelines.stats(),
+            compute_pipelines_pool: self.compute_pipelines.stats(),
+            derived_render_cache_len: self.derived_render_cache.len(),
+        }
+    }
+
     /// Compiles a WGSL shader source into a GPU shader module.
     pub fn create_shader_module(
         &mut self,
@@ -79,6 +103,7 @@ impl PipelineManager {
         label: Option<&str>,
         source: &str,
     ) -> GpuResult<GpuShaderHandle> {
+        let _span = diagnostics::SpanGuard::new(tags::PIPELINES, "gpu.shader_compile");
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label,
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(source)),
@@ -94,6 +119,7 @@ impl PipelineManager {
         device: &wgpu::Device,
         desc: &wgpu::RenderPipelineDescriptor,
     ) -> GpuResult<GpuRenderPipelineHandle> {
+        let _span = diagnostics::SpanGuard::new(tags::PIPELINES, "gpu.pipeline_compile");
         let pipeline = device.create_render_pipeline(desc);
         let handle = self
             .render_pipelines
@@ -122,8 +148,15 @@ impl PipelineManager {
                 .get(key)
                 .filter(|handle| self.render_pipelines.get(handle.cast()).is_ok())
         {
+            diagnostics::counter_add(MetricCounter::GpuPipelineCacheHit, 1);
             return Ok(handle);
         }
+        if key.is_some() {
+            diagnostics::counter_add(MetricCounter::GpuPipelineCacheMiss, 1);
+        } else {
+            diagnostics::counter_add(MetricCounter::GpuPipelineUncachedCreated, 1);
+        }
+        let _span = diagnostics::SpanGuard::new(tags::PIPELINES, "gpu.pipeline_compile");
 
         let pipeline = {
             let shader_module = self.get_shader(desc.shader)?;

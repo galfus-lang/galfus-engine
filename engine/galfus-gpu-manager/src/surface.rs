@@ -81,6 +81,10 @@ impl GpuSurface {
 
     /// Acquires the next swapchain texture for rendering and presentation.
     pub fn acquire_current_texture(&self) -> GpuResult<wgpu::SurfaceTexture> {
+        let _span = galfus_core::diagnostics::SpanGuard::new(
+            galfus_core::diagnostics::tags::GPU,
+            "gpu.surface_acquire",
+        );
         self.surface
             .get_current_texture()
             .map_err(|e| GpuError::SurfaceTextureAcquisitionFailed(e.to_string()))

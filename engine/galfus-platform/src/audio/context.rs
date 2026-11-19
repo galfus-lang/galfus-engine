@@ -115,6 +115,10 @@ impl AudioContext {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
+            let _span = galfus_core::diagnostics::SpanGuard::new(
+                galfus_core::diagnostics::tags::AUDIO,
+                "audio.decode",
+            );
             let cursor = std::io::Cursor::new(bytes.to_vec());
             let sound_data = StaticSoundData::from_cursor(cursor).map_err(|e| {
                 PlatformError::AudioPlaybackFailed(format!("Failed to parse sound bytes: {e}"))
@@ -362,6 +366,12 @@ impl AudioContext {
                     reaped += 1;
                 }
             }
+            if reaped > 0 {
+                galfus_core::diagnostics::counter_add(
+                    galfus_core::diagnostics::MetricCounter::AudioVoicesReaped,
+                    reaped as u64,
+                );
+            }
             reaped
         }
 
@@ -387,6 +397,83 @@ impl AudioContext {
             let _ = id;
             Ok(())
         }
+    }
+
+    /// Returns diagnostic statistics for this audio context.
+    pub fn diagnostic_stats(&self) -> AudioDiagnosticsStats {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let estimated_pcm_bytes: u64 = self
+                .sounds
+                .values()
+                .map(|s| (s.frames.len() * std::mem::size_of::<kira::Frame>()) as u64)
+                .sum();
+            let voices_pool = self.voices.stats();
+            let maps_bytes =
+                (self.voice_ids.capacity() * 24 + self.handle_to_voice_id.capacity() * 24) as u64;
+            AudioDiagnosticsStats {
+                sounds_len: self.sounds.len(),
+                estimated_pcm_bytes,
+                voices_active: voices_pool.active_count,
+                voices_pool_slots: voices_pool.slots_len,
+                voice_ids_len: self.voice_ids.len(),
+                handle_to_voice_id_len: self.handle_to_voice_id.len(),
+                estimated_overhead_bytes: voices_pool
+                    .estimated_cpu_bytes
+                    .saturating_add(maps_bytes),
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            AudioDiagnosticsStats::default()
+        }
+    }
+}
+
+/// Diagnostic statistics for [`AudioContext`].
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioDiagnosticsStats {
+    pub sounds_len: usize,
+    pub estimated_pcm_bytes: u64,
+    pub voices_active: usize,
+    pub voices_pool_slots: usize,
+    pub voice_ids_len: usize,
+    pub handle_to_voice_id_len: usize,
+    pub estimated_overhead_bytes: u64,
+}
+
+impl AudioDiagnosticsStats {
+    pub fn memory_category(&self) -> galfus_core::diagnostics::MemoryCategoryStats {
+        let total = self
+            .estimated_pcm_bytes
+            .saturating_add(self.estimated_overhead_bytes);
+        galfus_core::diagnostics::MemoryCategoryStats::new(
+            "platform.audio_pcm",
+            "audio",
+            total,
+            0,
+            total,
+            self.sounds_len + self.voices_active,
+        )
+    }
+
+    pub fn drift_warnings(&self) -> Vec<galfus_core::diagnostics::DriftWarning> {
+        let mut warnings = Vec::new();
+        if self.handle_to_voice_id_len > self.voices_active {
+            let delta = self.handle_to_voice_id_len as i64 - self.voices_active as i64;
+            warnings.push(galfus_core::diagnostics::DriftWarning {
+                category: "platform.audio".to_string(),
+                metric: "handleToVoiceIdLen".to_string(),
+                expected: self.voices_active as u64,
+                actual: self.handle_to_voice_id_len as u64,
+                delta,
+                message: format!(
+                    "handle_to_voice_id has {delta} stale entries compared to active voices"
+                ),
+            });
+        }
+        warnings
     }
 }
 

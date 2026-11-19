@@ -72,6 +72,24 @@ pub struct UiManager2D {
     node_upload_counts: HashMap<(u32, u32), u64>,
 }
 
+impl UiManager2D {
+    pub(crate) fn diagnostic_counts(&self) -> (usize, usize, usize, u32, u64, usize) {
+        let geom_gpu_bytes: u64 = self
+            .geometry_pool
+            .iter()
+            .map(|(_, g)| g.vertex_buffer.size().saturating_add(g.index_buffer.size()))
+            .sum();
+        (
+            self.node_geometries.len(),
+            self.text_geometries.len(),
+            self.textured_materials.len(),
+            self.next_mat_id,
+            geom_gpu_bytes,
+            self.geometry_pool.len(),
+        )
+    }
+}
+
 impl Default for UiManager2D {
     fn default() -> Self {
         Self {

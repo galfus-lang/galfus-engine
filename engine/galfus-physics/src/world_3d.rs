@@ -72,8 +72,48 @@ impl PhysicsWorld3D {
         }
     }
 
+    /// Returns diagnostic statistics for this 3D physics world.
+    pub fn diagnostic_stats(&self) -> crate::PhysicsDiagnosticsStats {
+        let rigid_bodies = self.rigid_body_set.len();
+        let colliders = self.collider_set.len();
+        let joints = self.impulse_joint_set.len();
+        let collider_vec_entries: usize =
+            self.entity_to_colliders.values().map(Vec::capacity).sum();
+        let estimated_cpu_bytes = (rigid_bodies * std::mem::size_of::<RigidBody>()
+            + colliders * std::mem::size_of::<Collider>()
+            + joints * 128
+            + self.entity_to_body.capacity() * 16
+            + self.body_to_entity.capacity() * 16
+            + self.body_descs.capacity() * std::mem::size_of::<(u32, RigidBodyDesc3D)>()
+            + self.entity_joints.capacity() * 16
+            + self.entity_to_colliders.capacity() * 32
+            + collider_vec_entries * std::mem::size_of::<ColliderHandle>()
+            + self.collider_to_entity.capacity() * 24
+            + self.contact_events.capacity() * std::mem::size_of::<PhysicsContactEvent>())
+            as u64;
+
+        crate::PhysicsDiagnosticsStats {
+            rigid_bodies,
+            colliders,
+            joints,
+            active_bodies: self.island_manager.active_bodies().count(),
+            entity_to_body_len: self.entity_to_body.len(),
+            body_to_entity_len: self.body_to_entity.len(),
+            body_descs_len: self.body_descs.len(),
+            entity_joints_len: self.entity_joints.len(),
+            entity_to_colliders_len: self.entity_to_colliders.len(),
+            collider_to_entity_len: self.collider_to_entity.len(),
+            contact_events_cap: self.contact_events.capacity(),
+            estimated_cpu_bytes,
+        }
+    }
+
     /// Advances the physics simulation by `dt` seconds and returns the step result.
     pub fn step(&mut self, dt: f32) -> PhysicsStepResult3D {
+        let _span = galfus_core::diagnostics::SpanGuard::new(
+            galfus_core::diagnostics::tags::PHYSICS,
+            "physics3d.step",
+        );
         self.integration_parameters.dt = dt.clamp(1e-4, 0.1);
 
         let physics_hooks = ();

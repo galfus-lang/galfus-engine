@@ -447,6 +447,12 @@ pub struct OutlineRenderDesc<'a> {
 }
 
 impl OutlinePipeline3D {
+    pub(crate) fn estimated_vram_bytes(&self) -> u64 {
+        self.texture
+            .as_ref()
+            .map_or(0, |(_, _, sz)| u64::from(sz.x) * u64::from(sz.y) * 4)
+    }
+
     /// Renders screen-space outline: Pass 1 draws silhouettes, Pass 2 dilates outline over target.
     pub fn render<'a>(
         &'a mut self,

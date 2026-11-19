@@ -20,6 +20,10 @@ pub struct PipelineManager2D {
 }
 
 impl PipelineManager2D {
+    pub fn diagnostic_counts(&self) -> (usize, usize) {
+        (self.pipelines.len(), self.custom_shader_modules.len())
+    }
+
     pub fn new(device: &wgpu::Device) -> Self {
         let global_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
