@@ -90,7 +90,8 @@ impl Realm3DContext {
             .post_pipelines
             .outline
             .as_ref()
-            .map_or(0, |o| o.estimated_vram_bytes());
+            .and_then(|o| o.texture.as_ref())
+            .map_or(0, |(_, _, sz)| u64::from(sz.x) * u64::from(sz.y) * 4);
         let ssao_bytes = self
             .post_pipelines
             .ssao
@@ -230,7 +231,7 @@ impl Realm3DContext {
         let (standard_pipelines, custom_pipelines) = self
             .pipeline
             .as_ref()
-            .map(|p| p.diagnostic_counts())
+            .map(|p| (p.standard_pipelines.len(), p.custom_pipelines.len()))
             .unwrap_or((0, 0));
 
         RealmDiagnosticReport {

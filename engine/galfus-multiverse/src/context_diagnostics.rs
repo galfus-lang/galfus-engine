@@ -6,6 +6,28 @@ use galfus_core::diagnostics::{DriftWarning, MemoryCategoryStats, RealmDiagnosti
 use serde::Serialize;
 
 use crate::context::MultiverseContext;
+use crate::error::MultiverseResult;
+
+pub(crate) fn dispatch_instrumented(
+    ctx: &mut MultiverseContext,
+    frame_id: u64,
+    delta_time: f32,
+) -> MultiverseResult<()> {
+    let _span = galfus_core::diagnostics::SpanGuard::new(
+        galfus_core::diagnostics::tags::FRAME,
+        "multiverse.dispatch",
+    );
+    galfus_core::diagnostics::counter_add(galfus_core::diagnostics::MetricCounter::FrameCount, 1);
+    let presented_windows = crate::executor::execute_frame(ctx, frame_id, delta_time)?;
+    {
+        let _pub_span = galfus_core::diagnostics::SpanGuard::new(
+            galfus_core::diagnostics::tags::INTERACTION,
+            "interaction.publish_frame",
+        );
+        ctx.publish_interaction_frame(&presented_windows);
+    }
+    Ok(())
+}
 
 /// Aggregated diagnostics collected from [`MultiverseContext`], its [`GpuManager`],
 /// and all registered realms.

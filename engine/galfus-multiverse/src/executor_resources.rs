@@ -48,6 +48,20 @@ pub(crate) struct PostprocessResourceRequest {
     pub needs_ping_pong: bool,
 }
 
+pub(crate) fn poll_after_frame(gpu_manager: Option<&GpuManager>, has_swapchain: bool) {
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(gpu) = gpu_manager {
+        let poll_type = if has_swapchain {
+            wgpu::PollType::Poll
+        } else {
+            wgpu::PollType::wait_indefinitely()
+        };
+        let _ = gpu.device().poll(poll_type);
+    }
+    #[cfg(target_arch = "wasm32")]
+    let _ = (gpu_manager, has_swapchain);
+}
+
 /// Frees temporal resources no longer referenced by the resolved frame schedule.
 pub(crate) fn prune_temporal_resources(
     target_history_textures: &mut HashMap<u32, TextureBinding>,

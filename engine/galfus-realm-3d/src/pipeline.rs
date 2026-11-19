@@ -77,7 +77,7 @@ pub struct Pipeline3D {
     pub fallback_black_view: wgpu::TextureView,
     _fallback_textures: (wgpu::Texture, wgpu::Texture, wgpu::Texture),
     pub target_format: wgpu::TextureFormat,
-    standard_pipelines: HashMap<
+    pub(crate) standard_pipelines: HashMap<
         (
             PrimitiveTopology3D,
             SurfacePipelineState,
@@ -86,7 +86,7 @@ pub struct Pipeline3D {
         ),
         wgpu::RenderPipeline,
     >,
-    custom_pipelines: HashMap<
+    pub(crate) custom_pipelines: HashMap<
         (
             u64,
             PrimitiveTopology3D,
@@ -131,10 +131,6 @@ fn cull_mode(topology: PrimitiveTopology3D, side: MaterialSide3D) -> Option<wgpu
 mod pipeline_render;
 use pipeline_render::{create_1x1_texture, create_3d_render_pipeline};
 impl Pipeline3D {
-    pub fn diagnostic_counts(&self) -> (usize, usize) {
-        (self.standard_pipelines.len(), self.custom_pipelines.len())
-    }
-
     pub fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,

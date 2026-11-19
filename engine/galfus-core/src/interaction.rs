@@ -185,32 +185,16 @@ pub struct InteractionSystem {
 }
 
 impl InteractionSystem {
-    /// Creates a new interaction manager.
     pub fn new() -> Self {
         Self::default()
     }
-
-    /// Drains all accumulated interaction events.
     pub fn poll_events(&mut self) -> Vec<InteractionEvent> {
         std::mem::take(&mut self.events)
     }
-
-    /// Returns the number of tracked pointer entries.
-    pub fn pointer_count(&self) -> usize {
-        self.pointers.len()
+    pub fn diagnostic_counts(&self) -> (usize, usize, usize) {
+        let p = self.pointers.len();
+        (p, self.events.len(), self.events.capacity())
     }
-
-    /// Returns the number of currently queued interaction events.
-    pub fn queued_event_count(&self) -> usize {
-        self.events.len()
-    }
-
-    /// Returns the backing capacity of the queued interaction events buffer.
-    pub fn queued_event_capacity(&self) -> usize {
-        self.events.capacity()
-    }
-
-    /// Cancels pressed targets and clears hover after collider or realm removal.
     pub fn reconcile(&mut self, valid: impl Fn(u32, InteractionTarget) -> bool) {
         let mut keys: Vec<_> = self.pointers.keys().copied().collect();
         keys.sort_unstable();

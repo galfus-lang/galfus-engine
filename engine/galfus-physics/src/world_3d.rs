@@ -29,15 +29,15 @@ pub struct PhysicsWorld3D {
     pub ccd_solver: CCDSolver,
 
     // Entity mapping
-    entity_to_body: HashMap<u32, RigidBodyHandle>,
-    body_to_entity: HashMap<RigidBodyHandle, u32>,
-    body_descs: HashMap<u32, RigidBodyDesc3D>,
-    entity_joints: HashMap<u32, ImpulseJointHandle>,
-    entity_to_colliders: HashMap<u32, Vec<ColliderHandle>>,
-    collider_to_entity: HashMap<ColliderHandle, (u32, u32)>, // (entity_id, collider_id)
+    pub(crate) entity_to_body: HashMap<u32, RigidBodyHandle>,
+    pub(crate) body_to_entity: HashMap<RigidBodyHandle, u32>,
+    pub(crate) body_descs: HashMap<u32, RigidBodyDesc3D>,
+    pub(crate) entity_joints: HashMap<u32, ImpulseJointHandle>,
+    pub(crate) entity_to_colliders: HashMap<u32, Vec<ColliderHandle>>,
+    pub(crate) collider_to_entity: HashMap<ColliderHandle, (u32, u32)>, // (entity_id, collider_id)
 
     // Events
-    contact_events: Vec<PhysicsContactEvent>,
+    pub(crate) contact_events: Vec<PhysicsContactEvent>,
 }
 
 impl Default for PhysicsWorld3D {
@@ -72,48 +72,10 @@ impl PhysicsWorld3D {
         }
     }
 
-    /// Returns diagnostic statistics for this 3D physics world.
-    pub fn diagnostic_stats(&self) -> crate::PhysicsDiagnosticsStats {
-        let rigid_bodies = self.rigid_body_set.len();
-        let colliders = self.collider_set.len();
-        let joints = self.impulse_joint_set.len();
-        let collider_vec_entries: usize =
-            self.entity_to_colliders.values().map(Vec::capacity).sum();
-        let estimated_cpu_bytes = (rigid_bodies * std::mem::size_of::<RigidBody>()
-            + colliders * std::mem::size_of::<Collider>()
-            + joints * 128
-            + self.entity_to_body.capacity() * 16
-            + self.body_to_entity.capacity() * 16
-            + self.body_descs.capacity() * std::mem::size_of::<(u32, RigidBodyDesc3D)>()
-            + self.entity_joints.capacity() * 16
-            + self.entity_to_colliders.capacity() * 32
-            + collider_vec_entries * std::mem::size_of::<ColliderHandle>()
-            + self.collider_to_entity.capacity() * 24
-            + self.contact_events.capacity() * std::mem::size_of::<PhysicsContactEvent>())
-            as u64;
-
-        crate::PhysicsDiagnosticsStats {
-            rigid_bodies,
-            colliders,
-            joints,
-            active_bodies: self.island_manager.active_bodies().count(),
-            entity_to_body_len: self.entity_to_body.len(),
-            body_to_entity_len: self.body_to_entity.len(),
-            body_descs_len: self.body_descs.len(),
-            entity_joints_len: self.entity_joints.len(),
-            entity_to_colliders_len: self.entity_to_colliders.len(),
-            collider_to_entity_len: self.collider_to_entity.len(),
-            contact_events_cap: self.contact_events.capacity(),
-            estimated_cpu_bytes,
-        }
-    }
-
     /// Advances the physics simulation by `dt` seconds and returns the step result.
     pub fn step(&mut self, dt: f32) -> PhysicsStepResult3D {
-        let _span = galfus_core::diagnostics::SpanGuard::new(
-            galfus_core::diagnostics::tags::PHYSICS,
-            "physics3d.step",
-        );
+        let _s =
+            galfus_core::galfus_span!(galfus_core::diagnostics::tags::PHYSICS, "physics3d.step");
         self.integration_parameters.dt = dt.clamp(1e-4, 0.1);
 
         let physics_hooks = ();
@@ -624,25 +586,5 @@ impl PhysicsWorld3D {
     /// Checks if an entity has an active rigid body.
     pub fn has_rigid_body(&self, entity_id: u32) -> bool {
         self.entity_to_body.contains_key(&entity_id)
-    }
-
-    /// Clears the physics world.
-    pub fn clear(&mut self) {
-        self.entity_to_body.clear();
-        self.body_to_entity.clear();
-        self.body_descs.clear();
-        self.entity_joints.clear();
-        self.entity_to_colliders.clear();
-        self.collider_to_entity.clear();
-        self.rigid_body_set = RigidBodySet::new();
-        self.collider_set = ColliderSet::new();
-        self.soft_body_set = SoftBodySet::new();
-        self.island_manager = IslandManager::new();
-        self.broad_phase = DefaultBroadPhase::new();
-        self.narrow_phase = NarrowPhase::new();
-        self.impulse_joint_set = ImpulseJointSet::new();
-        self.multibody_joint_set = MultibodyJointSet::new();
-        self.ccd_solver = CCDSolver::new();
-        self.contact_events.clear();
     }
 }

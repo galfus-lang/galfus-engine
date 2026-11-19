@@ -112,3 +112,9 @@ impl LogRing {
         }
     }
 }
+
+impl Default for LogRing {
+    fn default() -> Self {
+        Self::new()
+    }
+}

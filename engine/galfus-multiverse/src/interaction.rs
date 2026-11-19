@@ -52,12 +52,13 @@ impl MultiverseInteractionSystem {
         self.inner.cancel_window(window_id);
     }
     pub fn diagnostic_counts(&self) -> (usize, usize, usize, usize, usize) {
+        let (pointers, queued_events, queued_events_cap) = self.inner.diagnostic_counts();
         (
             self.surfaces.len(),
             self.ui_surfaces.len(),
-            self.inner.pointer_count(),
-            self.inner.queued_event_count(),
-            self.inner.queued_event_capacity(),
+            pointers,
+            queued_events,
+            queued_events_cap,
         )
     }
     pub(crate) fn reconcile(

@@ -1,13 +1,6 @@
 //! Full-Engine Stress & Memory Leak Benchmark
 //!
-//! Exercises Multiverse (offscreen targets, SMAA/TAA, post-process filters),
-//! Realm3D (PBR, morph targets, instancing, shadows, bloom, SSAO, outline, refraction,
-//! particles, gizmos, hierarchy+Rhai, Rapier 3D), Realm2D (sprites, shapes, 2D lights & shadows,
-//! particles, UI trees, hierarchy+Rhai, Rapier 2D), AnimationContext,
-//! GpuManager logical textures/buffers, and C FFI boundary tracking.
-//!
-//! Run with:
-//!   cargo run -p galfus-native --example leak_benchmark
+//! Run with: `cargo run -p galfus-native --example leak_benchmark`
 
 use std::collections::BTreeMap;
 use std::ffi::{CStr, CString};
@@ -58,22 +51,16 @@ const TARGET_MAIN_ID: u32 = 1;
 
 fn read_process_rss_kib() -> u64 {
     #[cfg(target_os = "linux")]
-    {
-        if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
-            for line in status.lines() {
-                if let Some(rest) = line.strip_prefix("VmRSS:") {
-                    if let Some(val) = rest.split_whitespace().next() {
-                        return val.parse::<u64>().unwrap_or(0);
-                    }
-                }
+    if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+        for line in status.lines() {
+            if let Some(rest) = line.strip_prefix("VmRSS:")
+                && let Some(val) = rest.split_whitespace().next()
+            {
+                return val.parse::<u64>().unwrap_or(0);
             }
         }
-        0
     }
-    #[cfg(not(target_os = "linux"))]
-    {
-        0
-    }
+    0
 }
 
 fn take_snapshot_via_ffi() -> (serde_json::Value, u64) {
@@ -84,8 +71,10 @@ fn take_snapshot_via_ffi() -> (serde_json::Value, u64) {
         .expect("valid utf8")
         .to_string();
     unsafe { galfus_string_free(ptr) };
-    let val: serde_json::Value = serde_json::from_str(&json_str).expect("valid snapshot json");
-    (val, read_process_rss_kib())
+    (
+        serde_json::from_str(&json_str).expect("valid snapshot json"),
+        read_process_rss_kib(),
+    )
 }
 
 fn rgba_checker(w: u32, h: u32, seed: u8) -> Vec<u8> {
@@ -93,14 +82,147 @@ fn rgba_checker(w: u32, h: u32, seed: u8) -> Vec<u8> {
     for y in 0..h {
         for x in 0..w {
             let idx = ((y * w + x) * 4) as usize;
-            let checker = (((x / 8) + (y / 8)) % 2 == 0) as u8;
-            data[idx] = if checker != 0 { seed } else { 40 };
+            let on = ((x / 8) + (y / 8)) % 2 == 0;
+            data[idx] = if on { seed } else { 40 };
             data[idx + 1] = ((x * 3) as u8).wrapping_add(seed);
             data[idx + 2] = ((y * 5) as u8).wrapping_add(seed);
             data[idx + 3] = 255;
         }
     }
     data
+}
+
+fn tex_desc(label: String, width: u32, height: u32) -> GpuTextureDesc {
+    GpuTextureDesc {
+        label: Some(label),
+        width,
+        height,
+        depth_or_layers: 1,
+        mip_levels: 1,
+        sample_count: 1,
+        dimension: TextureDimension::D2,
+        format: NormalizedTextureFormat::Rgba8Unorm,
+        usages: TextureUsageFlags {
+            texture_binding: true,
+            copy_dst: true,
+            ..Default::default()
+        },
+    }
+}
+
+fn build_realm_3d() -> Result<Realm3DContext, String> {
+    let mut r3d = Realm3DContext::new(REALM_3D_ID);
+    r3d.enable_physics_3d([0.0, -9.81, 0.0])
+        .map_err(|e| e.to_string())?;
+    r3d.create_camera(
+        1,
+        Camera3D::perspective(60.0, 0.1, 500.0, 0),
+        Transform3D::from_position(Vec3::new(0.0, 4.0, -12.0)),
+    )
+    .map_err(|e| e.to_string())?;
+
+    let mut env = EnvironmentRealm3D::default();
+    env.bloom.enabled = true;
+    env.ssao.enabled = true;
+    env.outline.enabled = true;
+    r3d.set_environment(env);
+
+    let mut cube = Geometry3D::cube(1.0);
+    cube.set_morph_targets(vec![MorphTarget3D::new(vec![
+        MorphVertex3D::new(
+            [0.0, 0.2, 0.0],
+            [0.0; 3],
+            [0.0; 3]
+        );
+        cube.vertices.len()
+    ])])
+    .map_err(|e| e.to_string())?;
+    r3d.create_geometry(1, cube).map_err(|e| e.to_string())?;
+    r3d.create_material(1, Material3D::solid_color(Vec4::new(0.3, 0.7, 1.0, 1.0)))
+        .map_err(|e| e.to_string())?;
+    let mut refractive = Material3D::solid_color(Vec4::new(0.8, 0.95, 1.0, 0.4));
+    refractive.surface_type = SurfaceType3D::Refractive;
+    r3d.create_material(2, refractive)
+        .map_err(|e| e.to_string())?;
+
+    for i in 0..24u32 {
+        let mut m = Model3D::new(1, if i % 6 == 0 { 2 } else { 1 });
+        m.cast_outline = i % 4 == 0;
+        let pos = Vec3::new((i % 6) as f32 * 2.2 - 5.5, 0.0, (i / 6) as f32 * 2.2);
+        r3d.create_model(100 + i, m, Transform3D::from_position(pos))
+            .map_err(|e| e.to_string())?;
+    }
+
+    r3d.create_instanced_model(500, InstancedModel3D::new(1, 1, 200))
+        .map_err(|e| e.to_string())?;
+    let instances: Vec<InstanceData3D> = (0..200)
+        .map(|i| InstanceData3D {
+            transform: Mat4::from_translation(Vec3::new(
+                (i % 20) as f32 * 1.5 - 15.0,
+                -2.0,
+                (i / 20) as f32 * 1.5,
+            )),
+            color: Vec4::new(0.6, 0.8, 0.4, 1.0),
+            emissive: Vec4::ZERO,
+            pbr: Vec4::new(0.1, 0.6, 0.5, 0.0),
+            custom: Vec4::ZERO,
+        })
+        .collect();
+    r3d.set_instanced_model_data(500, instances)
+        .map_err(|e| e.to_string())?;
+    r3d.create_light(
+        1,
+        Light3D::directional(Vec3::new(-0.5, -1.0, 0.4), 1.5, true),
+        Transform3D::default(),
+    )
+    .map_err(|e| e.to_string())?;
+    for i in 0..4u32 {
+        r3d.create_light(
+            10 + i,
+            Light3D::point(Vec3::new(1.0, 0.8, 0.5), 2.0, 18.0, i == 0),
+            Transform3D::from_position(Vec3::new(i as f32 * 3.0 - 4.5, 3.0, 0.0)),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    r3d.create_particle_emitter(
+        1,
+        ParticleEmitter3D::default(),
+        Transform3D::from_position(Vec3::new(0.0, 1.0, 0.0)),
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(r3d)
+}
+
+fn build_realm_2d() -> Result<Realm2DContext, String> {
+    let mut r2d = Realm2DContext::new(REALM_2D_ID);
+    r2d.enable_physics_2d([0.0, -9.81])
+        .map_err(|e| e.to_string())?;
+    r2d.set_camera(1, Camera2D::default(), Transform2D::default())
+        .map_err(|e| e.to_string())?;
+    r2d.set_material(1, Material2D::default())
+        .map_err(|e| e.to_string())?;
+    for i in 0..30u32 {
+        r2d.set_sprite(
+            100 + i,
+            Sprite2D::default(),
+            Transform2D::from_translation(Vec2::new(
+                (i % 10) as f32 * 40.0,
+                (i / 10) as f32 * 40.0,
+            )),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    for i in 0..3u32 {
+        let light = Light2D {
+            cast_shadow: true,
+            position: Vec2::new(i as f32 * 100.0, 50.0),
+            ..Default::default()
+        };
+        r2d.set_light(10 + i, light).map_err(|e| e.to_string())?;
+    }
+    r2d.set_particle_emitter(1, ParticleEmitter2D::default(), Transform2D::default())
+        .map_err(|e| e.to_string())?;
+    Ok(r2d)
 }
 
 fn setup_base_scene() {
@@ -118,149 +240,16 @@ fn setup_base_scene() {
             },
         )
         .map_err(|e| e.to_string())?;
-
-        // Base texture in GpuManager
-        let tex_bytes = rgba_checker(64, 64, 180);
         mv.create_texture(
             1,
-            &GpuTextureDesc {
-                label: Some("base_checker".into()),
-                width: 64,
-                height: 64,
-                depth_or_layers: 1,
-                mip_levels: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: NormalizedTextureFormat::Rgba8Unorm,
-                usages: TextureUsageFlags {
-                    texture_binding: true,
-                    copy_dst: true,
-                    ..Default::default()
-                },
-            },
-            &tex_bytes,
+            &tex_desc("base_checker".into(), 64, 64),
+            &rgba_checker(64, 64, 180),
         )
         .map_err(|e| e.to_string())?;
-
-        // Realm 3D with full features
-        let mut r3d = Realm3DContext::new(REALM_3D_ID);
-        r3d.enable_physics_3d([0.0, -9.81, 0.0])
+        mv.register_realm(Box::new(build_realm_3d()?))
             .map_err(|e| e.to_string())?;
-        r3d.create_camera(
-            1,
-            Camera3D::perspective(60.0, 0.1, 500.0, 0),
-            Transform3D::from_position(Vec3::new(0.0, 4.0, -12.0)),
-        )
-        .map_err(|e| e.to_string())?;
-
-        let mut env = EnvironmentRealm3D::default();
-        env.bloom.enabled = true;
-        env.ssao.enabled = true;
-        env.outline.enabled = true;
-        r3d.set_environment(env);
-
-        let mut cube = Geometry3D::cube(1.0);
-        cube.set_morph_targets(vec![MorphTarget3D::new(vec![
-            MorphVertex3D::new(
-                [0.0, 0.2, 0.0],
-                [0.0; 3],
-                [0.0; 3]
-            );
-            cube.vertices.len()
-        ])])
-        .map_err(|e| e.to_string())?;
-        r3d.create_geometry(1, cube).map_err(|e| e.to_string())?;
-        r3d.create_material(1, Material3D::solid_color(Vec4::new(0.3, 0.7, 1.0, 1.0)))
+        mv.register_realm(Box::new(build_realm_2d()?))
             .map_err(|e| e.to_string())?;
-        let mut refractive = Material3D::solid_color(Vec4::new(0.8, 0.95, 1.0, 0.4));
-        refractive.surface_type = SurfaceType3D::Refractive;
-        r3d.create_material(2, refractive)
-            .map_err(|e| e.to_string())?;
-
-        for i in 0..24u32 {
-            let mut m = Model3D::new(1, if i % 6 == 0 { 2 } else { 1 });
-            if i % 4 == 0 {
-                m.cast_outline = true;
-            }
-            let pos = Vec3::new((i % 6) as f32 * 2.2 - 5.5, 0.0, (i / 6) as f32 * 2.2);
-            r3d.create_model(100 + i, m, Transform3D::from_position(pos))
-                .map_err(|e| e.to_string())?;
-        }
-
-        r3d.create_instanced_model(500, InstancedModel3D::new(1, 1, 200))
-            .map_err(|e| e.to_string())?;
-        let instances: Vec<InstanceData3D> = (0..200)
-            .map(|i| InstanceData3D {
-                transform: Mat4::from_translation(Vec3::new(
-                    (i % 20) as f32 * 1.5 - 15.0,
-                    -2.0,
-                    (i / 20) as f32 * 1.5,
-                )),
-                color: Vec4::new(0.6, 0.8, 0.4, 1.0),
-                emissive: Vec4::ZERO,
-                pbr: Vec4::new(0.1, 0.6, 0.5, 0.0),
-                custom: Vec4::ZERO,
-            })
-            .collect();
-        r3d.set_instanced_model_data(500, instances)
-            .map_err(|e| e.to_string())?;
-
-        r3d.create_light(
-            1,
-            Light3D::directional(Vec3::new(-0.5, -1.0, 0.4), 1.5, true),
-            Transform3D::default(),
-        )
-        .map_err(|e| e.to_string())?;
-        for i in 0..4u32 {
-            r3d.create_light(
-                10 + i,
-                Light3D::point(Vec3::new(1.0, 0.8, 0.5), 2.0, 18.0, i == 0),
-                Transform3D::from_position(Vec3::new(i as f32 * 3.0 - 4.5, 3.0, 0.0)),
-            )
-            .map_err(|e| e.to_string())?;
-        }
-        r3d.create_particle_emitter(
-            1,
-            ParticleEmitter3D::default(),
-            Transform3D::from_position(Vec3::new(0.0, 1.0, 0.0)),
-        )
-        .map_err(|e| e.to_string())?;
-
-        mv.register_realm(Box::new(r3d))
-            .map_err(|e| e.to_string())?;
-
-        // Realm 2D (HUD + sprites + 2D lights/shadows + UI + physics)
-        let mut r2d = Realm2DContext::new(REALM_2D_ID);
-        r2d.enable_physics_2d([0.0, -9.81])
-            .map_err(|e| e.to_string())?;
-        r2d.set_camera(1, Camera2D::default(), Transform2D::default())
-            .map_err(|e| e.to_string())?;
-        r2d.set_material(1, Material2D::default())
-            .map_err(|e| e.to_string())?;
-        for i in 0..30u32 {
-            r2d.set_sprite(
-                100 + i,
-                Sprite2D::default(),
-                Transform2D::from_translation(Vec2::new(
-                    (i % 10) as f32 * 40.0,
-                    (i / 10) as f32 * 40.0,
-                )),
-            )
-            .map_err(|e| e.to_string())?;
-        }
-        for i in 0..3u32 {
-            let mut light = Light2D::default();
-            light.cast_shadow = true;
-            light.position = Vec2::new(i as f32 * 100.0, 50.0);
-            r2d.set_light(10 + i, light).map_err(|e| e.to_string())?;
-        }
-        r2d.set_particle_emitter(1, ParticleEmitter2D::default(), Transform2D::default())
-            .map_err(|e| e.to_string())?;
-
-        mv.register_realm(Box::new(r2d))
-            .map_err(|e| e.to_string())?;
-
-        // Invocations: 3D scene + 2D overlay with Sepia filter
         mv.create_invocation(
             1,
             InvocationDesc {
@@ -318,71 +307,37 @@ fn run_churn_cycle(cycle: u32, frame_counter: &mut u64) {
     let base_id = 10_000 + cycle * 1_000;
     let tex_bytes = rgba_checker(128, 128, (cycle * 37) as u8);
     let buf_bytes = vec![0xABu8; 4096];
+    let buf_usage = BufferUsageFlags {
+        vertex: false,
+        index: false,
+        uniform: false,
+        storage: true,
+        copy_src: false,
+        copy_dst: true,
+    };
 
-    // 1. Spawn across GPU, Realm2D, Realm3D, Physics, Hierarchy+Rhai, UI, Animations
     with_multiverse_mut(|mv| {
-        // Toggle AA between SMAA and TAA to exercise temporal/postproc caches
-        mv.set_anti_aliasing(if cycle % 2 == 0 {
+        mv.set_anti_aliasing(if cycle.is_multiple_of(2) {
             AntiAliasingMode::Smaa
         } else {
             AntiAliasingMode::Taa
         });
-
-        // Create 10 textures & 10 buffers
         for i in 0..10u32 {
             let tid = base_id + i;
-            mv.create_texture(
-                tid,
-                &GpuTextureDesc {
-                    label: Some(format!("churn_tex_{tid}")),
-                    width: 128,
-                    height: 128,
-                    depth_or_layers: 1,
-                    mip_levels: 1,
-                    sample_count: 1,
-                    dimension: TextureDimension::D2,
-                    format: NormalizedTextureFormat::Rgba8Unorm,
-                    usages: TextureUsageFlags {
-                        texture_binding: true,
-                        copy_dst: true,
-                        ..Default::default()
-                    },
-                },
-                &tex_bytes,
-            )
-            .map_err(|e| e.to_string())?;
-            mv.create_buffer(
-                tid,
-                Some(&format!("churn_buf_{tid}")),
-                &buf_bytes,
-                BufferUsageFlags {
-                    vertex: false,
-                    index: false,
-                    uniform: false,
-                    storage: true,
-                    copy_src: false,
-                    copy_dst: true,
-                },
-            )
-            .map_err(|e| e.to_string())?;
+            mv.create_texture(tid, &tex_desc(format!("churn_tex_{tid}"), 128, 128), &tex_bytes)
+                .map_err(|e| e.to_string())?;
+            mv.create_buffer(tid, Some(&format!("churn_buf_{tid}")), &buf_bytes, buf_usage)
+                .map_err(|e| e.to_string())?;
         }
-
-        // Realm 2D churn: sprites, shapes, UIs, colliders, physics bodies, hierarchy Rhai
         if let Some(r2d) = mv.get_realm_mut::<Realm2DContext>(REALM_2D_ID) {
             for i in 0..25u32 {
                 let id = base_id + 100 + i;
-                r2d.set_sprite(
-                    id,
-                    Sprite2D::default(),
-                    Transform2D::from_translation(Vec2::new(i as f32 * 5.0, 10.0)),
-                )
-                .map_err(|e| e.to_string())?;
+                r2d.set_sprite(id, Sprite2D::default(), Transform2D::from_translation(Vec2::new(i as f32 * 5.0, 10.0)))
+                    .map_err(|e| e.to_string())?;
                 r2d.create_collider_2d(Collider2D {
                     id,
                     model_id: id,
-                    shape: ColliderShape2D::Rectangle {
-                        half_extents: [8.0, 8.0],
-                    },
+                    shape: ColliderShape2D::Rectangle { half_extents: [8.0, 8.0] },
                     offset: [0.0, 0.0],
                     local_matrix: None,
                     sensor: false,
@@ -391,8 +346,7 @@ fn run_churn_cycle(cycle: u32, frame_counter: &mut u64) {
                     active: true,
                 })
                 .map_err(|e| e.to_string())?;
-                r2d.attach_rigid_body_2d(id, RigidBodyDesc2D::default())
-                    .map_err(|e| e.to_string())?;
+                r2d.attach_rigid_body_2d(id, RigidBodyDesc2D::default()).map_err(|e| e.to_string())?;
                 r2d.attach_2d(
                     id,
                     100,
@@ -403,34 +357,22 @@ fn run_churn_cycle(cycle: u32, frame_counter: &mut u64) {
                 .map_err(|e| e.to_string())?;
             }
             for i in 0..10u32 {
-                let id = base_id + 200 + i;
-                r2d.set_shape(id, Shape2D::default(), Transform2D::default())
+                r2d.set_shape(base_id + 200 + i, Shape2D::default(), Transform2D::default())
                     .map_err(|e| e.to_string())?;
             }
             for i in 0..5u32 {
-                let id = base_id + 300 + i;
-                r2d.create_ui(id, Model2DUI::default(), Transform2D::default())
+                r2d.create_ui(base_id + 300 + i, Model2DUI::default(), Transform2D::default())
                     .map_err(|e| e.to_string())?;
             }
         }
-
-        // Realm 3D churn: geometries, materials, models, colliders, physics bodies, hierarchy Rhai
         if let Some(r3d) = mv.get_realm_mut::<Realm3DContext>(REALM_3D_ID) {
             for i in 0..15u32 {
                 let id = base_id + 400 + i;
-                r3d.create_geometry(id, Geometry3D::sphere(0.6, 16, 12))
+                r3d.create_geometry(id, Geometry3D::sphere(0.6, 16, 12)).map_err(|e| e.to_string())?;
+                r3d.create_material(id, Material3D::solid_color(Vec4::new(0.8, 0.3, 0.2, 1.0)))
                     .map_err(|e| e.to_string())?;
-                r3d.create_material(
-                    id,
-                    Material3D::solid_color(Vec4::new(0.8, 0.3, 0.2, 1.0)),
-                )
-                .map_err(|e| e.to_string())?;
-                r3d.create_model(
-                    id,
-                    Model3D::new(id, id),
-                    Transform3D::from_position(Vec3::new(i as f32, 2.0, 0.0)),
-                )
-                .map_err(|e| e.to_string())?;
+                r3d.create_model(id, Model3D::new(id, id), Transform3D::from_position(Vec3::new(i as f32, 2.0, 0.0)))
+                    .map_err(|e| e.to_string())?;
                 r3d.create_collider_3d(Collider3D {
                     id,
                     model_id: id,
@@ -443,8 +385,7 @@ fn run_churn_cycle(cycle: u32, frame_counter: &mut u64) {
                     active: true,
                 })
                 .map_err(|e| e.to_string())?;
-                r3d.attach_rigid_body_3d(id, RigidBodyDesc3D::default())
-                    .map_err(|e| e.to_string())?;
+                r3d.attach_rigid_body_3d(id, RigidBodyDesc3D::default()).map_err(|e| e.to_string())?;
                 r3d.attach_3d(
                     id,
                     100,
@@ -459,13 +400,14 @@ fn run_churn_cycle(cycle: u32, frame_counter: &mut u64) {
     })
     .expect("churn spawn failed");
 
-    // Spawn 20 LoopMode::Once transitions that complete during the cycle
     with_animation_mut(|anim| {
         for i in 0..20u32 {
             let tid = base_id + 600 + i;
-            let mut cfg = TransitionConfig::default();
-            cfg.duration = 0.03;
-            cfg.loop_mode = LoopMode::Once;
+            let cfg = TransitionConfig {
+                duration: 0.03,
+                loop_mode: LoopMode::Once,
+                ..Default::default()
+            };
             anim.create_transition(tid, AnimValue::Scalar(0.0), cfg)
                 .map_err(|e| e.to_string())?;
             anim.bind_target(tid, AnimationTarget::CustomChannel { channel_id: tid })
@@ -477,19 +419,18 @@ fn run_churn_cycle(cycle: u32, frame_counter: &mut u64) {
     })
     .expect("churn anim spawn failed");
 
-    // 2. Render 4 frames with spawned objects active
     for _ in 0..4 {
         *frame_counter += 1;
         step_frame(*frame_counter, 0.016);
     }
 
-    // 3. Destroy everything spawned in this cycle
     with_animation_mut(|anim| {
         anim.prune_completed();
         let _ = anim.pump_events();
         Ok(())
     })
     .expect("churn anim prune failed");
+
     with_multiverse_mut(|mv| {
         if let Some(r2d) = mv.get_realm_mut::<Realm2DContext>(REALM_2D_ID) {
             for i in 0..25u32 {
@@ -522,7 +463,6 @@ fn run_churn_cycle(cycle: u32, frame_counter: &mut u64) {
     })
     .expect("churn destroy failed");
 
-    // 4. Render 2 clean frames after destruction
     for _ in 0..2 {
         *frame_counter += 1;
         step_frame(*frame_counter, 0.016);
@@ -533,14 +473,50 @@ fn extract_category_map(snap: &serde_json::Value) -> BTreeMap<String, (u64, u64,
     let mut map = BTreeMap::new();
     if let Some(arr) = snap["memory"]["categories"].as_array() {
         for item in arr {
-            let name = item["category"].as_str().unwrap_or("unknown").to_string();
-            let cpu = item["cpuBytes"].as_u64().unwrap_or(0);
-            let gpu = item["gpuBytes"].as_u64().unwrap_or(0);
-            let count = item["itemCount"].as_u64().unwrap_or(0);
-            map.insert(name, (cpu, gpu, count));
+            map.insert(
+                item["category"].as_str().unwrap_or("unknown").to_string(),
+                (
+                    item["cpuBytes"].as_u64().unwrap_or(0),
+                    item["gpuBytes"].as_u64().unwrap_or(0),
+                    item["itemCount"].as_u64().unwrap_or(0),
+                ),
+            );
         }
     }
     map
+}
+
+fn print_summary(
+    first_cats: &BTreeMap<String, (u64, u64, u64)>,
+    last_snap: &serde_json::Value,
+    rss_delta_mib: f64,
+) {
+    println!("\n=== Memory Growth (Cycle 1 -> 8 | VmRSS delta: {rss_delta_mib:+.2} MiB) ===");
+    let last_cats = extract_category_map(last_snap);
+    let mut rows: Vec<_> = last_cats
+        .iter()
+        .map(|(cat, &(ce, ge, ie))| {
+            let (cs, gs, is) = first_cats.get(cat).copied().unwrap_or((0, 0, 0));
+            (
+                cat.as_str(),
+                ce as i64 - cs as i64,
+                ge as i64 - gs as i64,
+                ie as i64 - is as i64,
+            )
+        })
+        .collect();
+    rows.sort_by_key(|a| std::cmp::Reverse(a.1 + a.2));
+    for (cat, dc, dg, di) in rows {
+        println!("  {cat:<34} cpu={dc:>+10}B gpu={dg:>+10}B items={di:>+6}");
+    }
+    if let Some(arr) = last_snap["driftWarnings"].as_array()
+        && !arr.is_empty()
+    {
+        println!("\n=== Drift Warnings ({}) ===", arr.len());
+        for w in arr {
+            println!("  [{}] {}", w["category"], w["message"]);
+        }
+    }
 }
 
 fn main() {
@@ -553,22 +529,18 @@ fn main() {
     setup_base_scene();
 
     let mut frame_counter = 0u64;
-
-    // Warmup (5 frames)
     for _ in 0..5 {
         frame_counter += 1;
         step_frame(frame_counter, 0.016);
     }
     let (steady_start, rss_steady_start) = take_snapshot_via_ffi();
-
-    // Phase A: Steady-state (40 frames)
     for _ in 0..40 {
         frame_counter += 1;
         step_frame(frame_counter, 0.016);
     }
     let (steady_end, rss_steady_end) = take_snapshot_via_ffi();
     println!(
-        "[Phase A: Steady-State 40 frames] VmRSS: {:.2} MiB -> {:.2} MiB (delta {:+.2} MiB) | Tracked CPU: {:.1} KiB -> {:.1} KiB | Tracked GPU: {:.2} MiB -> {:.2} MiB",
+        "[Phase A: Steady-State 40 frames] VmRSS: {:.2} -> {:.2} MiB ({:+.2} MiB) | CPU: {:.1} -> {:.1} KiB | GPU: {:.2} MiB",
         rss_steady_start as f64 / 1024.0,
         rss_steady_end as f64 / 1024.0,
         (rss_steady_end as i64 - rss_steady_start as i64) as f64 / 1024.0,
@@ -577,127 +549,35 @@ fn main() {
             .unwrap_or(0) as f64
             / 1024.0,
         steady_end["memory"]["totalCpuBytes"].as_u64().unwrap_or(0) as f64 / 1024.0,
-        steady_start["memory"]["totalGpuBytes"]
-            .as_u64()
-            .unwrap_or(0) as f64
-            / (1024.0 * 1024.0),
         steady_end["memory"]["totalGpuBytes"].as_u64().unwrap_or(0) as f64 / (1024.0 * 1024.0),
     );
 
-    // Phase B: Lifecycle Churn (8 cycles)
-    println!("\n[Phase B: Lifecycle Churn (8 cycles of spawn -> render -> destroy)]");
-    println!(
-        "{:<8} {:>12} {:>16} {:>16} {:>10}",
-        "Cycle", "VmRSS (MiB)", "CPU Track (KiB)", "GPU Track (MiB)", "Drifts"
-    );
-
-    let mut first_cycle_cats: Option<BTreeMap<String, (u64, u64, u64)>> = None;
-    let mut last_snap = steady_end.clone();
-    let mut rss_cycle_1 = 0u64;
-    let mut rss_cycle_last = 0u64;
-
+    println!("\n[Phase B: Lifecycle Churn (8 cycles)]");
+    let mut first_cats = BTreeMap::new();
+    let mut last_snap = steady_end;
+    let (mut rss_1, mut rss_last) = (0u64, 0u64);
     for cycle in 1..=8u32 {
         run_churn_cycle(cycle, &mut frame_counter);
         let (snap, rss) = take_snapshot_via_ffi();
-        let cpu_kib = snap["memory"]["totalCpuBytes"].as_u64().unwrap_or(0) as f64 / 1024.0;
-        let gpu_mib =
-            snap["memory"]["totalGpuBytes"].as_u64().unwrap_or(0) as f64 / (1024.0 * 1024.0);
-        let drifts = snap["driftWarnings"].as_array().map_or(0, Vec::len);
         println!(
-            "{:<8} {:>12.2} {:>16.1} {:>16.2} {:>10}",
-            cycle,
+            "Cycle {cycle}: VmRSS={:.2} MiB | CPU={:.1} KiB | GPU={:.2} MiB | Drifts={}",
             rss as f64 / 1024.0,
-            cpu_kib,
-            gpu_mib,
-            drifts
+            snap["memory"]["totalCpuBytes"].as_u64().unwrap_or(0) as f64 / 1024.0,
+            snap["memory"]["totalGpuBytes"].as_u64().unwrap_or(0) as f64 / (1024.0 * 1024.0),
+            snap["driftWarnings"].as_array().map_or(0, Vec::len),
         );
         if cycle == 1 {
-            first_cycle_cats = Some(extract_category_map(&snap));
-            rss_cycle_1 = rss;
+            first_cats = extract_category_map(&snap);
+            rss_1 = rss;
         }
-        rss_cycle_last = rss;
+        rss_last = rss;
         last_snap = snap;
     }
 
-    // Category Growth Table (Cycle 1 -> Cycle 8)
-    println!(
-        "\n=== Memory Growth By Category (Cycle 1 -> Cycle 8 | OS VmRSS delta: {:+.2} MiB) ===",
-        (rss_cycle_last as i64 - rss_cycle_1 as i64) as f64 / 1024.0
+    print_summary(
+        &first_cats,
+        &last_snap,
+        (rss_last as i64 - rss_1 as i64) as f64 / 1024.0,
     );
-    let last_cats = extract_category_map(&last_snap);
-    let first_cats = first_cycle_cats.unwrap_or_default();
-    let mut rows: Vec<(String, i64, i64, i64, u64, u64)> = Vec::new();
-    for (cat, &(cpu_end, gpu_end, items_end)) in &last_cats {
-        let (cpu_start, gpu_start, items_start) = first_cats.get(cat).copied().unwrap_or((0, 0, 0));
-        rows.push((
-            cat.clone(),
-            cpu_end as i64 - cpu_start as i64,
-            gpu_end as i64 - gpu_start as i64,
-            items_end as i64 - items_start as i64,
-            cpu_end,
-            gpu_end,
-        ));
-    }
-    rows.sort_by(|a, b| (b.1 + b.2).cmp(&(a.1 + a.2)));
-    println!(
-        "{:<36} {:>12} {:>12} {:>10} {:>12} {:>12}",
-        "Category", "CPU Δ (B)", "GPU Δ (B)", "Items Δ", "CPU End (B)", "GPU End (B)"
-    );
-    for (cat, d_cpu, d_gpu, d_items, cpu_end, gpu_end) in rows {
-        println!(
-            "{:<36} {:>+12} {:>+12} {:>+10} {:>12} {:>12}",
-            cat, d_cpu, d_gpu, d_items, cpu_end, gpu_end
-        );
-    }
-
-    // Drift Warnings
-    println!("\n=== Drift Warnings (End of Cycle 8) ===");
-    if let Some(arr) = last_snap["driftWarnings"].as_array() {
-        for w in arr {
-            println!(
-                "  [{}] {}: expected={}, actual={}, delta={:+} -> {}",
-                w["category"].as_str().unwrap_or(""),
-                w["metric"].as_str().unwrap_or(""),
-                w["expected"].as_u64().unwrap_or(0),
-                w["actual"].as_u64().unwrap_or(0),
-                w["delta"].as_i64().unwrap_or(0),
-                w["message"].as_str().unwrap_or(""),
-            );
-        }
-    }
-
-    // Top Timings
-    println!("\n=== Top Process Timings (us) ===");
-    if let Some(arr) = last_snap["timings"].as_array() {
-        let mut timings = arr.clone();
-        timings.sort_by(|a, b| {
-            b["avgUs"]
-                .as_f64()
-                .unwrap_or(0.0)
-                .total_cmp(&a["avgUs"].as_f64().unwrap_or(0.0))
-        });
-        println!(
-            "{:<32} {:>8} {:>10} {:>10} {:>10}",
-            "Span", "Count", "Avg (us)", "P95 (us)", "Max (us)"
-        );
-        for t in timings.iter().take(15) {
-            println!(
-                "{:<32} {:>8} {:>10.1} {:>10.1} {:>10.1}",
-                t["name"].as_str().unwrap_or(""),
-                t["count"].as_u64().unwrap_or(0),
-                t["avgUs"].as_f64().unwrap_or(0.0),
-                t["p95Us"].as_f64().unwrap_or(0.0),
-                t["maxUs"].as_f64().unwrap_or(0.0),
-            );
-        }
-    }
-
-    // Counters
-    println!("\n=== Global Counters ===");
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&last_snap["counters"]).unwrap()
-    );
-
     let _ = galfus_platform_shutdown();
 }

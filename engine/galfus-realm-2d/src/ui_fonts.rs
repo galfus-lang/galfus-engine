@@ -304,6 +304,12 @@ impl UiFontLibrary {
             .clear();
         Ok(family)
     }
+    pub(crate) fn clear_color_glyph_cache(&self) {
+        if let Ok(mut cache) = self.color_glyph_cache.lock() {
+            cache.clear();
+        }
+    }
+
     pub(crate) fn diagnostic_counts(&self) -> (usize, usize, usize, usize, usize, usize) {
         let (glyph_entries, glyph_bytes, glyph_hits) = self
             .color_glyph_cache

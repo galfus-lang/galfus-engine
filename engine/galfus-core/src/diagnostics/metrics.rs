@@ -95,6 +95,12 @@ impl AtomicCounters {
     }
 }
 
+impl Default for AtomicCounters {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CountersSnapshot {
@@ -229,6 +235,12 @@ impl SpanRegistry {
         if let Ok(mut guard) = self.windows.lock() {
             guard.clear();
         }
+    }
+}
+
+impl Default for SpanRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

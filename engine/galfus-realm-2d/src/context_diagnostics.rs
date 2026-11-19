@@ -5,6 +5,30 @@ use serde_json::json;
 
 use crate::context::Realm2DContext;
 
+pub(crate) fn solve_dirty_ui_layouts(
+    uis: &mut std::collections::HashMap<
+        u32,
+        (
+            galfus_realm_2d_resources::ui::Model2DUI,
+            galfus_realm_2d_resources::transform::Transform2D,
+        ),
+    >,
+    ui_fonts: &crate::ui_fonts::UiFontLibrary,
+) {
+    for (ui, _) in uis.values_mut() {
+        let layout_flags = galfus_realm_2d_resources::ui::UiDirtyFlags::LAYOUT
+            | galfus_realm_2d_resources::ui::UiDirtyFlags::TEXT_MEASURE
+            | galfus_realm_2d_resources::ui::UiDirtyFlags::HIERARCHY
+            | galfus_realm_2d_resources::ui::UiDirtyFlags::CLIP_TRANSFORM;
+        if ui.root_id.is_some()
+            && (ui.computed.is_empty() || ui.dirty_flags.values().any(|f| f.0 & layout_flags != 0))
+        {
+            let (w, h) = crate::context_ui::compute_ui_dimensions(ui);
+            crate::ui_layout::solve_ui_layout(ui, ui_fonts, &ui_fonts.default_family, w, h);
+        }
+    }
+}
+
 impl Realm2DContext {
     pub(crate) fn build_diagnostic_report(&self) -> RealmDiagnosticReport {
         let mut categories = Vec::new();

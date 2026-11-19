@@ -9,6 +9,9 @@ use crate::state::collect_diagnostics_snapshot;
 
 /// Configures tagged diagnostics from a JSON [`DiagnosticsConfig`] payload.
 /// Returns 0 on success, -1 on failure.
+///
+/// # Safety
+/// `config_json` must be a valid, null-terminated UTF-8 C string pointer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_diagnostics_configure(config_json: *const c_char) -> i32 {
     let json_str = match unsafe { from_c_str(config_json) } {
