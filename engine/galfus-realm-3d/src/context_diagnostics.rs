@@ -208,7 +208,11 @@ impl Realm3DContext {
         }
 
         // 7. Drift warnings
-        let max_expected_transforms = self.models.len() + self.instanced_models.len();
+        let max_expected_transforms = self.models.len()
+            + self.instanced_models.len()
+            + self.cameras.len()
+            + self.lights.len()
+            + self.emitters.len();
         if self.model_transforms.len() > max_expected_transforms {
             let delta = self.model_transforms.len() as i64 - max_expected_transforms as i64;
             drift_warnings.push(DriftWarning {

@@ -31,6 +31,8 @@ pub(crate) fn execute_frame(
             &mut ctx.target_history_textures,
             &mut ctx.scratch_textures,
             &mut ctx.taa_history,
+            &mut ctx.ping_pong_texture,
+            &mut ctx.smaa_intermediates,
             gpu,
             &schedule,
             default_aa,
@@ -589,6 +591,19 @@ pub(crate) fn execute_frame(
     for (window_id, surface_tex) in surface_textures {
         surface_tex.present();
         presented_windows.push(window_id);
+    }
+
+    // Drive wgpu resource reclamation (staging buffers, retired bind groups, completed
+    // command buffers). When rendering offscreen without swapchain backpressure, wait for
+    // completion so in-flight GPU submissions cannot pile up unboundedly in RSS.
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(gpu) = ctx.gpu_manager.as_ref() {
+        let poll_type = if presented_windows.is_empty() {
+            wgpu::PollType::wait_indefinitely()
+        } else {
+            wgpu::PollType::Poll
+        };
+        let _ = gpu.device().poll(poll_type);
     }
 
     Ok(presented_windows)

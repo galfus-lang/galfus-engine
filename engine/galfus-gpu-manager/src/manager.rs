@@ -174,6 +174,16 @@ impl GpuManager {
         self.textures.destroy_texture(handle)
     }
 
+    /// Destroys an explicit texture view after invalidating bind groups that reference it.
+    pub fn destroy_texture_view(
+        &mut self,
+        handle: crate::handle::GpuTextureViewHandle,
+    ) -> GpuResult<()> {
+        self.bind_groups
+            .destroy_referencing(BindResourceHandle::TextureView(handle));
+        self.textures.destroy_view(handle)
+    }
+
     /// Destroys a buffer after invalidating bind groups that reference it.
     pub fn destroy_buffer(&mut self, handle: crate::handle::GpuBufferHandle) -> GpuResult<()> {
         self.bind_groups

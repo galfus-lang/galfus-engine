@@ -272,6 +272,7 @@ impl AudioContext {
                 .remove(handle)
                 .map_err(|_| PlatformError::SoundNotFound(voice_id))?;
             self.voice_ids.remove(&voice_id);
+            self.handle_to_voice_id.remove(&handle);
             voice.stop(Tween::default());
             Ok(())
         }

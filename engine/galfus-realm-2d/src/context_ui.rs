@@ -386,11 +386,10 @@ impl UiManager2D {
             }
         }
 
-        // Export textured material bind groups to render map
+        // Export textured material bind groups to render map (always overwrite so
+        // refreshed/resized TextureViews replace stale BindGroups instead of pinning them).
         for entry in self.textured_materials.values() {
-            material_bind_groups
-                .entry(entry.mat_id)
-                .or_insert_with(|| entry.bind_group.clone());
+            material_bind_groups.insert(entry.mat_id, entry.bind_group.clone());
         }
     }
 

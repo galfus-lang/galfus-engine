@@ -311,6 +311,11 @@ impl PhysicsWorld3D {
         if let Some(handle) = self.entity_to_body.remove(&entity_id) {
             self.body_to_entity.remove(&handle);
             self.body_descs.remove(&entity_id);
+            if let Some(colliders) = self.entity_to_colliders.remove(&entity_id) {
+                for ch in colliders {
+                    self.collider_to_entity.remove(&ch);
+                }
+            }
             self.entity_joints.retain(|_, joint| {
                 self.impulse_joint_set
                     .get(*joint)
@@ -344,6 +349,9 @@ impl PhysicsWorld3D {
                 && let Some(cols) = self.entity_to_colliders.get_mut(&eid)
             {
                 cols.retain(|&c| c != h);
+                if cols.is_empty() {
+                    self.entity_to_colliders.remove(&eid);
+                }
             }
             self.collider_set.remove(
                 h,
@@ -604,6 +612,7 @@ impl PhysicsWorld3D {
 
     /// Removes an impulse joint by handle.
     pub fn remove_joint(&mut self, handle: ImpulseJointHandle) -> bool {
+        self.entity_joints.retain(|_, &mut j| j != handle);
         self.impulse_joint_set.remove(handle, true).is_some()
     }
 
@@ -628,8 +637,12 @@ impl PhysicsWorld3D {
         self.rigid_body_set = RigidBodySet::new();
         self.collider_set = ColliderSet::new();
         self.soft_body_set = SoftBodySet::new();
+        self.island_manager = IslandManager::new();
+        self.broad_phase = DefaultBroadPhase::new();
+        self.narrow_phase = NarrowPhase::new();
         self.impulse_joint_set = ImpulseJointSet::new();
         self.multibody_joint_set = MultibodyJointSet::new();
+        self.ccd_solver = CCDSolver::new();
         self.contact_events.clear();
     }
 }

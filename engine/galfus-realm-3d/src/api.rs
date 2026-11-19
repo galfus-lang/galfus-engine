@@ -440,9 +440,12 @@ impl Realm3DContext {
         self.models
             .remove(&id)
             .ok_or_else(|| not_found(self.id, "Model", id))?;
-        if !self.model_transforms.contains_key(&id) {
-            self.destroy_colliders_by_model_3d(id);
+        self.model_transforms.remove(&id);
+        self.hierarchy.remove_entity(id);
+        if let Some(ref mut physics) = self.physics {
+            physics.remove_rigid_body(id);
         }
+        self.destroy_colliders_by_model_3d(id);
         self.dirty = true;
         Ok(())
     }
@@ -452,10 +455,15 @@ impl Realm3DContext {
         validate_id(id)?;
         self.instanced_models
             .remove(&id)
-            .map(|_| {
-                self.dirty = true;
-            })
-            .ok_or_else(|| not_found(self.id, "InstancedModel", id))
+            .ok_or_else(|| not_found(self.id, "InstancedModel", id))?;
+        self.model_transforms.remove(&id);
+        self.hierarchy.remove_entity(id);
+        if let Some(ref mut physics) = self.physics {
+            physics.remove_rigid_body(id);
+        }
+        self.destroy_colliders_by_model_3d(id);
+        self.dirty = true;
+        Ok(())
     }
 
     /// Destroys an existing `Light3D`.

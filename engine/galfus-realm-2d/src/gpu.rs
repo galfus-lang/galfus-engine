@@ -213,7 +213,7 @@ impl GpuResources2D {
             wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         );
 
-        let initial_light_capacity = 64;
+        let initial_light_capacity = 4;
         let light_buffer = create_gpu_buffer(
             device,
             "galfus_2d_light_buffer",

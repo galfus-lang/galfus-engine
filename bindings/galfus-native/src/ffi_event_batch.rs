@@ -372,7 +372,11 @@ pub fn pop_next_event() -> GalfusPlatformEvent {
 
 /// Clears all pending events on platform shutdown.
 pub(crate) fn clear_pending_events() {
-    PENDING_EVENTS.with(|q| q.borrow_mut().clear());
+    PENDING_EVENTS.with(|q| {
+        let mut q = q.borrow_mut();
+        q.clear();
+        q.shrink_to_fit();
+    });
     CURRENT_TEXT.with(|text| *text.borrow_mut() = None);
 }
 

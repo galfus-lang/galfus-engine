@@ -90,8 +90,6 @@ impl<T> GenerationalPool<T> {
 
     /// Inserts a new value into the pool, returning its strongly typed `Handle<T>`.
     pub fn insert(&mut self, value: T) -> CoreResult<Handle<T>> {
-        self.active_count += 1;
-
         if let Some(free_slot_idx) = self.free_head {
             let slot = self
                 .slots
@@ -109,6 +107,7 @@ impl<T> GenerationalPool<T> {
                         value,
                         generation: current_gen,
                     };
+                    self.active_count += 1;
                     Ok(Handle::new(free_slot_idx, current_gen, self.namespace))
                 }
                 Slot::Occupied { .. } => Err(CoreError::InvalidHandle {
@@ -123,6 +122,7 @@ impl<T> GenerationalPool<T> {
                 value,
                 generation: initial_gen,
             });
+            self.active_count += 1;
             Ok(Handle::new(slot_idx, initial_gen, self.namespace))
         }
     }

@@ -136,6 +136,9 @@ impl Realm for Realm2DContext {
         }
         self.uis.clear();
         self.ui_manager.clear();
+        if let Ok(mut cache) = self.ui_fonts.color_glyph_cache.lock() {
+            cache.clear();
+        }
         self.materials.clear();
         self.lights.clear();
         self.emitters.clear();

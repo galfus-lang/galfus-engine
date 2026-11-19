@@ -193,6 +193,9 @@ impl BrowserPointer {
                                     let _ = surface.unchecked_ref::<web_sys::HtmlElement>().focus();
                                 }
                             }
+                            if name == "pointerup" && pointer_type != PointerType::Mouse {
+                                positions.remove(&pointer_id);
+                            }
                             PointerEvent::Button {
                                 window_id,
                                 pointer_id,

@@ -36,16 +36,23 @@ pub fn init_context_headless() -> Result<(), String> {
 
 /// Shuts down and drops the global platform context and multiverse context.
 pub fn shutdown_context() -> Result<(), String> {
+    let mut mv_err: Option<String> = None;
     let mv_dropped = MULTIVERSE.with(|cell| {
         let mut borrow = cell.borrow_mut();
-        if let Some(multiverse) = borrow.as_mut() {
-            multiverse.shutdown().map_err(|e| e.to_string())?;
+        if let Some(multiverse) = borrow.as_mut()
+            && let Err(e) = multiverse.shutdown()
+        {
+            mv_err = Some(e.to_string());
         }
-        Ok::<bool, String>(borrow.take().is_some())
-    })?;
+        borrow.take().is_some()
+    });
     let anim_dropped = ANIMATION.with(|cell| cell.borrow_mut().take().is_some());
     let ctx_dropped = CONTEXT.with(|cell| cell.borrow_mut().take().is_some());
     crate::ffi_event_batch::clear_pending_events();
+    crate::ffi::clear_last_error();
+    if let Some(err) = mv_err {
+        return Err(err);
+    }
     if anim_dropped || mv_dropped || ctx_dropped {
         Ok(())
     } else {

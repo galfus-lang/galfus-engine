@@ -107,6 +107,8 @@ impl PostProcessPipelines {
                 },
                 outline_items,
             );
+        } else if !desc.environment.outline.enabled {
+            self.outline = None;
         }
 
         // 2. Screen-Space Ambient Occlusion (SSAO) pass
@@ -125,6 +127,8 @@ impl PostProcessPipelines {
                 &desc.projection.inverse(),
                 &desc.environment.ssao,
             );
+        } else {
+            self.ssao = None;
         }
 
         // 3. Screen-Space Multi-Scale Bloom HDR Glow
@@ -141,6 +145,8 @@ impl PostProcessPipelines {
                 desc.target_view,
                 &desc.environment.bloom,
             );
+        } else {
+            self.bloom = None;
         }
 
         // 4. Debug Gizmos wireframe & line pass

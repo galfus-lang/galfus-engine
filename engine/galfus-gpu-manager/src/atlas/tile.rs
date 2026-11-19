@@ -241,7 +241,11 @@ impl TileAtlas2DArray {
                     slot.rect_tiles = (new_x, new_y, item.w, item.h);
                 }
             } else {
-                self.slots[item.index as usize].alive = false;
+                let slot = &mut self.slots[item.index as usize];
+                slot.alive = false;
+                slot.generation = slot.generation.wrapping_add(1);
+                self.free_slots.push(item.index);
+                self.free_tiles_total += item.w * item.h;
             }
         }
 

@@ -61,11 +61,25 @@ impl AnimationDiagnosticsStats {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum AnimationOwner {
+    Transition(u32),
+    PathFollow(u32),
+}
+
+impl AnimationOwner {
+    fn id(self) -> u32 {
+        match self {
+            Self::Transition(id) | Self::PathFollow(id) => id,
+        }
+    }
+}
+
 /// Autonomous animation manager coordinating transitions, state queries, and event pumping.
 pub struct AnimationContext {
     pub(crate) transitions: BTreeMap<u32, TransitionInstance>,
     pub(crate) path_follows: BTreeMap<u32, PathFollowInstance>,
-    pub(crate) target_locks: HashMap<AnimationTarget, u32>,
+    pub(crate) target_locks: HashMap<AnimationTarget, AnimationOwner>,
     pub(crate) custom_channels: HashMap<u32, AnimValue>,
     pub(crate) event_queue: VecDeque<AnimationEvent>,
 }
@@ -110,13 +124,14 @@ impl AnimationContext {
 
     /// Binds an existing transition to an entity property target with conflict locking.
     pub fn bind_target(&mut self, id: u32, target: AnimationTarget) -> AnimationResult<()> {
+        let owner = AnimationOwner::Transition(id);
         // Prevent concurrent transitions from writing to the same destination property
-        if let Some(&owner_id) = self.target_locks.get(&target)
-            && owner_id != id
+        if let Some(&existing) = self.target_locks.get(&target)
+            && existing != owner
         {
             return Err(AnimationError::TargetConflict {
                 target: format!("{target:?}"),
-                owner_id,
+                owner_id: existing.id(),
             });
         }
 
@@ -132,7 +147,7 @@ impl AnimationContext {
             self.target_locks.remove(old_target);
         }
 
-        self.target_locks.insert(target.clone(), id);
+        self.target_locks.insert(target.clone(), owner);
         instance.target = Some(target);
         Ok(())
     }
@@ -180,6 +195,9 @@ impl AnimationContext {
         if let Some(instance) = self.transitions.remove(&id) {
             if let Some(ref target) = instance.target {
                 self.target_locks.remove(target);
+                if let AnimationTarget::CustomChannel { channel_id } = target {
+                    self.custom_channels.remove(channel_id);
+                }
             }
             Ok(())
         } else {
@@ -274,12 +292,13 @@ impl AnimationContext {
         id: u32,
         target: AnimationTarget,
     ) -> AnimationResult<()> {
-        if let Some(&owner_id) = self.target_locks.get(&target)
-            && owner_id != id
+        let owner = AnimationOwner::PathFollow(id);
+        if let Some(&existing) = self.target_locks.get(&target)
+            && existing != owner
         {
             return Err(AnimationError::TargetConflict {
                 target: format!("{target:?}"),
-                owner_id,
+                owner_id: existing.id(),
             });
         }
 
@@ -294,7 +313,7 @@ impl AnimationContext {
             self.target_locks.remove(old_target);
         }
 
-        self.target_locks.insert(target.clone(), id);
+        self.target_locks.insert(target.clone(), owner);
         instance.target = Some(target);
         Ok(())
     }
@@ -327,11 +346,48 @@ impl AnimationContext {
         if let Some(instance) = self.path_follows.remove(&id) {
             if let Some(ref target) = instance.target {
                 self.target_locks.remove(target);
+                if let AnimationTarget::CustomChannel { channel_id } = target {
+                    self.custom_channels.remove(channel_id);
+                }
             }
             Ok(())
         } else {
             Err(AnimationError::PathFollowNotFound(id))
         }
+    }
+
+    /// Removes all transitions and path followers that have reached `Completed` status,
+    /// releasing their target locks and custom channels. Returns the number of pruned instances.
+    pub fn prune_completed(&mut self) -> usize {
+        let completed_t: Vec<u32> = self
+            .transitions
+            .iter()
+            .filter(|(_, inst)| inst.state().status == TransitionStatus::Completed)
+            .map(|(&id, _)| id)
+            .collect();
+        let completed_p: Vec<u32> = self
+            .path_follows
+            .iter()
+            .filter(|(_, inst)| inst.state().status == TransitionStatus::Completed)
+            .map(|(&id, _)| id)
+            .collect();
+        let count = completed_t.len() + completed_p.len();
+        for id in completed_t {
+            let _ = self.destroy_transition(id);
+        }
+        for id in completed_p {
+            let _ = self.destroy_path_follow(id);
+        }
+        count
+    }
+
+    /// Clears all transitions, path followers, locks, custom channels, and queued events.
+    pub fn clear(&mut self) {
+        self.transitions.clear();
+        self.path_follows.clear();
+        self.target_locks.clear();
+        self.custom_channels.clear();
+        self.event_queue.clear();
     }
 
     /// Drains and returns all queued animation lifecycle events.

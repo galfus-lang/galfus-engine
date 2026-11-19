@@ -128,6 +128,16 @@ impl MultiverseContext {
             self.interaction_frames
                 .insert(window_id, Arc::clone(&frame));
         }
+        self.interaction_frames.retain(|&wid, _| {
+            presented_windows.contains(&wid)
+                || self.surfaces.contains_key(&wid)
+                || self.targets.values().any(|t| {
+                    matches!(
+                        t.kind,
+                        crate::types::TargetKind::Window { window_id } if window_id == wid
+                    )
+                })
+        });
     }
 
     /// Routes hits on a collider into the texture target bound to its realm slot.

@@ -19,6 +19,12 @@ pub(crate) fn set_last_error(err: &str) {
     });
 }
 
+pub(crate) fn clear_last_error() {
+    LAST_ERROR.with(|cell| {
+        *cell.borrow_mut() = None;
+    });
+}
+
 /// Helper converting a Rust string into a newly allocated C string pointer.
 pub(crate) fn to_c_string(s: &str) -> *mut c_char {
     match CString::new(s) {

@@ -75,6 +75,9 @@ impl Default for HierarchyScriptEngine {
 impl HierarchyScriptEngine {
     pub fn new() -> Self {
         let mut engine = Engine::new();
+        engine.set_max_operations(10_000);
+        engine.set_max_string_size(4096);
+        engine.set_max_array_size(256);
         engine.build_type::<ScriptTransform2D>();
         engine.build_type::<ScriptTransform3D>();
 
