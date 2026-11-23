@@ -185,3 +185,51 @@ pub extern "C" fn galfus_realm_3d_destroy_projector(realm_id: u32, projector_id:
         }
     }
 }
+
+/// Queues a one-shot UV-space decal bake onto a model's target texture (tattoos / body paint).
+///
+/// # Safety
+/// `bake_json` and `transform_json` must be valid null-terminated UTF-8 C strings.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_3d_bake_uv_decal(
+    realm_id: u32,
+    bake_json: *const c_char,
+    transform_json: *const c_char,
+) -> i32 {
+    let bake_str = match unsafe { from_c_str(bake_json) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+    let bake: galfus_realm_3d_resources::uv_decal::UvDecalBake3D =
+        match serde_json::from_str(bake_str) {
+            Ok(b) => b,
+            Err(e) => {
+                set_last_error(&format!("Invalid UvDecalBake3DDesc: {e}"));
+                return -1;
+            }
+        };
+    let transform = match unsafe { crate::parse_transform_3d(transform_json) } {
+        Ok(t) => t,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D #{realm_id} not found"))?;
+        realm
+            .bake_uv_decal(bake, transform.into())
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}

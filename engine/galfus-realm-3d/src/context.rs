@@ -54,6 +54,11 @@ pub struct Realm3DContext {
     pub(crate) shadow_pipeline: Option<ShadowPipeline3D>,
     pub(crate) shadow_map: Option<ShadowMap3D>,
     pub(crate) projector_gpu: Option<crate::projector::ProjectorGpuResources3D>,
+    pub(crate) uv_bake_pipeline: Option<crate::uv_bake::UvBakePipeline3D>,
+    pub(crate) pending_uv_bakes: Vec<(
+        galfus_realm_3d_resources::uv_decal::UvDecalBake3D,
+        Transform3D,
+    )>,
     pub(crate) skybox_pipeline: Option<crate::skybox::SkyboxPipeline3D>,
     pub(crate) post_pipelines: crate::postprocess::PostProcessPipelines,
     pub(crate) light_cull_pipeline: Option<crate::light_cull::LightCullingPipeline3D>,
@@ -114,6 +119,8 @@ impl Realm3DContext {
             shadow_pipeline: None,
             shadow_map: None,
             projector_gpu: None,
+            uv_bake_pipeline: None,
+            pending_uv_bakes: Vec::new(),
             skybox_pipeline: None,
             post_pipelines: crate::postprocess::PostProcessPipelines::new(),
             light_cull_pipeline: None,
@@ -164,6 +171,7 @@ impl Realm3DContext {
         self.particle_additive_batches.clear();
         self.portals.clear();
         self.projectors.clear();
+        self.pending_uv_bakes.clear();
         self.model_bones.clear();
         self.bones.clear();
         self.lights_dirty = true;
@@ -179,6 +187,7 @@ impl Realm3DContext {
         self.shadow_pipeline = None;
         self.shadow_map = None;
         self.projector_gpu = None;
+        self.uv_bake_pipeline = None;
         self.skybox_pipeline = None;
         self.post_pipelines = crate::postprocess::PostProcessPipelines::new();
         self.light_cull_pipeline = None;

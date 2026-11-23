@@ -35,6 +35,7 @@ pub mod ssao;
 pub mod ssao_shader;
 pub mod surface_effect;
 pub mod types;
+pub mod uv_bake;
 
 #[cfg(test)]
 mod transparency_tests;

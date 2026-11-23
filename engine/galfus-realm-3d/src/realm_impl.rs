@@ -105,6 +105,9 @@ impl Realm for Realm3DContext {
             self.scene_bindings_generation = self.scene_bindings_generation.wrapping_add(1);
         }
 
+        // 5. Execute queued one-shot UV-space decal bakes (tattoos / body paint)
+        self.execute_pending_uv_bakes(device, queue, ctx.textures);
+
         Ok(())
     }
 
@@ -124,6 +127,14 @@ impl Realm for Realm3DContext {
         }
         for (proj, _) in self.projectors.values() {
             if let Some(tex_id) = proj.texture_id.filter(|&id| id != 0) {
+                ids.push(tex_id);
+            }
+        }
+        for (bake, _) in &self.pending_uv_bakes {
+            if bake.target_texture_id != 0 {
+                ids.push(bake.target_texture_id);
+            }
+            if let Some(tex_id) = bake.decal_texture_id.filter(|&id| id != 0) {
                 ids.push(tex_id);
             }
         }

@@ -504,3 +504,23 @@ pub fn realm_3d_destroy_projector(realm_id: u32, projector_id: u32) -> Result<()
         crate::ffi_realm_3d_portals::galfus_realm_3d_destroy_projector(realm_id, projector_id),
     )
 }
+
+#[napi(js_name = "realm3dBakeUvDecal")]
+pub fn realm_3d_bake_uv_decal(
+    env: Env,
+    realm_id: u32,
+    bake: JsUnknown,
+    transform: JsUnknown,
+) -> Result<()> {
+    let c_bake = js_to_c_string(&env, Some(bake))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "bake cannot be null"))?;
+    let c_tf = js_to_c_string(&env, Some(transform))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "transform cannot be null"))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d_portals::galfus_realm_3d_bake_uv_decal(
+            realm_id,
+            c_bake.as_ptr(),
+            c_tf.as_ptr(),
+        )
+    })
+}

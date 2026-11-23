@@ -17,6 +17,7 @@ pub mod portal;
 pub mod primitives;
 pub mod projector;
 pub mod transform;
+pub mod uv_decal;
 pub mod vertex;
 
 pub use aabb::Aabb;
@@ -37,6 +38,10 @@ pub use particle::{
     EmissionShape3D, Particle3D, Particle3DInstance, ParticleEmitter3D, ParticleEmitterState3D,
 };
 pub use portal::Portal3D;
-pub use projector::{Projector3D, Projector3DUniform, ProjectorBlendMode3D, ProjectorKind3D};
+pub use projector::{
+    Projector3D, Projector3DUniform, ProjectorBlendMode3D, ProjectorKind3D,
+    build_projector_view_proj,
+};
 pub use transform::Transform3D;
+pub use uv_decal::{UvDecalBake3D, UvDecalBake3DUniform};
 pub use vertex::{MorphTarget3D, MorphVertex3D, PrimitiveTopology3D, Vertex3D};

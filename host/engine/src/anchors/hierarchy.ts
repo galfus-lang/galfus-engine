@@ -82,7 +82,7 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
    *
    * @param origin The dependent entity to anchor.
    * @param target The target entity to follow.
-   * @param constraint Optional strategy name ('static', 'translation') or in-place zero-GC callback.
+   * @param constraint Optional strategy name ('static', 'translation', 'chain', 'rope', 'spring', etc.) or preset descriptor.
    */
   attach(
     origin: EntityLike,

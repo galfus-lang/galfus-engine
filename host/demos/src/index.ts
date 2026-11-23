@@ -28,6 +28,8 @@ export * from './realm3d/d3d7-portal-mirror';
 export * from './realm3d/d3d8-instancing';
 export * from './realm3d/d3d9-sides-normals';
 export * from './realm3d/d3d10-morph-targets';
+export * from './realm3d/d3d12-ik-layers';
+export * from './realm3d/d3d13-decals-projectors-tattoos';
 export * from './ui/ui1-pointer-wheel-image';
 export * from './ui/ui2-panels-layout';
 export * from './ui/ui3-components';

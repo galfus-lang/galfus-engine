@@ -156,40 +156,59 @@ impl Default for Projector3D {
     }
 }
 
+/// Computes a world-to-projector Reverse-Z view-projection matrix.
+pub fn build_projector_view_proj(
+    kind: ProjectorKind3D,
+    size: Vec3,
+    fov_y: f32,
+    aspect: f32,
+    near: f32,
+    far: f32,
+    transform: &Transform3D,
+) -> Mat4 {
+    let pos = transform.position;
+    let dir = transform.forward();
+    let up = (transform.rotation * Vec3::Y).normalize_or_zero();
+    let up = if up.length_squared() < 1e-6 || dir.dot(up).abs() > 0.99 {
+        if dir.dot(Vec3::Y).abs() > 0.95 {
+            Vec3::Z
+        } else {
+            Vec3::Y
+        }
+    } else {
+        up
+    };
+    let view = glam::camera::rh::view::look_to_mat4(pos, dir, up);
+    let proj = match kind {
+        ProjectorKind3D::Orthographic => {
+            let hw = (size.x.abs() * 0.5).max(1e-4);
+            let hh = (size.y.abs() * 0.5).max(1e-4);
+            let hd = (size.z.abs() * 0.5).max(1e-4);
+            glam::camera::rh::proj::directx::orthographic(-hw, hw, -hh, hh, hd, -hd)
+        }
+        ProjectorKind3D::Perspective => {
+            let fov = fov_y.clamp(0.05, std::f32::consts::PI - 0.05);
+            let aspect = aspect.max(1e-4);
+            let near = near.max(0.01);
+            let far = far.max(near + 0.01);
+            glam::camera::rh::proj::directx::perspective(fov, aspect, far, near)
+        }
+    };
+    proj * view
+}
+
 impl Projector3D {
     /// Computes the world-to-projector Reverse-Z view-projection matrix.
     pub fn build_view_projection(&self, transform: &Transform3D) -> Mat4 {
-        let pos = transform.position;
-        let dir = transform.forward();
-        let up = (transform.rotation * Vec3::Y).normalize_or_zero();
-        let up = if up.length_squared() < 1e-6 || dir.dot(up).abs() > 0.99 {
-            if dir.dot(Vec3::Y).abs() > 0.95 {
-                Vec3::Z
-            } else {
-                Vec3::Y
-            }
-        } else {
-            up
-        };
-        let view = glam::camera::rh::view::look_to_mat4(pos, dir, up);
-        let proj = match self.kind {
-            ProjectorKind3D::Orthographic => {
-                let hw = (self.size.x.abs() * 0.5).max(1e-4);
-                let hh = (self.size.y.abs() * 0.5).max(1e-4);
-                let hd = (self.size.z.abs() * 0.5).max(1e-4);
-                // Reverse-Z orthographic centered on projector position [-hd .. +hd]
-                glam::camera::rh::proj::directx::orthographic(-hw, hw, -hh, hh, hd, -hd)
-            }
-            ProjectorKind3D::Perspective => {
-                let fov = self.fov_y.clamp(0.05, std::f32::consts::PI - 0.05);
-                let aspect = self.aspect.max(1e-4);
-                let near = self.near.max(0.01);
-                let far = self.far.max(near + 0.01);
-                // Reverse-Z perspective
-                glam::camera::rh::proj::directx::perspective(fov, aspect, far, near)
-            }
-        };
-        proj * view
+        build_projector_view_proj(
+            self.kind,
+            self.size,
+            self.fov_y,
+            self.aspect,
+            self.near,
+            self.far,
+            transform,
+        )
     }
 
     /// Builds the GPU uniform representation for this projector.

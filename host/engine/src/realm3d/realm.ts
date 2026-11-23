@@ -1,7 +1,4 @@
-/**
- * High-level Realm3D manager combining an ECS World, Anchor solver, and core sync.
- */
-
+/** High-level Realm3D manager combining an ECS World, Anchor solver, and core sync. */
 import type {
   Camera3DDesc,
   CameraLookAt3D,
@@ -17,7 +14,8 @@ import type {
   Portal3DDesc,
   Projector3DDesc,
   Transform3D,
-  TransitionConfig
+  TransitionConfig,
+  UvDecalBake3DDesc
 } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
 import type { Transform3DProps } from '../anchors/component';
@@ -560,6 +558,9 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
 
   updateBones(modelId: number, data: Float32Array): void {
     this._engine?.realm3dUpdateBones(this.realmId, modelId, data, data.length);
+  }
+  bakeUvDecal(bake: UvDecalBake3DDesc, transform: Transform3D): void {
+    this._engine?.realm3dBakeUvDecal(this.realmId, bake, transform);
   }
 
   /** Helper to animate a model transform directly through ECS. */
