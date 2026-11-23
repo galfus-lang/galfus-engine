@@ -1,8 +1,9 @@
 ---
 name: galfus-animation
 description: >-
-  Use this skill to configure keyframe and skeletal animations in Galfus Engine,
-  including AnimationClip, AnimationPlayer3D, crossfading, loop modes, and pose blending.
+  Use this skill to configure keyframe and skeletal animations and native property transitions
+  in Galfus Engine, including AnimationClip, AnimationPlayer3D, crossfading, loop modes,
+  and core-evaluated transitions for models, cameras, lights, projectors/decals, and IK targets.
 ---
 
 # Galfus Engine Animation System
@@ -101,6 +102,28 @@ const bounceClip: AnimationClip = {
 player.addClip(bounceClip);
 player.play('Bounce', 'repeat');
 ```
+
+## 7. Native Property Transitions (Projectors, Decals & IK Targets)
+
+Use `runtime.animation.createTransition` and `transitionTo` to animate core properties with native easing and loop modes (`'once'`, `'loop'`, `'pingPong'`) without per-frame JS overhead:
+
+```typescript
+const animId = runtime.animation.createTransition(
+  { type: 'vec4', value: [1.0, 0.25, 0.35, 0.95] },
+  { duration: 2.0, easing: 'easeInOutSine', loopMode: 'pingPong' },
+  { kind: 'projector3DColor', realmId: realm3d.realmId, projectorId }
+);
+runtime.animation.transitionTo(
+  animId,
+  { type: 'vec4', value: [0.2, 0.85, 1.0, 0.85] },
+  { duration: 2.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+);
+```
+
+Supported 3D projector & IK native `AnimationTarget` kinds:
+
+- `projector3DTransform` (`vec3` position or `transform3D`), `projector3DColor` (`vec4`), `projector3DSize` (`vec3`), `projector3DFov` (`scalar`), `projector3DUvRect` (`vec4`), `projector3DAngleFade` (`scalar`)
+- `ik3DTarget` (`vec3` world target for an active `ikId`)
 
 ## Best Practices
 
