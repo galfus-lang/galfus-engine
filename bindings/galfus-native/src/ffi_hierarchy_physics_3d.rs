@@ -371,3 +371,200 @@ pub unsafe extern "C" fn galfus_realm_3d_body_command(
         }
     }
 }
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Skin3DDesc {
+    model_id: u32,
+    joint_model_ids: Vec<u32>,
+    inverse_bind_matrices: Vec<f32>,
+}
+
+/// Registers a core-evaluated 3D skeletal skin.
+///
+/// # Safety
+/// `desc_json` must be a valid, null-terminated UTF-8 C string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_3d_create_skin(
+    realm_id: u32,
+    skin_id: u32,
+    desc_json: *const c_char,
+) -> i32 {
+    let json_str = match unsafe { from_c_str(desc_json) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+    let desc: Skin3DDesc = match serde_json::from_str(json_str) {
+        Ok(d) => d,
+        Err(e) => {
+            set_last_error(&format!("Invalid Skin3DDesc JSON: {e}"));
+            return -1;
+        }
+    };
+    if desc.inverse_bind_matrices.len() != desc.joint_model_ids.len() * 16 {
+        set_last_error("Skin3DDesc inverseBindMatrices length must be jointModelIds.len() * 16");
+        return -1;
+    }
+    let inv_binds: Vec<glam::Mat4> = desc
+        .inverse_bind_matrices
+        .as_chunks::<16>()
+        .0
+        .iter()
+        .map(glam::Mat4::from_cols_array)
+        .collect();
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D #{realm_id} not found"))?;
+        realm
+            .create_skin_3d(skin_id, desc.model_id, desc.joint_model_ids, inv_binds)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Removes a registered 3D skeletal skin.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_destroy_skin(realm_id: u32, skin_id: u32) -> i32 {
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D #{realm_id} not found"))?;
+        realm.destroy_skin_3d(skin_id).map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Registers or updates a 3D Inverse Kinematics constraint.
+///
+/// # Safety
+/// `constraint_json` must be a valid, null-terminated UTF-8 C string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn galfus_realm_3d_set_ik_constraint(
+    realm_id: u32,
+    ik_id: u32,
+    constraint_json: *const c_char,
+) -> i32 {
+    let json_str = match unsafe { from_c_str(constraint_json) } {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e);
+            return -1;
+        }
+    };
+    let constraint: galfus_realm_3d::context_ik::IkConstraint3D =
+        match serde_json::from_str(json_str) {
+            Ok(c) => c,
+            Err(e) => {
+                set_last_error(&format!("Invalid IkConstraint3D JSON: {e}"));
+                return -1;
+            }
+        };
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D #{realm_id} not found"))?;
+        realm
+            .set_ik_constraint_3d(ik_id, constraint)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Fast-path update for an existing 3D IK constraint target position.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_set_ik_target(
+    realm_id: u32,
+    ik_id: u32,
+    tx: f32,
+    ty: f32,
+    tz: f32,
+) -> i32 {
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D #{realm_id} not found"))?;
+        realm
+            .set_ik_target_3d(ik_id, [tx, ty, tz], None, None)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Removes an existing 3D IK constraint.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_realm_3d_remove_ik_constraint(realm_id: u32, ik_id: u32) -> i32 {
+    match with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D #{realm_id} not found"))?;
+        realm
+            .remove_ik_constraint_3d(ik_id)
+            .map_err(|e| e.to_string())
+    }) {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Sweeps a sphere across 3D colliders (including TriMesh and Heightfield) and returns hit JSON.
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn galfus_realm_3d_spherecast(
+    realm_id: u32,
+    origin_x: f32,
+    origin_y: f32,
+    origin_z: f32,
+    dir_x: f32,
+    dir_y: f32,
+    dir_z: f32,
+    radius: f32,
+    max_dist: f32,
+    mask: u32,
+) -> *mut c_char {
+    let res = with_multiverse_mut(|mv| {
+        let realm = mv
+            .get_realm_mut::<Realm3DContext>(realm_id)
+            .ok_or_else(|| format!("Realm3D #{realm_id} not found"))?;
+        let ray = Ray3D {
+            origin: Vec3::new(origin_x, origin_y, origin_z),
+            direction: Vec3::new(dir_x, dir_y, dir_z).normalize_or_zero(),
+        };
+        let hits = realm.spherecast_colliders_3d(ray, radius, max_dist, mask);
+        serde_json::to_string(&hits).map_err(|e| e.to_string())
+    });
+
+    match res {
+        Ok(json) => to_c_string(&json),
+        Err(e) => {
+            set_last_error(&e);
+            std::ptr::null_mut()
+        }
+    }
+}

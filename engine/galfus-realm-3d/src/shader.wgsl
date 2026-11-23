@@ -27,9 +27,18 @@ struct LightUniform {
 
 struct LightsHeader {
     count: u32,
-    _pad0: u32,
+    projector_count: u32,
     _pad1: u32,
     _pad2: u32,
+};
+
+struct ProjectorUniform {
+    view_proj: mat4x4<f32>,
+    direction: vec4<f32>,
+    color: vec4<f32>,
+    uv_rect: vec4<f32>,
+    pbr_params: vec4<f32>,
+    masks: vec4<u32>,
 };
 
 struct MaterialUniform {
@@ -60,6 +69,9 @@ struct ModelUniform {
 @group(0) @binding(5) var shadow_sampler: sampler_comparison;
 @group(0) @binding(6) var<storage, read> bones: array<mat4x4<f32>>;
 @group(0) @binding(7) var<storage, read> shadow_matrices: array<mat4x4<f32>>;
+@group(0) @binding(8) var<storage, read> projectors: array<ProjectorUniform>;
+@group(0) @binding(9) var projector_textures: texture_2d_array<f32>;
+@group(0) @binding(10) var projector_depth_map: texture_depth_2d_array;
 
 @group(1) @binding(0) var<uniform> material: MaterialUniform;
 @group(1) @binding(1) var mat_tex_0: texture_2d<f32>;
@@ -496,11 +508,77 @@ fn shade_surface(in: VertexOutput, front_facing: bool) -> vec4<f32> {
     let N = normalize(s_out.normal);
     let V = s_in.view_dir;
 
-    let albedo = s_out.albedo;
-    var direct_light = vec3<f32>(0.0);
+    var albedo = s_out.albedo;
+    var emissive_accum = s_out.emissive;
+    var roughness = clamp(s_out.roughness, 0.04, 1.0);
+    var metallic = clamp(s_out.metallic, 0.0, 1.0);
 
-    let roughness = clamp(s_out.roughness, 0.04, 1.0);
-    let metallic = clamp(s_out.metallic, 0.0, 1.0);
+    // Forward PBR Decals & Occluded Texture Projectors (evaluated before lighting)
+    let proj_count = lights_header.projector_count;
+    for (var pi = 0u; pi < proj_count; pi = pi + 1u) {
+        let proj = projectors[pi];
+        if ((object.layer_mask.x & proj.masks.x) == 0u) {
+            continue;
+        }
+        let facing = dot(N, -proj.direction.xyz);
+        let angle_fade = proj.direction.w;
+        if (facing <= angle_fade) {
+            continue;
+        }
+        let p_clip = proj.view_proj * vec4<f32>(in.world_pos, 1.0);
+        if (p_clip.w <= 1e-5) {
+            continue;
+        }
+        let p_ndc = p_clip.xyz / p_clip.w;
+        if (p_ndc.x < -1.0 || p_ndc.x > 1.0 || p_ndc.y < -1.0 || p_ndc.y > 1.0 || p_ndc.z < 0.0 || p_ndc.z > 1.0) {
+            continue;
+        }
+        let raw_uv = vec2<f32>(p_ndc.x * 0.5 + 0.5, -p_ndc.y * 0.5 + 0.5);
+
+        var occ_vis = 1.0;
+        let occ_layer = proj.masks.z;
+        if (occ_layer < 8u) {
+            let slope = 1.0 - max(facing, 0.0);
+            let bias = 0.0005 + 0.0015 * slope;
+            let ref_depth = clamp(p_ndc.z - bias, 0.0, 1.0);
+            occ_vis = textureSampleCompare(projector_depth_map, shadow_sampler, raw_uv, i32(occ_layer), ref_depth);
+            if (occ_vis <= 0.001) {
+                continue;
+            }
+        }
+
+        var sample_col = vec4<f32>(1.0);
+        if (proj.pbr_params.w > 0.5) {
+            let tex_uv = mix(proj.uv_rect.xy, proj.uv_rect.zw, raw_uv);
+            sample_col = textureSample(projector_textures, sampler_linear_clamp, tex_uv, i32(proj.masks.y));
+        }
+        let angle_weight = smoothstep(angle_fade, min(angle_fade + 0.15, 1.0), facing);
+        let final_col = sample_col * proj.color;
+        let alpha = clamp(final_col.a * angle_weight * occ_vis, 0.0, 1.0);
+        if (alpha <= 0.001) {
+            continue;
+        }
+
+        let blend_code = u32(round(proj.pbr_params.z));
+        if (blend_code == 1u) {
+            // Multiply
+            albedo = vec4<f32>(mix(albedo.rgb, albedo.rgb * final_col.rgb, alpha), albedo.a);
+        } else if (blend_code == 2u) {
+            // Additive emissive projection
+            emissive_accum += final_col.rgb * alpha;
+        } else {
+            // Alpha PBR blend
+            albedo = vec4<f32>(mix(albedo.rgb, final_col.rgb, alpha), albedo.a);
+            if (proj.pbr_params.x >= 0.0) {
+                roughness = clamp(mix(roughness, proj.pbr_params.x, alpha), 0.04, 1.0);
+            }
+            if (proj.pbr_params.y >= 0.0) {
+                metallic = clamp(mix(metallic, proj.pbr_params.y, alpha), 0.0, 1.0);
+            }
+        }
+    }
+
+    var direct_light = vec3<f32>(0.0);
     let shininess = (2.0 / (roughness * roughness)) - 2.0;
 
     let light_count = lights_header.count;
@@ -599,7 +677,7 @@ fn shade_surface(in: VertexOutput, front_facing: bool) -> vec4<f32> {
 
     let occlusion = mix(1.0, tex_ao.r, material.refraction_params.w);
     let ambient = albedo.rgb * env.ambient_color.rgb * env.ambient_color.a * occlusion * in.instance_pbr.w;
-    var final_color = ambient + direct_light + s_out.emissive;
+    var final_color = ambient + direct_light + emissive_accum;
 
     // Refraction transmission for glass, water, crystals
     let is_refractive = surface_type == 4u;
@@ -614,7 +692,7 @@ fn shade_surface(in: VertexOutput, front_facing: bool) -> vec4<f32> {
         let fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
         let transmitted = mix(bg_color, bg_color * albedo.rgb, albedo.a);
         let spec_reflection = direct_light + vec3<f32>(fresnel * material.pbr_params.z);
-        final_color = transmitted + spec_reflection + s_out.emissive;
+        final_color = transmitted + spec_reflection + emissive_accum;
     }
 
     // Planar reflection for mirrors (5u) and optical portals (6u)
@@ -630,9 +708,9 @@ fn shade_surface(in: VertexOutput, front_facing: bool) -> vec4<f32> {
             let fresnel = pow(1.0 - max(dot(N, V), 0.0), 2.0);
             let tint = mix(albedo.rgb, vec3<f32>(1.0), fresnel * 0.4);
             let refl_strength = material.pbr_params.z;
-            final_color = refl_color * tint * refl_strength + direct_light + s_out.emissive;
+            final_color = refl_color * tint * refl_strength + direct_light + emissive_accum;
         } else {
-            final_color = refl_color + s_out.emissive;
+            final_color = refl_color + emissive_accum;
         }
     }
 

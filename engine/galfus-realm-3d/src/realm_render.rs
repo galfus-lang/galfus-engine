@@ -125,6 +125,18 @@ impl Realm3DContext {
                 &self.geometries,
                 self.total_time,
             );
+            if let Some(proj_gpu) = &self.projector_gpu {
+                proj_gpu.render_occlusion_passes(
+                    &mut encoder,
+                    queue,
+                    shadow_pipe,
+                    &self.models,
+                    &self.instanced_models,
+                    &self.materials,
+                    &self.geometries,
+                    self.total_time,
+                );
+            }
         }
 
         let has_refr = !collector.refractive.is_empty();
@@ -261,12 +273,14 @@ impl Realm3DContext {
                     bytemuck::bytes_of(&v_cam),
                 );
 
-                if let Some(shadow_map) = &self.shadow_map {
+                if let (Some(shadow_map), Some(proj_gpu)) = (&self.shadow_map, &self.projector_gpu)
+                {
                     portal_pipe.ensure_virtual_scene_bind_group(
                         device,
                         pipeline,
                         scene_buffers,
                         shadow_map,
+                        proj_gpu,
                         self.scene_bindings_generation,
                     );
                     let v_bg = portal_pipe.virtual_scene_bind_group();

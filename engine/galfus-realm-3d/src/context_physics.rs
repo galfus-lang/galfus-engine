@@ -72,7 +72,20 @@ impl Realm3DContext {
         let scale = [pose.scale.x, pose.scale.y, pose.scale.z];
         // Synchronize all attached colliders for this entity
         for collider in self.colliders.values().filter(|c| c.model_id == entity_id) {
-            world.sync_collider(entity_id, collider, Some(&desc), scale);
+            let mesh_data = match &collider.shape {
+                galfus_realm_core::collision::ColliderShape3D::TriMesh { geometry_id } => {
+                    self.geometries.get(geometry_id).map(|(geom, _)| {
+                        let verts: Vec<[f32; 3]> =
+                            geom.vertices.iter().map(|v| v.position).collect();
+                        (verts, geom.indices.clone())
+                    })
+                }
+                _ => None,
+            };
+            let mesh_ref = mesh_data
+                .as_ref()
+                .map(|(v, i)| (v.as_slice(), i.as_slice()));
+            world.sync_collider_with_mesh(entity_id, collider, Some(&desc), scale, mesh_ref);
         }
 
         Ok(())

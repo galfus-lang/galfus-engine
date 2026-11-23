@@ -318,3 +318,67 @@ pub fn realm_3d_raycast(
     );
     ffi_string_result(result)
 }
+
+#[napi(js_name = "realm3dCreateSkin")]
+pub fn realm_3d_create_skin(realm_id: u32, skin_id: u32, desc_json: String) -> Result<()> {
+    let c = std::ffi::CString::new(desc_json)
+        .map_err(|e| Error::new(Status::InvalidArg, e.to_string()))?;
+    check_ffi_res(unsafe { crate::galfus_realm_3d_create_skin(realm_id, skin_id, c.as_ptr()) })
+}
+
+#[napi(js_name = "realm3dDestroySkin")]
+pub fn realm_3d_destroy_skin(realm_id: u32, skin_id: u32) -> Result<()> {
+    check_ffi_res(crate::galfus_realm_3d_destroy_skin(realm_id, skin_id))
+}
+
+#[napi(js_name = "realm3dSetIkConstraint")]
+pub fn realm_3d_set_ik_constraint(
+    realm_id: u32,
+    ik_id: u32,
+    constraint_json: String,
+) -> Result<()> {
+    let c = std::ffi::CString::new(constraint_json)
+        .map_err(|e| Error::new(Status::InvalidArg, e.to_string()))?;
+    check_ffi_res(unsafe { crate::galfus_realm_3d_set_ik_constraint(realm_id, ik_id, c.as_ptr()) })
+}
+
+#[napi(js_name = "realm3dSetIkTarget")]
+pub fn realm_3d_set_ik_target(realm_id: u32, ik_id: u32, tx: f64, ty: f64, tz: f64) -> Result<()> {
+    check_ffi_res(crate::galfus_realm_3d_set_ik_target(
+        realm_id, ik_id, tx as f32, ty as f32, tz as f32,
+    ))
+}
+
+#[napi(js_name = "realm3dRemoveIkConstraint")]
+pub fn realm_3d_remove_ik_constraint(realm_id: u32, ik_id: u32) -> Result<()> {
+    check_ffi_res(crate::galfus_realm_3d_remove_ik_constraint(realm_id, ik_id))
+}
+
+#[napi(js_name = "realm3dSpherecast")]
+#[allow(clippy::too_many_arguments)]
+pub fn realm_3d_spherecast(
+    realm_id: u32,
+    origin_x: f64,
+    origin_y: f64,
+    origin_z: f64,
+    dir_x: f64,
+    dir_y: f64,
+    dir_z: f64,
+    radius: f64,
+    max_dist: f64,
+    mask: u32,
+) -> Result<String> {
+    let result = crate::galfus_realm_3d_spherecast(
+        realm_id,
+        origin_x as f32,
+        origin_y as f32,
+        origin_z as f32,
+        dir_x as f32,
+        dir_y as f32,
+        dir_z as f32,
+        radius as f32,
+        max_dist as f32,
+        mask,
+    );
+    ffi_string_result(result)
+}

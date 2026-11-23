@@ -429,7 +429,9 @@ export class Realm3DSyncSystem {
           entry.shape.type !== 'sphere' &&
           entry.shape.type !== 'cylinder' &&
           entry.shape.type !== 'capsule' &&
-          entry.shape.type !== 'plane'
+          entry.shape.type !== 'plane' &&
+          entry.shape.type !== 'triMesh' &&
+          entry.shape.type !== 'heightfield'
         )
           continue;
         currentColliders.add(entry.colliderId);
@@ -450,6 +452,16 @@ export class Realm3DSyncSystem {
               type: 'capsule',
               radius: entry.shape.radius,
               halfHeight: entry.shape.halfHeight
+            };
+          } else if (entry.shape.type === 'triMesh') {
+            shapeDesc = { type: 'triMesh', geometryId: entry.shape.geometryId };
+          } else if (entry.shape.type === 'heightfield') {
+            shapeDesc = {
+              type: 'heightfield',
+              heights: entry.shape.heights,
+              nrows: entry.shape.nrows,
+              ncols: entry.shape.ncols,
+              scale: entry.shape.scale
             };
           } else {
             shapeDesc = { type: 'rectangle', halfExtents: entry.shape.halfExtents };

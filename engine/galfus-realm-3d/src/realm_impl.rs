@@ -38,6 +38,8 @@ impl Realm for Realm3DContext {
         if !self.hierarchy.is_empty() {
             self.solve_hierarchy(ctx.delta_time);
         }
+        self.solve_ik();
+        self.solve_skins();
 
         for (emitter, transform, state) in self.emitters.values_mut() {
             state.update(
@@ -89,11 +91,15 @@ impl Realm for Realm3DContext {
             pipeline,
             shadow_pipe,
             &mut self.shadow_map,
+            &mut self.projector_gpu,
             &mut self.scene_buffers,
             &self.environment,
             &self.lights,
+            &self.projectors,
+            ctx.textures,
             &self.bones,
             &mut self.lights_dirty,
+            &mut self.projectors_dirty,
             &mut self.bones_dirty,
         ) {
             self.scene_bindings_generation = self.scene_bindings_generation.wrapping_add(1);
@@ -115,6 +121,11 @@ impl Realm for Realm3DContext {
             .collect();
         if let Some(tex_id) = self.environment.skybox.texture_id.filter(|&id| id != 0) {
             ids.push(tex_id);
+        }
+        for (proj, _) in self.projectors.values() {
+            if let Some(tex_id) = proj.texture_id.filter(|&id| id != 0) {
+                ids.push(tex_id);
+            }
         }
         ids
     }

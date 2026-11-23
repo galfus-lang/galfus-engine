@@ -64,6 +64,24 @@ pub enum ColliderShape3D {
         /// Distance from origin along the normal.
         distance: f32,
     },
+    /// Triangle mesh collider referencing a registered `Geometry3D` logical ID.
+    #[serde(rename_all = "camelCase")]
+    TriMesh {
+        /// Logical ID of the `Geometry3D` whose triangles form this collider.
+        geometry_id: u32,
+    },
+    /// Regular grid heightfield collider centered at the local origin.
+    #[serde(rename_all = "camelCase")]
+    Heightfield {
+        /// Row-major height samples (`nrows * ncols` elements).
+        heights: Vec<f32>,
+        /// Number of grid rows along the local Z axis (`>= 2`).
+        nrows: usize,
+        /// Number of grid columns along the local X axis (`>= 2`).
+        ncols: usize,
+        /// Total grid extent `[size_x, height_scale, size_z]`.
+        scale: [f32; 3],
+    },
 }
 
 /// 2D collision component attached to a logical model.
@@ -173,6 +191,21 @@ impl Collider3D {
                 Vec3::from(*normal).is_finite()
                     && Vec3::from(*normal).length_squared() > 0.0
                     && distance.is_finite()
+            }
+            ColliderShape3D::TriMesh { geometry_id } => {
+                *geometry_id > 0 && !crate::id::is_reserved_logical_id(*geometry_id)
+            }
+            ColliderShape3D::Heightfield {
+                heights,
+                nrows,
+                ncols,
+                scale,
+            } => {
+                *nrows >= 2
+                    && *ncols >= 2
+                    && heights.len() == nrows.saturating_mul(*ncols)
+                    && heights.iter().all(|v| v.is_finite())
+                    && scale.iter().all(positive)
             }
         };
         geometry

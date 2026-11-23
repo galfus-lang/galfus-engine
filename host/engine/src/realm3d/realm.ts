@@ -8,12 +8,15 @@ import type {
   CameraLookAt3DStateDesc,
   EnvironmentRealm3DDesc,
   GalfusEngine,
+  IkConstraint3DDesc,
   InstancedModel3DDesc,
   Light3DDesc,
   Material3DDesc,
   Model3DDesc,
   ParticleEmitter3DDesc,
   Portal3DDesc,
+  Projector3DDesc,
+  Transform3D,
   TransitionConfig
 } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
@@ -227,6 +230,17 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     return id;
   }
 
+  private _parseHits3D(res: unknown) {
+    if (typeof res === 'string') {
+      try {
+        return translateColliderHits(this.world, '3D', JSON.parse(res));
+      } catch {
+        return [];
+      }
+    }
+    return Array.isArray(res) ? translateColliderHits(this.world, '3D', res) : [];
+  }
+
   raycast(
     origin: [number, number, number],
     direction: [number, number, number],
@@ -234,33 +248,66 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     mask = 0xffffffff
   ) {
     if (this._disposed) throw new Error('Cannot query a disposed Realm3D.');
-    if (
-      this._engine &&
-      'realm3dRaycast' in this._engine &&
-      typeof this._engine.realm3dRaycast === 'function'
-    ) {
+    if (typeof this._engine?.realm3dRaycast === 'function') {
       const res = this._engine.realm3dRaycast(
         this.realmId,
-        origin[0],
-        origin[1],
-        origin[2],
-        direction[0],
-        direction[1],
-        direction[2],
+        ...origin,
+        ...direction,
         maxDistance,
         mask
       );
-      if (typeof res === 'string') {
-        try {
-          return translateColliderHits(this.world, '3D', JSON.parse(res));
-        } catch {
-          return [];
-        }
-      }
-      if (Array.isArray(res)) return translateColliderHits(this.world, '3D', res);
+      if (typeof res === 'string' || Array.isArray(res)) return this._parseHits3D(res);
     }
     this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0 });
     return raycast3D(this.world, origin, direction, maxDistance, mask);
+  }
+
+  spherecast(
+    origin: [number, number, number],
+    direction: [number, number, number],
+    radius: number,
+    maxDistance: number,
+    mask = 0xffffffff
+  ) {
+    if (this._disposed) throw new Error('Cannot query a disposed Realm3D.');
+    if (typeof this._engine?.realm3dSpherecast === 'function') {
+      return this._parseHits3D(
+        this._engine.realm3dSpherecast(
+          this.realmId,
+          ...origin,
+          ...direction,
+          radius,
+          maxDistance,
+          mask
+        )
+      );
+    }
+    return [];
+  }
+
+  setIkConstraint(ikId: number, constraint: IkConstraint3DDesc): void {
+    assertValidLogicalId(ikId, 'IkConstraintId');
+    this._engine?.realm3dSetIkConstraint(this.realmId, ikId, constraint);
+  }
+  setIkTarget(ikId: number, target: [number, number, number]): void {
+    assertValidLogicalId(ikId, 'IkConstraintId');
+    this._engine?.realm3dSetIkTarget(this.realmId, ikId, ...target);
+  }
+  removeIkConstraint(ikId: number): void {
+    assertValidLogicalId(ikId, 'IkConstraintId');
+    this._engine?.realm3dRemoveIkConstraint(this.realmId, ikId);
+  }
+  createProjector(projectorId: number, desc: Projector3DDesc, transform: Transform3D): void {
+    assertValidLogicalId(projectorId, 'ProjectorId');
+    this._engine?.realm3dCreateProjector(this.realmId, projectorId, desc, transform);
+  }
+  setProjectorTransform(projectorId: number, transform: Transform3D): void {
+    assertValidLogicalId(projectorId, 'ProjectorId');
+    this._engine?.realm3dSetProjectorTransform(this.realmId, projectorId, transform);
+  }
+  destroyProjector(projectorId: number): void {
+    assertValidLogicalId(projectorId, 'ProjectorId');
+    this._engine?.realm3dDestroyProjector(this.realmId, projectorId);
   }
 
   destroyEntity(entityId: EntityId): boolean {
@@ -515,9 +562,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     this._engine?.realm3dUpdateBones(this.realmId, modelId, data, data.length);
   }
 
-  /**
-   * Helper to animate a model transform directly through ECS.
-   */
+  /** Helper to animate a model transform directly through ECS. */
   animateModel(
     entityId: EntityId,
     targetValue: unknown,

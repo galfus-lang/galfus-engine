@@ -455,3 +455,52 @@ pub fn realm_3d_destroy_collider(realm_id: u32, collider_id: u32) -> Result<()> 
         collider_id,
     ))
 }
+
+#[napi(js_name = "realm3dCreateProjector")]
+pub fn realm_3d_create_projector(
+    env: Env,
+    realm_id: u32,
+    projector_id: u32,
+    projector: JsUnknown,
+    transform: JsUnknown,
+) -> Result<()> {
+    let c_proj = js_to_c_string(&env, Some(projector))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "projector cannot be null"))?;
+    let c_tf = js_to_c_string(&env, Some(transform))?
+        .ok_or_else(|| Error::new(Status::InvalidArg, "transform cannot be null"))?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d_portals::galfus_realm_3d_create_projector(
+            realm_id,
+            projector_id,
+            c_proj.as_ptr(),
+            c_tf.as_ptr(),
+        )
+    })
+}
+
+#[napi(js_name = "realm3dSetProjectorTransform")]
+pub fn realm_3d_set_projector_transform(
+    env: Env,
+    realm_id: u32,
+    projector_id: u32,
+    transform: JsUnknown,
+) -> Result<()> {
+    let tf_desc: crate::ffi_realm_3d_desc::Transform3DDesc = env.from_js_value(transform)?;
+    let native_tf = crate::ffi_native_structs::GalfusTransform3D::from(
+        galfus_realm_3d_resources::transform::Transform3D::from(tf_desc),
+    );
+    check_ffi_res(unsafe {
+        crate::ffi_realm_3d_portals::galfus_realm_3d_set_projector_transform(
+            realm_id,
+            projector_id,
+            &native_tf,
+        )
+    })
+}
+
+#[napi(js_name = "realm3dDestroyProjector")]
+pub fn realm_3d_destroy_projector(realm_id: u32, projector_id: u32) -> Result<()> {
+    check_ffi_res(
+        crate::ffi_realm_3d_portals::galfus_realm_3d_destroy_projector(realm_id, projector_id),
+    )
+}

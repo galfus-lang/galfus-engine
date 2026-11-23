@@ -20,6 +20,7 @@ pub struct SceneGpuBuffers {
     pub lights_buf: wgpu::Buffer,
     pub _lights_header_buf: wgpu::Buffer,
     pub _bones_buf: wgpu::Buffer,
+    pub projectors_buf: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
 }
 
@@ -29,11 +30,13 @@ impl SceneGpuBuffers {
         device: &wgpu::Device,
         pipeline: &crate::pipeline::Pipeline3D,
         shadow_map: &crate::shadow::ShadowMap3D,
+        projector_gpu: &crate::projector::ProjectorGpuResources3D,
         camera_buf: &wgpu::Buffer,
         env_buf: &wgpu::Buffer,
         lights_buf: &wgpu::Buffer,
         lights_header_buf: &wgpu::Buffer,
         bones_buf: &wgpu::Buffer,
+        projectors_buf: &wgpu::Buffer,
     ) -> wgpu::BindGroup {
         let b_entry = |binding, resource| wgpu::BindGroupEntry { binding, resource };
         device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -51,17 +54,30 @@ impl SceneGpuBuffers {
                 b_entry(5, wgpu::BindingResource::Sampler(&shadow_map.sampler)),
                 b_entry(6, bones_buf.as_entire_binding()),
                 b_entry(7, shadow_map.matrices_buffer.as_entire_binding()),
+                b_entry(8, projectors_buf.as_entire_binding()),
+                b_entry(
+                    9,
+                    wgpu::BindingResource::TextureView(&projector_gpu.color_array_view),
+                ),
+                b_entry(
+                    10,
+                    wgpu::BindingResource::TextureView(&projector_gpu.depth_array_view),
+                ),
             ],
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         device: &wgpu::Device,
         pipeline: &crate::pipeline::Pipeline3D,
         shadow_map: &crate::shadow::ShadowMap3D,
+        projector_gpu: &crate::projector::ProjectorGpuResources3D,
         env_uniform: &galfus_realm_3d_resources::environment::Environment3DUniform,
         lights_data: &[galfus_realm_3d_resources::light::Light3DUniform],
         light_count: u32,
+        projectors_data: &[galfus_realm_3d_resources::projector::Projector3DUniform],
+        projector_count: u32,
         bones_buf: wgpu::Buffer,
     ) -> Self {
         let camera_buf = device.create_buffer(&wgpu::BufferDescriptor {
@@ -83,22 +99,30 @@ impl SceneGpuBuffers {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
-        let header = [light_count, 0, 0, 0];
+        let header = [light_count, projector_count, 0, 0];
         let lights_header_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Lights Header Buffer"),
             contents: bytemuck::cast_slice(&header),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
+        let projectors_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Projectors Storage Buffer"),
+            contents: bytemuck::cast_slice(projectors_data),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
         let bind_group = Self::build_bind_group(
             device,
             pipeline,
             shadow_map,
+            projector_gpu,
             &camera_buf,
             &env_buf,
             &lights_buf,
             &lights_header_buf,
             &bones_buf,
+            &projectors_buf,
         );
 
         Self {
@@ -107,6 +131,7 @@ impl SceneGpuBuffers {
             lights_buf,
             _lights_header_buf: lights_header_buf,
             _bones_buf: bones_buf,
+            projectors_buf,
             bind_group,
         }
     }
@@ -116,16 +141,19 @@ impl SceneGpuBuffers {
         device: &wgpu::Device,
         pipeline: &crate::pipeline::Pipeline3D,
         shadow_map: &crate::shadow::ShadowMap3D,
+        projector_gpu: &crate::projector::ProjectorGpuResources3D,
     ) {
         self.bind_group = Self::build_bind_group(
             device,
             pipeline,
             shadow_map,
+            projector_gpu,
             &self.camera_buf,
             &self.env_buf,
             &self.lights_buf,
             &self._lights_header_buf,
             &self._bones_buf,
+            &self.projectors_buf,
         );
     }
 
@@ -135,26 +163,21 @@ impl SceneGpuBuffers {
         device: &wgpu::Device,
         pipeline: &crate::pipeline::Pipeline3D,
         shadow_map: &crate::shadow::ShadowMap3D,
+        projector_gpu: &crate::projector::ProjectorGpuResources3D,
         camera_buf: &wgpu::Buffer,
     ) -> wgpu::BindGroup {
-        let b_entry = |binding, resource| wgpu::BindGroupEntry { binding, resource };
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Virtual Camera Scene Bind Group"),
-            layout: &pipeline.scene_layout,
-            entries: &[
-                b_entry(0, camera_buf.as_entire_binding()),
-                b_entry(1, self.env_buf.as_entire_binding()),
-                b_entry(2, self.lights_buf.as_entire_binding()),
-                b_entry(3, self._lights_header_buf.as_entire_binding()),
-                b_entry(
-                    4,
-                    wgpu::BindingResource::TextureView(&shadow_map.array_view),
-                ),
-                b_entry(5, wgpu::BindingResource::Sampler(&shadow_map.sampler)),
-                b_entry(6, self._bones_buf.as_entire_binding()),
-                b_entry(7, shadow_map.matrices_buffer.as_entire_binding()),
-            ],
-        })
+        Self::build_bind_group(
+            device,
+            pipeline,
+            shadow_map,
+            projector_gpu,
+            camera_buf,
+            &self.env_buf,
+            &self.lights_buf,
+            &self._lights_header_buf,
+            &self._bones_buf,
+            &self.projectors_buf,
+        )
     }
 }
 
@@ -542,38 +565,4 @@ pub fn sync_realm_resources<'a>(
 
 #[path = "types_scene.rs"]
 mod types_scene;
-pub use types_scene::sync_scene_buffers;
-/// Ensures the Reverse-Z depth texture matches the current invocation viewport size.
-pub fn ensure_depth_texture<'a>(
-    device: &wgpu::Device,
-    depth_texture: &'a mut Option<(wgpu::Texture, wgpu::TextureView, glam::UVec2)>,
-    width: u32,
-    height: u32,
-) -> &'a wgpu::TextureView {
-    let size = glam::UVec2::new(width, height);
-    if let Some((_, _, d_size)) = depth_texture
-        && *d_size != size
-    {
-        *depth_texture = None;
-    }
-    if depth_texture.is_none() {
-        let tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Realm3D Depth Texture"),
-            size: wgpu::Extent3d {
-                width: width.max(1),
-                height: height.max(1),
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Depth32Float,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
-        *depth_texture = Some((tex, view, size));
-    }
-    let (_, view, _) = depth_texture.as_ref().unwrap();
-    view
-}
+pub use types_scene::{ensure_depth_texture, sync_scene_buffers};

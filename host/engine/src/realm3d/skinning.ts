@@ -14,12 +14,13 @@ import { SpatialDirtyFlags } from '../spatial/flags';
 import type { Model3DComponent, Skin3DComponent } from './components';
 
 export class SkinningSolveSystem {
-  // Pre-allocated scratch matrices for zero-GC execution
+  // Pre-allocated scratch matrices for zero-GC fallback execution
   private readonly _invModelMat: Mat4 = mat4.create();
   private readonly _tempMat: Mat4 = mat4.create();
   private readonly _skinMat: Mat4 = mat4.create();
   private readonly _invBindMat: Mat4 = mat4.create();
   private readonly _identityMat: Mat4 = mat4.create();
+  private readonly _registeredSkins = new Set<number>();
 
   constructor(
     readonly realmId: number,
@@ -27,12 +28,17 @@ export class SkinningSolveSystem {
   ) {}
 
   /**
-   * Evaluates all active skins and submits bone matrices to the engine.
+   * Evaluates or registers all active skins with the engine.
+   * Uses core-owned `realm3dCreateSkin` when supported to avoid per-frame FFI bone uploads.
    */
   solve(world: EcsWorld, engine: GalfusEngine | null): void {
     const skinEntities = world.query('Skin3D');
-    if (skinEntities.length === 0) return;
+    const useCoreSkins =
+      engine !== null &&
+      'realm3dCreateSkin' in engine &&
+      typeof engine.realm3dCreateSkin === 'function';
 
+    const activeSkinIds = new Set<number>();
     for (const skinEntityId of skinEntities) {
       const skin = world.getComponent<Skin3DComponent>(skinEntityId, 'Skin3D');
       if (!skin || skin.joints.length === 0) continue;
@@ -48,7 +54,32 @@ export class SkinningSolveSystem {
       const model = world.getComponent<Model3DComponent>(skin.modelEntityId, 'Model3D');
       if (!model) continue;
 
-      // Incremental optimization: skip re-computation and upload if model, joints, and skin are clean
+      if (useCoreSkins && engine) {
+        activeSkinIds.add(skinEntityId);
+        if (!this._registeredSkins.has(skinEntityId) || skin.isDirty) {
+          const jointModelIds: number[] = [];
+          for (let j = 0; j < skin.joints.length; j++) {
+            const jointEntityId = skin.joints[j];
+            const jointModel =
+              jointEntityId !== undefined
+                ? world.getComponent<Model3DComponent>(jointEntityId, 'Model3D')
+                : undefined;
+            jointModelIds.push(jointModel?.modelId ?? 0);
+          }
+          if (jointModelIds.every((id) => id > 0)) {
+            engine.realm3dCreateSkin(this.realmId, skinEntityId, {
+              modelId: model.modelId,
+              jointModelIds,
+              inverseBindMatrices: Array.from(skin.inverseBindMatrices)
+            });
+            this._registeredSkins.add(skinEntityId);
+            skin.isDirty = false;
+          }
+        }
+        continue;
+      }
+
+      // Fallback for mock/offline transports without core skinning
       const isModelDirty = (model.flags & SpatialDirtyFlags.WorldDirty) !== 0;
       let isAnyJointDirty = false;
       for (let j = 0; j < skin.joints.length; j++) {
@@ -65,16 +96,12 @@ export class SkinningSolveSystem {
         continue;
       }
 
-      // 1. Get model world matrix (from model component or cache)
       const modelWorld =
         model.worldMatrix ?? this.cache.getWorld3D(skin.modelEntityId) ?? this._identityMat;
-
-      // 2. Invert model world matrix
       if (!mat4.invert(this._invModelMat, modelWorld)) {
         mat4.identity(this._invModelMat);
       }
 
-      // 3. For each joint bone, compute: SkinMatrix = inv(ModelWorld) * JointWorld * InvBind
       const jointCount = skin.joints.length;
       for (let j = 0; j < jointCount; j++) {
         const jointEntityId = skin.joints[j];
@@ -85,24 +112,18 @@ export class SkinningSolveSystem {
           jointModel?.worldMatrix ?? this.cache.getWorld3D(jointEntityId) ?? this._identityMat;
         const offset = j * 16;
 
-        // Copy 16 floats of the inverse bind matrix into scratch
         for (let k = 0; k < 16; k++) {
           this._invBindMat[k] = skin.inverseBindMatrices[offset + k] ?? (k % 5 === 0 ? 1 : 0);
         }
 
-        // temp = JointWorld * InvBind
         mat4.multiply(this._tempMat, jointWorld, this._invBindMat);
-
-        // skinMat = inv(ModelWorld) * temp
         mat4.multiply(this._skinMat, this._invModelMat, this._tempMat);
 
-        // Store into pre-allocated jointMatrices buffer
         for (let k = 0; k < 16; k++) {
           skin.jointMatrices[offset + k] = this._skinMat[k] ?? 0;
         }
       }
 
-      // 4. Upload bone matrices to native core
       if (engine) {
         engine.realm3dUpdateBones(
           this.realmId,
@@ -113,6 +134,15 @@ export class SkinningSolveSystem {
       }
 
       skin.isDirty = false;
+    }
+
+    if (useCoreSkins && engine && this._registeredSkins.size > 0) {
+      for (const skinId of this._registeredSkins) {
+        if (!activeSkinIds.has(skinId)) {
+          engine.realm3dDestroySkin(this.realmId, skinId);
+          this._registeredSkins.delete(skinId);
+        }
+      }
     }
   }
 

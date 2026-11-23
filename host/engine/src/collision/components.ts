@@ -12,7 +12,15 @@ export type ColliderShape3D =
   | { type: 'sphere'; radius: number }
   | { type: 'cylinder'; radius: number; halfHeight: number }
   | { type: 'capsule'; radius: number; halfHeight: number }
-  | { type: 'plane'; halfExtents: [number, number] };
+  | { type: 'plane'; halfExtents: [number, number] }
+  | { type: 'triMesh'; geometryId: number }
+  | {
+      type: 'heightfield';
+      heights: number[];
+      nrows: number;
+      ncols: number;
+      scale: [number, number, number];
+    };
 
 export interface ColliderHit2D {
   entityId: number;
@@ -100,6 +108,21 @@ function validateShape(shape: ColliderShape2D | ColliderShape3D): void {
   } else if (shape.type === 'polygon') {
     if (!validPolygon(shape.vertices))
       throw new Error('Collider polygon must be simple, non-degenerate, and finite.');
+  } else if (shape.type === 'triMesh') {
+    assertValidLogicalId(shape.geometryId, 'GeometryId');
+  } else if (shape.type === 'heightfield') {
+    if (
+      !Number.isInteger(shape.nrows) ||
+      !Number.isInteger(shape.ncols) ||
+      shape.nrows < 2 ||
+      shape.ncols < 2 ||
+      shape.heights.length !== shape.nrows * shape.ncols ||
+      shape.heights.some((v) => !Number.isFinite(v)) ||
+      shape.scale.length !== 3 ||
+      shape.scale.some((v) => !Number.isFinite(v) || v <= 0)
+    ) {
+      throw new Error('Collider heightfield dimensions, heights, and scale must be valid.');
+    }
   } else if (
     shape.halfExtents.length !== (shape.type === 'box' ? 3 : 2) ||
     shape.halfExtents.some((v) => !Number.isFinite(v) || v <= 0)

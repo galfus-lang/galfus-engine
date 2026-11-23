@@ -209,6 +209,7 @@ impl PortalPipeline3D {
         pipeline: &crate::pipeline::Pipeline3D,
         scene: &crate::types::SceneGpuBuffers,
         shadow_map: &crate::shadow::ShadowMap3D,
+        projector_gpu: &crate::projector::ProjectorGpuResources3D,
         scene_bindings_generation: u64,
     ) {
         if self.virtual_scene_bind_group.is_none()
@@ -218,6 +219,7 @@ impl PortalPipeline3D {
                 device,
                 pipeline,
                 shadow_map,
+                projector_gpu,
                 &self.virtual_camera_buf,
             ));
             self.scene_bindings_generation = scene_bindings_generation;

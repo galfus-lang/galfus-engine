@@ -54,6 +54,57 @@ export const hierarchyPhysicsDescriptors: DescSpec[] = [
       },
       initialScale: { type: { tuple: ['number', 'number', 'number'] }, optional: true }
     }
+  },
+  {
+    kind: 'object',
+    name: 'Skin3DDesc',
+    doc: 'Core-evaluated 3D skeletal skin binding a target model to joint entities and inverse bind matrices.',
+    fields: {
+      modelId: { type: 'number' },
+      jointModelIds: { type: { array: 'number' } },
+      inverseBindMatrices: { type: { array: 'number' } }
+    }
+  },
+  {
+    kind: 'union',
+    name: 'IkConstraint3DDesc',
+    doc: '3D Inverse Kinematics constraint solved in core world space after hierarchy resolution.',
+    variants: [
+      {
+        inline: {
+          type: { type: { literal: 'twoBone' } },
+          rootId: { type: 'number' },
+          midId: { type: 'number' },
+          effectorId: { type: 'number' },
+          target: { type: { tuple: ['number', 'number', 'number'] } },
+          poleTarget: { type: { tuple: ['number', 'number', 'number'] }, optional: true },
+          weight: { type: 'number', optional: true },
+          active: { type: 'boolean', optional: true }
+        }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'fabrik' } },
+          chain: { type: { array: 'number' } },
+          target: { type: { tuple: ['number', 'number', 'number'] } },
+          iterations: { type: 'number', optional: true },
+          tolerance: { type: 'number', optional: true },
+          weight: { type: 'number', optional: true },
+          active: { type: 'boolean', optional: true }
+        }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'lookAt' } },
+          entityId: { type: 'number' },
+          target: { type: { tuple: ['number', 'number', 'number'] } },
+          forwardAxis: { type: { tuple: ['number', 'number', 'number'] }, optional: true },
+          upAxis: { type: { tuple: ['number', 'number', 'number'] }, optional: true },
+          weight: { type: 'number', optional: true },
+          active: { type: 'boolean', optional: true }
+        }
+      }
+    ]
   }
 ];
 
@@ -378,5 +429,78 @@ export const hierarchyPhysicsFunctions: FunctionSpec[] = [
       { name: 'mask', type: 'u32', doc: 'Collision mask.' }
     ],
     returnType: 'string'
+  },
+  {
+    cName: 'galfus_realm_3d_spherecast',
+    methodName: 'realm3dSpherecast',
+    doc: 'Sweeps a sphere across 3D colliders (including TriMesh and Heightfield).',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'originX', type: 'f32', doc: 'Origin X.' },
+      { name: 'originY', type: 'f32', doc: 'Origin Y.' },
+      { name: 'originZ', type: 'f32', doc: 'Origin Z.' },
+      { name: 'dirX', type: 'f32', doc: 'Direction X.' },
+      { name: 'dirY', type: 'f32', doc: 'Direction Y.' },
+      { name: 'dirZ', type: 'f32', doc: 'Direction Z.' },
+      { name: 'radius', type: 'f32', doc: 'Sphere radius.' },
+      { name: 'maxDist', type: 'f32', doc: 'Maximum distance.' },
+      { name: 'mask', type: 'u32', doc: 'Collision mask.' }
+    ],
+    returnType: 'string'
+  },
+  {
+    cName: 'galfus_realm_3d_create_skin',
+    methodName: 'realm3dCreateSkin',
+    doc: 'Registers a core-evaluated 3D skeletal skin.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'skinId', type: 'u32', doc: 'Logical ID of the Skin.' },
+      { name: 'desc', type: { json: 'Skin3DDesc' }, doc: 'Skin configuration.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_destroy_skin',
+    methodName: 'realm3dDestroySkin',
+    doc: 'Removes a registered 3D skeletal skin.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'skinId', type: 'u32', doc: 'Logical ID of the Skin.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_set_ik_constraint',
+    methodName: 'realm3dSetIkConstraint',
+    doc: 'Registers or updates a 3D Inverse Kinematics constraint.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'ikId', type: 'u32', doc: 'Logical ID of the IK constraint.' },
+      { name: 'constraint', type: { json: 'IkConstraint3DDesc' }, doc: 'IK constraint descriptor.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_set_ik_target',
+    methodName: 'realm3dSetIkTarget',
+    doc: 'Fast-path update for an existing 3D IK constraint target position.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'ikId', type: 'u32', doc: 'Logical ID of the IK constraint.' },
+      { name: 'tx', type: 'f32', doc: 'Target X.' },
+      { name: 'ty', type: 'f32', doc: 'Target Y.' },
+      { name: 'tz', type: 'f32', doc: 'Target Z.' }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_realm_3d_remove_ik_constraint',
+    methodName: 'realm3dRemoveIkConstraint',
+    doc: 'Removes an existing 3D IK constraint.',
+    params: [
+      { name: 'realmId', type: 'u32', doc: 'Logical ID of the 3D Realm.' },
+      { name: 'ikId', type: 'u32', doc: 'Logical ID of the IK constraint.' }
+    ],
+    returnType: 'i32'
   }
 ];

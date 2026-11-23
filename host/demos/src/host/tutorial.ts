@@ -13,7 +13,6 @@
 import {
   createRuntime,
   isKey,
-  mat4,
   type Model3DComponent,
   quat,
   type TargetId,
@@ -253,12 +252,9 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
   });
   realm3D.hierarchy.attach(barrel, turret);
 
-  // E) Floating Target Indicator using functional in-place constraint callback
+  // E) Floating Target Indicator following parent translation only
   const indicator = realm3D.createCube(0.28, indicatorMat, { position: [0, 2.6, 0] });
-  realm3D.hierarchy.attach(indicator, parentTank, (targetWorld, local, outWorld) => {
-    mat4.copy(outWorld, local);
-    mat4.copyPosition(outWorld, targetWorld);
-  });
+  realm3D.hierarchy.attach(indicator, parentTank, 'translation');
 
   // Debug gizmos on the floor
   realm3D.drawLine(-12, 0.02, 0, 12, 0.02, 0, 0.2, 0.6, 1.0, 0.7);

@@ -15,6 +15,7 @@ pub mod model;
 pub mod particle;
 pub mod portal;
 pub mod primitives;
+pub mod projector;
 pub mod transform;
 pub mod vertex;
 
@@ -36,5 +37,6 @@ pub use particle::{
     EmissionShape3D, Particle3D, Particle3DInstance, ParticleEmitter3D, ParticleEmitterState3D,
 };
 pub use portal::Portal3D;
+pub use projector::{Projector3D, Projector3DUniform, ProjectorBlendMode3D, ProjectorKind3D};
 pub use transform::Transform3D;
 pub use vertex::{MorphTarget3D, MorphVertex3D, PrimitiveTopology3D, Vertex3D};

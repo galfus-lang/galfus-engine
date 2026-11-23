@@ -53,15 +53,25 @@ pub struct Realm3DContext {
     pub(crate) pipeline: Option<Pipeline3D>,
     pub(crate) shadow_pipeline: Option<ShadowPipeline3D>,
     pub(crate) shadow_map: Option<ShadowMap3D>,
+    pub(crate) projector_gpu: Option<crate::projector::ProjectorGpuResources3D>,
     pub(crate) skybox_pipeline: Option<crate::skybox::SkyboxPipeline3D>,
     pub(crate) post_pipelines: crate::postprocess::PostProcessPipelines,
     pub(crate) light_cull_pipeline: Option<crate::light_cull::LightCullingPipeline3D>,
     pub(crate) gizmos: crate::gizmo::GizmoSystem3D,
     pub emitters: BTreeMap<u32, (ParticleEmitter3D, Transform3D, ParticleEmitterState3D)>,
     pub portals: BTreeMap<u32, galfus_realm_3d_resources::portal::Portal3D>,
+    pub projectors: BTreeMap<
+        u32,
+        (
+            galfus_realm_3d_resources::projector::Projector3D,
+            Transform3D,
+        ),
+    >,
     pub colliders: BTreeMap<u32, galfus_realm_core::Collider3D>,
     pub model_transforms: BTreeMap<u32, Transform3D>,
     pub hierarchy: galfus_realm_core::hierarchy::HierarchyGraph3D,
+    pub ik_constraints: BTreeMap<u32, crate::context_ik::IkConstraint3D>,
+    pub skins: BTreeMap<u32, crate::context_skinning::Skin3D>,
     pub physics: Option<galfus_physics::PhysicsWorld3D>,
     pub(crate) particle_renderer: Option<crate::particle::ParticleRenderer3D>,
     pub(crate) particle_alpha_instances: Vec<Particle3DInstance>,
@@ -75,6 +85,7 @@ pub struct Realm3DContext {
     pub(crate) model_bones: BTreeMap<u32, Vec<glam::Mat4>>,
     pub(crate) bones: Vec<glam::Mat4>,
     pub(crate) lights_dirty: bool,
+    pub(crate) projectors_dirty: bool,
     pub(crate) bones_dirty: bool,
     pub(crate) scene_bindings_generation: u64,
     pub(crate) total_time: f32,
@@ -96,16 +107,20 @@ impl Realm3DContext {
             colliders: BTreeMap::new(),
             model_transforms: BTreeMap::new(),
             hierarchy: galfus_realm_core::hierarchy::HierarchyGraph3D::new(),
+            ik_constraints: BTreeMap::new(),
+            skins: BTreeMap::new(),
             physics: None,
             pipeline: None,
             shadow_pipeline: None,
             shadow_map: None,
+            projector_gpu: None,
             skybox_pipeline: None,
             post_pipelines: crate::postprocess::PostProcessPipelines::new(),
             light_cull_pipeline: None,
             gizmos: crate::gizmo::GizmoSystem3D::new(),
             emitters: BTreeMap::new(),
             portals: BTreeMap::new(),
+            projectors: BTreeMap::new(),
             particle_renderer: None,
             particle_alpha_instances: Vec::new(),
             particle_additive_instances: Vec::new(),
@@ -118,6 +133,7 @@ impl Realm3DContext {
             model_bones: BTreeMap::new(),
             bones: Vec::new(),
             lights_dirty: true,
+            projectors_dirty: true,
             bones_dirty: true,
             scene_bindings_generation: 0,
             total_time: 0.0,
@@ -134,6 +150,8 @@ impl Realm3DContext {
         self.colliders.clear();
         self.model_transforms.clear();
         self.hierarchy.clear();
+        self.ik_constraints.clear();
+        self.skins.clear();
         if let Some(p) = self.physics.as_mut() {
             p.clear();
         }
@@ -145,9 +163,11 @@ impl Realm3DContext {
         self.particle_alpha_batches.clear();
         self.particle_additive_batches.clear();
         self.portals.clear();
+        self.projectors.clear();
         self.model_bones.clear();
         self.bones.clear();
         self.lights_dirty = true;
+        self.projectors_dirty = true;
         self.bones_dirty = true;
         self.gizmos.clear();
         self.portal_pipelines.clear();
@@ -158,6 +178,7 @@ impl Realm3DContext {
         self.pipeline = None;
         self.shadow_pipeline = None;
         self.shadow_map = None;
+        self.projector_gpu = None;
         self.skybox_pipeline = None;
         self.post_pipelines = crate::postprocess::PostProcessPipelines::new();
         self.light_cull_pipeline = None;
