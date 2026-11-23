@@ -9,7 +9,8 @@ import type {
   Light3DDesc,
   Material3DDesc,
   ParticleEmitter3DDesc,
-  Portal3DDesc
+  Portal3DDesc,
+  Projector3DDesc
 } from '@galfus/transport-types';
 import type { Component } from '../ecs/component';
 import type { EntityId } from '../ecs/entity';
@@ -292,6 +293,25 @@ export function createPortal3D(portalId: number, desc: Portal3DDesc): Portal3DCo
   return {
     type: 'Portal3D',
     portalId,
+    desc,
+    isDirty: true
+  };
+}
+
+export interface Projector3DComponent extends Component {
+  readonly type: 'Projector3D';
+  readonly projectorId: number;
+  desc: Projector3DDesc;
+  isDirty: boolean;
+}
+
+export function createProjector3D(
+  projectorId: number,
+  desc: Projector3DDesc
+): Projector3DComponent {
+  return {
+    type: 'Projector3D',
+    projectorId,
     desc,
     isDirty: true
   };

@@ -8,7 +8,7 @@
  * - [Space] Pause / resume animation
  * - [Esc] / [Q] Exit
  */
-import { isKey, type Model3DComponent, utils3D } from '@galfus/engine';
+import { isKey, type Model3DComponent, type Projector3DComponent, utils3D } from '@galfus/engine';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
 import { createCheckerTexture, createParticleAtlasTexture } from '../common/textures';
@@ -145,11 +145,10 @@ export async function runDemo3d13(options: HostDemoOptions = {}): Promise<void> 
 
     realm3d.flush();
 
-    // Phase 3A: Forward PBR Orthographic Decal on floor (receives PBR lighting & shadows)
+    // Phase 3A: Forward PBR Orthographic Decal on floor (ECS-managed + animated color transition)
     const floorDecalPos: [number, number, number] = [0.2, 0.6, 1.8];
     const floorDecalRot = utils3D.quatFromLookAt(floorDecalPos, [0.2, 0.0, 1.8]);
-    realm3d.createProjector(
-      1,
+    const floorDecal = realm3d.createProjector(
       {
         kind: 'orthographic',
         blendMode: 'alpha',
@@ -160,37 +159,45 @@ export async function runDemo3d13(options: HostDemoOptions = {}): Promise<void> 
         roughnessOverride: 0.2,
         layerMask: LAYER_WALL
       },
-      { position: floorDecalPos, rotation: floorDecalRot, scale: [1, 1, 1] }
+      { position: floorDecalPos, rotation: floorDecalRot }
     );
 
     // Phase 3B: Occluded Perspective Texture Projector aimed at the right side of the back wall
     let occlusionEnabled = true;
     const wallProjPos: [number, number, number] = [3.2, 2.5, 2.8];
-    const wallProjTf = {
-      position: wallProjPos,
-      rotation: utils3D.quatFromLookAt(wallProjPos, [3.2, 2.4, -4.0]),
-      scale: [1, 1, 1] as [number, number, number]
-    };
-    const updateWallProjector = () => {
-      realm3d.createProjector(
-        2,
-        {
-          kind: 'perspective',
-          blendMode: 'alpha',
-          textureId: goboTexId,
-          color: [1, 1, 1, 0.9],
-          fovY: (42 * Math.PI) / 180,
-          aspect: 1.25,
-          near: 0.3,
-          far: 12.0,
-          layerMask: LAYER_WALL,
-          occlusionMask: LAYER_OCCLUDER | LAYER_WALL,
-          castOcclusion: occlusionEnabled
-        },
-        wallProjTf
-      );
-    };
-    updateWallProjector();
+    const wallProj = realm3d.createProjector(
+      {
+        kind: 'perspective',
+        blendMode: 'alpha',
+        textureId: goboTexId,
+        color: [1, 1, 1, 0.9],
+        fovY: (42 * Math.PI) / 180,
+        aspect: 1.25,
+        near: 0.3,
+        far: 12.0,
+        layerMask: LAYER_WALL,
+        occlusionMask: LAYER_OCCLUDER | LAYER_WALL,
+        castOcclusion: occlusionEnabled
+      },
+      { position: wallProjPos, rotation: utils3D.quatFromLookAt(wallProjPos, [3.2, 2.4, -4.0]) }
+    );
+    realm3d.flush();
+
+    // Native transition pulsing the floor decal's color & opacity smoothly in core
+    const decalColorAnim = runtime.animation.createTransition(
+      { type: 'vec4', value: [1.0, 0.25, 0.35, 0.95] },
+      { duration: 2.0, easing: 'easeInOutSine', loopMode: 'pingPong' },
+      {
+        kind: 'projector3DColor',
+        realmId: realm3d.realmId,
+        projectorId: floorDecal.projectorId
+      }
+    );
+    runtime.animation.transitionTo(
+      decalColorAnim,
+      { type: 'vec4', value: [0.2, 0.85, 1.0, 0.85] },
+      { duration: 2.0, easing: 'easeInOutSine', loopMode: 'pingPong' }
+    );
 
     // Phase 4: UV-Space Tattoo Baking helper (stamps directly onto hero sphere's current pose!)
     const tattooColors: [number, number, number, number][] = [
@@ -251,7 +258,14 @@ export async function runDemo3d13(options: HostDemoOptions = {}): Promise<void> 
       if (isKey(ev, 'KeyC')) stampTattoo(true);
       if (isKey(ev, 'KeyO')) {
         occlusionEnabled = !occlusionEnabled;
-        updateWallProjector();
+        const projComp = realm3d.world.getComponent<Projector3DComponent>(
+          wallProj.entityId,
+          'Projector3D'
+        );
+        if (projComp) {
+          projComp.desc.castOcclusion = occlusionEnabled;
+          projComp.isDirty = true;
+        }
       }
     });
 
@@ -276,13 +290,11 @@ export async function runDemo3d13(options: HostDemoOptions = {}): Promise<void> 
         .getComponent<Model3DComponent>(occluderEnt, 'Model3D')
         ?.setPosition(3.2 + Math.sin(elapsed * 1.4) * 1.4, 2.4, -1.2);
 
-      // Gently sweep the floor decal
+      // Gently sweep the floor decal via ECS Model3D transform
       const fx = 0.2 + Math.sin(elapsed * 0.9) * 0.6;
-      realm3d.setProjectorTransform(1, {
-        position: [fx, 0.6, 1.8],
-        rotation: floorDecalRot,
-        scale: [1, 1, 1]
-      });
+      realm3d.world
+        .getComponent<Model3DComponent>(floorDecal.entityId, 'Model3D')
+        ?.setPosition(fx, 0.6, 1.8);
     });
 
     await runDemoLoop(runtime, { windowId, maxFrames, exitKeys: ['Escape', 'KeyQ'] });

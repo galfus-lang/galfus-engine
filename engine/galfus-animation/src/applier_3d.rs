@@ -227,6 +227,89 @@ pub(super) fn apply_target_value(
                 })?,
             )
             .map_err(realm_error),
+        AnimationTarget::Projector3DTransform {
+            realm_id,
+            projector_id,
+        } => {
+            let realm = realm(multiverse, *realm_id)?;
+            if let Some(position) = value.as_vec3() {
+                realm
+                    .set_projector_position(*projector_id, position)
+                    .map_err(realm_error)
+            } else {
+                realm
+                    .set_projector_transform(*projector_id, value.to_transform3d()?)
+                    .map_err(realm_error)
+            }
+        }
+        AnimationTarget::Projector3DColor {
+            realm_id,
+            projector_id,
+        } => realm(multiverse, *realm_id)?
+            .set_projector_color(
+                *projector_id,
+                value.as_vec4().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Vec4 for Projector3DColor".into())
+                })?,
+            )
+            .map_err(realm_error),
+        AnimationTarget::Projector3DSize {
+            realm_id,
+            projector_id,
+        } => realm(multiverse, *realm_id)?
+            .set_projector_size(
+                *projector_id,
+                value.as_vec3().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Vec3 for Projector3DSize".into())
+                })?,
+            )
+            .map_err(realm_error),
+        AnimationTarget::Projector3DFov {
+            realm_id,
+            projector_id,
+        } => realm(multiverse, *realm_id)?
+            .set_projector_fov(
+                *projector_id,
+                value.as_scalar().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Scalar for Projector3DFov".into())
+                })?,
+            )
+            .map_err(realm_error),
+        AnimationTarget::Projector3DUvRect {
+            realm_id,
+            projector_id,
+        } => realm(multiverse, *realm_id)?
+            .set_projector_uv_rect(
+                *projector_id,
+                value.as_vec4().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Vec4 for Projector3DUvRect".into())
+                })?,
+            )
+            .map_err(realm_error),
+        AnimationTarget::Projector3DAngleFade {
+            realm_id,
+            projector_id,
+        } => realm(multiverse, *realm_id)?
+            .set_projector_angle_fade(
+                *projector_id,
+                value.as_scalar().ok_or_else(|| {
+                    AnimationError::InvalidValue("Expected Scalar for Projector3DAngleFade".into())
+                })?,
+            )
+            .map_err(realm_error),
+        AnimationTarget::Ik3DTarget { realm_id, ik_id } => realm(multiverse, *realm_id)?
+            .set_ik_target_3d(
+                *ik_id,
+                value
+                    .as_vec3()
+                    .ok_or_else(|| {
+                        AnimationError::InvalidValue("Expected Vec3 for Ik3DTarget".into())
+                    })?
+                    .to_array(),
+                None,
+                None,
+            )
+            .map_err(realm_error),
         _ => unreachable!("Realm 3D dispatcher received a non-3D target"),
     }
 }

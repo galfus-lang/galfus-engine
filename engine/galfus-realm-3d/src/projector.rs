@@ -76,6 +76,7 @@ pub struct ProjectorGpuResources3D {
     blit_sampler: wgpu::Sampler,
     allocated_full: bool,
     allocated_depth: bool,
+    blitted_layers: Vec<Option<u32>>,
     pub occlusion_jobs: Vec<OccludedProjectorJob>,
 }
 
@@ -166,6 +167,7 @@ impl ProjectorGpuResources3D {
             blit_sampler,
             allocated_full: false,
             allocated_depth: false,
+            blitted_layers: Vec::new(),
             occlusion_jobs: Vec::new(),
         }
     }
@@ -220,6 +222,7 @@ impl ProjectorGpuResources3D {
             self.color_texture = tex;
             self.color_array_view = view;
             self.color_layer_views = layers;
+            self.blitted_layers = vec![None; MAX_PROJECTOR_TEXTURES as usize];
             self.allocated_full = true;
             bindings_changed = true;
         }
@@ -278,15 +281,25 @@ impl ProjectorGpuResources3D {
             uniforms.push(proj.build_uniform(tf, texture_layer, occlusion_layer));
         }
 
-        // Blit active projector textures into the array
-        if !tex_id_to_layer.is_empty() && self.allocated_full {
+        // Blit only projector textures whose assigned array layer changed
+        let pending_blits: Vec<(u32, u32)> = tex_id_to_layer
+            .iter()
+            .copied()
+            .filter(|&(tid, layer)| {
+                self.blitted_layers.get(layer as usize).copied().flatten() != Some(tid)
+            })
+            .collect();
+        if !pending_blits.is_empty() && self.allocated_full {
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Realm3D Projector Texture Blit Encoder"),
             });
-            for &(tid, layer) in &tex_id_to_layer {
+            for &(tid, layer) in &pending_blits {
                 let Some(src_view) = textures(tid) else {
                     continue;
                 };
+                if let Some(slot) = self.blitted_layers.get_mut(layer as usize) {
+                    *slot = Some(tid);
+                }
                 let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("Realm3D Projector Blit BG"),
                     layout: &self.blit_layout,

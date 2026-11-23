@@ -99,7 +99,14 @@ pub fn apply_target_value(
         | AnimationTarget::Particle3DTransform { .. }
         | AnimationTarget::Particle3DSpeed { .. }
         | AnimationTarget::Particle3DColorStart { .. }
-        | AnimationTarget::Particle3DColorEnd { .. } => {
+        | AnimationTarget::Particle3DColorEnd { .. }
+        | AnimationTarget::Projector3DTransform { .. }
+        | AnimationTarget::Projector3DColor { .. }
+        | AnimationTarget::Projector3DSize { .. }
+        | AnimationTarget::Projector3DFov { .. }
+        | AnimationTarget::Projector3DUvRect { .. }
+        | AnimationTarget::Projector3DAngleFade { .. }
+        | AnimationTarget::Ik3DTarget { .. } => {
             applier_3d::apply_target_value(target, value, multiverse)
         }
         AnimationTarget::SpriteTransform2D { .. }

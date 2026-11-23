@@ -41,6 +41,7 @@ import {
   createModel3D,
   createParticleEmitter3D,
   createPortal3D,
+  createProjector3D,
   createSkin3D,
   type GeometryResourceEntry,
   type MaterialResourceEntry,
@@ -181,6 +182,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     if (this._disposed) throw new Error('Cannot reset a disposed Realm3D.');
     this.world.reset();
     this.hierarchy.reset();
+    this.skinningSystem.reset();
     this.solver.cache.clear();
     this._geometries.clear();
     this._materials.clear();
@@ -200,6 +202,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     this._disposed = true;
     this._physics?.dispose();
     this.hierarchy.reset();
+    this.skinningSystem.reset();
     this.syncSystem.dispose(this._engine);
     if (this._engine) {
       this._engine.realm3dDestroy(this.realmId);
@@ -295,17 +298,15 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     assertValidLogicalId(ikId, 'IkConstraintId');
     this._engine?.realm3dRemoveIkConstraint(this.realmId, ikId);
   }
-  createProjector(projectorId: number, desc: Projector3DDesc, transform: Transform3D): void {
-    assertValidLogicalId(projectorId, 'ProjectorId');
-    this._engine?.realm3dCreateProjector(this.realmId, projectorId, desc, transform);
-  }
-  setProjectorTransform(projectorId: number, transform: Transform3D): void {
-    assertValidLogicalId(projectorId, 'ProjectorId');
-    this._engine?.realm3dSetProjectorTransform(this.realmId, projectorId, transform);
-  }
-  destroyProjector(projectorId: number): void {
-    assertValidLogicalId(projectorId, 'ProjectorId');
-    this._engine?.realm3dDestroyProjector(this.realmId, projectorId);
+  createProjector(
+    desc: Projector3DDesc,
+    transform?: Transform3DProps
+  ): { entityId: EntityId; projectorId: number } {
+    const entityId = this.world.createEntity(),
+      projectorId = this.allocateResourceId();
+    this._attachModel(entityId, projectorId, transform);
+    this.world.attachComponent(entityId, createProjector3D(projectorId, desc));
+    return { entityId, projectorId };
   }
 
   destroyEntity(entityId: EntityId): boolean {
@@ -360,9 +361,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     return model;
   }
 
-  /**
-   * Creates a pure spatial node with Model3DComponent (no Mesh attached).
-   */
+  /** Creates a pure spatial node with Model3DComponent (no Mesh attached). */
   createSpatialNode(transform?: Transform3DProps): EntityId {
     const entityId = this.world.createEntity();
     this._attachModel(entityId, this.allocateResourceId(), transform);

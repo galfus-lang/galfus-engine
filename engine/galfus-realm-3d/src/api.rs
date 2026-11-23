@@ -442,6 +442,9 @@ impl Realm3DContext {
             .ok_or_else(|| not_found(self.id, "Model", id))?;
         self.model_transforms.remove(&id);
         self.hierarchy.remove_entity(id);
+        self.skins.retain(|_, skin| skin.model_id != id);
+        self.ik_constraints
+            .retain(|_, constraint| !constraint.references_entity(id));
         if let Some(ref mut physics) = self.physics {
             physics.remove_rigid_body(id);
         }
@@ -458,6 +461,9 @@ impl Realm3DContext {
             .ok_or_else(|| not_found(self.id, "InstancedModel", id))?;
         self.model_transforms.remove(&id);
         self.hierarchy.remove_entity(id);
+        self.skins.retain(|_, skin| skin.model_id != id);
+        self.ik_constraints
+            .retain(|_, constraint| !constraint.references_entity(id));
         if let Some(ref mut physics) = self.physics {
             physics.remove_rigid_body(id);
         }

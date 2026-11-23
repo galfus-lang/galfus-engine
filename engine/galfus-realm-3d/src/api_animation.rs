@@ -214,4 +214,96 @@ impl Realm3DContext {
         self.dirty = true;
         Ok(())
     }
+
+    /// Updates only the position of an existing 3D projector or decal.
+    pub fn set_projector_position(
+        &mut self,
+        id: u32,
+        position: Vec3,
+    ) -> galfus_realm_core::RealmResult<()> {
+        self.projectors
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "Projector", id))?
+            .1
+            .position = position;
+        self.projectors_dirty = true;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the sRGB RGBA tint and opacity of an existing 3D projector or decal.
+    pub fn set_projector_color(
+        &mut self,
+        id: u32,
+        color: Vec4,
+    ) -> galfus_realm_core::RealmResult<()> {
+        self.projectors
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "Projector", id))?
+            .0
+            .color = color;
+        self.projectors_dirty = true;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the orthographic box extents `[width, height, depth]` of an existing 3D projector.
+    pub fn set_projector_size(
+        &mut self,
+        id: u32,
+        size: Vec3,
+    ) -> galfus_realm_core::RealmResult<()> {
+        self.projectors
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "Projector", id))?
+            .0
+            .size = size;
+        self.projectors_dirty = true;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the perspective vertical FOV (radians) of an existing 3D projector.
+    pub fn set_projector_fov(&mut self, id: u32, fov_y: f32) -> galfus_realm_core::RealmResult<()> {
+        self.projectors
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "Projector", id))?
+            .0
+            .fov_y = fov_y;
+        self.projectors_dirty = true;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the UV sub-rectangle `[u0, v0, u1, v1]` of an existing 3D projector or decal.
+    pub fn set_projector_uv_rect(
+        &mut self,
+        id: u32,
+        uv_rect: Vec4,
+    ) -> galfus_realm_core::RealmResult<()> {
+        self.projectors
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "Projector", id))?
+            .0
+            .uv_rect = uv_rect;
+        self.projectors_dirty = true;
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Updates the grazing-angle fade cosine threshold of an existing 3D projector or decal.
+    pub fn set_projector_angle_fade(
+        &mut self,
+        id: u32,
+        angle_fade: f32,
+    ) -> galfus_realm_core::RealmResult<()> {
+        self.projectors
+            .get_mut(&id)
+            .ok_or_else(|| not_found(self.id, "Projector", id))?
+            .0
+            .angle_fade = angle_fade;
+        self.projectors_dirty = true;
+        self.dirty = true;
+        Ok(())
+    }
 }

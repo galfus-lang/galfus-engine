@@ -27,6 +27,11 @@ export class SkinningSolveSystem {
     readonly cache: AnchorMatrixCache
   ) {}
 
+  /** Clears host-side tracking of core-registered skins (called on realm reset/dispose). */
+  reset(): void {
+    this._registeredSkins.clear();
+  }
+
   /**
    * Evaluates or registers all active skins with the engine.
    * Uses core-owned `realm3dCreateSkin` when supported to avoid per-frame FFI bone uploads.

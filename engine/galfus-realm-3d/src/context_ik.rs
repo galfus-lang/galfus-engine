@@ -54,6 +54,8 @@ pub enum IkConstraint3D {
     Fabrik {
         chain: Vec<u32>,
         target: [f32; 3],
+        #[serde(default)]
+        pole_target: Option<[f32; 3]>,
         #[serde(default = "default_iterations")]
         iterations: u32,
         #[serde(default = "default_tolerance")]
@@ -80,6 +82,20 @@ pub enum IkConstraint3D {
 }
 
 impl IkConstraint3D {
+    /// Returns true if this constraint directly references the given entity/model ID.
+    pub fn references_entity(&self, id: u32) -> bool {
+        match self {
+            Self::TwoBone {
+                root_id,
+                mid_id,
+                effector_id,
+                ..
+            } => *root_id == id || *mid_id == id || *effector_id == id,
+            Self::Fabrik { chain, .. } => chain.contains(&id),
+            Self::LookAt { entity_id, .. } => *entity_id == id,
+        }
+    }
+
     fn validate(&self) -> RealmResult<()> {
         match self {
             Self::TwoBone {
@@ -179,6 +195,12 @@ impl Realm3DContext {
                 pole_target: p,
                 weight: w,
                 ..
+            }
+            | IkConstraint3D::Fabrik {
+                target: t,
+                pole_target: p,
+                weight: w,
+                ..
             } => {
                 *t = target;
                 if pole_target.is_some() {
@@ -188,12 +210,7 @@ impl Realm3DContext {
                     *w = nw;
                 }
             }
-            IkConstraint3D::Fabrik {
-                target: t,
-                weight: w,
-                ..
-            }
-            | IkConstraint3D::LookAt {
+            IkConstraint3D::LookAt {
                 target: t,
                 weight: w,
                 ..
@@ -245,6 +262,7 @@ impl Realm3DContext {
                 IkConstraint3D::Fabrik {
                     chain,
                     target,
+                    pole_target,
                     iterations,
                     tolerance,
                     weight,
@@ -253,6 +271,7 @@ impl Realm3DContext {
                     self.solve_fabrik(
                         &chain,
                         Vec3::from_array(target),
+                        pole_target.map(Vec3::from_array),
                         iterations.clamp(1, 64),
                         tolerance.max(1e-6),
                         weight.clamp(0.0, 1.0),
@@ -363,6 +382,7 @@ impl Realm3DContext {
         &mut self,
         chain: &[u32],
         target: Vec3,
+        pole_target: Option<Vec3>,
         iterations: u32,
         tolerance: f32,
         weight: f32,
@@ -400,21 +420,40 @@ impl Realm3DContext {
             }
         } else {
             let last = positions.len() - 1;
+            let dist = to_target.length();
+            if let Some(pole) = pole_target {
+                let axis = to_target.normalize_or_zero();
+                let pv = pole - root_pos;
+                let bend = (pv - axis * pv.dot(axis)).normalize_or_zero();
+                if axis.length_squared() > 1e-6 && bend.length_squared() > 1e-6 {
+                    // Seed an upward parabolic arch in the (root, target, pole) plane so all
+                    // FABRIK iterations stay strictly in-plane, arch toward `pole`, and finish
+                    // on the forward pass with exact bone lengths.
+                    let arch = (total_len * total_len - dist * dist).max(0.0).sqrt() * 0.5;
+                    for (i, p) in positions.iter_mut().enumerate().take(last).skip(1) {
+                        let frac = i as f32 / last as f32;
+                        let lift = (frac * std::f32::consts::PI).sin() * arch.max(0.1);
+                        *p = root_pos + axis * (dist * frac) + bend * lift;
+                    }
+                    positions[last] = target;
+                }
+            }
             for _ in 0..iterations {
-                if (positions[last] - target).length() <= tolerance {
+                if (positions[last] - target).length() <= tolerance && pole_target.is_none() {
                     break;
                 }
-                // Backward pass: pull effector to target
                 positions[last] = target;
                 for i in (0..last).rev() {
                     let dir = (positions[i] - positions[i + 1]).normalize_or_zero();
                     positions[i] = positions[i + 1] + dir * lengths[i];
                 }
-                // Forward pass: pin root back to origin
                 positions[0] = root_pos;
                 for i in 0..last {
                     let dir = (positions[i + 1] - positions[i]).normalize_or_zero();
                     positions[i + 1] = positions[i] + dir * lengths[i];
+                }
+                if (positions[last] - target).length() <= tolerance {
+                    break;
                 }
             }
         }
@@ -481,89 +520,5 @@ impl Realm3DContext {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use galfus_realm_3d_resources::transform::Transform3D;
-
-    #[test]
-    fn two_bone_ik_reaches_target_and_respects_pole() {
-        let mut realm = Realm3DContext::new(1);
-        realm.write_entity_transform(1, Transform3D::from_position(Vec3::new(0.0, 2.0, 0.0)));
-        realm.write_entity_transform(2, Transform3D::from_position(Vec3::new(0.0, 1.0, 0.0)));
-        realm.write_entity_transform(3, Transform3D::from_position(Vec3::new(0.0, 0.0, 0.0)));
-
-        let target = [0.0, 0.6, 0.0];
-        realm
-            .set_ik_constraint_3d(
-                10,
-                IkConstraint3D::TwoBone {
-                    root_id: 1,
-                    mid_id: 2,
-                    effector_id: 3,
-                    target,
-                    pole_target: Some([0.0, 1.0, 2.0]),
-                    weight: 1.0,
-                    active: true,
-                },
-            )
-            .unwrap();
-
-        realm.solve_ik();
-
-        let eff = realm.resolve_entity_transform(3).unwrap().position;
-        let mid = realm.resolve_entity_transform(2).unwrap().position;
-        assert!((eff - Vec3::from_array(target)).length() < 1e-3);
-        assert!(mid.z > 0.1, "knee should bend toward +Z pole: {mid:?}");
-    }
-
-    #[test]
-    fn fabrik_chain_converges_to_target() {
-        let mut realm = Realm3DContext::new(1);
-        for i in 0..4u32 {
-            realm.write_entity_transform(
-                i + 1,
-                Transform3D::from_position(Vec3::new(0.0, i as f32, 0.0)),
-            );
-        }
-        realm
-            .set_ik_constraint_3d(
-                20,
-                IkConstraint3D::Fabrik {
-                    chain: vec![1, 2, 3, 4],
-                    target: [1.5, 1.5, 0.0],
-                    iterations: 16,
-                    tolerance: 1e-4,
-                    weight: 1.0,
-                    active: true,
-                },
-            )
-            .unwrap();
-
-        realm.solve_ik();
-        let tip = realm.resolve_entity_transform(4).unwrap().position;
-        assert!((tip - Vec3::new(1.5, 1.5, 0.0)).length() < 1e-2);
-    }
-
-    #[test]
-    fn look_at_ik_orients_forward_axis_toward_target() {
-        let mut realm = Realm3DContext::new(1);
-        realm.write_entity_transform(1, Transform3D::from_position(Vec3::ZERO));
-        realm
-            .set_ik_constraint_3d(
-                30,
-                IkConstraint3D::LookAt {
-                    entity_id: 1,
-                    target: [5.0, 0.0, 0.0],
-                    forward_axis: [0.0, 0.0, 1.0],
-                    up_axis: [0.0, 1.0, 0.0],
-                    weight: 1.0,
-                    active: true,
-                },
-            )
-            .unwrap();
-        realm.solve_ik();
-        let rot = realm.resolve_entity_transform(1).unwrap().rotation;
-        let aimed = rot * Vec3::Z;
-        assert!((aimed - Vec3::X).length() < 1e-4);
-    }
-}
+#[path = "context_ik_tests.rs"]
+mod tests;

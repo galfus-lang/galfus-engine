@@ -87,6 +87,7 @@ export const hierarchyPhysicsDescriptors: DescSpec[] = [
           type: { type: { literal: 'fabrik' } },
           chain: { type: { array: 'number' } },
           target: { type: { tuple: ['number', 'number', 'number'] } },
+          poleTarget: { type: { tuple: ['number', 'number', 'number'] }, optional: true },
           iterations: { type: 'number', optional: true },
           tolerance: { type: 'number', optional: true },
           weight: { type: 'number', optional: true },
