@@ -147,7 +147,7 @@ export async function runDemo3d13(options: HostDemoOptions = {}): Promise<void> 
 
     // Phase 3A: Forward PBR Orthographic Decal on floor (ECS-managed + animated color transition)
     const floorDecalPos: [number, number, number] = [0.2, 0.6, 1.8];
-    const floorDecalRot = utils3D.quatFromLookAt(floorDecalPos, [0.2, 0.0, 1.8]);
+    const floorDecalRot = utils3D.quatFromLookAt(floorDecalPos, [0.2, 0.0, 1.8], [0, 0, -1]);
     const floorDecal = realm3d.createProjector(
       {
         kind: 'orthographic',

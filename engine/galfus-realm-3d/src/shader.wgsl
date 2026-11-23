@@ -540,7 +540,7 @@ fn shade_surface(in: VertexOutput, front_facing: bool) -> vec4<f32> {
         if (occ_layer < 8u) {
             let slope = 1.0 - max(facing, 0.0);
             let bias = 0.0005 + 0.0015 * slope;
-            let ref_depth = clamp(p_ndc.z - bias, 0.0, 1.0);
+            let ref_depth = clamp(p_ndc.z + bias, 0.0, 1.0);
             occ_vis = textureSampleCompare(projector_depth_map, shadow_sampler, raw_uv, i32(occ_layer), ref_depth);
             if (occ_vis <= 0.001) {
                 continue;
