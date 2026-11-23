@@ -116,12 +116,15 @@ mod tests {
                 surface_type: 1,
                 material_id,
                 geometry_id,
+                layer_mask: u32::MAX,
             },
             instance: Item2DInstanceRaw {
                 model_matrix: Mat4::IDENTITY,
                 tint: Vec4::ONE,
                 uv_rect: Vec4::new(0.0, 0.0, 1.0, 1.0),
                 shadow_params: Vec4::ZERO,
+                layer_mask: u32::MAX,
+                _pad: [0; 3],
             },
             occluder_only: false,
         }
@@ -182,5 +185,27 @@ mod tests {
         builder.build();
         assert_eq!(builder.ranges()[0].key.material_id, 99);
         assert_eq!(builder.ranges()[1].key.material_id, 1);
+    }
+
+    #[test]
+    fn distinct_layer_masks_split_batches_for_camera_culling() {
+        let mut builder = BatchBuilder2D::new();
+        let mut layer_a = make_item(0, 10, 0);
+        layer_a.key.layer_mask = 0b01;
+        layer_a.instance.layer_mask = 0b01;
+        layer_a.order = (1, 0, 0);
+
+        let mut layer_b = make_item(0, 10, 0);
+        layer_b.key.layer_mask = 0b10;
+        layer_b.instance.layer_mask = 0b10;
+        layer_b.order = (2, 0, 0);
+
+        builder.push(layer_a);
+        builder.push(layer_b);
+        builder.build();
+
+        assert_eq!(builder.ranges().len(), 2);
+        assert_eq!(builder.ranges()[0].key.layer_mask, 0b01);
+        assert_eq!(builder.ranges()[1].key.layer_mask, 0b10);
     }
 }

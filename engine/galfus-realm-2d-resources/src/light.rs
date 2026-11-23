@@ -21,12 +21,19 @@ pub struct Light2D {
     pub range: f32,
     /// Physical radius of the light emitter disk for soft penumbra projection.
     pub light_radius: f32,
+    /// Bitmask defining which object layers this light illuminates.
+    #[serde(default = "default_layer_mask")]
+    pub layer_mask: u32,
     /// Bitmask defining which occluder layers cast shadows for this light.
     pub shadow_layer_mask: u32,
     /// Whether this light casts dynamic 2D shadows.
     pub cast_shadow: bool,
     /// Whether the light is active.
     pub active: bool,
+}
+
+fn default_layer_mask() -> u32 {
+    u32::MAX
 }
 
 impl Default for Light2D {
@@ -39,6 +46,7 @@ impl Default for Light2D {
             intensity: 1.0,
             range: 10.0,
             light_radius: 0.25,
+            layer_mask: u32::MAX,
             shadow_layer_mask: u32::MAX,
             cast_shadow: true,
             active: true,
@@ -73,7 +81,7 @@ impl Light2D {
                 self.shadow_layer_mask,
                 shadow_index,
                 if self.active { 1 } else { 0 },
-                0,
+                self.layer_mask,
             ),
         }
     }

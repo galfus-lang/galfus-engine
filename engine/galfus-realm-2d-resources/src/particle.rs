@@ -63,8 +63,15 @@ pub struct ParticleEmitter2D {
     pub cast_shadow: bool,
     /// Whether particles receive 2D dynamic shadows.
     pub receive_shadow: bool,
+    /// Visibility and lighting layer bitmask.
+    #[serde(default = "default_layer_mask")]
+    pub layer_mask: u32,
     /// Active simulation state flag.
     pub active: bool,
+}
+
+fn default_layer_mask() -> u32 {
+    u32::MAX
 }
 
 impl Default for ParticleEmitter2D {
@@ -90,6 +97,7 @@ impl Default for ParticleEmitter2D {
             z_layer: 1,
             cast_shadow: false,
             receive_shadow: false,
+            layer_mask: u32::MAX,
             active: true,
         }
     }

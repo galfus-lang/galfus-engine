@@ -448,6 +448,7 @@ pub fn sync_realm_resources<'a>(
             normal_matrix: glam::Mat4::IDENTITY,
             outline_color: glam::Vec4::ZERO,
             flags: glam::UVec4::new(flags, 0, 0, inst_model.morph_weights.len() as u32),
+            layer_mask: glam::UVec4::new(inst_model.layer_mask, 0, 0, 0),
         };
         if let Some(buf) = model_buf_opt {
             queue.write_buffer(buf, 0, bytemuck::bytes_of(&uniform));

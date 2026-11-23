@@ -65,6 +65,7 @@ export const realm2dDescriptors: DescSpec[] = [
       receiveShadow: { type: 'boolean', optional: true },
       occluderOnly: { type: 'boolean', optional: true },
       shadowHeight: { type: 'number', optional: true },
+      layerMask: { type: 'number', optional: true },
       shadowLayerMask: { type: 'number', optional: true },
       heightRange: { type: { tuple: ['number', 'number'] }, optional: true },
       drawOrder: { type: 'number', optional: true }
@@ -85,6 +86,7 @@ export const realm2dDescriptors: DescSpec[] = [
       receiveShadow: { type: 'boolean', optional: true },
       occluderOnly: { type: 'boolean', optional: true },
       shadowHeight: { type: 'number', optional: true },
+      layerMask: { type: 'number', optional: true },
       shadowLayerMask: { type: 'number', optional: true },
       heightRange: { type: { tuple: ['number', 'number'] }, optional: true },
       drawOrder: { type: 'number', optional: true }
@@ -101,6 +103,7 @@ export const realm2dDescriptors: DescSpec[] = [
       intensity: { type: 'number' },
       range: { type: 'number' },
       lightRadius: { type: 'number', optional: true },
+      layerMask: { type: 'number', optional: true },
       shadowLayerMask: { type: 'number', optional: true },
       castShadow: { type: 'boolean', optional: true },
       active: { type: 'boolean', optional: true }
@@ -153,6 +156,7 @@ export const realm2dDescriptors: DescSpec[] = [
       zLayer: { type: 'number', optional: true },
       castShadow: { type: 'boolean', optional: true },
       receiveShadow: { type: 'boolean', optional: true },
+      layerMask: { type: 'number', optional: true },
       active: { type: 'boolean', optional: true }
     }
   }

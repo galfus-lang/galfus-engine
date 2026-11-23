@@ -27,6 +27,7 @@ pub struct PostProcessDesc<'a> {
     pub pipeline: &'a Pipeline3D,
     pub environment: &'a EnvironmentRealm3D,
     pub cam_frustum: &'a Frustum,
+    pub camera_layer_mask: u32,
     pub projection: &'a Mat4,
     pub models: &'a BTreeMap<u32, GpuModelEntry>,
     pub geometries: &'a BTreeMap<u32, (Geometry3D, Option<GpuMeshBuffers>)>,
@@ -54,10 +55,9 @@ impl PostProcessPipelines {
     pub fn execute(&mut self, desc: PostProcessDesc<'_>, gizmos: &mut GizmoSystem3D) {
         // 1. Screen-space model outline dilation pass
         if desc.environment.outline.enabled
-            && desc
-                .models
-                .values()
-                .any(|(m, _, _, _, _, _)| m.active && m.cast_outline)
+            && desc.models.values().any(|(m, _, _, _, _, _)| {
+                m.active && m.cast_outline && (m.layer_mask & desc.camera_layer_mask) != 0
+            })
         {
             let outline_pipe = self.outline.get_or_insert_with(|| {
                 OutlinePipeline3D::new(
@@ -71,7 +71,10 @@ impl PostProcessPipelines {
                 desc.models
                     .values()
                     .filter_map(|(m, trans, local_aabb, _, _, bg_opt)| {
-                        if !m.active || !m.cast_outline {
+                        if !m.active
+                            || !m.cast_outline
+                            || (m.layer_mask & desc.camera_layer_mask) == 0
+                        {
                             return None;
                         }
                         let (geom, gpu_mesh) = desc.geometries.get(&m.geometry_id)?;

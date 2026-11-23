@@ -108,6 +108,7 @@ impl Realm3DContext {
             &self.materials,
             Some(&cam_frustum),
             camera_transform.position,
+            camera.layer_mask,
         );
 
         // Shadow Depth Pass for each shadow-casting light (Directional & Spot, Reverse-Z)
@@ -143,6 +144,7 @@ impl Realm3DContext {
             &self.emitters,
             &self.materials,
             refraction_threshold,
+            camera.layer_mask,
             &mut self.particle_alpha_instances,
             &mut self.particle_additive_instances,
             &mut self.particle_alpha_batches,
@@ -268,6 +270,9 @@ impl Realm3DContext {
                         self.scene_bindings_generation,
                     );
                     let v_bg = portal_pipe.virtual_scene_bind_group();
+                    let portal_layer_mask = mirror_portal
+                        .map(|portal| portal.layer_mask)
+                        .unwrap_or(camera.layer_mask);
                     let v_collector = crate::portal::PortalPipeline3D::collect_virtual_items(
                         &self.models,
                         &self.instanced_models,
@@ -277,6 +282,7 @@ impl Realm3DContext {
                         mirror_item.model_id,
                         mirror_transform.position,
                         mirror_normal,
+                        portal_layer_mask,
                     );
                     let opaque_draws = v_collector.opaque.iter().chain(v_collector.masked.iter());
                     let particle_draw = self
@@ -486,6 +492,7 @@ impl Realm3DContext {
                 pipeline,
                 environment: &self.environment,
                 cam_frustum: &cam_frustum,
+                camera_layer_mask: camera.layer_mask,
                 projection: &camera_uniform.projection,
                 models: &self.models,
                 geometries: &self.geometries,

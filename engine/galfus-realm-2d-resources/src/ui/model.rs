@@ -52,11 +52,14 @@ pub struct UiText2D {
 }
 
 /// Dedicated 2D UI Model holding a core-owned tree of panels and text elements.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Model2DUI {
     /// Optional human-readable debug label.
     pub label: Option<String>,
+    /// Visibility and lighting layer bitmask.
+    #[serde(default = "default_ui_layer_mask")]
+    pub layer_mask: u32,
     /// Root panel node identifier.
     #[serde(default)]
     pub root_id: Option<u32>,
@@ -79,6 +82,26 @@ pub struct Model2DUI {
     /// Temporary compatibility batches for flat text descriptions.
     #[serde(default)]
     pub texts: Vec<UiText2D>,
+}
+
+fn default_ui_layer_mask() -> u32 {
+    u32::MAX
+}
+
+impl Default for Model2DUI {
+    fn default() -> Self {
+        Self {
+            label: None,
+            layer_mask: u32::MAX,
+            root_id: None,
+            nodes: HashMap::new(),
+            computed: HashMap::new(),
+            dirty_flags: HashMap::new(),
+            damage_regions: Vec::new(),
+            quads: Vec::new(),
+            texts: Vec::new(),
+        }
+    }
 }
 
 impl Model2DUI {

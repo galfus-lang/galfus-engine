@@ -371,6 +371,7 @@ impl PortalPipeline3D {
         mirror_model_id: u32,
         mirror_pos: Vec3,
         mirror_normal: Option<Vec3>,
+        layer_mask: u32,
     ) -> DrawCollector<'a> {
         let v_frustum = Frustum::from_view_projection(v_cam.view_projection);
         let mut collector = DrawCollector::collect(
@@ -380,6 +381,7 @@ impl PortalPipeline3D {
             materials,
             Some(&v_frustum),
             v_cam.position.truncate(),
+            layer_mask,
         );
 
         // Never draw the mirror or portal surface itself inside its own offscreen render pass

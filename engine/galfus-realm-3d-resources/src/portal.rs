@@ -18,6 +18,9 @@ pub struct Portal3D {
     /// Resolution scaling factor relative to the main viewport (e.g. 1.0 or 0.5).
     #[serde(default = "default_resolution_scale")]
     pub resolution_scale: f32,
+    /// Visibility bitmask determining which object layers this portal renders.
+    #[serde(default = "default_layer_mask")]
+    pub layer_mask: u32,
 }
 
 fn default_portal_active() -> bool {
@@ -28,6 +31,10 @@ fn default_resolution_scale() -> f32 {
     1.0
 }
 
+fn default_layer_mask() -> u32 {
+    u32::MAX
+}
+
 impl Portal3D {
     /// Creates a planar mirror reflecting across a model's plane.
     pub fn mirror(model_id: u32) -> Self {
@@ -36,6 +43,7 @@ impl Portal3D {
             exit_transform: None,
             active: true,
             resolution_scale: 1.0,
+            layer_mask: u32::MAX,
         }
     }
 
@@ -46,6 +54,7 @@ impl Portal3D {
             exit_transform: Some(exit_transform),
             active: true,
             resolution_scale: 1.0,
+            layer_mask: u32::MAX,
         }
     }
 }

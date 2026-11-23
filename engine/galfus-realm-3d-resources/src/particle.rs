@@ -86,8 +86,15 @@ pub struct ParticleEmitter3D {
     /// Geometric emission region.
     #[serde(default)]
     pub emission_shape: EmissionShape3D,
+    /// Visibility layer bitmask.
+    #[serde(default = "default_layer_mask")]
+    pub layer_mask: u32,
     /// Active simulation state flag.
     pub active: bool,
+}
+
+fn default_layer_mask() -> u32 {
+    u32::MAX
 }
 
 impl Default for ParticleEmitter3D {
@@ -110,6 +117,7 @@ impl Default for ParticleEmitter3D {
             rotation_speed_range: [-2.0, 2.0],
             uv_rect: Vec4::new(0.0, 0.0, 1.0, 1.0),
             emission_shape: EmissionShape3D::Point,
+            layer_mask: u32::MAX,
             active: true,
         }
     }

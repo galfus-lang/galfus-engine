@@ -48,8 +48,15 @@ pub struct Light3D {
     pub spot_inner_outer: Vec2,
     /// Whether this light projects shadow maps.
     pub cast_shadow: bool,
+    /// Bitmask defining which object layers this light illuminates and shadows.
+    #[serde(default = "default_layer_mask")]
+    pub layer_mask: u32,
     /// Active state flag.
     pub active: bool,
+}
+
+fn default_layer_mask() -> u32 {
+    u32::MAX
 }
 
 impl Default for Light3D {
@@ -61,6 +68,7 @@ impl Default for Light3D {
             range: 50.0,
             spot_inner_outer: Vec2::new(0.9, 0.8),
             cast_shadow: true,
+            layer_mask: u32::MAX,
             active: true,
         }
     }
@@ -177,7 +185,7 @@ impl Light3D {
                 self.kind.to_code() as f32,
             ),
             shadow_view_proj,
-            flags: UVec4::new(flags, shadow_layer, 0, 0),
+            flags: UVec4::new(flags, shadow_layer, self.layer_mask, 0),
         }
     }
 
@@ -229,9 +237,11 @@ mod tests {
 
     #[test]
     fn test_directional_light_flags() {
-        let light = Light3D::directional(Vec3::ONE, 2.5, true);
+        let mut light = Light3D::directional(Vec3::ONE, 2.5, true);
+        light.layer_mask = 0b0101;
         let u = light.build_uniform(&Transform3D::default());
         assert_eq!(u.flags.x & 1, 1);
+        assert_eq!(u.flags.z, 0b0101);
         assert_eq!(u.color_intensity.w, 2.5);
     }
 

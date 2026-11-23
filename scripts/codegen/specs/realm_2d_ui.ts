@@ -210,6 +210,7 @@ export const realm2dUiDescriptors: DescSpec[] = [
     doc: 'Dedicated 2D UI Model holding batches of quads and text runs for hardware-accelerated interfaces.',
     fields: {
       label: { type: 'string', optional: true },
+      layerMask: { type: 'number', optional: true },
       quads: { type: { array: { ref: 'UiQuad2DDesc' } }, optional: true },
       texts: { type: { array: { ref: 'UiText2DDesc' } }, optional: true }
     }

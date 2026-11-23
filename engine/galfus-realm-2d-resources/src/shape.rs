@@ -33,6 +33,9 @@ pub struct Shape2D {
     pub occluder_only: bool,
     /// Shadow projection height scalar.
     pub shadow_height: f32,
+    /// Visibility and lighting layer bitmask.
+    #[serde(default = "default_layer_mask")]
+    pub layer_mask: u32,
     /// Shadow layer filter mask.
     pub shadow_layer_mask: u32,
     /// Optional vertical height interval [min_z, max_z] where this occluder blocks light.
@@ -41,6 +44,10 @@ pub struct Shape2D {
     /// Optional explicit draw order override within the same Z layer.
     #[serde(default)]
     pub draw_order: Option<i32>,
+}
+
+fn default_layer_mask() -> u32 {
+    u32::MAX
 }
 
 impl Default for Shape2D {
@@ -53,6 +60,7 @@ impl Default for Shape2D {
             receive_shadow: true,
             occluder_only: false,
             shadow_height: 1.0,
+            layer_mask: u32::MAX,
             shadow_layer_mask: u32::MAX,
             height_range: None,
             draw_order: None,

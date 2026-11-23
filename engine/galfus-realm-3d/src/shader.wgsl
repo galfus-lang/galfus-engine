@@ -49,6 +49,7 @@ struct ModelUniform {
     normal_matrix: mat4x4<f32>,
     outline_color: vec4<f32>,
     flags: vec4<u32>,
+    layer_mask: vec4<u32>,
 };
 
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
@@ -505,6 +506,9 @@ fn shade_surface(in: VertexOutput, front_facing: bool) -> vec4<f32> {
     let light_count = lights_header.count;
     for (var i = 0u; i < light_count; i = i + 1u) {
         let light = lights[i];
+        if ((object.layer_mask.x & light.flags.z) == 0u) {
+            continue;
+        }
         let kind_code = u32(round(light.params.w));
 
         var L: vec3<f32>;

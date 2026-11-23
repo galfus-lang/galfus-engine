@@ -269,6 +269,7 @@ export class Realm3DSyncSystem {
           receiveShadow: mesh ? mesh.receiveShadow : true,
           castOutline: mesh ? mesh.castOutline : false,
           outlineColor: mesh ? mesh.outlineColor : [1, 1, 1, 1],
+          layerMask: mesh ? mesh.layerMask : 0xffffffff,
           active: mesh ? mesh.active : true,
           boneOffset: mesh ? mesh.boneOffset : 0,
           boneCount: mesh ? mesh.boneCount : 0

@@ -23,6 +23,7 @@ struct ModelUniform {
     normal_matrix: mat4x4<f32>,
     outline_color: vec4<f32>,
     flags: vec4<u32>,
+    layer_mask: vec4<u32>,
 };
 
 @group(0) @binding(0) var<uniform> camera: CameraUniform;

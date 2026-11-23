@@ -12,6 +12,7 @@ fn render_single_shadow_layer(
     shadow_pipe: &ShadowPipeline3D,
     shadow_map: &ShadowMap3D,
     layer_idx: u32,
+    light_layer_mask: u32,
     shadow_view_proj: &Mat4,
     time: f32,
     models: &std::collections::BTreeMap<u32, crate::types::GpuModelEntry>,
@@ -53,7 +54,7 @@ fn render_single_shadow_layer(
     let shadow_frustum =
         galfus_realm_3d_resources::frustum::Frustum::from_view_projection(*shadow_view_proj);
     for (model, model_trans, local_aabb, _, _, model_bg_opt) in models.values() {
-        if !model.active || !model.cast_shadow {
+        if !model.active || !model.cast_shadow || (model.layer_mask & light_layer_mask) == 0 {
             continue;
         }
         let Some(model_bg) = model_bg_opt else {
@@ -95,7 +96,11 @@ fn render_single_shadow_layer(
 
     // Instanced models depth pass
     for (inst_model, instances, inst_buf_opt, _, _, model_bg_opt) in instanced_models.values() {
-        if !inst_model.active || !inst_model.cast_shadow || instances.is_empty() {
+        if !inst_model.active
+            || !inst_model.cast_shadow
+            || instances.is_empty()
+            || (inst_model.layer_mask & light_layer_mask) == 0
+        {
             continue;
         }
         if inst_buf_opt.is_none() {
@@ -194,6 +199,7 @@ pub fn render_shadow_depth_pass(
                     shadow_pipe,
                     shadow_map,
                     layer_idx + face_i as u32,
+                    light.layer_mask,
                     &vp,
                     time,
                     models,
@@ -214,6 +220,7 @@ pub fn render_shadow_depth_pass(
                 shadow_pipe,
                 shadow_map,
                 layer_idx,
+                light.layer_mask,
                 &light_uniform.shadow_view_proj,
                 time,
                 models,
