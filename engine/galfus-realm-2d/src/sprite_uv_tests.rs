@@ -72,6 +72,12 @@ fn ui_sprite_uv_updates_the_next_batch_without_relayout() {
 
 #[test]
 fn sprite_uv_is_reflected_in_next_render_batch() {
+    let _gpu_guard = crate::GPU_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _gpu_guard = crate::GPU_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     use galfus_realm_core::{Realm, RealmPrepareContext};
     let instance = wgpu::Instance::default();
     let Ok(adapter) = pollster::block_on(instance.request_adapter(&Default::default())) else {
@@ -118,6 +124,12 @@ fn sprite_uv_is_reflected_in_next_render_batch() {
 
 #[test]
 fn sprite_panel_uv_changes_the_rendered_texture_region() {
+    let _gpu_guard = crate::GPU_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _gpu_guard = crate::GPU_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     use galfus_realm_2d_resources::ui::{
         Model2DUI, PanelNode, SpritePanelNode, UiCommand, UiDimension, UiLayoutStyle,
     };

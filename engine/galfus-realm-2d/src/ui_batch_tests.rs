@@ -45,6 +45,12 @@ fn test_ui_legacy_quads_backward_compatibility() {
 
 #[test]
 fn test_ui_legacy_sync_gpu_and_batch() {
+    let _gpu_guard = crate::GPU_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _gpu_guard = crate::GPU_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let instance = wgpu::Instance::default();
     let Ok(adapter) = pollster::block_on(instance.request_adapter(&Default::default())) else {
         return;
@@ -213,6 +219,12 @@ fn test_ui_text_run_vertex_bounds() {
 
 #[test]
 fn test_ui_textured_materials_eviction_and_view_change() {
+    let _gpu_guard = crate::GPU_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let _gpu_guard = crate::GPU_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let instance = wgpu::Instance::default();
     let Ok(adapter) = pollster::block_on(instance.request_adapter(&Default::default())) else {
         return;
