@@ -272,6 +272,9 @@ impl Realm2DContext {
         }
         self.ui_manager
             .push_batches(&self.uis, &mut self.batch_builder);
+        let mut tm_batch = std::mem::take(&mut self.batch_builder);
+        self.push_tilemap_batches(None, &mut tm_batch);
+        self.batch_builder = tm_batch;
         self.batch_builder.build();
     }
 
@@ -485,6 +488,9 @@ impl Realm2DContext {
 
         self.ui_manager
             .push_batches(&self.uis, &mut self.batch_builder);
+        let mut tm_batch = std::mem::take(&mut self.batch_builder);
+        self.push_tilemap_batches(Some(&bounds), &mut tm_batch);
+        self.batch_builder = tm_batch;
         self.batch_builder.build_for_early_z();
     }
 }

@@ -19,6 +19,7 @@ export * from './realm2d/anim2-path';
 export * from './realm2d/d2d1-shadows';
 export * from './realm2d/d2d2-effects-particles';
 export * from './realm2d/d2d3-culling-lod';
+export * from './realm2d/d2d4-tilemap';
 export * from './realm3d/d3d1-orbit';
 export * from './realm3d/d3d2-bones';
 export * from './realm3d/d3d3-ssao-shadows';

@@ -50,6 +50,7 @@ import { setSpriteUvRect } from './sprite-uv';
 
 import type { UiComputedLayout, UiTextCluster, UiTextGeometry } from './ui-types';
 import { type FontFamilyConfig, packFontGroup } from './fonts';
+import { createTilemap2DHandle, type Tilemap2DHandle } from './tilemap';
 export type * from './ui-types';
 export type * from './fonts';
 
@@ -481,46 +482,33 @@ export class Realm2D implements RealmConnector {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // 2D Polar Shadows, Fonts & Materials
-  // ---------------------------------------------------------------------------
   setShadowConfig(config: Shadow2DConfigDesc): void {
-    if (this._engine) {
-      this._engine.realm2dSetShadowConfig(this.realmId, config);
-    }
+    this._engine?.realm2dSetShadowConfig(this.realmId, config);
   }
 
   loadFontData(data: Uint8Array): string {
-    if (!this._engine) {
-      throw new Error('Cannot load font: Realm2D is not bound to an engine instance.');
-    }
+    if (!this._engine) throw new Error('Cannot load font: Realm2D is not bound.');
     return this._engine.realm2dLoadFontData(this.realmId, data, data.byteLength);
   }
 
-  /** Atomically registers the font faces that make up a group. */
   registerFontGroup(name: string, files: readonly Uint8Array[]): void {
-    if (!this._engine)
-      throw new Error('Cannot register font group: Realm2D is not bound to an engine instance.');
+    if (!this._engine) throw new Error('Cannot register font group: Realm2D is not bound.');
     const data = packFontGroup(files);
     this._engine.realm2dRegisterFontGroup(this.realmId, name, data, data.byteLength);
   }
 
-  /** Sets the ordered groups and default variation axes for a family label. */
   setFontFamily(config: FontFamilyConfig): void {
-    if (!this._engine)
-      throw new Error('Cannot set font family: Realm2D is not bound to an engine instance.');
+    if (!this._engine) throw new Error('Cannot set font family: Realm2D is not bound.');
     this._engine.realm2dSetFontFamily(this.realmId, JSON.stringify(config));
   }
 
   removeFontFamily(name: string): void {
-    if (!this._engine)
-      throw new Error('Cannot remove font family: Realm2D is not bound to an engine instance.');
+    if (!this._engine) throw new Error('Cannot remove font family: Realm2D is not bound.');
     this._engine.realm2dRemoveFontFamily(this.realmId, name);
   }
 
   removeFontGroup(name: string): void {
-    if (!this._engine)
-      throw new Error('Cannot remove font group: Realm2D is not bound to an engine instance.');
+    if (!this._engine) throw new Error('Cannot remove font group: Realm2D is not bound.');
     this._engine.realm2dRemoveFontGroup(this.realmId, name);
   }
 
@@ -531,14 +519,19 @@ export class Realm2D implements RealmConnector {
     return materialId;
   }
 
-  /** Removes a material on the next sync or flush; entities referencing it are not destroyed. */
   destroyMaterial(materialId: number): void {
     this._materials.delete(materialId);
   }
 
-  // ---------------------------------------------------------------------------
-  // 2D Particle Emitters
-  // ---------------------------------------------------------------------------
+  /** Creates a chunked 2D tilemap with optional greedy-merged colliders and shadows. */
+  createTilemap(
+    desc: import('@galfus/transport-types').Tilemap2DDesc,
+    transform?: Partial<import('@galfus/transport-types').Transform2DDesc>
+  ): Tilemap2DHandle {
+    const tilemapId = this.allocateResourceId();
+    return createTilemap2DHandle(() => this._engine, this.realmId, tilemapId, desc, transform);
+  }
+
   createParticleEmitter(
     desc: ParticleEmitter2DDesc,
     transform?: Transform2DProps

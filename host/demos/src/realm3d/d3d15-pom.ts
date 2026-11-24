@@ -409,16 +409,16 @@ export async function runDemo3d15(options: HostDemoOptions = {}): Promise<void> 
 
     runtime.on('keyboard', (ev) => {
       if (ev.type !== 'input' || ev.state !== 'pressed') return;
-      if (isKey(ev, 'Space')) {
+      if (isKey(ev, ' ', 'space')) {
         paused = !paused;
-      } else if (isKey(ev, 'KeyP')) {
+      } else if (isKey(ev, 'p')) {
         pomEnabled = !pomEnabled;
         syncMaterials();
-      } else if (isKey(ev, 'ArrowUp') || isKey(ev, 'Equal')) {
+      } else if (isKey(ev, 'arrowup', '=', '+')) {
         parallaxScale = Math.min(0.08, +(parallaxScale + 0.005).toFixed(3));
         pomEnabled = true;
         syncMaterials();
-      } else if (isKey(ev, 'ArrowDown') || isKey(ev, 'Minus')) {
+      } else if (isKey(ev, 'arrowdown', '-', '_')) {
         parallaxScale = Math.max(0.0, +(parallaxScale - 0.005).toFixed(3));
         syncMaterials();
       }

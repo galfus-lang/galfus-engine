@@ -44,6 +44,8 @@ impl Realm2DContext {
             materials: std::collections::HashMap::new(),
             lights: std::collections::HashMap::new(),
             emitters: std::collections::HashMap::new(),
+            tilemaps: std::collections::HashMap::new(),
+            next_tilemap_collider_id: crate::tilemap::TILEMAP_COLLIDER_ID_START,
             ui_manager: crate::context_ui::UiManager2D::new(),
             ui_fonts: crate::ui_fonts::UiFontLibrary::empty(),
             uis: std::collections::HashMap::new(),

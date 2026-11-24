@@ -25,6 +25,8 @@ pub struct Realm2DContext {
     pub materials: HashMap<u32, Material2D>,
     pub lights: HashMap<u32, Light2D>,
     pub emitters: HashMap<u32, (ParticleEmitter2D, Transform2D, ParticleEmitterState2D)>,
+    pub tilemaps: HashMap<u32, crate::tilemap::TilemapState2D>,
+    pub(crate) next_tilemap_collider_id: u32,
     pub ui_manager: crate::context_ui::UiManager2D,
     pub(crate) ui_fonts: crate::ui_fonts::UiFontLibrary,
     pub uis: HashMap<u32, (Model2DUI, Transform2D)>,
@@ -58,6 +60,8 @@ impl Realm2DContext {
             materials: HashMap::new(),
             lights: HashMap::new(),
             emitters: HashMap::new(),
+            tilemaps: HashMap::new(),
+            next_tilemap_collider_id: crate::tilemap::TILEMAP_COLLIDER_ID_START,
             ui_manager: crate::context_ui::UiManager2D::new(),
             ui_fonts: crate::ui_fonts::UiFontLibrary::default(),
             uis: HashMap::new(),
@@ -147,6 +151,8 @@ impl Realm for Realm2DContext {
         self.materials.clear();
         self.lights.clear();
         self.emitters.clear();
+        self.tilemaps.clear();
+        self.next_tilemap_collider_id = crate::tilemap::TILEMAP_COLLIDER_ID_START;
         self.material_bind_groups.clear();
         self.material_uniform_buffers.clear();
         self.material_texture_slots.clear();
@@ -182,6 +188,7 @@ impl Realm for Realm2DContext {
         for (cfg, transform, state) in self.emitters.values_mut() {
             state.update(ctx.delta_time, transform.position, cfg);
         }
+        self.prepare_tilemaps();
         let device = ctx.device;
         let queue = ctx.queue;
         self.ensure_gpu_resources(device, queue);

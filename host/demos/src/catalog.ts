@@ -21,6 +21,7 @@ import { runDemoAnim2 } from './realm2d/anim2-path';
 import { runDemo2d1 } from './realm2d/d2d1-shadows';
 import { runDemo2d2 } from './realm2d/d2d2-effects-particles';
 import { runDemo2d3 } from './realm2d/d2d3-culling-lod';
+import { runDemo2d4 } from './realm2d/d2d4-tilemap';
 import { runDemo3d1 } from './realm3d/d3d1-orbit';
 import { runDemo3d2 } from './realm3d/d3d2-bones';
 import { runDemo3d3 } from './realm3d/d3d3-ssao-shadows';
@@ -507,6 +508,16 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     description:
       'Split-screen 2D culling validator pairing a panning/zooming Main Camera with a zoomed-out Debug Observer (cullCameraSlot: 0) showing viewport AABB culling, dynamic orthoScale distance LOD, cullMargin, and alwaysRender.',
     run: runDemo2d3
+  },
+  {
+    id: '2d4',
+    aliases: ['tilemap', 'tilemap-2d', 'chunks-2d'],
+    title: 'Chunked 2D Tilemap (128x128), Greedy Colliders & Polar Shadows',
+    category: 'Realm 2D & Animation',
+    tags: ['2d', 'tilemap', 'chunks', 'culling', 'greedy-meshing', 'physics', 'shadows'],
+    description:
+      '128x128 chunked Tilemap2D with greedy-merged Rapier 2D colliders, greedy-merged polar soft shadow occluders, live O(1) tile painting, and toggleable chunk-culling Debug Observer.',
+    run: runDemo2d4
   },
   {
     id: 'anim1',

@@ -1,8 +1,10 @@
 import type { DescSpec, FunctionSpec } from './types';
+import { realm2dTilemapDescriptors, realm2dTilemapFunctions } from './realm_2d_tilemap';
 import { realm2dUiDescriptors, realm2dUiFunctions } from './realm_2d_ui';
 
 export const realm2dDescriptors: DescSpec[] = [
   ...realm2dUiDescriptors,
+  ...realm2dTilemapDescriptors,
   {
     kind: 'object',
     name: 'Transform2DDesc',
@@ -490,5 +492,6 @@ export const realm2dFunctions: FunctionSpec[] = [
     ],
     returnType: 'string'
   },
-  ...realm2dUiFunctions
+  ...realm2dUiFunctions,
+  ...realm2dTilemapFunctions
 ];
