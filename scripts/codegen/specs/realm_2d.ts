@@ -26,7 +26,8 @@ export const realm2dDescriptors: DescSpec[] = [
       layerMask: { type: 'number', optional: true },
       order: { type: 'number', optional: true },
       cameraSlot: { type: 'number', optional: true },
-      active: { type: 'boolean', optional: true }
+      active: { type: 'boolean', optional: true },
+      cullCameraSlot: { type: 'number', optional: true }
     }
   },
   {
@@ -68,7 +69,10 @@ export const realm2dDescriptors: DescSpec[] = [
       layerMask: { type: 'number', optional: true },
       shadowLayerMask: { type: 'number', optional: true },
       heightRange: { type: { tuple: ['number', 'number'] }, optional: true },
-      drawOrder: { type: 'number', optional: true }
+      drawOrder: { type: 'number', optional: true },
+      cullingMode: { type: { enum: ['auto', 'frustumOnly', 'alwaysRender'] }, optional: true },
+      cullMargin: { type: 'number', optional: true },
+      distanceRange: { type: { tuple: ['number', 'number'] }, optional: true }
     }
   },
   {
@@ -89,7 +93,10 @@ export const realm2dDescriptors: DescSpec[] = [
       layerMask: { type: 'number', optional: true },
       shadowLayerMask: { type: 'number', optional: true },
       heightRange: { type: { tuple: ['number', 'number'] }, optional: true },
-      drawOrder: { type: 'number', optional: true }
+      drawOrder: { type: 'number', optional: true },
+      cullingMode: { type: { enum: ['auto', 'frustumOnly', 'alwaysRender'] }, optional: true },
+      cullMargin: { type: 'number', optional: true },
+      distanceRange: { type: { tuple: ['number', 'number'] }, optional: true }
     }
   },
   {

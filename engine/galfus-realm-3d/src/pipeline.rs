@@ -9,6 +9,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum SurfacePipelineState {
     Opaque,
+    Masked,
     OpaqueTransparent,
     AlphaBlend,
     AlphaBlendAfterOpaque,
@@ -20,20 +21,18 @@ impl SurfacePipelineState {
         match surface_type {
             SurfaceType3D::Transparent | SurfaceType3D::Refractive => Self::AlphaBlend,
             SurfaceType3D::Additive => Self::Additive,
-            SurfaceType3D::Opaque
-            | SurfaceType3D::Masked
-            | SurfaceType3D::Mirror
-            | SurfaceType3D::Portal => Self::Opaque,
+            SurfaceType3D::Masked => Self::Masked,
+            SurfaceType3D::Opaque | SurfaceType3D::Mirror | SurfaceType3D::Portal => Self::Opaque,
         }
     }
 
     const fn depth_write_enabled(self) -> bool {
-        matches!(self, Self::Opaque | Self::OpaqueTransparent)
+        matches!(self, Self::Opaque | Self::Masked | Self::OpaqueTransparent)
     }
 
     fn blend_state(self) -> Option<wgpu::BlendState> {
         match self {
-            Self::Opaque | Self::OpaqueTransparent => None,
+            Self::Opaque | Self::Masked | Self::OpaqueTransparent => None,
             Self::AlphaBlend | Self::AlphaBlendAfterOpaque => {
                 Some(wgpu::BlendState::ALPHA_BLENDING)
             }
@@ -411,6 +410,7 @@ impl Pipeline3D {
         for topology in PrimitiveTopology3D::ALL {
             for surface_state in [
                 SurfacePipelineState::Opaque,
+                SurfacePipelineState::Masked,
                 SurfacePipelineState::OpaqueTransparent,
                 SurfacePipelineState::AlphaBlend,
                 SurfacePipelineState::AlphaBlendAfterOpaque,
@@ -572,7 +572,7 @@ mod tests {
         );
         assert_eq!(
             SurfacePipelineState::from_surface_type(SurfaceType3D::Masked),
-            SurfacePipelineState::Opaque
+            SurfacePipelineState::Masked
         );
         assert_eq!(
             SurfacePipelineState::from_surface_type(SurfaceType3D::Transparent),

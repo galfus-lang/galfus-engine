@@ -21,12 +21,12 @@ impl Realm3DContext {
         let device = ctx.device;
         let queue = ctx.queue;
 
-        // Resolve camera strictly by requested slot, or default slot 0 if none specified
+        // Resolve camera strictly by requested slot first, falling back to logical ID only if no slot matches.
         let selected_camera = if let Some(slot) = ctx.camera_slot {
             self.cameras
-                .iter()
-                .find(|(id, (c, _))| c.active && (c.camera_slot == slot || **id == slot))
-                .map(|(_, pair)| pair)
+                .values()
+                .find(|(c, _)| c.active && c.camera_slot == slot)
+                .or_else(|| self.cameras.get(&slot).filter(|(c, _)| c.active))
         } else {
             self.cameras
                 .values()
@@ -86,6 +86,23 @@ impl Realm3DContext {
         });
 
         let cam_frustum = Frustum::from_view_projection(camera_uniform.view_projection);
+        let (cull_frustum, cull_pos, cull_layer_mask) = if let Some(cull_slot) =
+            camera.cull_camera_slot
+            && let Some((cull_cam, cull_tf)) = self
+                .cameras
+                .values()
+                .find(|(c, _)| c.active && c.camera_slot == cull_slot)
+        {
+            let aspect = width as f32 / height.max(1) as f32;
+            let cull_uniform = cull_cam.build_uniform(cull_tf, aspect);
+            (
+                Frustum::from_view_projection(cull_uniform.view_projection),
+                cull_tf.position,
+                cull_cam.layer_mask,
+            )
+        } else {
+            (cam_frustum, camera_transform.position, camera.layer_mask)
+        };
 
         // Optional parallel GPU light culling against camera frustum
         if let Some(cull_pipe) = &self.light_cull_pipeline
@@ -97,7 +114,7 @@ impl Realm3DContext {
                 &mut encoder,
                 &scene_buffers.lights_buf,
                 self.lights.len() as u32,
-                &cam_frustum.planes,
+                &cull_frustum.planes,
             );
         }
 
@@ -106,9 +123,9 @@ impl Realm3DContext {
             &self.instanced_models,
             &self.geometries,
             &self.materials,
-            Some(&cam_frustum),
-            camera_transform.position,
-            camera.layer_mask,
+            Some(&cull_frustum),
+            cull_pos,
+            cull_layer_mask,
         );
 
         // Shadow Depth Pass for each shadow-casting light (Directional & Spot, Reverse-Z)
@@ -123,6 +140,7 @@ impl Realm3DContext {
                 &self.instanced_models,
                 &self.materials,
                 &self.geometries,
+                Some(camera_transform.position),
                 self.total_time,
             );
             if let Some(proj_gpu) = &self.projector_gpu {
@@ -326,6 +344,25 @@ impl Realm3DContext {
             }
         }
 
+        // 0. Unbiased Reverse-Z Depth Pre-Pass for opaque/masked occluders (guarantees Early-Z)
+        let depth_prepass_ran =
+            if let (Some(shadow_pipe), Some(shadow_map)) = (&self.shadow_pipeline, &self.shadow_map)
+            {
+                crate::shadow::render_depth_prepass(
+                    &mut encoder,
+                    queue,
+                    shadow_pipe,
+                    shadow_map,
+                    depth_view,
+                    &camera_uniform.view_projection,
+                    self.total_time,
+                    &collector.opaque,
+                    &collector.masked,
+                )
+            } else {
+                false
+            };
+
         // 1. Opaque & Masked forward geometry pass
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -341,9 +378,13 @@ impl Realm3DContext {
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: depth_view,
-                    // Reverse-Z: Clear depth buffer to 0.0 (Far plane)
+                    // Reverse-Z: load pre-pass depth if populated, otherwise clear to 0.0 (Far plane)
                     depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0.0),
+                        load: if depth_prepass_ran {
+                            wgpu::LoadOp::Load
+                        } else {
+                            wgpu::LoadOp::Clear(0.0)
+                        },
                         store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,
@@ -352,16 +393,6 @@ impl Realm3DContext {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-
-            // Draw Skybox at Reverse-Z far plane (0.0) before geometry if enabled
-            if self.environment.skybox.mode
-                != galfus_realm_3d_resources::environment::SkyboxMode3D::None
-                && let Some(sky_pipe) = &self.skybox_pipeline
-            {
-                pass.set_pipeline(&sky_pipe.pipeline);
-                pass.set_bind_group(0, &sky_pipe.bind_group, &[]);
-                pass.draw(0..3, 0..1);
-            }
 
             pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
             let opaque_draws = collector.opaque.iter().chain(collector.masked.iter());
@@ -378,6 +409,16 @@ impl Realm3DContext {
                 collector.transparent.iter(),
                 &pipeline.dummy_refraction_bg,
             );
+
+            // Draw Skybox AFTER opaque geometry at Reverse-Z far plane (0.0) so Early-Z skips covered sky pixels
+            if self.environment.skybox.mode
+                != galfus_realm_3d_resources::environment::SkyboxMode3D::None
+                && let Some(sky_pipe) = &self.skybox_pipeline
+            {
+                pass.set_pipeline(&sky_pipe.pipeline);
+                pass.set_bind_group(0, &sky_pipe.bind_group, &[]);
+                pass.draw(0..3, 0..1);
+            }
 
             // Draw background particles before capturing opaque texture so they distort through refractive surfaces
             if has_behind_particles {

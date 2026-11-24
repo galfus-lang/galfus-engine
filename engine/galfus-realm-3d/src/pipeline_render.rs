@@ -131,6 +131,7 @@ pub(super) fn create_3d_render_pipeline(
         fragment: Some(wgpu::FragmentState {
             module: shader,
             entry_point: Some(match options.surface_state {
+                SurfacePipelineState::Opaque => "fs_opaque",
                 SurfacePipelineState::OpaqueTransparent => "fs_opaque_transparent",
                 SurfacePipelineState::AlphaBlendAfterOpaque => "fs_transparent",
                 _ => "fs_main",

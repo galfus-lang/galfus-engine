@@ -1,4 +1,5 @@
 use bytemuck::{Pod, Zeroable};
+use galfus_core::CullingMode;
 use glam::{Mat4, UVec4, Vec4};
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +36,18 @@ pub struct Model3D {
     /// Per-target blend weights for the bound geometry. An empty vector disables morphing.
     #[serde(skip, default)]
     pub morph_weights: Vec<f32>,
+    /// Frustum, distance, and occlusion culling policy for this model.
+    #[serde(default)]
+    pub culling_mode: CullingMode,
+    /// World-space AABB expansion margin applied before frustum/occlusion tests.
+    #[serde(default)]
+    pub cull_margin: f32,
+    /// Optional half-open camera distance interval `[start, end)` in world units for culling/LOD.
+    #[serde(default)]
+    pub distance_range: Option<[f32; 2]>,
+    /// Whether this opaque/masked model writes to the depth pre-pass as an occluder.
+    #[serde(default = "default_true")]
+    pub is_occluder: bool,
 }
 
 fn default_layer_mask() -> u32 {
@@ -55,6 +68,10 @@ impl Default for Model3D {
             bone_offset: 0,
             bone_count: 0,
             morph_weights: Vec::new(),
+            culling_mode: CullingMode::Auto,
+            cull_margin: 0.0,
+            distance_range: None,
+            is_occluder: true,
         }
     }
 }
@@ -178,6 +195,18 @@ pub struct InstancedModel3D {
     /// Per-target blend weights shared by every instance in this draw batch.
     #[serde(skip, default)]
     pub morph_weights: Vec<f32>,
+    /// Frustum, distance, and occlusion culling policy for this instanced batch.
+    #[serde(default)]
+    pub culling_mode: CullingMode,
+    /// World-space AABB expansion margin applied before frustum/occlusion tests.
+    #[serde(default)]
+    pub cull_margin: f32,
+    /// Optional half-open camera distance interval `[start, end)` in world units for culling/LOD.
+    #[serde(default)]
+    pub distance_range: Option<[f32; 2]>,
+    /// Whether this instanced batch writes to the depth pre-pass as an occluder.
+    #[serde(default = "default_true")]
+    pub is_occluder: bool,
 }
 
 fn default_true() -> bool {
@@ -195,6 +224,10 @@ impl Default for InstancedModel3D {
             layer_mask: u32::MAX,
             active: true,
             morph_weights: Vec::new(),
+            culling_mode: CullingMode::Auto,
+            cull_margin: 0.0,
+            distance_range: None,
+            is_occluder: true,
         }
     }
 }

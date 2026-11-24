@@ -163,6 +163,10 @@ export interface Mesh3DDesc {
   active?: boolean;
   boneOffset?: number;
   boneCount?: number;
+  cullingMode?: 'auto' | 'frustumOnly' | 'alwaysRender';
+  cullMargin?: number;
+  distanceRange?: [number, number];
+  isOccluder?: boolean;
 }
 
 export interface Mesh3DComponent extends Component {
@@ -179,6 +183,10 @@ export interface Mesh3DComponent extends Component {
   active: boolean;
   boneOffset: number;
   boneCount: number;
+  cullingMode: 'auto' | 'frustumOnly' | 'alwaysRender';
+  cullMargin: number;
+  distanceRange?: [number, number];
+  isOccluder: boolean;
   isDirty: boolean;
 }
 
@@ -197,6 +205,10 @@ export function createMesh3D(meshId: number, modelId: number, desc: Mesh3DDesc):
     active: desc.active ?? true,
     boneOffset: desc.boneOffset ?? 0,
     boneCount: desc.boneCount ?? 0,
+    cullingMode: desc.cullingMode ?? 'auto',
+    cullMargin: desc.cullMargin ?? 0,
+    distanceRange: desc.distanceRange,
+    isOccluder: desc.isOccluder ?? true,
     isDirty: true
   };
 }

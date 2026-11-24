@@ -66,7 +66,8 @@ export const realm3dDescriptors: DescSpec[] = [
       orthoScale: { type: 'number', optional: true },
       cameraSlot: { type: 'number', optional: true },
       layerMask: { type: 'number', optional: true },
-      lookAt: { type: { ref: 'CameraLookAt3DDesc' }, optional: true }
+      lookAt: { type: { ref: 'CameraLookAt3DDesc' }, optional: true },
+      cullCameraSlot: { type: 'number', optional: true }
     }
   },
   {
@@ -180,7 +181,11 @@ export const realm3dDescriptors: DescSpec[] = [
       layerMask: { type: 'number', optional: true },
       boneOffset: { type: 'number', optional: true },
       boneCount: { type: 'number', optional: true },
-      active: { type: 'boolean', optional: true }
+      active: { type: 'boolean', optional: true },
+      cullingMode: { type: { enum: ['auto', 'frustumOnly', 'alwaysRender'] }, optional: true },
+      cullMargin: { type: 'number', optional: true },
+      distanceRange: { type: { tuple: ['number', 'number'] }, optional: true },
+      isOccluder: { type: 'boolean', optional: true }
     }
   },
   {
@@ -382,7 +387,11 @@ export const realm3dDescriptors: DescSpec[] = [
       castShadow: { type: 'boolean', optional: true },
       receiveShadow: { type: 'boolean', optional: true },
       layerMask: { type: 'number', optional: true },
-      active: { type: 'boolean', optional: true }
+      active: { type: 'boolean', optional: true },
+      cullingMode: { type: { enum: ['auto', 'frustumOnly', 'alwaysRender'] }, optional: true },
+      cullMargin: { type: 'number', optional: true },
+      distanceRange: { type: { tuple: ['number', 'number'] }, optional: true },
+      isOccluder: { type: 'boolean', optional: true }
     }
   }
 ];

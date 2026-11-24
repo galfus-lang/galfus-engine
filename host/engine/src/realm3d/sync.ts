@@ -275,7 +275,11 @@ export class Realm3DSyncSystem {
           layerMask: mesh ? mesh.layerMask : 0xffffffff,
           active: mesh ? mesh.active : true,
           boneOffset: mesh ? mesh.boneOffset : 0,
-          boneCount: mesh ? mesh.boneCount : 0
+          boneCount: mesh ? mesh.boneCount : 0,
+          cullingMode: mesh ? mesh.cullingMode : 'auto',
+          cullMargin: mesh ? mesh.cullMargin : 0,
+          distanceRange: mesh?.distanceRange,
+          isOccluder: mesh ? mesh.isOccluder : true
         };
         engine.realm3dCreateModel(this.realmId, model.modelId, desc, tf);
         this._syncedModels.add(model.modelId);

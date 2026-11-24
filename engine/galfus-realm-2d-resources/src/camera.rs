@@ -22,6 +22,9 @@ pub struct Camera2D {
     pub camera_slot: u32,
     /// Whether this camera is actively rendering.
     pub active: bool,
+    /// Optional debug override: cull viewport & distance against another camera slot while rendering from this camera.
+    #[serde(default)]
+    pub cull_camera_slot: Option<u32>,
 }
 
 impl Default for Camera2D {
@@ -34,6 +37,7 @@ impl Default for Camera2D {
             order: 0,
             camera_slot: 0,
             active: true,
+            cull_camera_slot: None,
         }
     }
 }

@@ -317,7 +317,13 @@ impl PipelineManager2D {
                     unclipped_depth: false,
                     conservative: false,
                 },
-                depth_stencil: None,
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: key.surface_type == 0,
+                    depth_compare: wgpu::CompareFunction::GreaterEqual,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
                 multisample: wgpu::MultisampleState {
                     count: key.sample_count,
                     mask: !0,

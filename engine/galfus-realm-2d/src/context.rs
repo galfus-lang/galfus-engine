@@ -395,12 +395,12 @@ impl Realm for Realm2DContext {
         let device = ctx.device;
         let queue = ctx.queue;
 
-        // Resolve camera strictly by requested slot, or default slot 0 if none specified (no arbitrary fallback)
+        // Resolve camera strictly by requested slot first, falling back to logical ID only if no slot matches.
         let selected_camera = if let Some(slot) = ctx.camera_slot {
             self.cameras
-                .iter()
-                .find(|(id, (c, _))| c.active && (c.camera_slot == slot || **id == slot))
-                .map(|(_, pair)| pair)
+                .values()
+                .find(|(c, _)| c.active && c.camera_slot == slot)
+                .or_else(|| self.cameras.get(&slot).filter(|(c, _)| c.active))
         } else {
             self.cameras
                 .values()
@@ -410,13 +410,28 @@ impl Realm for Realm2DContext {
         let Some((camera, camera_transform)) = selected_camera else {
             return Ok(());
         };
+        let camera = camera.clone();
+        let camera_transform = *camera_transform;
 
         let width = ctx.viewport.z.max(1);
         let height = ctx.viewport.w.max(1);
         let viewport_size = Vec2::new(width as f32, height as f32);
 
+        let (cull_cam, cull_tf) = if let Some(cull_slot) = camera.cull_camera_slot
+            && let Some((c, t)) = self
+                .cameras
+                .values()
+                .find(|(c, _)| c.active && c.camera_slot == cull_slot)
+        {
+            (c.clone(), *t)
+        } else {
+            (camera.clone(), camera_transform)
+        };
+
+        self.build_batches_for_camera(&cull_cam, &cull_tf, viewport_size);
+
         let mut camera_uniform = camera.build_uniform(
-            camera_transform,
+            &camera_transform,
             viewport_size,
             self.shadow_manager.config.ambient,
             self.shadow_manager.config.angular_resolution as f32,
@@ -432,6 +447,7 @@ impl Realm for Realm2DContext {
         }
 
         let gpu = self.gpu_res.as_mut().unwrap();
+        let _ = gpu.ensure_depth_texture(device, width, height);
         queue.write_buffer(&gpu.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
 
         // Upload instance buffer
@@ -454,6 +470,7 @@ impl Realm for Realm2DContext {
         let instance_buf = &gpu.instance_buffer;
         let global_bg = &gpu.global_bind_group;
         let fallback_mat_bg = &gpu.fallback_material_bind_group;
+        let depth_view = &gpu.depth_texture.as_ref().unwrap().1;
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("galfus_2d_invocation_encoder"),
@@ -471,7 +488,14 @@ impl Realm for Realm2DContext {
                     },
                     depth_slice: None,
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,

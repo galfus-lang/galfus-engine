@@ -13,7 +13,8 @@ const AUDIO_METHODS: ReadonlySet<string> = new Set([
   'audioStopSound',
   'audioSetVolume',
   'audioSetPanning',
-  'audioUnloadSound'
+  'audioUnloadSound',
+  'platformShutdown'
 ]);
 
 export class BrowserWasmStrategy implements CodegenStrategy {
@@ -108,6 +109,15 @@ export class BrowserWasmStrategy implements CodegenStrategy {
       '  audioSetPanning(voiceId: number, panning: number): void { this._audio.setPanning(voiceId, panning); }',
       '  /** Unloads a browser sound and stops its voices. */',
       '  audioUnloadSound(soundId: number): void { this._audio.unload(soundId); }',
+      '',
+      '  /** Shuts down and cleans up the platform coordinator and browser audio context. */',
+      '  platformShutdown(): void {',
+      '    this._audio.dispose();',
+      "    if (typeof this._addon.platformShutdown !== 'function') {",
+      "      throw new GalfusError('WASM method not implemented: platformShutdown');",
+      '    }',
+      '    this._addon.platformShutdown();',
+      '  }',
       ''
     );
     lines.push(...engineMethodLines(context, 'WASM', ASYNC_METHODS, AUDIO_METHODS));

@@ -225,6 +225,24 @@ fn append_shadow_samples_for_light(
         {
             continue;
         }
+        let max_reach = light_range + light_radius;
+        let mut min_x = f32::INFINITY;
+        let mut max_x = f32::NEG_INFINITY;
+        let mut min_y = f32::INFINITY;
+        let mut max_y = f32::NEG_INFINITY;
+        for p in &occluder.silhouette.vertices {
+            min_x = min_x.min(p.x);
+            max_x = max_x.max(p.x);
+            min_y = min_y.min(p.y);
+            max_y = max_y.max(p.y);
+        }
+        if max_x < light_pos.x - max_reach
+            || min_x > light_pos.x + max_reach
+            || max_y < light_pos.y - max_reach
+            || min_y > light_pos.y + max_reach
+        {
+            continue;
+        }
         if let Some(cone) = build_occluder_light_cone(&occluder.silhouette, light_pos, light_radius)
         {
             let support_depth = cone

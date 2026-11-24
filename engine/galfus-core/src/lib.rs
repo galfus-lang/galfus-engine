@@ -9,12 +9,15 @@
 //! - **Core Errors**: Unified, domain-agnostic error primitives ([`error::CoreError`]).
 
 pub mod collision;
+pub mod culling;
 pub mod diagnostics;
 pub mod error;
 pub mod handle;
 pub mod id;
 pub mod interaction;
 pub mod shader_effects;
+
+pub use culling::{CullingMode, distance_sq_in_range};
 
 pub use error::{CoreError, CoreResult};
 pub use handle::{GenerationalPool, Handle, PoolStats};

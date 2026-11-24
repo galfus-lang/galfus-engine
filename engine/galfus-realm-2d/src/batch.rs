@@ -82,6 +82,65 @@ impl BatchBuilder2D {
         }
     }
 
+    /// Sorts items with monotonic Reverse-Z depth ranks, emitting opaque items front-to-back
+    /// for Hardware Early-Z rejection followed by non-opaque items back-to-front.
+    pub fn build_for_early_z(&mut self) {
+        self.sorted_instances.clear();
+        self.ranges.clear();
+
+        if self.items.is_empty() {
+            return;
+        }
+
+        // First establish exact painter order and stamp monotonic Z onto each item.
+        self.items
+            .sort_by_key(|a| (a.key.z_layer, a.key.draw_order, a.order));
+
+        let total = self.items.len();
+        let z_step = if total > 1 {
+            (8.0_f32 / (total as f32)).min(1e-3)
+        } else {
+            1e-3
+        };
+        for (rank, item) in self.items.iter_mut().enumerate() {
+            item.instance.model_matrix.w_axis.z = (rank as f32) * z_step;
+        }
+
+        self.sorted_instances.reserve(total);
+
+        let emit = |item: &PreparedItem2D,
+                    sorted: &mut Vec<Item2DInstanceRaw>,
+                    ranges: &mut Vec<BatchRange2D>| {
+            if let Some(last) = ranges.last_mut()
+                && last.key == item.key
+            {
+                sorted.push(item.instance);
+                last.count += 1;
+            } else {
+                let start = sorted.len() as u32;
+                sorted.push(item.instance);
+                ranges.push(BatchRange2D {
+                    key: item.key,
+                    start,
+                    count: 1,
+                });
+            }
+        };
+
+        // Pass 1: Opaque items front-to-back (reverse painter order) for maximum Early-Z rejection.
+        for item in self.items.iter().rev() {
+            if item.key.surface_type == 0 {
+                emit(item, &mut self.sorted_instances, &mut self.ranges);
+            }
+        }
+        // Pass 2: Non-opaque items (Transparent, Masked, Additive) back-to-front.
+        for item in &self.items {
+            if item.key.surface_type != 0 {
+                emit(item, &mut self.sorted_instances, &mut self.ranges);
+            }
+        }
+    }
+
     /// Returns the sorted instances to be uploaded to the GPU.
     pub fn instances(&self) -> &[Item2DInstanceRaw] {
         &self.sorted_instances
