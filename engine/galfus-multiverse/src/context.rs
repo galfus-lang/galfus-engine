@@ -545,32 +545,7 @@ impl MultiverseContext {
             "multiverse.resolve_schedule"
         );
         if self.dirty || self.cached_schedule.is_none() {
-            // Validate that if any realm references a Target ID as texture, a TargetTextureBinding exists
-            for (&realm_id, realm) in &self.realms {
-                for tex_id in realm.referenced_texture_ids() {
-                    let is_explicit_texture = self
-                        .gpu_manager
-                        .as_ref()
-                        .is_some_and(|g| g.textures.get_logical_view(tex_id).is_ok());
-                    if self.targets.contains_key(&tex_id) && !is_explicit_texture {
-                        let has_binding = self
-                            .bindings
-                            .iter()
-                            .any(|b| b.realm_id == realm_id && b.source_target_id == tex_id);
-                        if !has_binding {
-                            log::warn!(
-                                "[Multiverse WARNING] Realm {} material references Target ID {} as texture, but no TargetTextureBinding was declared in Multiverse!",
-                                realm_id,
-                                tex_id
-                            );
-                            eprintln!(
-                                "[Multiverse WARNING] Realm {} material references Target ID {} as texture, but no TargetTextureBinding was declared in Multiverse!",
-                                realm_id, tex_id
-                            );
-                        }
-                    }
-                }
-            }
+            self.warn_unbound_target_textures();
 
             let schedule = resolve_schedule(
                 &self.targets,
