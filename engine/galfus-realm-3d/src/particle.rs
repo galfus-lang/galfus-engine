@@ -60,6 +60,7 @@ struct MaterialUniform {
     pbr_params: vec4<f32>,
     flags: vec4<u32>,
     refraction_params: vec4<f32>,
+    parallax_params: vec4<f32>,
     custom_v0: vec4<f32>,
     custom_v1: vec4<f32>,
     custom_v2: vec4<f32>,

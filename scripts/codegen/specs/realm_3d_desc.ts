@@ -141,6 +141,36 @@ export const realm3dDescriptors: DescSpec[] = [
         optional: true,
         doc: 'Emissive texture. Its resource format alone determines whether it is sampled as sRGB or linear.'
       },
+      heightTextureId: {
+        type: 'number',
+        optional: true,
+        doc: 'Grayscale heightmap texture (Slot 5) for Parallax Occlusion Mapping (1.0 = surface top, 0.0 = deepest recess).'
+      },
+      parallaxScale: {
+        type: 'number',
+        optional: true,
+        doc: 'Parallax Occlusion Mapping depth scale in UV space. 0.0 disables POM (typical 0.01..0.10).'
+      },
+      parallaxMinLayers: {
+        type: 'number',
+        optional: true,
+        doc: 'Minimum POM raymarch layers at perpendicular angles. Defaults to 8.'
+      },
+      parallaxMaxLayers: {
+        type: 'number',
+        optional: true,
+        doc: 'Maximum POM raymarch layers at grazing angles. Defaults to 24.'
+      },
+      parallaxFadeDistance: {
+        type: 'number',
+        optional: true,
+        doc: 'Camera distance where POM fades to zero (0.0 disables fade). Defaults to 40.0.'
+      },
+      parallaxClipEdges: {
+        type: 'boolean',
+        optional: true,
+        doc: 'Discard fragments whose parallax-displaced UV exits [0, 1]. Defaults to false.'
+      },
       textureSlots: {
         type: { array: 'number' },
         optional: true,

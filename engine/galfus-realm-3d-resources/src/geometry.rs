@@ -137,14 +137,16 @@ impl Geometry3D {
         }
 
         let aabb = Aabb::from_vertices(&vertices);
-        Self {
+        let mut geom = Self {
             label: Some("Cube3D".into()),
             aabb,
             vertices,
             indices,
             topology: PrimitiveTopology3D::Triangles,
             morph_targets: Vec::new(),
-        }
+        };
+        geom.compute_tangents();
+        geom
     }
 
     /// Generates a horizontal flat plane/quad centered at the origin on the XZ plane.
@@ -162,14 +164,16 @@ impl Geometry3D {
         let indices = vec![0, 1, 2, 0, 2, 3];
         let aabb = Aabb::from_vertices(&vertices);
 
-        Self {
+        let mut geom = Self {
             label: Some("Plane3D".into()),
             aabb,
             vertices,
             indices,
             topology: PrimitiveTopology3D::Triangles,
             morph_targets: Vec::new(),
-        }
+        };
+        geom.compute_tangents();
+        geom
     }
 
     /// Generates a vertical quad centered on the origin in the XY plane facing +Z.
@@ -187,14 +191,16 @@ impl Geometry3D {
         let indices = vec![0, 1, 2, 0, 2, 3];
         let aabb = Aabb::from_vertices(&vertices);
 
-        Self {
+        let mut geom = Self {
             label: Some("Quad3D".into()),
             aabb,
             vertices,
             indices,
             topology: PrimitiveTopology3D::Triangles,
             morph_targets: Vec::new(),
-        }
+        };
+        geom.compute_tangents();
+        geom
     }
 
     /// Generates a UV sphere with a given radius and tessellation subdivisions.
@@ -240,29 +246,37 @@ impl Geometry3D {
         }
 
         let aabb = Aabb::from_vertices(&vertices);
-        Self {
+        let mut geom = Self {
             label: Some("Sphere3D".into()),
             aabb,
             vertices,
             indices,
             topology: PrimitiveTopology3D::Triangles,
             morph_targets: Vec::new(),
-        }
+        };
+        geom.compute_tangents();
+        geom
     }
 
     /// Generates a cylinder with circular caps centered at the origin along the Y axis.
     pub fn cylinder(radius: f32, height: f32, sectors: u32) -> Self {
-        crate::primitives::cylinder(radius, height, sectors)
+        let mut geom = crate::primitives::cylinder(radius, height, sectors);
+        geom.compute_tangents();
+        geom
     }
 
     /// Generates a capsule (pill) with hemispherical caps along the Y axis.
     pub fn capsule(radius: f32, cylinder_height: f32, rings: u32, sectors: u32) -> Self {
-        crate::primitives::capsule(radius, cylinder_height, rings, sectors)
+        let mut geom = crate::primitives::capsule(radius, cylinder_height, rings, sectors);
+        geom.compute_tangents();
+        geom
     }
 
     /// Generates a pyramid with a rectangular base on the XZ plane and an apex at `+height/2`.
     pub fn pyramid(width: f32, depth: f32, height: f32) -> Self {
-        crate::primitives::pyramid(width, depth, height)
+        let mut geom = crate::primitives::pyramid(width, depth, height);
+        geom.compute_tangents();
+        geom
     }
 
     /// Generates a torus (doughnut) centered on the origin in the XZ plane.
@@ -272,7 +286,64 @@ impl Geometry3D {
         major_segments: u32,
         minor_segments: u32,
     ) -> Self {
-        crate::primitives::torus(major_radius, minor_radius, major_segments, minor_segments)
+        let mut geom =
+            crate::primitives::torus(major_radius, minor_radius, major_segments, minor_segments);
+        geom.compute_tangents();
+        geom
+    }
+
+    /// Computes per-vertex tangent vectors (`[tx, ty, tz, handedness]`) from triangle UV edges.
+    pub fn compute_tangents(&mut self) {
+        if self.topology != PrimitiveTopology3D::Triangles || self.vertices.is_empty() {
+            return;
+        }
+        let mut tan_acc = vec![Vec3::ZERO; self.vertices.len()];
+        let mut bitan_acc = vec![Vec3::ZERO; self.vertices.len()];
+
+        for tri in self.indices.as_chunks::<3>().0 {
+            let (i0, i1, i2) = (tri[0] as usize, tri[1] as usize, tri[2] as usize);
+            if i0 >= self.vertices.len() || i1 >= self.vertices.len() || i2 >= self.vertices.len() {
+                continue;
+            }
+            let p0 = Vec3::from_array(self.vertices[i0].position);
+            let p1 = Vec3::from_array(self.vertices[i1].position);
+            let p2 = Vec3::from_array(self.vertices[i2].position);
+            let uv0 = self.vertices[i0].uv0;
+            let uv1 = self.vertices[i1].uv0;
+            let uv2 = self.vertices[i2].uv0;
+
+            let e1 = p1 - p0;
+            let e2 = p2 - p0;
+            let du1 = uv1[0] - uv0[0];
+            let dv1 = uv1[1] - uv0[1];
+            let du2 = uv2[0] - uv0[0];
+            let dv2 = uv2[1] - uv0[1];
+            let det = du1 * dv2 - dv1 * du2;
+            if det.abs() <= 1e-8 {
+                continue;
+            }
+            let inv_det = 1.0 / det;
+            let t = (e1 * dv2 - e2 * dv1) * inv_det;
+            let b = (e2 * du1 - e1 * du2) * inv_det;
+            for idx in [i0, i1, i2] {
+                tan_acc[idx] += t;
+                bitan_acc[idx] += b;
+            }
+        }
+
+        for (i, v) in self.vertices.iter_mut().enumerate() {
+            let n = Vec3::from_array(v.normal).normalize_or_zero();
+            let t_raw = tan_acc[i] - n * n.dot(tan_acc[i]);
+            if t_raw.length_squared() > 1e-8 {
+                let t = t_raw.normalize();
+                let handedness = if n.cross(t).dot(bitan_acc[i]) < 0.0 {
+                    -1.0
+                } else {
+                    1.0
+                };
+                v.tangent = [t.x, t.y, t.z, handedness];
+            }
+        }
     }
 }
 

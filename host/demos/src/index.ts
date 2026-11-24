@@ -32,6 +32,7 @@ export * from './realm3d/d3d10-morph-targets';
 export * from './realm3d/d3d12-ik-layers';
 export * from './realm3d/d3d13-decals-projectors-tattoos';
 export * from './realm3d/d3d14-culling-lod';
+export * from './realm3d/d3d15-pom';
 export * from './ui/ui1-pointer-wheel-image';
 export * from './ui/ui2-panels-layout';
 export * from './ui/ui3-components';

@@ -39,7 +39,7 @@ mod tests {
     fn material_texture_slots_select_uv_sets_internally() {
         assert!(REALM_3D_SHADER.contains("(material.flags.z >> slot) & 1u"));
         assert!(REALM_3D_SHADER.contains("return uv1;"));
-        assert!(REALM_3D_SHADER.contains("sample_material_texture(0u, in.uv0, in.uv1)"));
+        assert!(REALM_3D_SHADER.contains("sample_material_texture(0u, uv0, uv1)"));
     }
 
     #[test]
@@ -47,10 +47,23 @@ mod tests {
         assert!(REALM_3D_SHADER.contains("skin_direction(local_tangent"));
         assert!(REALM_3D_SHADER.contains("out.world_tangent"));
         assert!(REALM_3D_SHADER.contains("inverse_transpose_mat3(instance_mat)"));
-        assert!(REALM_3D_SHADER.contains("sample_material_texture(1u, in.uv0, in.uv1)"));
+        assert!(REALM_3D_SHADER.contains("sample_material_texture(1u, uv0, uv1)"));
         assert!(REALM_3D_SHADER.contains("cross(world_normal, tangent)"));
         assert!(REALM_3D_SHADER.contains("material.refraction_params.z"));
         assert!(REALM_3D_SHADER.contains("@builtin(front_facing) front_facing: bool"));
+    }
+
+    #[test]
+    fn parallax_occlusion_mapping_uses_grad_sampling_and_keeps_fs_opaque_discard_free() {
+        assert!(REALM_3D_SHADER.contains("textureSampleGrad("));
+        assert!(REALM_3D_SHADER.contains("compute_parallax_uv("));
+        assert!(REALM_3D_SHADER.contains("material.parallax_params"));
+        let fs_opaque = REALM_3D_SHADER
+            .split("fn fs_opaque(")
+            .nth(1)
+            .and_then(|s| s.split("fn fs_main(").next())
+            .expect("fs_opaque must exist before fs_main");
+        assert!(!fs_opaque.contains("discard;"));
     }
 
     #[test]

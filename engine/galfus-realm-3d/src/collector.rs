@@ -109,7 +109,7 @@ impl<'a> DrawCollector<'a> {
             };
 
             let surface_type = mat_entry
-                .map(|m| m.0.surface_type)
+                .map(|m| m.0.effective_surface_type())
                 .unwrap_or(SurfaceType3D::Opaque);
 
             let shader_effect = mat_entry.and_then(|m| m.0.shader_effect.as_deref());
@@ -195,7 +195,7 @@ impl<'a> DrawCollector<'a> {
             };
 
             let surface_type = mat_entry
-                .map(|m| m.0.surface_type)
+                .map(|m| m.0.effective_surface_type())
                 .unwrap_or(SurfaceType3D::Opaque);
 
             let shader_effect = mat_entry.and_then(|m| m.0.shader_effect.as_deref());

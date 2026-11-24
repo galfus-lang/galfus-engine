@@ -150,6 +150,24 @@ pub struct Material3D {
     pub occlusion_strength: f32,
     /// Optional logical texture ID for emissive glow map (Slot 4).
     pub emissive_texture_id: Option<u32>,
+    /// Optional logical texture ID for grayscale heightmap used by Parallax Occlusion Mapping (Slot 5).
+    #[serde(default)]
+    pub height_texture_id: Option<u32>,
+    /// Parallax Occlusion Mapping depth scale in UV space (`0.0` disables POM; typical `0.01..0.10`).
+    #[serde(default)]
+    pub parallax_scale: f32,
+    /// Minimum raymarch layers at perpendicular viewing angles. Defaults to `8`.
+    #[serde(default = "default_parallax_min_layers")]
+    pub parallax_min_layers: u32,
+    /// Maximum raymarch layers at steep grazing viewing angles. Defaults to `24`.
+    #[serde(default = "default_parallax_max_layers")]
+    pub parallax_max_layers: u32,
+    /// Camera distance at which POM fades smoothly to zero (`0.0` disables distance fade). Defaults to `40.0`.
+    #[serde(default = "default_parallax_fade_distance")]
+    pub parallax_fade_distance: f32,
+    /// Discard fragments whose parallax-displaced UV exits `[0, 1]`. Defaults to `false`.
+    #[serde(default)]
+    pub parallax_clip_edges: bool,
     /// Universal 8-slot texture array `[Slot 0 .. Slot 7]`.
     #[serde(default = "default_texture_slots")]
     pub texture_slots: [Option<u32>; 8],
@@ -198,6 +216,18 @@ fn default_occlusion_strength() -> f32 {
     1.0
 }
 
+fn default_parallax_min_layers() -> u32 {
+    8
+}
+
+fn default_parallax_max_layers() -> u32 {
+    24
+}
+
+fn default_parallax_fade_distance() -> f32 {
+    40.0
+}
+
 fn default_custom_params() -> [Vec4; 4] {
     [Vec4::ZERO; 4]
 }
@@ -223,6 +253,12 @@ impl Default for Material3D {
             occlusion_texture_id: None,
             occlusion_strength: default_occlusion_strength(),
             emissive_texture_id: None,
+            height_texture_id: None,
+            parallax_scale: 0.0,
+            parallax_min_layers: default_parallax_min_layers(),
+            parallax_max_layers: default_parallax_max_layers(),
+            parallax_fade_distance: default_parallax_fade_distance(),
+            parallax_clip_edges: false,
             texture_slots: [None; 8],
             texture_samplers: [None; 8],
             texture_uv_sets: default_texture_uv_sets(),
@@ -251,7 +287,28 @@ impl Material3D {
         if slots[4].is_none() {
             slots[4] = self.emissive_texture_id;
         }
+        if slots[5].is_none() {
+            slots[5] = self.height_texture_id;
+        }
         slots
+    }
+
+    /// Returns `true` when Parallax Occlusion Mapping is active on this material.
+    pub fn has_active_parallax(&self) -> bool {
+        self.resolved_texture_slots()[5].is_some() && self.parallax_scale > 0.0
+    }
+
+    /// Returns the effective surface pipeline classification, routing edge-clipped opaque POM
+    /// materials to [`SurfaceType3D::Masked`] so `fs_opaque` stays discard-free for Early-Z.
+    pub fn effective_surface_type(&self) -> SurfaceType3D {
+        if self.surface_type == SurfaceType3D::Opaque
+            && self.parallax_clip_edges
+            && self.has_active_parallax()
+        {
+            SurfaceType3D::Masked
+        } else {
+            self.surface_type
+        }
     }
 
     /// Returns the compact two-bit sampler selector set consumed by the material shader.
@@ -306,6 +363,15 @@ impl Material3D {
         if self.shader_effect.is_some() {
             flags |= 1 << 9;
         }
+        let has_parallax = slots[5].is_some() && self.parallax_scale > 0.0;
+        if has_parallax {
+            flags |= 1 << 10;
+            if self.parallax_clip_edges {
+                flags |= 1 << 11;
+            }
+        }
+        let min_layers = self.parallax_min_layers.clamp(1, 64);
+        let max_layers = self.parallax_max_layers.clamp(min_layers, 64);
 
         Material3DUniform {
             base_color: srgb_to_linear_rgba(self.base_color),
@@ -328,6 +394,12 @@ impl Material3D {
                 self.normal_scale,
                 self.occlusion_strength.clamp(0.0, 1.0),
             ),
+            parallax_params: Vec4::new(
+                self.parallax_scale.max(0.0),
+                min_layers as f32,
+                max_layers as f32,
+                self.parallax_fade_distance.max(0.0),
+            ),
             custom_v0: self.custom_params[0],
             custom_v1: self.custom_params[1],
             custom_v2: self.custom_params[2],
@@ -336,7 +408,7 @@ impl Material3D {
     }
 }
 
-/// GPU layout of Material3D aligned to 16-byte boundaries (144 bytes total).
+/// GPU layout of Material3D aligned to 16-byte boundaries (160 bytes total).
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
 pub struct Material3DUniform {
@@ -350,6 +422,8 @@ pub struct Material3DUniform {
     pub flags: UVec4,
     /// Refraction and texture parameters: `[index_of_refraction, distortion_strength, normal_scale, occlusion_strength]`.
     pub refraction_params: Vec4,
+    /// Parallax Occlusion Mapping parameters: `[scale, min_layers, max_layers, fade_distance]`.
+    pub parallax_params: Vec4,
     /// Custom parameter vectors v0, v1, v2, v3 (64 bytes).
     pub custom_v0: Vec4,
     pub custom_v1: Vec4,
@@ -471,5 +545,35 @@ mod tests {
         assert_eq!(uniform.base_color.w, 0.4);
         assert!((uniform.emissive_color.x - 0.214_041_14).abs() < 1e-6);
         assert_eq!(uniform.emissive_color.w, 2.0);
+    }
+
+    #[test]
+    fn parallax_occlusion_mapping_flags_and_params_reach_uniform() {
+        let disabled = Material3D {
+            height_texture_id: Some(42),
+            parallax_scale: 0.0,
+            ..Default::default()
+        };
+        assert_eq!(disabled.resolved_texture_slots()[5], Some(42));
+        assert!(!disabled.has_active_parallax());
+        assert_eq!(disabled.build_uniform().flags.x & (1 << 10), 0);
+        assert_eq!(disabled.effective_surface_type(), SurfaceType3D::Opaque);
+
+        let enabled = Material3D {
+            height_texture_id: Some(42),
+            parallax_scale: 0.05,
+            parallax_min_layers: 10,
+            parallax_max_layers: 32,
+            parallax_fade_distance: 25.0,
+            parallax_clip_edges: true,
+            ..Default::default()
+        };
+        assert!(enabled.has_active_parallax());
+        assert_eq!(enabled.effective_surface_type(), SurfaceType3D::Masked);
+        let u = enabled.build_uniform();
+        assert_ne!(u.flags.x & (1 << 10), 0);
+        assert_ne!(u.flags.x & (1 << 11), 0);
+        assert_eq!(u.parallax_params, Vec4::new(0.05, 10.0, 32.0, 25.0));
+        assert_eq!(std::mem::size_of::<Material3DUniform>(), 160);
     }
 }
