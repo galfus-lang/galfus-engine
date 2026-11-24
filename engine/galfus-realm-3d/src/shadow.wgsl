@@ -8,6 +8,7 @@ struct ModelUniform {
     normal_matrix: mat4x4<f32>,
     outline_color: vec4<f32>,
     flags: vec4<u32>,
+    layer_mask: vec4<u32>,
 };
 
 struct MaterialUniform {

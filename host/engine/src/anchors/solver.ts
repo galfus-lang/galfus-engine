@@ -142,12 +142,8 @@ export class AnchorSolveSystem {
       keepAwake: false
     };
 
-    if (anchor.callback2d) {
-      anchor.callback2d(targetWorld, localMatrix, worldMatrix, anchorCtx);
-    } else {
-      const strategy = this.strategies.get2D(anchor.strategy);
-      strategy.apply(targetWorld, localMatrix, worldMatrix, anchor.offset2d, anchorCtx);
-    }
+    const strategy = this.strategies.get2D(anchor.strategy);
+    strategy.apply(targetWorld, localMatrix, worldMatrix, anchor.offset2d, anchorCtx);
 
     if (model) {
       mat2d.copy(model.worldMatrix, worldMatrix);
@@ -273,12 +269,8 @@ export class AnchorSolveSystem {
       keepAwake: false
     };
 
-    if (anchor.callback3d) {
-      anchor.callback3d(targetWorld, localMatrix, worldMatrix, anchorCtx);
-    } else {
-      const strategy = this.strategies.get3D(anchor.strategy);
-      strategy.apply(targetWorld, localMatrix, worldMatrix, anchor.offset3d, anchorCtx);
-    }
+    const strategy = this.strategies.get3D(anchor.strategy);
+    strategy.apply(targetWorld, localMatrix, worldMatrix, anchor.offset3d, anchorCtx);
 
     if (model) {
       mat4.copy(model.worldMatrix, worldMatrix);

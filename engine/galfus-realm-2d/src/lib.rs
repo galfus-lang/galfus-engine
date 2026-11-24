@@ -56,6 +56,9 @@ pub use ui_fonts::UiFontFamily;
 pub use ui_variations::UiFontAxis;
 
 #[cfg(test)]
+pub(crate) static GPU_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
 mod transparency_tests;
 #[cfg(test)]
 mod ui_tests;

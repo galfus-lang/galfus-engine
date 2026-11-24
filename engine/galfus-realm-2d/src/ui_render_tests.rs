@@ -56,6 +56,9 @@ fn borders_use_independent_side_widths_and_colors() {
 
 #[test]
 fn tree_batches_preserve_sprite_order_and_rebuild_only_changed_node() {
+    let _gpu_guard = crate::GPU_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     use galfus_realm_core::{Realm, RealmInvocationContext, RealmPrepareContext};
     let instance = wgpu::Instance::default();
     let Ok(adapter) =

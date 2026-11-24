@@ -161,6 +161,7 @@ pub struct Sprite2DDesc {
     #[serde(default)]
     pub occluder_only: bool,
     pub shadow_height: Option<f32>,
+    pub layer_mask: Option<u32>,
     pub shadow_layer_mask: Option<u32>,
     pub height_range: Option<[f32; 2]>,
     pub draw_order: Option<i32>,
@@ -184,6 +185,7 @@ impl From<Sprite2DDesc> for Sprite2D {
             receive_shadow: d.receive_shadow,
             occluder_only: d.occluder_only,
             shadow_height: d.shadow_height.unwrap_or(1.0),
+            layer_mask: d.layer_mask.unwrap_or(u32::MAX),
             shadow_layer_mask: d.shadow_layer_mask.unwrap_or(u32::MAX),
             height_range: d.height_range,
             draw_order: d.draw_order,
@@ -207,6 +209,7 @@ pub struct Shape2DDesc {
     #[serde(default)]
     pub occluder_only: bool,
     pub shadow_height: Option<f32>,
+    pub layer_mask: Option<u32>,
     pub shadow_layer_mask: Option<u32>,
     pub height_range: Option<[f32; 2]>,
     pub draw_order: Option<i32>,
@@ -240,6 +243,7 @@ impl From<Shape2DDesc> for Shape2D {
             receive_shadow: d.receive_shadow,
             occluder_only: d.occluder_only,
             shadow_height: d.shadow_height.unwrap_or(1.0),
+            layer_mask: d.layer_mask.unwrap_or(u32::MAX),
             shadow_layer_mask: d.shadow_layer_mask.unwrap_or(u32::MAX),
             height_range: d.height_range,
             draw_order: d.draw_order,
@@ -258,6 +262,7 @@ pub struct Light2DDesc {
     pub intensity: f32,
     pub range: f32,
     pub light_radius: Option<f32>,
+    pub layer_mask: Option<u32>,
     pub shadow_layer_mask: Option<u32>,
     #[serde(default = "default_true")]
     pub cast_shadow: bool,
@@ -278,6 +283,7 @@ impl From<Light2DDesc> for Light2D {
             intensity: d.intensity,
             range: d.range,
             light_radius: d.light_radius.unwrap_or(0.25),
+            layer_mask: d.layer_mask.unwrap_or(u32::MAX),
             shadow_layer_mask: d.shadow_layer_mask.unwrap_or(u32::MAX),
             cast_shadow: d.cast_shadow,
             active: d.active,
@@ -366,6 +372,7 @@ pub struct ParticleEmitter2DDesc {
     pub cast_shadow: bool,
     #[serde(default)]
     pub receive_shadow: bool,
+    pub layer_mask: Option<u32>,
     #[serde(default = "default_true")]
     pub active: bool,
 }
@@ -412,6 +419,7 @@ impl From<ParticleEmitter2DDesc> for ParticleEmitter2D {
             z_layer: d.z_layer.unwrap_or(def.z_layer),
             cast_shadow: d.cast_shadow,
             receive_shadow: d.receive_shadow,
+            layer_mask: d.layer_mask.unwrap_or(def.layer_mask),
             active: d.active,
         }
     }

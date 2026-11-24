@@ -2,7 +2,7 @@
 name: galfus-realm-2d
 description: >-
   Use this skill to build 2D scenes in Galfus Engine, including 2D orthographic cameras,
-  sprites, 2D dynamic lighting, materials, sprite sheets, and 2D entity transforms.
+  sprites, 2D dynamic lighting, materials, sprite sheets, layer masks, and 2D entity transforms.
 ---
 
 # Galfus Engine 2D Realm (Realm2D)
@@ -123,6 +123,22 @@ runtime.on('tick', ({ dt }) => {
   spriteModel?.setPosition(x, y);
   spriteModel?.setRotation(time); // Rotate continuously
 });
+```
+
+## 8. Layer Masks (`layerMask`)
+
+2D cameras, sprites, shapes, lights, particle emitters, and UI models accept an optional 32-bit `layerMask` (default `0xffffffff`). A camera only renders items matching `(camera.layerMask & item.layerMask) !== 0`, and 2D lights only illuminate items matching `(light.layerMask & item.layerMask) !== 0`:
+
+```typescript
+const LAYER_WORLD = 0b0001;
+const LAYER_UI = 0b0010;
+
+realm2d.createCamera(
+  { cameraSlot: 1, orthoScale: 10, layerMask: LAYER_WORLD },
+  { position: [0, 0] }
+);
+realm2d.createSprite({ dimensions: [2, 2], materialId: greenMat, layerMask: LAYER_WORLD });
+realm2d.createLight({ color: [1, 0.9, 0.7], intensity: 2, range: 10, layerMask: LAYER_WORLD });
 ```
 
 ## Best Practices

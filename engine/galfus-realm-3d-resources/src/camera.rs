@@ -57,10 +57,17 @@ pub struct Camera3D {
     pub ortho_scale: f32,
     /// Optional logical camera slot (e.g. 0 for main, 1 for secondary/portal).
     pub camera_slot: u32,
+    /// Visibility bitmask determining which object layers this camera renders.
+    #[serde(default = "default_layer_mask")]
+    pub layer_mask: u32,
     /// Whether the camera is active.
     pub active: bool,
     /// Optional point and up direction used to derive the view orientation.
     pub look_at: Option<CameraLookAt3D>,
+}
+
+fn default_layer_mask() -> u32 {
+    u32::MAX
 }
 
 impl Default for Camera3D {
@@ -72,6 +79,7 @@ impl Default for Camera3D {
             far: 1000.0,
             ortho_scale: 10.0,
             camera_slot: 0,
+            layer_mask: u32::MAX,
             active: true,
             look_at: None,
         }

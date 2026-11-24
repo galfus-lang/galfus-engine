@@ -1,7 +1,8 @@
 //! 3D Collider management and raycast picking for `Realm3DContext`.
 
 use crate::collision_geometry::{
-    ray_intersects_box, ray_intersects_capsule, ray_intersects_cylinder, ray_intersects_sphere,
+    ray_intersects_box, ray_intersects_capsule, ray_intersects_cylinder,
+    ray_intersects_heightfield, ray_intersects_sphere, ray_intersects_trimesh,
 };
 use galfus_realm_core::collision::{
     Collider3D, ColliderQueryHit3D, ColliderShape3D, HitResult3D, Ray3D,
@@ -43,7 +44,20 @@ impl Realm3DContext {
         if let Some(physics) = self.physics.as_mut()
             && physics.has_rigid_body(collider.model_id)
         {
-            physics.sync_collider(collider.model_id, &collider, None, scale);
+            let mesh_data = match &collider.shape {
+                ColliderShape3D::TriMesh { geometry_id } => {
+                    self.geometries.get(geometry_id).map(|(geom, _)| {
+                        let verts: Vec<[f32; 3]> =
+                            geom.vertices.iter().map(|v| v.position).collect();
+                        (verts, geom.indices.clone())
+                    })
+                }
+                _ => None,
+            };
+            let mesh_ref = mesh_data
+                .as_ref()
+                .map(|(v, i)| (v.as_slice(), i.as_slice()));
+            physics.sync_collider_with_mesh(collider.model_id, &collider, None, scale, mesh_ref);
         }
         self.colliders.insert(collider.id, collider);
         Ok(())
@@ -231,6 +245,37 @@ impl Realm3DContext {
                         None
                     }
                 }
+                ColliderShape3D::TriMesh { geometry_id } => {
+                    self.geometries.get(geometry_id).and_then(|(geom, _)| {
+                        let verts: Vec<[f32; 3]> =
+                            geom.vertices.iter().map(|v| v.position).collect();
+                        ray_intersects_trimesh(
+                            Ray3D {
+                                origin: local_ray.origin - center,
+                                direction: local_ray.direction,
+                            },
+                            &verts,
+                            &geom.indices,
+                            geom.aabb.min,
+                            geom.aabb.max,
+                        )
+                    })
+                }
+                ColliderShape3D::Heightfield {
+                    heights,
+                    nrows,
+                    ncols,
+                    scale,
+                } => ray_intersects_heightfield(
+                    Ray3D {
+                        origin: local_ray.origin - center,
+                        direction: local_ray.direction,
+                    },
+                    heights,
+                    *nrows,
+                    *ncols,
+                    *scale,
+                ),
             };
 
             let hit = hit.map(|(distance, normal)| {

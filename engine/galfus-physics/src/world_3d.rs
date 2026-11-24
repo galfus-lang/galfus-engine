@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 mod poses;
+mod shapes;
 
-use galfus_realm_core::collision::{Collider3D, ColliderShape3D};
+use galfus_realm_core::collision::Collider3D;
 use galfus_realm_core::hierarchy::Pose3D;
 use glam::{Mat4, Quat, Vec3};
 use rapier3d::prelude::*;
@@ -336,6 +337,18 @@ impl PhysicsWorld3D {
         desc: Option<&RigidBodyDesc3D>,
         scale: [f32; 3],
     ) {
+        self.sync_collider_with_mesh(entity_id, collider, desc, scale, None);
+    }
+
+    /// Attaches or synchronizes a canonical 3D collider into Rapier with optional triangle mesh data.
+    pub fn sync_collider_with_mesh(
+        &mut self,
+        entity_id: u32,
+        collider: &Collider3D,
+        desc: Option<&RigidBodyDesc3D>,
+        scale: [f32; 3],
+        mesh_data: Option<(&[[f32; 3]], &[u32])>,
+    ) {
         self.remove_collider(collider.id);
         let local = collider
             .local_matrix
@@ -350,28 +363,9 @@ impl PhysicsWorld3D {
         let position =
             local.transform_point3(Vec3::from_array(collider.offset)) * Vec3::from_array(scale);
 
-        let shape = match &collider.shape {
-            ColliderShape3D::Box { half_extents } => SharedShape::cuboid(
-                half_extents[0] * sx,
-                half_extents[1] * sy,
-                half_extents[2] * sz,
-            ),
-            ColliderShape3D::Sphere { radius } => SharedShape::ball(*radius * sx.max(sy).max(sz)),
-            ColliderShape3D::Cylinder {
-                radius,
-                half_height,
-            } => SharedShape::cylinder(*half_height * sy, *radius * sx.max(sz)),
-            ColliderShape3D::Capsule {
-                radius,
-                half_height,
-            } => SharedShape::capsule_y(*half_height * sy, *radius * sx.max(sz)),
-            ColliderShape3D::Rectangle { half_extents } => {
-                SharedShape::cuboid(half_extents[0] * sx, half_extents[1] * sy, 0.01)
-            }
-            ColliderShape3D::Plane { normal, .. } => {
-                let n = Vec3::new(normal[0], normal[1], normal[2]).normalize_or_zero();
-                SharedShape::halfspace(n)
-            }
+        let Some(shape) = shapes::build_rapier_shape_3d(&collider.shape, sx, sy, sz, mesh_data)
+        else {
+            return;
         };
 
         let desc = desc.or_else(|| self.body_descs.get(&entity_id));

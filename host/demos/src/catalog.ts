@@ -31,6 +31,8 @@ import { runDemo3d8 } from './realm3d/d3d8-instancing';
 import { runDemo3d9 } from './realm3d/d3d9-sides-normals';
 import { runDemo3d10 } from './realm3d/d3d10-morph-targets';
 import { runDemo3d11 } from './realm3d/d3d11-imported-skybox';
+import { runDemo3d12 } from './realm3d/d3d12-ik-layers';
+import { runDemo3d13 } from './realm3d/d3d13-decals-projectors-tattoos';
 import { runDemoUi1 } from './ui/ui1-pointer-wheel-image';
 import { runDemoUi2 } from './ui/ui2-panels-layout';
 import { runDemoUi3 } from './ui/ui3-components';
@@ -430,6 +432,26 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     description:
       'Imports a 360° equirectangular panoramic texture as a background skybox, reflected across chrome, gold, and glass PBR materials.',
     run: runDemo3d11
+  },
+  {
+    id: '3d12',
+    aliases: ['ik', 'procedural-ik', 'layers-3d', 'spherecast'],
+    title: 'Procedural IK (Two-Bone, FABRIK, LookAt), Spherecast & Layers',
+    category: 'Realm 3D',
+    tags: ['3d', 'ik', 'two-bone', 'fabrik', 'look-at', 'spherecast', 'heightfield', 'layers'],
+    description:
+      'Core-solved Two-Bone leg grounded on a heightfield via 3D spherecast, 5-joint FABRIK tentacle, LookAt turret, and camera layerMask toggling.',
+    run: runDemo3d12
+  },
+  {
+    id: '3d13',
+    aliases: ['decals', 'projectors', 'tattoos', 'uv-bake'],
+    title: 'Forward PBR Decals, Occluded Projectors & UV-Baked Tattoos',
+    category: 'Realm 3D',
+    tags: ['3d', 'decals', 'projectors', 'occlusion', 'tattoos', 'uv-bake', 'pbr'],
+    description:
+      'Forward PBR orthographic floor decal, occluded perspective texture projector with moving blocker, and permanent UV-space baked tattoos on a rotating mesh.',
+    run: runDemo3d13
   },
 
   // 5. Realm 2D & Animation (4 demos)

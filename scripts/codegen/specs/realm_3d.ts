@@ -1,8 +1,14 @@
-import type { FunctionSpec } from './types';
+import type { DescSpec, FunctionSpec } from './types';
+import { realm3dDescriptors as baseRealm3dDescriptors } from './realm_3d_desc';
+import { realm3dProjectorDescriptors, realm3dProjectorFunctions } from './realm_3d_projectors';
 
-export { realm3dDescriptors } from './realm_3d_desc';
+export const realm3dDescriptors: DescSpec[] = [
+  ...baseRealm3dDescriptors,
+  ...realm3dProjectorDescriptors
+];
 
 export const realm3dFunctions: FunctionSpec[] = [
+  ...realm3dProjectorFunctions,
   {
     cName: 'galfus_realm_3d_create',
     methodName: 'realm3dCreate',

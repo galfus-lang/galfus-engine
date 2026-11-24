@@ -272,6 +272,12 @@ impl PipelineManager2D {
                         offset: 96,
                         shader_location: 9,
                     },
+                    // layer_mask
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Uint32,
+                        offset: 112,
+                        shader_location: 10,
+                    },
                 ],
             };
 

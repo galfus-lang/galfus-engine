@@ -13,6 +13,29 @@ pub struct Item2DInstanceRaw {
     pub uv_rect: Vec4,
     /// Shadow and lighting parameters: `[receive_shadow, cast_shadow, shadow_height, shadow_layer_mask]`.
     pub shadow_params: Vec4,
+    /// Visibility and lighting layer bitmask.
+    pub layer_mask: u32,
+    /// 16-byte alignment padding for Pod layout.
+    pub _pad: [u32; 3],
+}
+
+impl Item2DInstanceRaw {
+    pub const fn new(
+        model_matrix: Mat4,
+        tint: Vec4,
+        uv_rect: Vec4,
+        shadow_params: Vec4,
+        layer_mask: u32,
+    ) -> Self {
+        Self {
+            model_matrix,
+            tint,
+            uv_rect,
+            shadow_params,
+            layer_mask,
+            _pad: [0; 3],
+        }
+    }
 }
 
 /// Single polar shadow sample candidate for soft 2D penumbra calculations (64 bytes).
@@ -77,6 +100,8 @@ pub struct BatchKey2D {
     pub material_id: u32,
     /// Geometry mesh index (0 for quad, or packed Generational Handle).
     pub geometry_id: u64,
+    /// Visibility layer bitmask used for per-camera culling.
+    pub layer_mask: u32,
 }
 
 /// Contiguous index range sharing the same `BatchKey2D`.

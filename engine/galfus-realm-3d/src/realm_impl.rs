@@ -38,6 +38,8 @@ impl Realm for Realm3DContext {
         if !self.hierarchy.is_empty() {
             self.solve_hierarchy(ctx.delta_time);
         }
+        self.solve_ik();
+        self.solve_skins();
 
         for (emitter, transform, state) in self.emitters.values_mut() {
             state.update(
@@ -89,15 +91,22 @@ impl Realm for Realm3DContext {
             pipeline,
             shadow_pipe,
             &mut self.shadow_map,
+            &mut self.projector_gpu,
             &mut self.scene_buffers,
             &self.environment,
             &self.lights,
+            &self.projectors,
+            ctx.textures,
             &self.bones,
             &mut self.lights_dirty,
+            &mut self.projectors_dirty,
             &mut self.bones_dirty,
         ) {
             self.scene_bindings_generation = self.scene_bindings_generation.wrapping_add(1);
         }
+
+        // 5. Execute queued one-shot UV-space decal bakes (tattoos / body paint)
+        self.execute_pending_uv_bakes(device, queue, ctx.textures);
 
         Ok(())
     }
@@ -115,6 +124,19 @@ impl Realm for Realm3DContext {
             .collect();
         if let Some(tex_id) = self.environment.skybox.texture_id.filter(|&id| id != 0) {
             ids.push(tex_id);
+        }
+        for (proj, _) in self.projectors.values() {
+            if let Some(tex_id) = proj.texture_id.filter(|&id| id != 0) {
+                ids.push(tex_id);
+            }
+        }
+        for (bake, _) in &self.pending_uv_bakes {
+            if bake.target_texture_id != 0 {
+                ids.push(bake.target_texture_id);
+            }
+            if let Some(tex_id) = bake.decal_texture_id.filter(|&id| id != 0) {
+                ids.push(tex_id);
+            }
         }
         ids
     }

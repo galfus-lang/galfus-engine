@@ -244,6 +244,31 @@ export const animationDescriptors: DescSpec[] = [
       },
       {
         inline: {
+          kind: {
+            type: {
+              enum: [
+                'projector3DTransform',
+                'projector3DColor',
+                'projector3DSize',
+                'projector3DFov',
+                'projector3DUvRect',
+                'projector3DAngleFade'
+              ]
+            }
+          },
+          realmId: { type: 'number' },
+          projectorId: { type: 'number' }
+        }
+      },
+      {
+        inline: {
+          kind: { type: { literal: 'ik3DTarget' } },
+          realmId: { type: 'number' },
+          ikId: { type: 'number' }
+        }
+      },
+      {
+        inline: {
           kind: { type: { literal: 'customChannel' } },
           channelId: { type: 'number' }
         }

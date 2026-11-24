@@ -21,6 +21,9 @@ pub struct Model3D {
     pub cast_outline: bool,
     /// sRGB RGBA tint for this model's outline silhouette.
     pub outline_color: Vec4,
+    /// Visibility, lighting, and shadow layer bitmask.
+    #[serde(default = "default_layer_mask")]
+    pub layer_mask: u32,
     /// Whether this model instance is actively drawn.
     pub active: bool,
     /// Offset into the shared bones storage buffer palette.
@@ -34,6 +37,10 @@ pub struct Model3D {
     pub morph_weights: Vec<f32>,
 }
 
+fn default_layer_mask() -> u32 {
+    u32::MAX
+}
+
 impl Default for Model3D {
     fn default() -> Self {
         Self {
@@ -43,6 +50,7 @@ impl Default for Model3D {
             receive_shadow: true,
             cast_outline: false,
             outline_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+            layer_mask: u32::MAX,
             active: true,
             bone_offset: 0,
             bone_count: 0,
@@ -85,6 +93,7 @@ impl Model3D {
                 self.bone_count,
                 self.morph_weights.len() as u32,
             ),
+            layer_mask: UVec4::new(self.layer_mask, 0, 0, 0),
         }
     }
 }
@@ -101,6 +110,8 @@ pub struct Model3DUniform {
     pub outline_color: Vec4,
     /// Flags and offsets: `[flags, bone_offset, bone_count, morph_target_count]`.
     pub flags: UVec4,
+    /// Layer metadata: `[layer_mask, 0, 0, 0]`.
+    pub layer_mask: UVec4,
 }
 
 /// Per-instance data for 3D GPU mesh instancing aligned to 128 bytes (cache-line).
@@ -158,6 +169,9 @@ pub struct InstancedModel3D {
     /// Whether this instanced model receives shadows from shadow-casting lights.
     #[serde(default = "default_true")]
     pub receive_shadow: bool,
+    /// Visibility, lighting, and shadow layer bitmask.
+    #[serde(default = "default_layer_mask")]
+    pub layer_mask: u32,
     /// Whether this instanced model collection is actively drawn.
     #[serde(default = "default_true")]
     pub active: bool,
@@ -178,6 +192,7 @@ impl Default for InstancedModel3D {
             capacity: 0,
             cast_shadow: true,
             receive_shadow: true,
+            layer_mask: u32::MAX,
             active: true,
             morph_weights: Vec::new(),
         }
@@ -241,9 +256,11 @@ mod tests {
     fn model_uniform_exposes_morph_target_count() {
         let model = Model3D {
             morph_weights: vec![0.25, 0.75],
+            layer_mask: 0b1010,
             ..Default::default()
         };
         let uniform = model.build_uniform(&Transform3D::default());
         assert_eq!(uniform.flags.w, 2);
+        assert_eq!(uniform.layer_mask.x, 0b1010);
     }
 }

@@ -61,7 +61,14 @@ impl UiManager2D {
                     let geometry = self.node_geometries.get(&(ui_id, node_id));
                     if let Some(handle) = geometry.and_then(|geometry| geometry.back) {
                         sub_order = sub_order.saturating_add(1);
-                        push_node_geometry(batch_builder, ui_id, sub_order, transform, handle);
+                        push_node_geometry(
+                            batch_builder,
+                            ui_id,
+                            sub_order,
+                            ui.layer_mask,
+                            transform,
+                            handle,
+                        );
                     }
 
                     let clipped =
@@ -91,6 +98,7 @@ impl UiManager2D {
                                             batch_builder,
                                             ui_id,
                                             sub_order,
+                                            ui.layer_mask,
                                             transform,
                                             model_matrix,
                                             bg,
@@ -100,6 +108,7 @@ impl UiManager2D {
                                         batch_builder,
                                         ui_id,
                                         sub_order,
+                                        ui.layer_mask,
                                         transform,
                                         [qx, qy, qw, qh],
                                         panel.border_width,
@@ -122,6 +131,7 @@ impl UiManager2D {
                                             batch_builder,
                                             ui_id,
                                             sub_order,
+                                            ui.layer_mask,
                                             transform,
                                             model_matrix,
                                             bg,
@@ -131,6 +141,7 @@ impl UiManager2D {
                                         batch_builder,
                                         ui_id,
                                         sub_order,
+                                        ui.layer_mask,
                                         transform,
                                         [qx, qy, qw, qh],
                                         sprite.panel.border_width,
@@ -163,6 +174,7 @@ impl UiManager2D {
                                             batch_builder,
                                             ui_id,
                                             sub_order,
+                                            ui.layer_mask,
                                             transform,
                                             mat_id,
                                             layout.absolute_rect,
@@ -209,6 +221,7 @@ impl UiManager2D {
                                                     surface_type: 1,
                                                     material_id: mat_id,
                                                     geometry_id: 0,
+                                                    layer_mask: ui.layer_mask,
                                                 },
                                                 instance: Item2DInstanceRaw {
                                                     model_matrix: image_matrix,
@@ -217,6 +230,8 @@ impl UiManager2D {
                                                     shadow_params: Vec4::new(
                                                         0.0, 0.0, -10000.0, 10000.0,
                                                     ),
+                                                    layer_mask: ui.layer_mask,
+                                                    _pad: [0; 3],
                                                 },
                                                 occluder_only: false,
                                             });
@@ -230,7 +245,14 @@ impl UiManager2D {
 
                     if let Some(handle) = geometry.and_then(|geometry| geometry.front) {
                         sub_order = sub_order.saturating_add(1);
-                        push_node_geometry(batch_builder, ui_id, sub_order, transform, handle);
+                        push_node_geometry(
+                            batch_builder,
+                            ui_id,
+                            sub_order,
+                            ui.layer_mask,
+                            transform,
+                            handle,
+                        );
                     }
                 }
             } else {
@@ -261,6 +283,7 @@ impl UiManager2D {
                                 batch_builder,
                                 ui_id,
                                 sub_base,
+                                ui.layer_mask,
                                 transform,
                                 model_matrix,
                                 quad.background_color,
@@ -270,6 +293,7 @@ impl UiManager2D {
                             batch_builder,
                             ui_id,
                             sub_base + 2,
+                            ui.layer_mask,
                             transform,
                             [qx, qy, qw, qh],
                             quad.border_width,
@@ -298,12 +322,15 @@ impl UiManager2D {
                                 surface_type: 1,
                                 material_id: mat_id,
                                 geometry_id: 0,
+                                layer_mask: ui.layer_mask,
                             },
                             instance: Item2DInstanceRaw {
                                 model_matrix,
                                 tint: Vec4::from_array(quad.tint_color),
                                 uv_rect: Vec4::from_array(uv),
                                 shadow_params: Vec4::new(0.0, 0.0, -10000.0, 10000.0),
+                                layer_mask: ui.layer_mask,
+                                _pad: [0; 3],
                             },
                             occluder_only: false,
                         });
@@ -330,12 +357,15 @@ impl UiManager2D {
                         surface_type: 1,
                         material_id: 0,
                         geometry_id: handle.to_u64(),
+                        layer_mask: ui.layer_mask,
                     },
                     instance: Item2DInstanceRaw {
                         model_matrix,
                         tint: Vec4::ONE,
                         uv_rect: Vec4::new(0.0, 0.0, 1.0, 1.0),
                         shadow_params: Vec4::new(0.0, 0.0, -10000.0, 10000.0),
+                        layer_mask: ui.layer_mask,
+                        _pad: [0; 3],
                     },
                     occluder_only: false,
                 });
@@ -348,6 +378,7 @@ fn push_node_geometry(
     batch_builder: &mut BatchBuilder2D,
     ui_id: u32,
     sub_order: u32,
+    layer_mask: u32,
     transform: &Transform2D,
     handle: Handle<GpuVectorGeometry>,
 ) {
@@ -368,12 +399,15 @@ fn push_node_geometry(
             surface_type: 1,
             material_id: 0,
             geometry_id: handle.to_u64(),
+            layer_mask,
         },
         instance: Item2DInstanceRaw {
             model_matrix,
             tint: Vec4::ONE,
             uv_rect: Vec4::new(0.0, 0.0, 1.0, 1.0),
             shadow_params: Vec4::new(0.0, 0.0, -10000.0, 10000.0),
+            layer_mask,
+            _pad: [0; 3],
         },
         occluder_only: false,
     });
@@ -416,6 +450,7 @@ fn push_colored_quad(
     batch_builder: &mut BatchBuilder2D,
     ui_id: u32,
     sub_order: u32,
+    layer_mask: u32,
     transform: &Transform2D,
     model_matrix: Mat4,
     color: [f32; 4],
@@ -428,12 +463,15 @@ fn push_colored_quad(
             surface_type: 1,
             material_id: 0,
             geometry_id: 0,
+            layer_mask,
         },
         instance: Item2DInstanceRaw {
             model_matrix,
             tint: Vec4::from_array(color),
             uv_rect: Vec4::new(0.0, 0.0, 1.0, 1.0),
             shadow_params: Vec4::new(0.0, 0.0, -10000.0, 10000.0),
+            layer_mask,
+            _pad: [0; 3],
         },
         occluder_only: false,
     });
@@ -444,6 +482,7 @@ fn push_borders(
     batch_builder: &mut BatchBuilder2D,
     ui_id: u32,
     mut sub_order: u32,
+    layer_mask: u32,
     transform: &Transform2D,
     rect: [f32; 4],
     border_width: [f32; 4],
@@ -478,7 +517,15 @@ fn push_borders(
                 Vec3::new(ewx, ewy, quad_z + 0.0001),
             );
             sub_order = sub_order.saturating_add(1);
-            push_colored_quad(batch_builder, ui_id, sub_order, transform, emat, tint);
+            push_colored_quad(
+                batch_builder,
+                ui_id,
+                sub_order,
+                layer_mask,
+                transform,
+                emat,
+                tint,
+            );
         }
     }
     sub_order

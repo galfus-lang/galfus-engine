@@ -29,7 +29,8 @@ import type {
   Model3DComponent,
   ParticleEmitter3DComponent,
   Portal3DComponent,
-  Primitive3DKind
+  Primitive3DKind,
+  Projector3DComponent
 } from './components';
 
 export interface Realm3DResourceProvider {
@@ -49,6 +50,7 @@ export class Realm3DSyncSystem {
   private readonly _syncedLights = new Set<number>();
   private readonly _syncedEmitters = new Set<number>();
   private readonly _syncedPortals = new Set<number>();
+  private readonly _syncedProjectors = new Set<number>();
   private readonly _syncedInstancedModels = new Set<number>();
   private readonly _syncedColliders = new Map<
     number,
@@ -248,6 +250,7 @@ export class Realm3DSyncSystem {
           world.hasComponent(id, 'Light3D') ||
           world.hasComponent(id, 'ParticleEmitter3D') ||
           world.hasComponent(id, 'Portal3D') ||
+          world.hasComponent(id, 'Projector3D') ||
           world.hasComponent(id, 'InstancedModel3D'))
       ) {
         continue;
@@ -269,6 +272,7 @@ export class Realm3DSyncSystem {
           receiveShadow: mesh ? mesh.receiveShadow : true,
           castOutline: mesh ? mesh.castOutline : false,
           outlineColor: mesh ? mesh.outlineColor : [1, 1, 1, 1],
+          layerMask: mesh ? mesh.layerMask : 0xffffffff,
           active: mesh ? mesh.active : true,
           boneOffset: mesh ? mesh.boneOffset : 0,
           boneCount: mesh ? mesh.boneCount : 0
@@ -284,7 +288,6 @@ export class Realm3DSyncSystem {
       if (!currentModels.has(modelId)) {
         engine.realm3dDestroyModel(this.realmId, modelId);
         this._syncedModels.delete(modelId);
-        this._transformCache.delete(modelId);
       }
     }
 
@@ -387,6 +390,32 @@ export class Realm3DSyncSystem {
       }
     }
 
+    // 7b. Sync Projectors / Decals
+    const projectorEntities = world.query('Projector3D');
+    const currentProjectors = new Set<number>();
+    for (const id of projectorEntities) {
+      const projector = world.getComponent<Projector3DComponent>(id, 'Projector3D');
+      if (!projector) continue;
+      currentProjectors.add(projector.projectorId);
+
+      const model = world.getComponent<Model3DComponent>(id, 'Model3D');
+      const isSpatialDirty = model ? (model.flags & SpatialDirtyFlags.WorldDirty) !== 0 : false;
+      const tf = this.getResolvedTransform(world, id);
+      if (!this._syncedProjectors.has(projector.projectorId) || projector.isDirty) {
+        engine.realm3dCreateProjector(this.realmId, projector.projectorId, projector.desc, tf);
+        this._syncedProjectors.add(projector.projectorId);
+        projector.isDirty = false;
+      } else if (isSpatialDirty) {
+        engine.realm3dSetProjectorTransform(this.realmId, projector.projectorId, tf);
+      }
+    }
+    for (const projId of this._syncedProjectors) {
+      if (!currentProjectors.has(projId)) {
+        engine.realm3dDestroyProjector(this.realmId, projId);
+        this._syncedProjectors.delete(projId);
+      }
+    }
+
     // 8. Sync Instanced Models
     const instancedEntities = world.query('InstancedModel3D');
     const currentInstanced = new Set<number>();
@@ -428,7 +457,9 @@ export class Realm3DSyncSystem {
           entry.shape.type !== 'sphere' &&
           entry.shape.type !== 'cylinder' &&
           entry.shape.type !== 'capsule' &&
-          entry.shape.type !== 'plane'
+          entry.shape.type !== 'plane' &&
+          entry.shape.type !== 'triMesh' &&
+          entry.shape.type !== 'heightfield'
         )
           continue;
         currentColliders.add(entry.colliderId);
@@ -449,6 +480,16 @@ export class Realm3DSyncSystem {
               type: 'capsule',
               radius: entry.shape.radius,
               halfHeight: entry.shape.halfHeight
+            };
+          } else if (entry.shape.type === 'triMesh') {
+            shapeDesc = { type: 'triMesh', geometryId: entry.shape.geometryId };
+          } else if (entry.shape.type === 'heightfield') {
+            shapeDesc = {
+              type: 'heightfield',
+              heights: entry.shape.heights,
+              nrows: entry.shape.nrows,
+              ncols: entry.shape.ncols,
+              scale: entry.shape.scale
             };
           } else {
             shapeDesc = { type: 'rectangle', halfExtents: entry.shape.halfExtents };
@@ -471,11 +512,16 @@ export class Realm3DSyncSystem {
       }
     }
 
-    // 10. Clear WorldDirty for all Model3D entities after all Core sync steps are complete
+    // 10. Clear WorldDirty and prune _transformCache entries for destroyed entities
     for (const id of modelEntities) {
       const model = world.getComponent<Model3DComponent>(id, 'Model3D');
       if (model) {
         model.flags &= ~SpatialDirtyFlags.WorldDirty;
+      }
+    }
+    for (const entityId of this._transformCache.keys()) {
+      if (!world.isAlive(entityId)) {
+        this._transformCache.delete(entityId);
       }
     }
   }
@@ -500,6 +546,7 @@ export class Realm3DSyncSystem {
       for (const id of this._syncedGeometries) engine.realm3dDestroyGeometry(this.realmId, id);
       for (const id of this._syncedEmitters) engine.realm3dDestroyParticleEmitter(this.realmId, id);
       for (const id of this._syncedPortals) engine.realm3dDestroyPortal(this.realmId, id);
+      for (const id of this._syncedProjectors) engine.realm3dDestroyProjector(this.realmId, id);
       for (const id of this._syncedInstancedModels)
         engine.realm3dDestroyInstancedModel(this.realmId, id);
       for (const id of this._syncedColliders.keys()) {
@@ -515,6 +562,7 @@ export class Realm3DSyncSystem {
     this._syncedGeometries.clear();
     this._syncedEmitters.clear();
     this._syncedPortals.clear();
+    this._syncedProjectors.clear();
     this._syncedInstancedModels.clear();
     this._syncedColliders.clear();
     this._transformCache.clear();

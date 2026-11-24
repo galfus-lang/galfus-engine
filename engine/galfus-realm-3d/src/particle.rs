@@ -492,6 +492,7 @@ pub fn collect_emitter_instances(
         ),
     >,
     refraction_threshold: Option<(glam::Vec3, f32)>,
+    camera_layer_mask: u32,
     alpha: &mut Vec<Particle3DInstance>,
     additive: &mut Vec<Particle3DInstance>,
     alpha_batches: &mut Vec<ParticleBatch3D>,
@@ -503,6 +504,9 @@ pub fn collect_emitter_instances(
     additive_batches.clear();
 
     for (emitter, _, state) in emitters.values() {
+        if (emitter.layer_mask & camera_layer_mask) == 0 {
+            continue;
+        }
         let is_add = emitter
             .material_id
             .and_then(|mid| materials.get(&mid))
@@ -542,54 +546,5 @@ pub fn collect_emitter_instances(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use galfus_realm_3d_resources::material::SurfaceType3D;
-    use galfus_realm_3d_resources::particle::{ParticleEmitter3D, ParticleEmitterState3D};
-    use galfus_realm_3d_resources::transform::Transform3D;
-    use glam::{Quat, Vec3, Vec4};
-    use std::collections::BTreeMap;
-
-    #[test]
-    fn collect_emitter_instances_propagates_uv_rect_and_material_batches() {
-        let mut emitters = BTreeMap::new();
-        let emitter = ParticleEmitter3D {
-            material_id: Some(7),
-            uv_rect: Vec4::new(0.25, 0.5, 0.75, 1.0),
-            ..Default::default()
-        };
-        let mut state = ParticleEmitterState3D::new();
-        state.burst(&emitter, 4, Vec3::ZERO, Quat::IDENTITY);
-        emitters.insert(1, (emitter, Transform3D::default(), state));
-
-        let mut materials = BTreeMap::new();
-        let mat = Material3D {
-            surface_type: SurfaceType3D::Transparent,
-            albedo_texture_id: Some(42),
-            ..Default::default()
-        };
-        materials.insert(7, (mat, None, None));
-
-        let mut alpha = Vec::new();
-        let mut additive = Vec::new();
-        let mut alpha_batches = Vec::new();
-        let mut additive_batches = Vec::new();
-
-        collect_emitter_instances(
-            &emitters,
-            &materials,
-            None,
-            &mut alpha,
-            &mut additive,
-            &mut alpha_batches,
-            &mut additive_batches,
-        );
-
-        assert_eq!(alpha.len(), 4);
-        assert!(additive.is_empty());
-        assert_eq!(alpha_batches.len(), 1);
-        assert_eq!(alpha_batches[0].material_id, Some(7));
-        assert_eq!(alpha_batches[0].front_range, 0..4);
-        assert_eq!(alpha[0].uv_rect, [0.25, 0.5, 0.75, 1.0]);
-    }
-}
+#[path = "particle_tests.rs"]
+mod tests;

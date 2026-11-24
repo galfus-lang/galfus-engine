@@ -65,6 +65,7 @@ export const realm3dDescriptors: DescSpec[] = [
       far: { type: 'number', optional: true },
       orthoScale: { type: 'number', optional: true },
       cameraSlot: { type: 'number', optional: true },
+      layerMask: { type: 'number', optional: true },
       lookAt: { type: { ref: 'CameraLookAt3DDesc' }, optional: true }
     }
   },
@@ -176,6 +177,7 @@ export const realm3dDescriptors: DescSpec[] = [
         optional: true,
         doc: 'sRGB outline color; RGB is converted to linear light before GPU upload.'
       },
+      layerMask: { type: 'number', optional: true },
       boneOffset: { type: 'number', optional: true },
       boneCount: { type: 'number', optional: true },
       active: { type: 'boolean', optional: true }
@@ -196,7 +198,8 @@ export const realm3dDescriptors: DescSpec[] = [
       range: { type: 'number', optional: true },
       spotInnerAngleRad: { type: 'number', optional: true },
       spotOuterAngleRad: { type: 'number', optional: true },
-      castShadow: { type: 'boolean', optional: true }
+      castShadow: { type: 'boolean', optional: true },
+      layerMask: { type: 'number', optional: true }
     }
   },
   {
@@ -330,7 +333,8 @@ export const realm3dDescriptors: DescSpec[] = [
         type: 'number',
         optional: true,
         doc: 'Offscreen buffer resolution scale factor (default 1.0).'
-      }
+      },
+      layerMask: { type: 'number', optional: true }
     }
   },
   {
@@ -363,6 +367,7 @@ export const realm3dDescriptors: DescSpec[] = [
       rotationSpeedRange: { type: { tuple: ['number', 'number'] }, optional: true },
       uvRect: { type: { tuple: ['number', 'number', 'number', 'number'] }, optional: true },
       emissionShape: { type: { ref: 'EmissionShape3DDesc' }, optional: true },
+      layerMask: { type: 'number', optional: true },
       active: { type: 'boolean', optional: true }
     }
   },
@@ -376,6 +381,7 @@ export const realm3dDescriptors: DescSpec[] = [
       capacity: { type: 'number', optional: true },
       castShadow: { type: 'boolean', optional: true },
       receiveShadow: { type: 'boolean', optional: true },
+      layerMask: { type: 'number', optional: true },
       active: { type: 'boolean', optional: true }
     }
   }

@@ -46,6 +46,7 @@ pub struct Camera3DDesc {
     pub far: Option<f32>,
     pub ortho_scale: Option<f32>,
     pub camera_slot: Option<u32>,
+    pub layer_mask: Option<u32>,
     pub look_at: Option<CameraLookAt3DDesc>,
 }
 
@@ -114,6 +115,7 @@ impl From<Camera3DDesc> for Camera3D {
             far: d.far.unwrap_or(1000.0),
             ortho_scale: d.ortho_scale.unwrap_or(10.0),
             camera_slot: d.camera_slot.unwrap_or(0),
+            layer_mask: d.layer_mask.unwrap_or(u32::MAX),
             active: true,
             look_at: None,
         }
@@ -226,6 +228,7 @@ pub struct Model3DDesc {
     pub receive_shadow: Option<bool>,
     pub cast_outline: Option<bool>,
     pub outline_color: Option<[f32; 4]>,
+    pub layer_mask: Option<u32>,
     pub bone_offset: Option<u32>,
     pub bone_count: Option<u32>,
     pub active: Option<bool>,
@@ -243,6 +246,7 @@ impl From<Model3DDesc> for Model3D {
                 .outline_color
                 .map(|c| Vec4::new(c[0], c[1], c[2], c[3]))
                 .unwrap_or(Vec4::new(1.0, 1.0, 1.0, 1.0)),
+            layer_mask: d.layer_mask.unwrap_or(u32::MAX),
             bone_offset: d.bone_offset.unwrap_or(0),
             bone_count: d.bone_count.unwrap_or(0),
             active: d.active.unwrap_or(true),
@@ -259,6 +263,7 @@ pub struct InstancedModel3DDesc {
     pub capacity: Option<u32>,
     pub cast_shadow: Option<bool>,
     pub receive_shadow: Option<bool>,
+    pub layer_mask: Option<u32>,
     pub active: Option<bool>,
 }
 
@@ -270,6 +275,7 @@ impl From<InstancedModel3DDesc> for InstancedModel3D {
             capacity: d.capacity.unwrap_or(0),
             cast_shadow: d.cast_shadow.unwrap_or(true),
             receive_shadow: d.receive_shadow.unwrap_or(true),
+            layer_mask: d.layer_mask.unwrap_or(u32::MAX),
             active: d.active.unwrap_or(true),
             morph_weights: Vec::new(),
         }
@@ -288,6 +294,7 @@ pub struct Light3DDesc {
     #[serde(alias = "outerAngle", alias = "spotOuterAngle")]
     pub spot_outer_angle_rad: Option<f32>,
     pub cast_shadow: Option<bool>,
+    pub layer_mask: Option<u32>,
 }
 
 impl From<Light3DDesc> for Light3D {
@@ -298,7 +305,7 @@ impl From<Light3DDesc> for Light3D {
             .unwrap_or(Vec3::ONE);
         let intensity = d.intensity.unwrap_or(1.0);
         let cast_shadow = d.cast_shadow.unwrap_or(false);
-        match d.kind.as_deref() {
+        let mut light = match d.kind.as_deref() {
             Some("point") => Light3D::point(color, intensity, d.range.unwrap_or(10.0), cast_shadow),
             Some("spot") => Light3D::spot(
                 color,
@@ -309,7 +316,9 @@ impl From<Light3DDesc> for Light3D {
                 cast_shadow,
             ),
             _ => Light3D::directional(color, intensity, cast_shadow),
-        }
+        };
+        light.layer_mask = d.layer_mask.unwrap_or(u32::MAX);
+        light
     }
 }
 
@@ -374,6 +383,7 @@ pub struct ParticleEmitter3DDesc {
     pub rotation_speed_range: Option<[f32; 2]>,
     pub uv_rect: Option<[f32; 4]>,
     pub emission_shape: Option<EmissionShape3DDesc>,
+    pub layer_mask: Option<u32>,
     #[serde(default = "default_true")]
     pub active: bool,
 }
@@ -417,6 +427,7 @@ impl From<ParticleEmitter3DDesc> for ParticleEmitter3D {
                 .emission_shape
                 .map(Into::into)
                 .unwrap_or(EmissionShape3D::Point),
+            layer_mask: d.layer_mask.unwrap_or(def.layer_mask),
             active: d.active,
         }
     }
@@ -429,6 +440,7 @@ pub struct Portal3DDesc {
     pub exit_transform: Option<Transform3DDesc>,
     pub active: Option<bool>,
     pub resolution_scale: Option<f32>,
+    pub layer_mask: Option<u32>,
 }
 
 impl From<Portal3DDesc> for galfus_realm_3d_resources::portal::Portal3D {
@@ -438,6 +450,7 @@ impl From<Portal3DDesc> for galfus_realm_3d_resources::portal::Portal3D {
             exit_transform: d.exit_transform.map(Into::into),
             active: d.active.unwrap_or(true),
             resolution_scale: d.resolution_scale.unwrap_or(1.0),
+            layer_mask: d.layer_mask.unwrap_or(u32::MAX),
         }
     }
 }

@@ -209,6 +209,7 @@ impl PortalPipeline3D {
         pipeline: &crate::pipeline::Pipeline3D,
         scene: &crate::types::SceneGpuBuffers,
         shadow_map: &crate::shadow::ShadowMap3D,
+        projector_gpu: &crate::projector::ProjectorGpuResources3D,
         scene_bindings_generation: u64,
     ) {
         if self.virtual_scene_bind_group.is_none()
@@ -218,6 +219,7 @@ impl PortalPipeline3D {
                 device,
                 pipeline,
                 shadow_map,
+                projector_gpu,
                 &self.virtual_camera_buf,
             ));
             self.scene_bindings_generation = scene_bindings_generation;
@@ -371,6 +373,7 @@ impl PortalPipeline3D {
         mirror_model_id: u32,
         mirror_pos: Vec3,
         mirror_normal: Option<Vec3>,
+        layer_mask: u32,
     ) -> DrawCollector<'a> {
         let v_frustum = Frustum::from_view_projection(v_cam.view_projection);
         let mut collector = DrawCollector::collect(
@@ -380,6 +383,7 @@ impl PortalPipeline3D {
             materials,
             Some(&v_frustum),
             v_cam.position.truncate(),
+            layer_mask,
         );
 
         // Never draw the mirror or portal surface itself inside its own offscreen render pass

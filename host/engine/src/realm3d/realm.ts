@@ -1,20 +1,21 @@
-/**
- * High-level Realm3D manager combining an ECS World, Anchor solver, and core sync.
- */
-
+/** High-level Realm3D manager combining an ECS World, Anchor solver, and core sync. */
 import type {
   Camera3DDesc,
   CameraLookAt3D,
   CameraLookAt3DStateDesc,
   EnvironmentRealm3DDesc,
   GalfusEngine,
+  IkConstraint3DDesc,
   InstancedModel3DDesc,
   Light3DDesc,
   Material3DDesc,
   Model3DDesc,
   ParticleEmitter3DDesc,
   Portal3DDesc,
-  TransitionConfig
+  Projector3DDesc,
+  Transform3D,
+  TransitionConfig,
+  UvDecalBake3DDesc
 } from '@galfus/transport-types';
 import { assertValidLogicalId } from '@galfus/transport-types';
 import type { Transform3DProps } from '../anchors/component';
@@ -40,6 +41,7 @@ import {
   createModel3D,
   createParticleEmitter3D,
   createPortal3D,
+  createProjector3D,
   createSkin3D,
   type GeometryResourceEntry,
   type MaterialResourceEntry,
@@ -180,6 +182,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     if (this._disposed) throw new Error('Cannot reset a disposed Realm3D.');
     this.world.reset();
     this.hierarchy.reset();
+    this.skinningSystem.reset();
     this.solver.cache.clear();
     this._geometries.clear();
     this._materials.clear();
@@ -199,6 +202,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     this._disposed = true;
     this._physics?.dispose();
     this.hierarchy.reset();
+    this.skinningSystem.reset();
     this.syncSystem.dispose(this._engine);
     if (this._engine) {
       this._engine.realm3dDestroy(this.realmId);
@@ -227,6 +231,17 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     return id;
   }
 
+  private _parseHits3D(res: unknown) {
+    if (typeof res === 'string') {
+      try {
+        return translateColliderHits(this.world, '3D', JSON.parse(res));
+      } catch {
+        return [];
+      }
+    }
+    return Array.isArray(res) ? translateColliderHits(this.world, '3D', res) : [];
+  }
+
   raycast(
     origin: [number, number, number],
     direction: [number, number, number],
@@ -234,33 +249,64 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     mask = 0xffffffff
   ) {
     if (this._disposed) throw new Error('Cannot query a disposed Realm3D.');
-    if (
-      this._engine &&
-      'realm3dRaycast' in this._engine &&
-      typeof this._engine.realm3dRaycast === 'function'
-    ) {
+    if (typeof this._engine?.realm3dRaycast === 'function') {
       const res = this._engine.realm3dRaycast(
         this.realmId,
-        origin[0],
-        origin[1],
-        origin[2],
-        direction[0],
-        direction[1],
-        direction[2],
+        ...origin,
+        ...direction,
         maxDistance,
         mask
       );
-      if (typeof res === 'string') {
-        try {
-          return translateColliderHits(this.world, '3D', JSON.parse(res));
-        } catch {
-          return [];
-        }
-      }
-      if (Array.isArray(res)) return translateColliderHits(this.world, '3D', res);
+      if (typeof res === 'string' || Array.isArray(res)) return this._parseHits3D(res);
     }
     this.solver.solve(this.world, { time: 0, dt: 0, frameId: 0 });
     return raycast3D(this.world, origin, direction, maxDistance, mask);
+  }
+
+  spherecast(
+    origin: [number, number, number],
+    direction: [number, number, number],
+    radius: number,
+    maxDistance: number,
+    mask = 0xffffffff
+  ) {
+    if (this._disposed) throw new Error('Cannot query a disposed Realm3D.');
+    if (typeof this._engine?.realm3dSpherecast === 'function') {
+      return this._parseHits3D(
+        this._engine.realm3dSpherecast(
+          this.realmId,
+          ...origin,
+          ...direction,
+          radius,
+          maxDistance,
+          mask
+        )
+      );
+    }
+    return [];
+  }
+
+  setIkConstraint(ikId: number, constraint: IkConstraint3DDesc): void {
+    assertValidLogicalId(ikId, 'IkConstraintId');
+    this._engine?.realm3dSetIkConstraint(this.realmId, ikId, constraint);
+  }
+  setIkTarget(ikId: number, target: [number, number, number]): void {
+    assertValidLogicalId(ikId, 'IkConstraintId');
+    this._engine?.realm3dSetIkTarget(this.realmId, ikId, ...target);
+  }
+  removeIkConstraint(ikId: number): void {
+    assertValidLogicalId(ikId, 'IkConstraintId');
+    this._engine?.realm3dRemoveIkConstraint(this.realmId, ikId);
+  }
+  createProjector(
+    desc: Projector3DDesc,
+    transform?: Transform3DProps
+  ): { entityId: EntityId; projectorId: number } {
+    const entityId = this.world.createEntity(),
+      projectorId = this.allocateResourceId();
+    this._attachModel(entityId, projectorId, transform);
+    this.world.attachComponent(entityId, createProjector3D(projectorId, desc));
+    return { entityId, projectorId };
   }
 
   destroyEntity(entityId: EntityId): boolean {
@@ -315,9 +361,7 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
     return model;
   }
 
-  /**
-   * Creates a pure spatial node with Model3DComponent (no Mesh attached).
-   */
+  /** Creates a pure spatial node with Model3DComponent (no Mesh attached). */
   createSpatialNode(transform?: Transform3DProps): EntityId {
     const entityId = this.world.createEntity();
     this._attachModel(entityId, this.allocateResourceId(), transform);
@@ -514,10 +558,11 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
   updateBones(modelId: number, data: Float32Array): void {
     this._engine?.realm3dUpdateBones(this.realmId, modelId, data, data.length);
   }
+  bakeUvDecal(bake: UvDecalBake3DDesc, transform: Transform3D): void {
+    this._engine?.realm3dBakeUvDecal(this.realmId, bake, transform);
+  }
 
-  /**
-   * Helper to animate a model transform directly through ECS.
-   */
+  /** Helper to animate a model transform directly through ECS. */
   animateModel(
     entityId: EntityId,
     targetValue: unknown,

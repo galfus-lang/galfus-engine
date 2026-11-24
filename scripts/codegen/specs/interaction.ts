@@ -81,6 +81,21 @@ export const interactionDescriptors: DescSpec[] = [
           halfHeight: { type: 'number' },
           offset: { type: { tuple: ['number', 'number', 'number'] }, optional: true }
         }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'triMesh' } },
+          geometryId: { type: 'number' }
+        }
+      },
+      {
+        inline: {
+          type: { type: { literal: 'heightfield' } },
+          heights: { type: { array: 'number' } },
+          nrows: { type: 'number' },
+          ncols: { type: 'number' },
+          scale: { type: { tuple: ['number', 'number', 'number'] } }
+        }
       }
     ]
   },

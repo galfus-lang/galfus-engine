@@ -179,6 +179,9 @@ export function intersectCollider3D(
     vec3.normalize(normal, normal);
     return out;
   }
+  if (shape.type === 'triMesh' || shape.type === 'heightfield') {
+    return undefined;
+  }
   const h = shape.halfExtents;
   if (Math.abs(o[0]) <= h[0] && Math.abs(o[1]) <= h[1] && Math.abs(o[2]) <= h[2]) {
     out.distance = 0;

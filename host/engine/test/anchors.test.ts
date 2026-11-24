@@ -186,35 +186,4 @@ describe('@galfus/engine > Anchors', () => {
     expect(hierarchy.isAttached(barrel)).toBe(false);
     expect(hierarchy.getDependents(turret)).toEqual([]);
   });
-
-  it('HierarchyCoordinator: executes functional in-place callback using mat4.copyPosition and setTranslation', () => {
-    const world = new EcsWorld();
-    const solver = new AnchorSolveSystem();
-    const { HierarchyCoordinator } = require('../src/anchors/hierarchy');
-    const hierarchy = new HierarchyCoordinator(world, '3d');
-
-    const parent = world.createEntity();
-    const child = world.createEntity();
-
-    world.attachComponent(parent, makeModel3D(1, [50, 20, -10]));
-    world.attachComponent(child, makeModel3D(2, [1, 2, 3]));
-
-    // Custom functional constraint: copy position from parent and override Y to 999
-    hierarchy.attach(child, parent, (targetWorld: any, local: any, outWorld: any) => {
-      mat4.copy(outWorld, local);
-      mat4.copyPosition(outWorld, targetWorld);
-      mat4.setTranslation(outWorld, 50, 999, -10);
-    });
-
-    solver.solve(world, { time: 0, dt: 0.016, frameId: 1 });
-
-    const childWorld = solver.cache.getWorld3D(child);
-    expect(childWorld).toBeDefined();
-
-    const pos = vec3.create();
-    mat4.getTranslation(pos, childWorld!);
-    expect(pos[0]).toBeCloseTo(50);
-    expect(pos[1]).toBeCloseTo(999);
-    expect(pos[2]).toBeCloseTo(-10);
-  });
 });

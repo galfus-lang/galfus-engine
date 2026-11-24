@@ -238,17 +238,18 @@ impl Realm for Realm2DContext {
         self.batch_builder.clear();
         for (&id, (sprite, transform)) in &self.sprites {
             let [min_z, max_z] = sprite.height_range.unwrap_or([-10000.0, 10000.0]);
-            let instance = Item2DInstanceRaw {
-                model_matrix: sprite.compute_model_matrix(transform),
-                tint: Vec4::ONE,
-                uv_rect: sprite.uv_rect,
-                shadow_params: Vec4::new(
+            let instance = Item2DInstanceRaw::new(
+                sprite.compute_model_matrix(transform),
+                Vec4::ONE,
+                sprite.uv_rect,
+                Vec4::new(
                     if sprite.receive_shadow { 1.0 } else { 0.0 },
                     if sprite.cast_shadow { 1.0 } else { 0.0 },
                     min_z,
                     max_z,
                 ),
-            };
+                sprite.layer_mask,
+            );
 
             let draw_order = sprite.draw_order.unwrap_or(transform.draw_order);
             self.batch_builder.push(PreparedItem2D {
@@ -262,6 +263,7 @@ impl Realm for Realm2DContext {
                         .map_or(1, Material2D::surface_type_id),
                     material_id: sprite.material_id.unwrap_or(0),
                     geometry_id: 0,
+                    layer_mask: sprite.layer_mask,
                 },
                 instance,
                 occluder_only: sprite.occluder_only,
@@ -270,17 +272,18 @@ impl Realm for Realm2DContext {
 
         for (&id, (shape, transform)) in &self.shapes {
             let [min_z, max_z] = shape.height_range.unwrap_or([-10000.0, 10000.0]);
-            let instance = Item2DInstanceRaw {
-                model_matrix: shape.compute_model_matrix(transform),
-                tint: Vec4::ONE,
-                uv_rect: Vec4::new(0.0, 0.0, 1.0, 1.0),
-                shadow_params: Vec4::new(
+            let instance = Item2DInstanceRaw::new(
+                shape.compute_model_matrix(transform),
+                Vec4::ONE,
+                Vec4::new(0.0, 0.0, 1.0, 1.0),
+                Vec4::new(
                     if shape.receive_shadow { 1.0 } else { 0.0 },
                     if shape.cast_shadow { 1.0 } else { 0.0 },
                     min_z,
                     max_z,
                 ),
-            };
+                shape.layer_mask,
+            );
 
             let draw_order = shape.draw_order.unwrap_or(transform.draw_order);
             self.batch_builder.push(PreparedItem2D {
@@ -294,6 +297,7 @@ impl Realm for Realm2DContext {
                         .map_or(1, Material2D::surface_type_id),
                     material_id: shape.material_id.unwrap_or(0),
                     geometry_id: 0,
+                    layer_mask: shape.layer_mask,
                 },
                 instance,
                 occluder_only: shape.occluder_only,
@@ -320,17 +324,18 @@ impl Realm for Realm2DContext {
                     transform.z_layer,
                 );
 
-                let instance = Item2DInstanceRaw {
+                let instance = Item2DInstanceRaw::new(
                     model_matrix,
-                    tint: current_color,
-                    uv_rect: cfg.uv_rect,
-                    shadow_params: Vec4::new(
+                    current_color,
+                    cfg.uv_rect,
+                    Vec4::new(
                         if cfg.receive_shadow { 1.0 } else { 0.0 },
                         if cfg.cast_shadow { 1.0 } else { 0.0 },
                         -10000.0,
                         10000.0,
                     ),
-                };
+                    cfg.layer_mask,
+                );
 
                 self.batch_builder.push(PreparedItem2D {
                     order: (id, 2, 0),
@@ -340,6 +345,7 @@ impl Realm for Realm2DContext {
                         surface_type,
                         material_id,
                         geometry_id: 0,
+                        layer_mask: cfg.layer_mask,
                     },
                     instance,
                     occluder_only: false,
@@ -448,6 +454,9 @@ impl Realm for Realm2DContext {
             let mut current_geo_id = 0u64;
             let pipeline_mgr = self.pipeline_manager.as_mut().unwrap();
             for range in ranges {
+                if (range.key.layer_mask & camera.layer_mask) == 0 {
+                    continue;
+                }
                 if range.key.geometry_id != current_geo_id {
                     current_geo_id = range.key.geometry_id;
                     if current_geo_id == 0 {

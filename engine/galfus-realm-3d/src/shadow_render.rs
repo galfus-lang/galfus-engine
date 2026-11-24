@@ -6,14 +6,13 @@ use glam::Mat4;
 use super::{MAX_SHADOW_LIGHTS, ShadowMap3D, ShadowPipeline3D, ShadowSurfaceMode};
 
 #[allow(clippy::too_many_arguments)]
-fn render_single_shadow_layer(
+pub(crate) fn render_depth_layer_target(
     encoder: &mut wgpu::CommandEncoder,
-    queue: &wgpu::Queue,
     shadow_pipe: &ShadowPipeline3D,
-    shadow_map: &ShadowMap3D,
-    layer_idx: u32,
-    shadow_view_proj: &Mat4,
-    time: f32,
+    layer_view: &wgpu::TextureView,
+    vp_bg: &wgpu::BindGroup,
+    layer_mask: u32,
+    view_proj: &Mat4,
     models: &std::collections::BTreeMap<u32, crate::types::GpuModelEntry>,
     instanced_models: &std::collections::BTreeMap<u32, crate::types::GpuInstancedModelEntry>,
     materials: &std::collections::BTreeMap<
@@ -28,12 +27,8 @@ fn render_single_shadow_layer(
         ),
     >,
 ) {
-    shadow_map.update_vp(queue, layer_idx, shadow_view_proj, time);
-    let layer_view = &shadow_map.layer_views[layer_idx as usize];
-    let vp_bg = &shadow_map.vp_bind_groups[layer_idx as usize];
-
     let mut s_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Realm3D Shadow Pass"),
+        label: Some("Realm3D Depth Layer Pass"),
         color_attachments: &[],
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
             view: layer_view,
@@ -50,10 +45,9 @@ fn render_single_shadow_layer(
 
     s_pass.set_bind_group(0, vp_bg, &[]);
 
-    let shadow_frustum =
-        galfus_realm_3d_resources::frustum::Frustum::from_view_projection(*shadow_view_proj);
+    let frustum = galfus_realm_3d_resources::frustum::Frustum::from_view_projection(*view_proj);
     for (model, model_trans, local_aabb, _, _, model_bg_opt) in models.values() {
-        if !model.active || !model.cast_shadow {
+        if !model.active || !model.cast_shadow || (model.layer_mask & layer_mask) == 0 {
             continue;
         }
         let Some(model_bg) = model_bg_opt else {
@@ -63,7 +57,7 @@ fn render_single_shadow_layer(
             continue;
         };
         let world_aabb = local_aabb.transform(&model_trans.matrix());
-        if !shadow_frustum.intersects_aabb(world_aabb.min, world_aabb.max) {
+        if !frustum.intersects_aabb(world_aabb.min, world_aabb.max) {
             continue;
         }
         let (side, surface_mode, material_bg) = match materials.get(&model.material_id) {
@@ -95,7 +89,11 @@ fn render_single_shadow_layer(
 
     // Instanced models depth pass
     for (inst_model, instances, inst_buf_opt, _, _, model_bg_opt) in instanced_models.values() {
-        if !inst_model.active || !inst_model.cast_shadow || instances.is_empty() {
+        if !inst_model.active
+            || !inst_model.cast_shadow
+            || instances.is_empty()
+            || (inst_model.layer_mask & layer_mask) == 0
+        {
             continue;
         }
         if inst_buf_opt.is_none() {
@@ -133,6 +131,45 @@ fn render_single_shadow_layer(
         s_pass.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
         s_pass.draw_indexed(0..mesh.index_count, 0, 0..instances.len() as u32);
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_single_shadow_layer(
+    encoder: &mut wgpu::CommandEncoder,
+    queue: &wgpu::Queue,
+    shadow_pipe: &ShadowPipeline3D,
+    shadow_map: &ShadowMap3D,
+    layer_idx: u32,
+    light_layer_mask: u32,
+    shadow_view_proj: &Mat4,
+    time: f32,
+    models: &std::collections::BTreeMap<u32, crate::types::GpuModelEntry>,
+    instanced_models: &std::collections::BTreeMap<u32, crate::types::GpuInstancedModelEntry>,
+    materials: &std::collections::BTreeMap<
+        u32,
+        (Material3D, Option<wgpu::Buffer>, Option<wgpu::BindGroup>),
+    >,
+    geometries: &std::collections::BTreeMap<
+        u32,
+        (
+            galfus_realm_3d_resources::geometry::Geometry3D,
+            Option<crate::types::GpuMeshBuffers>,
+        ),
+    >,
+) {
+    shadow_map.update_vp(queue, layer_idx, shadow_view_proj, time);
+    render_depth_layer_target(
+        encoder,
+        shadow_pipe,
+        &shadow_map.layer_views[layer_idx as usize],
+        &shadow_map.vp_bind_groups[layer_idx as usize],
+        light_layer_mask,
+        shadow_view_proj,
+        models,
+        instanced_models,
+        materials,
+        geometries,
+    );
 }
 
 /// Executes depth passes for all shadow-casting lights applying frustum culling per light.
@@ -194,6 +231,7 @@ pub fn render_shadow_depth_pass(
                     shadow_pipe,
                     shadow_map,
                     layer_idx + face_i as u32,
+                    light.layer_mask,
                     &vp,
                     time,
                     models,
@@ -214,6 +252,7 @@ pub fn render_shadow_depth_pass(
                 shadow_pipe,
                 shadow_map,
                 layer_idx,
+                light.layer_mask,
                 &light_uniform.shadow_view_proj,
                 time,
                 models,

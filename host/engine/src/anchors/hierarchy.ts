@@ -19,8 +19,6 @@ import {
 import { presetsAnchor } from './presets';
 import { serializeConstraint } from './serialize';
 
-import type { AnchorConstraintCallback2D, AnchorConstraintCallback3D } from './strategy';
-
 export type EntityLike = EntityId | { entityId: EntityId };
 
 export interface AnchorAttachOptions {
@@ -29,10 +27,8 @@ export interface AnchorAttachOptions {
   readonly offset?: readonly number[];
 }
 
-export type AnchorConstraint3D =
-  string | AnchorPresetDescriptor | AnchorAttachOptions | AnchorConstraintCallback3D;
-export type AnchorConstraint2D =
-  string | AnchorPresetDescriptor | AnchorAttachOptions | AnchorConstraintCallback2D;
+export type AnchorConstraint3D = string | AnchorPresetDescriptor | AnchorAttachOptions;
+export type AnchorConstraint2D = string | AnchorPresetDescriptor | AnchorAttachOptions;
 
 export interface AttachChainOptions {
   /** Link distance between consecutive entities (defaults to 1.0). */
@@ -86,7 +82,7 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
    *
    * @param origin The dependent entity to anchor.
    * @param target The target entity to follow.
-   * @param constraint Optional strategy name ('static', 'translation') or in-place zero-GC callback.
+   * @param constraint Optional strategy name ('static', 'translation', 'chain', 'rope', 'spring', etc.) or preset descriptor.
    */
   attach(
     origin: EntityLike,
@@ -127,17 +123,9 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
 
     let strategy = 'static';
     let params: AnchorStrategyParams | undefined;
-    let callback2d: AnchorConstraintCallback2D | undefined;
-    let callback3d: AnchorConstraintCallback3D | undefined;
 
     if (typeof constraint === 'string') {
       strategy = constraint;
-    } else if (typeof constraint === 'function') {
-      if (this._dimension === '3d') {
-        callback3d = constraint as AnchorConstraintCallback3D;
-      } else {
-        callback2d = constraint as AnchorConstraintCallback2D;
-      }
     } else if (constraint && typeof constraint === 'object') {
       if (typeof constraint.strategy === 'object' && constraint.strategy !== null) {
         const inner = constraint.strategy;
@@ -189,8 +177,6 @@ export class HierarchyCoordinator<Kind extends '2d' | '3d' = '2d' | '3d'> {
         targetEntityId: targetId,
         strategy,
         params,
-        callback2d,
-        callback3d,
         managedByPhysics:
           this._physicsBodies.has(originId) &&
           this._physicsBodies.has(targetId) &&

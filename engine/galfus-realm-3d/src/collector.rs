@@ -56,11 +56,12 @@ impl<'a> DrawCollector<'a> {
         materials: &'a BTreeMap<u32, (Material3D, Option<wgpu::Buffer>, Option<wgpu::BindGroup>)>,
         frustum: Option<&Frustum>,
         camera_pos: Vec3,
+        camera_layer_mask: u32,
     ) -> Self {
         let mut collector = Self::default();
 
         for (&model_id, (model, model_transform, local_aabb, _, _, model_bg_opt)) in models {
-            if !model.active {
+            if !model.active || (model.layer_mask & camera_layer_mask) == 0 {
                 continue;
             }
 
@@ -131,7 +132,10 @@ impl<'a> DrawCollector<'a> {
         for (&inst_id, (inst_model, instances, inst_buf_opt, _, _, model_bg_opt)) in
             instanced_models
         {
-            if !inst_model.active || instances.is_empty() {
+            if !inst_model.active
+                || instances.is_empty()
+                || (inst_model.layer_mask & camera_layer_mask) == 0
+            {
                 continue;
             }
 

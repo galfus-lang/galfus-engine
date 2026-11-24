@@ -49,12 +49,12 @@ export function createProjectAgentsMd(config: ProjectConfig): string {
 Before implementing game features, consult the specialized skills in \`.agents/skills/\`:
 
 - **[galfus-core](skills/galfus-core/SKILL.md)**: Runtime lifecycle, Multiverse presentation graph, ECS (entities, custom components, queries, 4-stage systems), input events, and spatial audio.
-- **[galfus-realm-3d](skills/galfus-realm-3d/SKILL.md)**: 3D scenes, cameras, PBR materials, directional/point/spot lights with shadows, and 3D primitives.
-- **[galfus-realm-2d](skills/galfus-realm-2d/SKILL.md)**: 2D orthographic cameras, sprites, 2D dynamic lights, materials, and sprite sheets.
+- **[galfus-realm-3d](skills/galfus-realm-3d/SKILL.md)**: 3D scenes, cameras, PBR materials, lights/shadows, layer masks, core IK & skinning, Forward PBR decals/occluded projectors, and UV-space tattoo baking.
+- **[galfus-realm-2d](skills/galfus-realm-2d/SKILL.md)**: 2D orthographic cameras, sprites, 2D dynamic lights, materials, sprite sheets, and layer masks.
 - **[galfus-realm-3d-helpers](skills/galfus-realm-3d-helpers/SKILL.md)**: Loading and instantiating \`.gltf\`, \`.glb\`, and \`.zip\` 3D models with \`@galfus/gltf-loader\`.
 - **[galfus-realm-2d-helpers](skills/galfus-realm-2d-helpers/SKILL.md)**: Building HUDs, buttons, panels, dialogs, and anchored layouts with \`@galfus/ui\`.
-- **[galfus-animation](skills/galfus-animation/SKILL.md)**: Skeletal and keyframe animations, \`AnimationClip\`, \`AnimationPlayer3D\`, crossfading, and loop modes.
-- **[galfus-physics-3d](skills/galfus-physics-3d/SKILL.md)**: 3D Rapier physics via \`attachPhysics3D\`, rigid bodies, colliders, impulses, and raycasting.
+- **[galfus-animation](skills/galfus-animation/SKILL.md)**: Skeletal/keyframe animations (\`AnimationClip\`, \`AnimationPlayer3D\`) and native property transitions (models, lights, projectors/decals, IK targets).
+- **[galfus-physics-3d](skills/galfus-physics-3d/SKILL.md)**: 3D Rapier physics via \`attachPhysics3D\`, rigid bodies, colliders (including \`triMesh\` and \`heightfield\`), impulses, raycasting, and spherecasting.
 - **[galfus-physics-2d](skills/galfus-physics-2d/SKILL.md)**: 2D Rapier physics via \`attachPhysics2D\`, 2D colliders, sensors, and point queries.
 `;
 }

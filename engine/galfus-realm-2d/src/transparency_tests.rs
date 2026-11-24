@@ -175,6 +175,9 @@ fn render(
 
 #[test]
 fn sprite_surface_modes_composite_in_resource_order() {
+    let _gpu_guard = crate::GPU_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let instance = wgpu::Instance::default();
     let Ok(adapter) =
         pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))

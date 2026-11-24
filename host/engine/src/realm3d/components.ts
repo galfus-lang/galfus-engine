@@ -9,7 +9,8 @@ import type {
   Light3DDesc,
   Material3DDesc,
   ParticleEmitter3DDesc,
-  Portal3DDesc
+  Portal3DDesc,
+  Projector3DDesc
 } from '@galfus/transport-types';
 import type { Component } from '../ecs/component';
 import type { EntityId } from '../ecs/entity';
@@ -158,6 +159,7 @@ export interface Mesh3DDesc {
   receiveShadow?: boolean;
   castOutline?: boolean;
   outlineColor?: [number, number, number, number];
+  layerMask?: number;
   active?: boolean;
   boneOffset?: number;
   boneCount?: number;
@@ -173,6 +175,7 @@ export interface Mesh3DComponent extends Component {
   receiveShadow: boolean;
   castOutline: boolean;
   outlineColor: [number, number, number, number];
+  layerMask: number;
   active: boolean;
   boneOffset: number;
   boneCount: number;
@@ -190,6 +193,7 @@ export function createMesh3D(meshId: number, modelId: number, desc: Mesh3DDesc):
     receiveShadow: desc.receiveShadow ?? true,
     castOutline: desc.castOutline ?? false,
     outlineColor: desc.outlineColor ?? [1, 1, 1, 1],
+    layerMask: desc.layerMask ?? 0xffffffff,
     active: desc.active ?? true,
     boneOffset: desc.boneOffset ?? 0,
     boneCount: desc.boneCount ?? 0,
@@ -289,6 +293,25 @@ export function createPortal3D(portalId: number, desc: Portal3DDesc): Portal3DCo
   return {
     type: 'Portal3D',
     portalId,
+    desc,
+    isDirty: true
+  };
+}
+
+export interface Projector3DComponent extends Component {
+  readonly type: 'Projector3D';
+  readonly projectorId: number;
+  desc: Projector3DDesc;
+  isDirty: boolean;
+}
+
+export function createProjector3D(
+  projectorId: number,
+  desc: Projector3DDesc
+): Projector3DComponent {
+  return {
+    type: 'Projector3D',
+    projectorId,
     desc,
     isDirty: true
   };

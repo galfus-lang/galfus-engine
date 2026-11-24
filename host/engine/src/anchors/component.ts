@@ -9,7 +9,6 @@ import { type Mat2d, type Mat4, type Quat, type Vec2, type Vec3 } from '../math/
 import type { Model2DComponent } from '../realm2d/components';
 import type { Model3DComponent } from '../realm3d/components';
 import { SpatialDirtyFlags } from '../spatial/flags';
-import type { AnchorConstraintCallback2D, AnchorConstraintCallback3D } from './strategy';
 
 /**
  * Spatial transform descriptors for initial setup.
@@ -104,10 +103,6 @@ export interface AnchorComponent extends Component {
   offset2d?: Mat2d;
   /** Optional 3D offset matrix if anchoring in 3D space. */
   offset3d?: Mat4;
-  /** Optional custom in-place constraint callback for 2D. */
-  callback2d?: AnchorConstraintCallback2D;
-  /** Optional custom in-place constraint callback for 3D. */
-  callback3d?: AnchorConstraintCallback3D;
   /** Whether this anchor is currently active. */
   active: boolean;
   /**
@@ -124,8 +119,6 @@ export interface AnchorProps {
   distance?: number;
   offset2d?: Mat2d;
   offset3d?: Mat4;
-  callback2d?: AnchorConstraintCallback2D;
-  callback3d?: AnchorConstraintCallback3D;
   active?: boolean;
   managedByPhysics?: boolean;
 }
@@ -139,8 +132,6 @@ export function createAnchor(props: AnchorProps): AnchorComponent {
     distance: props.distance ?? props.params?.maxLength ?? props.params?.length,
     offset2d: props.offset2d,
     offset3d: props.offset3d,
-    callback2d: props.callback2d,
-    callback3d: props.callback3d,
     active: props.active ?? true,
     managedByPhysics: props.managedByPhysics ?? false
   };

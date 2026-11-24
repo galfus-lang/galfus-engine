@@ -35,20 +35,6 @@ export interface AnchorContext {
   keepAwake?: boolean;
 }
 
-export type AnchorConstraintCallback2D = (
-  targetWorld: Mat2d,
-  local: Mat2d,
-  outWorld: Mat2d,
-  context: AnchorContext
-) => void;
-
-export type AnchorConstraintCallback3D = (
-  targetWorld: Mat4,
-  local: Mat4,
-  outWorld: Mat4,
-  context: AnchorContext
-) => void;
-
 /**
  * 2D Anchor resolution strategy contract.
  */

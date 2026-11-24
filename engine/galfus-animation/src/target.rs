@@ -84,6 +84,34 @@ pub enum AnimationTarget {
         realm_id: u32,
         emitter_id: u32,
     },
+    Projector3DTransform {
+        realm_id: u32,
+        projector_id: u32,
+    },
+    Projector3DColor {
+        realm_id: u32,
+        projector_id: u32,
+    },
+    Projector3DSize {
+        realm_id: u32,
+        projector_id: u32,
+    },
+    Projector3DFov {
+        realm_id: u32,
+        projector_id: u32,
+    },
+    Projector3DUvRect {
+        realm_id: u32,
+        projector_id: u32,
+    },
+    Projector3DAngleFade {
+        realm_id: u32,
+        projector_id: u32,
+    },
+    Ik3DTarget {
+        realm_id: u32,
+        ik_id: u32,
+    },
 
     // === Realm 2D Targets ===
     SpriteTransform2D {

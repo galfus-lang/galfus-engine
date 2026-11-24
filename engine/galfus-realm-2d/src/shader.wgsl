@@ -96,6 +96,7 @@ struct VertexInput {
     @location(7) instance_tint: vec4<f32>,
     @location(8) uv_rect: vec4<f32>,
     @location(9) shadow_params: vec4<f32>,
+    @location(10) layer_mask: u32,
 };
 
 struct VertexOutput {
@@ -104,6 +105,7 @@ struct VertexOutput {
     @location(1) color: vec4<f32>,
     @location(2) world_pos: vec2<f32>,
     @location(3) shadow_params: vec4<f32>,
+    @location(4) @interpolate(flat) layer_mask: u32,
 };
 
 @vertex
@@ -116,6 +118,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.uv = mix(in.uv_rect.xy, in.uv_rect.zw, in.uv);
     out.color = in.color * in.instance_tint * material.base_color;
     out.shadow_params = in.shadow_params;
+    out.layer_mask = in.layer_mask;
     return out;
 }
 
@@ -485,7 +488,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     for (var i = 0u; i < light_count; i = i + 1u) {
         let l = lights[i];
-        if (l.light_meta.z == 0u) {
+        if (l.light_meta.z == 0u || (l.light_meta.w & in.layer_mask) == 0u) {
             continue;
         }
         if (l.position.z < in.shadow_params.z) {
