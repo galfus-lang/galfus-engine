@@ -11,9 +11,13 @@ use galfus_realm_3d_resources::material::{MaterialSide3D, SurfaceType3D};
 /// WGSL shader for the shadow depth pass.
 pub const SHADOW_SHADER: &str = include_str!("shadow.wgsl");
 
-/// Dedicated depth-only pipeline for rendering shadow maps.
+/// Dedicated depth-only pipeline for rendering shadow maps and the camera depth pre-pass.
 pub struct ShadowPipeline3D {
     pipelines: HashMap<
+        (PrimitiveTopology3D, MaterialSide3D, bool, ShadowSurfaceMode),
+        wgpu::RenderPipeline,
+    >,
+    prepass_pipelines: HashMap<
         (PrimitiveTopology3D, MaterialSide3D, bool, ShadowSurfaceMode),
         wgpu::RenderPipeline,
     >,
@@ -270,7 +274,16 @@ impl ShadowPipeline3D {
             },
         };
 
+        let prepass_depth_stencil = wgpu::DepthStencilState {
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::GreaterEqual,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        };
+
         let mut pipelines = HashMap::new();
+        let mut prepass_pipelines = HashMap::new();
         for topology in PrimitiveTopology3D::ALL {
             for side in MaterialSide3D::ALL {
                 if effective_side(topology, side) != side {
@@ -278,6 +291,12 @@ impl ShadowPipeline3D {
                 }
                 for &instanced in &[false, true] {
                     for surface_mode in [ShadowSurfaceMode::Solid, ShadowSurfaceMode::AlphaMask] {
+                        let opts = ShadowPipelineOptions {
+                            topology,
+                            side,
+                            instanced,
+                            surface_mode,
+                        };
                         pipelines.insert(
                             (topology, side, instanced, surface_mode),
                             create_shadow_render_pipeline(
@@ -286,12 +305,18 @@ impl ShadowPipeline3D {
                                 &shader,
                                 &vertex_buffer_layout,
                                 &depth_stencil,
-                                ShadowPipelineOptions {
-                                    topology,
-                                    side,
-                                    instanced,
-                                    surface_mode,
-                                },
+                                opts,
+                            ),
+                        );
+                        prepass_pipelines.insert(
+                            (topology, side, instanced, surface_mode),
+                            create_shadow_render_pipeline(
+                                device,
+                                &pipeline_layout,
+                                &shader,
+                                &vertex_buffer_layout,
+                                &prepass_depth_stencil,
+                                opts,
                             ),
                         );
                     }
@@ -301,6 +326,7 @@ impl ShadowPipeline3D {
 
         Self {
             pipelines,
+            prepass_pipelines,
             vp_layout,
             fallback_material_bg,
         }
@@ -318,6 +344,19 @@ impl ShadowPipeline3D {
             .get(&(topology, side, instanced, surface_mode))
             .expect("all shadow primitive topologies are precompiled")
     }
+
+    fn prepass_pipeline(
+        &self,
+        topology: PrimitiveTopology3D,
+        side: MaterialSide3D,
+        instanced: bool,
+        surface_mode: ShadowSurfaceMode,
+    ) -> &wgpu::RenderPipeline {
+        let side = effective_side(topology, side);
+        self.prepass_pipelines
+            .get(&(topology, side, instanced, surface_mode))
+            .expect("all depth pre-pass primitive topologies are precompiled")
+    }
 }
 
 /// Maximum number of concurrent shadow-casting layers supported by the shadow map array.
@@ -331,6 +370,8 @@ pub struct ShadowMap3D {
     pub sampler: wgpu::Sampler,
     pub vp_buffers: Vec<wgpu::Buffer>,
     pub vp_bind_groups: Vec<wgpu::BindGroup>,
+    pub prepass_vp_buffer: wgpu::Buffer,
+    pub prepass_vp_bind_group: wgpu::BindGroup,
     pub matrices_buffer: wgpu::Buffer,
     pub resolution: u32,
 }
@@ -420,6 +461,26 @@ impl ShadowMap3D {
             vp_bind_groups.push(bg);
         }
 
+        let prepass_vp_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Realm3D Depth Pre-Pass VP Buffer"),
+            contents: bytemuck::cast_slice(&[0.0f32; 20]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let prepass_vp_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Realm3D Depth Pre-Pass VP Bind Group"),
+            layout: &shadow_pipeline.vp_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: prepass_vp_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: bones_buf.as_entire_binding(),
+                },
+            ],
+        });
+
         let initial_matrices = vec![Mat4::IDENTITY; MAX_SHADOW_LIGHTS as usize];
         let matrices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Realm3D Shadow Matrices Storage Buffer"),
@@ -434,6 +495,8 @@ impl ShadowMap3D {
             sampler,
             vp_buffers,
             vp_bind_groups,
+            prepass_vp_buffer,
+            prepass_vp_bind_group,
             matrices_buffer,
             resolution,
         }
@@ -464,6 +527,27 @@ impl ShadowMap3D {
                 })
             })
             .collect();
+        self.prepass_vp_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Realm3D Depth Pre-Pass VP Bind Group"),
+            layout: &shadow_pipeline.vp_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.prepass_vp_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: bones_buf.as_entire_binding(),
+                },
+            ],
+        });
+    }
+
+    /// Updates the camera view-projection uniform buffer used by the depth pre-pass.
+    pub fn update_prepass_vp(&self, queue: &wgpu::Queue, camera_view_proj: &Mat4, time: f32) {
+        queue.write_buffer(&self.prepass_vp_buffer, 0, bytes_of(camera_view_proj));
+        let misc = [0.0f32, 0.0, time, 0.0];
+        queue.write_buffer(&self.prepass_vp_buffer, 64, bytemuck::cast_slice(&misc));
     }
 
     /// Updates the shadow view-projection uniform buffer and time parameter for a specific layer.
@@ -483,55 +567,8 @@ impl ShadowMap3D {
 
 #[path = "shadow_render.rs"]
 mod shadow_render;
-pub(crate) use shadow_render::render_depth_layer_target;
 pub use shadow_render::render_shadow_depth_pass;
+pub(crate) use shadow_render::{render_depth_layer_target, render_depth_prepass};
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn surface_types_select_the_expected_shadow_mode() {
-        assert_eq!(
-            ShadowSurfaceMode::from_surface_type(SurfaceType3D::Opaque),
-            Some(ShadowSurfaceMode::Solid)
-        );
-        assert_eq!(
-            ShadowSurfaceMode::from_surface_type(SurfaceType3D::Mirror),
-            Some(ShadowSurfaceMode::Solid)
-        );
-        assert_eq!(
-            ShadowSurfaceMode::from_surface_type(SurfaceType3D::Masked),
-            Some(ShadowSurfaceMode::AlphaMask)
-        );
-        assert_eq!(
-            ShadowSurfaceMode::from_surface_type(SurfaceType3D::Transparent),
-            Some(ShadowSurfaceMode::AlphaMask)
-        );
-        assert_eq!(
-            ShadowSurfaceMode::from_surface_type(SurfaceType3D::Refractive),
-            Some(ShadowSurfaceMode::AlphaMask)
-        );
-        assert_eq!(
-            ShadowSurfaceMode::from_surface_type(SurfaceType3D::Additive),
-            None
-        );
-    }
-
-    #[test]
-    fn alpha_shadow_shader_uses_the_material_alpha_contract() {
-        assert!(SHADOW_SHADER.contains("@group(1) @binding(1) var mat_tex_0"));
-        assert!(SHADOW_SHADER.contains("material.flags.y & 0x3u"));
-        assert!(SHADOW_SHADER.contains("material.flags.z & 1u"));
-        assert!(SHADOW_SHADER.contains(
-            "material.base_color.a * sample_albedo(uv).a * in.vertex_alpha * in.instance_alpha"
-        ));
-        assert!(SHADOW_SHADER.contains("material.pbr_params.w"));
-    }
-
-    #[test]
-    fn shadow_shader_applies_morphs_before_skinning() {
-        assert!(SHADOW_SHADER.contains("@group(2) @binding(2) var<storage, read> morph_weights"));
-        assert!(SHADOW_SHADER.contains("apply_morph_position(vertex_index, &local_pos)"));
-        assert!(SHADOW_SHADER.contains("if (bone_count > 0u)"));
-    }
-}
+#[path = "shadow_tests.rs"]
+mod tests;

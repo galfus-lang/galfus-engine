@@ -24,6 +24,14 @@ impl PipelineManager2D {
         (self.pipelines.len(), self.custom_shader_modules.len())
     }
 
+    /// Prunes cached custom shader modules and pipelines not present in `active_effect_ids`.
+    pub fn prune_custom_effects(&mut self, active_effect_ids: &std::collections::HashSet<u64>) {
+        self.custom_shader_modules
+            .retain(|id, _| active_effect_ids.contains(id));
+        self.pipelines
+            .retain(|key, _| key.effect_id == 0 || active_effect_ids.contains(&key.effect_id));
+    }
+
     pub fn new(device: &wgpu::Device) -> Self {
         let global_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -309,7 +317,13 @@ impl PipelineManager2D {
                     unclipped_depth: false,
                     conservative: false,
                 },
-                depth_stencil: None,
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: key.surface_type == 0,
+                    depth_compare: wgpu::CompareFunction::GreaterEqual,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
                 multisample: wgpu::MultisampleState {
                     count: key.sample_count,
                     mask: !0,

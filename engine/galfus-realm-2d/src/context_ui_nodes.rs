@@ -73,6 +73,18 @@ impl UiManager2D {
             let Some(layout) = ui.computed.get(&id) else {
                 continue;
             };
+            if let Some([cx, cy, cw, ch]) = layout.clip_rect {
+                let [x, y, w, h] = layout.absolute_rect;
+                if cw <= 0.0
+                    || ch <= 0.0
+                    || x + w <= cx
+                    || x >= cx + cw
+                    || y + h <= cy
+                    || y >= cy + ch
+                {
+                    continue;
+                }
+            }
             let key = (ui_id, id);
             active.insert(key);
             let mut existing = self.node_geometries.remove(&key);

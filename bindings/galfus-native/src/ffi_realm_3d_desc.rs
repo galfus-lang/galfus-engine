@@ -48,6 +48,7 @@ pub struct Camera3DDesc {
     pub camera_slot: Option<u32>,
     pub layer_mask: Option<u32>,
     pub look_at: Option<CameraLookAt3DDesc>,
+    pub cull_camera_slot: Option<u32>,
 }
 
 /// Host descriptor for an optional camera look-at point and preferred up direction.
@@ -118,6 +119,7 @@ impl From<Camera3DDesc> for Camera3D {
             layer_mask: d.layer_mask.unwrap_or(u32::MAX),
             active: true,
             look_at: None,
+            cull_camera_slot: d.cull_camera_slot,
         }
     }
 }
@@ -232,6 +234,10 @@ pub struct Model3DDesc {
     pub bone_offset: Option<u32>,
     pub bone_count: Option<u32>,
     pub active: Option<bool>,
+    pub culling_mode: Option<galfus_core::CullingMode>,
+    pub cull_margin: Option<f32>,
+    pub distance_range: Option<[f32; 2]>,
+    pub is_occluder: Option<bool>,
 }
 
 impl From<Model3DDesc> for Model3D {
@@ -251,6 +257,10 @@ impl From<Model3DDesc> for Model3D {
             bone_count: d.bone_count.unwrap_or(0),
             active: d.active.unwrap_or(true),
             morph_weights: Vec::new(),
+            culling_mode: d.culling_mode.unwrap_or_default(),
+            cull_margin: d.cull_margin.unwrap_or(0.0).max(0.0),
+            distance_range: d.distance_range,
+            is_occluder: d.is_occluder.unwrap_or(true),
         }
     }
 }
@@ -265,6 +275,10 @@ pub struct InstancedModel3DDesc {
     pub receive_shadow: Option<bool>,
     pub layer_mask: Option<u32>,
     pub active: Option<bool>,
+    pub culling_mode: Option<galfus_core::CullingMode>,
+    pub cull_margin: Option<f32>,
+    pub distance_range: Option<[f32; 2]>,
+    pub is_occluder: Option<bool>,
 }
 
 impl From<InstancedModel3DDesc> for InstancedModel3D {
@@ -278,6 +292,10 @@ impl From<InstancedModel3DDesc> for InstancedModel3D {
             layer_mask: d.layer_mask.unwrap_or(u32::MAX),
             active: d.active.unwrap_or(true),
             morph_weights: Vec::new(),
+            culling_mode: d.culling_mode.unwrap_or_default(),
+            cull_margin: d.cull_margin.unwrap_or(0.0).max(0.0),
+            distance_range: d.distance_range,
+            is_occluder: d.is_occluder.unwrap_or(true),
         }
     }
 }

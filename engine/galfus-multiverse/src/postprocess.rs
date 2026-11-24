@@ -226,7 +226,17 @@ impl PostProcessor {
             source: wgpu::ShaderSource::Wgsl(composed.source.into()),
         });
         self.custom_shaders.insert(id, module);
+        let key_name = format!("custom:{id}");
+        self.pipelines.retain(|(name, _), _| name != &key_name);
         Ok(())
+    }
+
+    /// Unregisters a custom shader snippet and evicts its compiled render pipelines.
+    pub fn unregister_custom_shader(&mut self, id: u32) -> bool {
+        let removed = self.custom_shaders.remove(&id).is_some();
+        let key_name = format!("custom:{id}");
+        self.pipelines.retain(|(name, _), _| name != &key_name);
+        removed
     }
 
     fn ensure_pipeline(

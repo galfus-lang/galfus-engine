@@ -77,6 +77,13 @@ impl Realm2DContext {
         if let Some(world) = self.physics.as_mut() {
             world.remove_rigid_body(entity_id);
         }
+        if !self.sprites.contains_key(&entity_id)
+            && !self.shapes.contains_key(&entity_id)
+            && !self.uis.contains_key(&entity_id)
+            && !self.colliders.values().any(|c| c.model_id == entity_id)
+        {
+            self.model_transforms.remove(&entity_id);
+        }
         Ok(())
     }
 

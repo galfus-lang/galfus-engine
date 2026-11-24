@@ -48,10 +48,25 @@ impl Realm2DContext {
 
     pub fn set_material(&mut self, material_id: u32, material: Material2D) -> RealmResult<()> {
         self.validate_id(material_id)?;
-        self.materials.insert(material_id, material);
+        let effect_id = crate::pipeline::PipelineManager2D::compute_effect_id(
+            material.shader_effect.as_deref(),
+        );
+        let prev = self.materials.insert(material_id, material);
         self.material_bind_groups.remove(&material_id);
         self.material_uniform_buffers.remove(&material_id);
         self.material_texture_slots.remove(&material_id);
+        if effect_id != 0 {
+            self.material_effect_ids.insert(material_id, effect_id);
+        } else {
+            self.material_effect_ids.remove(&material_id);
+        }
+        if prev.is_some_and(|p| p.shader_effect.is_some())
+            && let Some(ref mut pm) = self.pipeline_manager
+        {
+            let active: std::collections::HashSet<u64> =
+                self.material_effect_ids.values().copied().collect();
+            pm.prune_custom_effects(&active);
+        }
         self.dirty = true;
         Ok(())
     }
@@ -192,6 +207,7 @@ impl Realm2DContext {
         self.emitters
             .remove(&emitter_id)
             .map(|_| {
+                self.hierarchy.remove_entity(emitter_id);
                 self.dirty = true;
             })
             .ok_or_else(|| {
@@ -213,6 +229,7 @@ impl Realm2DContext {
         self.cameras
             .remove(&camera_id)
             .map(|_| {
+                self.hierarchy.remove_entity(camera_id);
                 self.dirty = true;
             })
             .ok_or_else(|| {
@@ -228,17 +245,22 @@ impl Realm2DContext {
         self.material_bind_groups.remove(&material_id);
         self.material_uniform_buffers.remove(&material_id);
         self.material_texture_slots.remove(&material_id);
-        self.materials
-            .remove(&material_id)
-            .map(|_| {
-                self.dirty = true;
-            })
-            .ok_or_else(|| {
-                galfus_realm_core::RealmError::ResourceNotFound(
-                    self.id,
-                    format!("Material {material_id}"),
-                )
-            })
+        self.material_effect_ids.remove(&material_id);
+        let removed = self.materials.remove(&material_id).ok_or_else(|| {
+            galfus_realm_core::RealmError::ResourceNotFound(
+                self.id,
+                format!("Material {material_id}"),
+            )
+        })?;
+        if removed.shader_effect.is_some()
+            && let Some(ref mut pm) = self.pipeline_manager
+        {
+            let active: std::collections::HashSet<u64> =
+                self.material_effect_ids.values().copied().collect();
+            pm.prune_custom_effects(&active);
+        }
+        self.dirty = true;
+        Ok(())
     }
 
     /// Destroys a sprite entity by its host logical ID.
@@ -278,6 +300,7 @@ impl Realm2DContext {
         self.lights
             .remove(&light_id)
             .map(|_| {
+                self.hierarchy.remove_entity(light_id);
                 self.shadow_manager.mark_dirty();
                 self.dirty = true;
             })

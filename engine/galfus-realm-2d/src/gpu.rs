@@ -41,6 +41,7 @@ pub struct GpuResources2D {
     pub fallback_material_buffer: wgpu::Buffer,
     pub fallback_material_bind_group: wgpu::BindGroup,
     pub global_bind_group: wgpu::BindGroup,
+    pub depth_texture: Option<(wgpu::Texture, wgpu::TextureView, u32, u32)>,
 }
 
 fn create_1x1_texture(
@@ -305,7 +306,40 @@ impl GpuResources2D {
             fallback_material_buffer,
             fallback_material_bind_group,
             global_bind_group,
+            depth_texture: None,
         }
+    }
+
+    /// Lazily allocates or resizes the Reverse-Z `Depth32Float` buffer for 2D Early-Z occlusion.
+    pub fn ensure_depth_texture(
+        &mut self,
+        device: &wgpu::Device,
+        width: u32,
+        height: u32,
+    ) -> &wgpu::TextureView {
+        let needs_realloc = match &self.depth_texture {
+            Some((_, _, w, h)) => *w != width || *h != height,
+            None => true,
+        };
+        if needs_realloc {
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("galfus_2d_depth_texture"),
+                size: wgpu::Extent3d {
+                    width: width.max(1),
+                    height: height.max(1),
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            self.depth_texture = Some((texture, view, width, height));
+        }
+        &self.depth_texture.as_ref().unwrap().1
     }
 
     pub fn build_global_bind_group(

@@ -20,6 +20,7 @@ import { runDemoAnim1 } from './realm2d/anim1-transitions';
 import { runDemoAnim2 } from './realm2d/anim2-path';
 import { runDemo2d1 } from './realm2d/d2d1-shadows';
 import { runDemo2d2 } from './realm2d/d2d2-effects-particles';
+import { runDemo2d3 } from './realm2d/d2d3-culling-lod';
 import { runDemo3d1 } from './realm3d/d3d1-orbit';
 import { runDemo3d2 } from './realm3d/d3d2-bones';
 import { runDemo3d3 } from './realm3d/d3d3-ssao-shadows';
@@ -33,6 +34,7 @@ import { runDemo3d10 } from './realm3d/d3d10-morph-targets';
 import { runDemo3d11 } from './realm3d/d3d11-imported-skybox';
 import { runDemo3d12 } from './realm3d/d3d12-ik-layers';
 import { runDemo3d13 } from './realm3d/d3d13-decals-projectors-tattoos';
+import { runDemo3d14 } from './realm3d/d3d14-culling-lod';
 import { runDemoUi1 } from './ui/ui1-pointer-wheel-image';
 import { runDemoUi2 } from './ui/ui2-panels-layout';
 import { runDemoUi3 } from './ui/ui3-components';
@@ -453,6 +455,16 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
       'Forward PBR orthographic floor decal, occluded perspective texture projector with moving blocker, and permanent UV-space baked tattoos on a rotating mesh.',
     run: runDemo3d13
   },
+  {
+    id: '3d14',
+    aliases: ['culling-3d', 'lod-3d', 'occlusion-3d'],
+    title: '3D Frustum/Distance Culling, LOD & Debug Observer Camera',
+    category: 'Realm 3D',
+    tags: ['3d', 'culling', 'occlusion', 'lod', 'frustum', 'debug-camera', 'depth-prepass'],
+    description:
+      'Split-screen 3D culling validator pairing a sweeping Main Camera with a bird-eye Debug Observer (cullCameraSlot: 0) showing live frustum culling, 3-band distance LOD, cullMargin, and alwaysRender.',
+    run: runDemo3d14
+  },
 
   // 5. Realm 2D & Animation (4 demos)
   {
@@ -474,6 +486,16 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     description:
       'Custom 2D WGSL surface shaders (Plasma, Hologram, Lava, Caustics) paired with procedural and atlas-textured 2D particles.',
     run: runDemo2d2
+  },
+  {
+    id: '2d3',
+    aliases: ['culling-2d', 'lod-2d', 'occlusion-2d'],
+    title: '2D Viewport Culling, Zoom-LOD & Debug Observer Camera',
+    category: 'Realm 2D & Animation',
+    tags: ['2d', 'culling', 'occlusion', 'lod', 'zoom', 'viewport', 'debug-camera'],
+    description:
+      'Split-screen 2D culling validator pairing a panning/zooming Main Camera with a zoomed-out Debug Observer (cullCameraSlot: 0) showing viewport AABB culling, dynamic orthoScale distance LOD, cullMargin, and alwaysRender.',
+    run: runDemo2d3
   },
   {
     id: 'anim1',

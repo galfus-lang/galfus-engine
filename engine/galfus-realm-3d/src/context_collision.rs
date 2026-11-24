@@ -114,7 +114,16 @@ impl Realm3DContext {
         self.model_transforms.remove(&model_id).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("Model3D {model_id}"))
         })?;
+        self.bones_dirty |= self.model_bones.remove(&model_id).is_some();
+        self.hierarchy.remove_entity(model_id);
+        self.skins.retain(|_, skin| skin.model_id != model_id);
+        self.ik_constraints
+            .retain(|_, constraint| !constraint.references_entity(model_id));
+        if let Some(ref mut physics) = self.physics {
+            physics.remove_rigid_body(model_id);
+        }
         self.destroy_colliders_by_model_3d(model_id);
+        self.dirty = true;
         Ok(())
     }
 

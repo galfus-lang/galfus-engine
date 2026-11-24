@@ -64,6 +64,9 @@ pub struct Camera3D {
     pub active: bool,
     /// Optional point and up direction used to derive the view orientation.
     pub look_at: Option<CameraLookAt3D>,
+    /// Optional debug override: cull frustum & distance against another camera slot while rendering from this camera.
+    #[serde(default)]
+    pub cull_camera_slot: Option<u32>,
 }
 
 fn default_layer_mask() -> u32 {
@@ -82,6 +85,7 @@ impl Default for Camera3D {
             layer_mask: u32::MAX,
             active: true,
             look_at: None,
+            cull_camera_slot: None,
         }
     }
 }

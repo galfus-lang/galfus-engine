@@ -247,9 +247,10 @@ impl PhysicsWorld2D {
         if let Some(handle) = self.entity_to_body.remove(&entity_id) {
             self.body_to_entity.remove(&handle);
             self.body_descs.remove(&entity_id);
-            if let Some(colliders) = self.entity_to_colliders.remove(&entity_id) {
+            let removed_colliders = self.entity_to_colliders.remove(&entity_id);
+            if let Some(ref colliders) = removed_colliders {
                 for ch in colliders {
-                    self.collider_to_entity.remove(&ch);
+                    self.collider_to_entity.remove(ch);
                 }
             }
             self.entity_joints.retain(|_, joint| {
@@ -266,6 +267,19 @@ impl PhysicsWorld2D {
                 &mut self.soft_body_set,
                 true,
             );
+            if let Some(colliders) = removed_colliders {
+                for ch in colliders {
+                    if self.collider_set.contains(ch) {
+                        self.collider_set.remove(
+                            ch,
+                            &mut self.island_manager,
+                            &mut self.rigid_body_set,
+                            &mut self.soft_body_set,
+                            true,
+                        );
+                    }
+                }
+            }
             true
         } else {
             false
@@ -467,8 +481,8 @@ impl PhysicsWorld2D {
 
         let joint: GenericJoint = match desc {
             JointDesc2D::Fixed { anchor1, anchor2 } => FixedJointBuilder::new()
-                .local_anchor1(Vec2::new(anchor1[0], anchor1[1]))
-                .local_anchor2(Vec2::new(anchor2[0], anchor2[1]))
+                .local_anchor1(Vec2::from(*anchor1))
+                .local_anchor2(Vec2::from(*anchor2))
                 .into(),
             JointDesc2D::Revolute {
                 anchor1,
@@ -478,11 +492,11 @@ impl PhysicsWorld2D {
                 collide_connected,
             } => {
                 let mut builder = RevoluteJointBuilder::new()
-                    .local_anchor1(Vec2::new(anchor1[0], anchor1[1]))
-                    .local_anchor2(Vec2::new(anchor2[0], anchor2[1]));
-                builder = builder.contacts_enabled(*collide_connected);
+                    .local_anchor1(Vec2::from(*anchor1))
+                    .local_anchor2(Vec2::from(*anchor2))
+                    .contacts_enabled(*collide_connected);
                 if let Some(lim) = limits {
-                    builder = builder.limits([lim[0], lim[1]]);
+                    builder = builder.limits(*lim);
                 }
                 if let Some([target, stiffness, damping]) = motor {
                     builder = builder.motor_position(*target, *stiffness, *damping);
@@ -495,11 +509,11 @@ impl PhysicsWorld2D {
                 axis,
                 limits,
             } => {
-                let mut builder = PrismaticJointBuilder::new(Vec2::new(axis[0], axis[1]))
-                    .local_anchor1(Vec2::new(anchor1[0], anchor1[1]))
-                    .local_anchor2(Vec2::new(anchor2[0], anchor2[1]));
+                let mut builder = PrismaticJointBuilder::new(Vec2::from(*axis))
+                    .local_anchor1(Vec2::from(*anchor1))
+                    .local_anchor2(Vec2::from(*anchor2));
                 if let Some(lim) = limits {
-                    builder = builder.limits([lim[0], lim[1]]);
+                    builder = builder.limits(*lim);
                 }
                 builder.into()
             }
@@ -508,8 +522,8 @@ impl PhysicsWorld2D {
                 anchor2,
                 max_length,
             } => RopeJointBuilder::new(*max_length)
-                .local_anchor1(Vec2::new(anchor1[0], anchor1[1]))
-                .local_anchor2(Vec2::new(anchor2[0], anchor2[1]))
+                .local_anchor1(Vec2::from(*anchor1))
+                .local_anchor2(Vec2::from(*anchor2))
                 .into(),
             JointDesc2D::Spring {
                 anchor1,
@@ -518,8 +532,8 @@ impl PhysicsWorld2D {
                 stiffness,
                 damping,
             } => SpringJointBuilder::new(*rest_length, *stiffness, *damping)
-                .local_anchor1(Vec2::new(anchor1[0], anchor1[1]))
-                .local_anchor2(Vec2::new(anchor2[0], anchor2[1]))
+                .local_anchor1(Vec2::from(*anchor1))
+                .local_anchor2(Vec2::from(*anchor2))
                 .into(),
         };
 
@@ -544,13 +558,13 @@ impl PhysicsWorld2D {
 
     /// Gets the current simulated world pose of an entity's rigid body.
     pub fn get_body_pose(&self, entity_id: u32) -> Option<Pose2D> {
-        let handle = self.entity_to_body.get(&entity_id)?;
-        let body = self.rigid_body_set.get(*handle)?;
+        let body = self
+            .rigid_body_set
+            .get(*self.entity_to_body.get(&entity_id)?)?;
         let pos = body.translation();
-        let rot = body.rotation().angle();
         Some(Pose2D {
             position: Vec2::new(pos.x, pos.y),
-            rotation: rot,
+            rotation: body.rotation().angle(),
             scale: Vec2::ONE,
         })
     }
@@ -559,22 +573,15 @@ impl PhysicsWorld2D {
     pub fn write_poses_to_transforms(&self, transforms: &mut HashMap<u32, Pose2D>) {
         for (&entity_id, &handle) in &self.entity_to_body {
             if let Some(body) = self.rigid_body_set.get(handle) {
-                let pos = body.translation();
+                let pos = Vec2::new(body.translation().x, body.translation().y);
                 let rot = body.rotation().angle();
-                if let Some(pose) = transforms.get_mut(&entity_id) {
-                    pose.position.x = pos.x;
-                    pose.position.y = pos.y;
-                    pose.rotation = rot;
-                } else {
-                    transforms.insert(
-                        entity_id,
-                        Pose2D {
-                            position: Vec2::new(pos.x, pos.y),
-                            rotation: rot,
-                            scale: Vec2::ONE,
-                        },
-                    );
-                }
+                let pose = transforms.entry(entity_id).or_insert(Pose2D {
+                    position: pos,
+                    rotation: rot,
+                    scale: Vec2::ONE,
+                });
+                pose.position = pos;
+                pose.rotation = rot;
             }
         }
     }

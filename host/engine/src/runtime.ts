@@ -304,8 +304,17 @@ export class MultiverseRuntime {
 
       // 3. Animation: Clear transitions and paths
       this.animation.dispose();
+      this._animationUnsubscribe = null;
       if (this.#transport.engine) {
         this.animation.bindEngine(this.#transport.engine);
+        this._animationUnsubscribe = this.animation.on('animation', (event) => {
+          const animListeners = this._eventListeners.get('animation');
+          if (animListeners && animListeners.size > 0) {
+            for (const listener of animListeners) {
+              listener(event);
+            }
+          }
+        });
       }
 
       // 4. Windows: Close all open windows

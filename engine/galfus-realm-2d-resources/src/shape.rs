@@ -1,3 +1,4 @@
+use galfus_core::CullingMode;
 use glam::Vec2;
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +45,15 @@ pub struct Shape2D {
     /// Optional explicit draw order override within the same Z layer.
     #[serde(default)]
     pub draw_order: Option<i32>,
+    /// Viewport, distance, and occlusion culling policy for this shape.
+    #[serde(default)]
+    pub culling_mode: CullingMode,
+    /// World-space AABB expansion margin applied before viewport culling.
+    #[serde(default)]
+    pub cull_margin: f32,
+    /// Optional half-open effective camera distance `[start, end)` (`hypot(dx, dy, ortho_scale)`).
+    #[serde(default)]
+    pub distance_range: Option<[f32; 2]>,
 }
 
 fn default_layer_mask() -> u32 {
@@ -64,6 +74,9 @@ impl Default for Shape2D {
             shadow_layer_mask: u32::MAX,
             height_range: None,
             draw_order: None,
+            culling_mode: CullingMode::Auto,
+            cull_margin: 0.0,
+            distance_range: None,
         }
     }
 }

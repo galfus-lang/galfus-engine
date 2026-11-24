@@ -54,6 +54,8 @@ export class AudioManager {
   private readonly _idAllocator = new IdAllocator<SoundId>(1);
   private readonly _sounds = new Set<SoundId>();
   private readonly _activeVoices = new Set<VoiceId>();
+  private readonly _soundVoices = new Map<SoundId, Set<VoiceId>>();
+  private readonly _voiceToSound = new Map<VoiceId, SoundId>();
 
   // Global listener for voices without an explicit spatial listener
   private readonly _listener: SpatialTransform = {
@@ -80,14 +82,32 @@ export class AudioManager {
   }
 
   /**
-   * Unloads a sound from core memory.
+   * Unloads a sound from core memory and cleans up any active voices referencing it.
    */
   unloadSound(soundId: SoundId): void {
     if (!this._sounds.has(soundId)) return;
+    const voices = this._soundVoices.get(soundId);
+    if (voices) {
+      for (const voiceId of [...voices]) {
+        this.handleVoiceFinished(voiceId);
+      }
+      this._soundVoices.delete(soundId);
+    }
     if (this._engine) {
       this._engine.audioUnloadSound(soundId);
     }
     this._sounds.delete(soundId);
+  }
+
+  private _trackVoice(soundId: SoundId, voiceId: VoiceId): void {
+    this._activeVoices.add(voiceId);
+    this._voiceToSound.set(voiceId, soundId);
+    let set = this._soundVoices.get(soundId);
+    if (!set) {
+      set = new Set();
+      this._soundVoices.set(soundId, set);
+    }
+    set.add(voiceId);
   }
 
   /**
@@ -104,7 +124,7 @@ export class AudioManager {
       options.speed ?? 1.0,
       options.looping ?? false
     ) as VoiceId;
-    this._activeVoices.add(voiceId);
+    this._trackVoice(soundId, voiceId);
     return voiceId;
   }
 
@@ -152,7 +172,7 @@ export class AudioManager {
       : { ...spatialOrPosition, listener: listenerToUse };
 
     const voiceId = this._engine.audioPlaySoundSpatial(soundId, spatial) as VoiceId;
-    this._activeVoices.add(voiceId);
+    this._trackVoice(soundId, voiceId);
     this._voiceSpatialCache.set(voiceId, {
       spatial: {
         emitter: {
@@ -175,10 +195,14 @@ export class AudioManager {
     if (vec3Equals(this._listener.position, x, y, z)) return;
     this._listener.position = [x, y, z];
     if (this._engine) {
-      for (const [voiceId, entry] of this._voiceSpatialCache) {
+      for (const [voiceId, entry] of [...this._voiceSpatialCache]) {
         if (!entry.explicitListener) {
           entry.spatial.listener = this._listener;
-          this._engine.audioUpdateSoundSpatial(voiceId, entry.spatial);
+          try {
+            this._engine.audioUpdateSoundSpatial(voiceId, entry.spatial);
+          } catch {
+            this.handleVoiceFinished(voiceId);
+          }
         }
       }
     }
@@ -192,10 +216,14 @@ export class AudioManager {
     if (quatEquals(this._listener.rotation, x, y, z, w)) return;
     this._listener.rotation = [x, y, z, w];
     if (this._engine) {
-      for (const [voiceId, entry] of this._voiceSpatialCache) {
+      for (const [voiceId, entry] of [...this._voiceSpatialCache]) {
         if (!entry.explicitListener) {
           entry.spatial.listener = this._listener;
-          this._engine.audioUpdateSoundSpatial(voiceId, entry.spatial);
+          try {
+            this._engine.audioUpdateSoundSpatial(voiceId, entry.spatial);
+          } catch {
+            this.handleVoiceFinished(voiceId);
+          }
         }
       }
     }
@@ -284,6 +312,15 @@ export class AudioManager {
   handleVoiceFinished(voiceId: VoiceId): void {
     this._activeVoices.delete(voiceId);
     this._voiceSpatialCache.delete(voiceId);
+    const soundId = this._voiceToSound.get(voiceId);
+    if (soundId !== undefined) {
+      this._voiceToSound.delete(voiceId);
+      const set = this._soundVoices.get(soundId);
+      if (set) {
+        set.delete(voiceId);
+        if (set.size === 0) this._soundVoices.delete(soundId);
+      }
+    }
     const listeners = this._voiceFinishListeners.get(voiceId);
     if (listeners) {
       for (const listener of [...listeners]) {
@@ -364,8 +401,11 @@ export class AudioManager {
     }
     this._sounds.clear();
     this._activeVoices.clear();
+    this._soundVoices.clear();
+    this._voiceToSound.clear();
     this._voiceSpatialCache.clear();
     this._voiceFinishListeners.clear();
+    this._idAllocator.reset(1);
     this._engine = null;
   }
 }

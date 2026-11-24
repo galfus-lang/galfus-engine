@@ -95,7 +95,7 @@ export function spawnSceneGraph(
   }
 
   // Fallback default material if a primitive omits material definition
-  let defaultMaterialId: number | undefined;
+  let defaultMaterialId: number | undefined = resources.defaultMaterialId;
   function getDefaultMaterial(): number {
     if (defaultMaterialId === undefined) {
       defaultMaterialId = realm.createMaterial({ baseColor: [1, 1, 1, 1] }).materialId;

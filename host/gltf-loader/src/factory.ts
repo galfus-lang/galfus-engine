@@ -299,5 +299,10 @@ export class GltfAssetFactory implements ModelAssetFactory {
         // Ignored during shutdown
       }
     }
+
+    this._buffers.length = 0;
+    this._resources.geometryMap.clear();
+    this._resources.materialMap.clear();
+    this._resources.textureMap.clear();
   }
 }

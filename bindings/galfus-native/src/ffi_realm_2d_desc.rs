@@ -51,6 +51,7 @@ pub struct Camera2DDesc {
     pub camera_slot: u32,
     #[serde(default = "default_true")]
     pub active: bool,
+    pub cull_camera_slot: Option<u32>,
 }
 
 fn default_near_2d() -> f32 {
@@ -76,6 +77,7 @@ impl From<Camera2DDesc> for Camera2D {
             order: d.order,
             camera_slot: d.camera_slot,
             active: d.active,
+            cull_camera_slot: d.cull_camera_slot,
         }
     }
 }
@@ -165,6 +167,9 @@ pub struct Sprite2DDesc {
     pub shadow_layer_mask: Option<u32>,
     pub height_range: Option<[f32; 2]>,
     pub draw_order: Option<i32>,
+    pub culling_mode: Option<galfus_core::CullingMode>,
+    pub cull_margin: Option<f32>,
+    pub distance_range: Option<[f32; 2]>,
 }
 
 impl From<Sprite2DDesc> for Sprite2D {
@@ -189,6 +194,9 @@ impl From<Sprite2DDesc> for Sprite2D {
             shadow_layer_mask: d.shadow_layer_mask.unwrap_or(u32::MAX),
             height_range: d.height_range,
             draw_order: d.draw_order,
+            culling_mode: d.culling_mode.unwrap_or_default(),
+            cull_margin: d.cull_margin.unwrap_or(0.0).max(0.0),
+            distance_range: d.distance_range,
         }
     }
 }
@@ -213,6 +221,9 @@ pub struct Shape2DDesc {
     pub shadow_layer_mask: Option<u32>,
     pub height_range: Option<[f32; 2]>,
     pub draw_order: Option<i32>,
+    pub culling_mode: Option<galfus_core::CullingMode>,
+    pub cull_margin: Option<f32>,
+    pub distance_range: Option<[f32; 2]>,
 }
 
 impl From<Shape2DDesc> for Shape2D {
@@ -247,6 +258,9 @@ impl From<Shape2DDesc> for Shape2D {
             shadow_layer_mask: d.shadow_layer_mask.unwrap_or(u32::MAX),
             height_range: d.height_range,
             draw_order: d.draw_order,
+            culling_mode: d.culling_mode.unwrap_or_default(),
+            cull_margin: d.cull_margin.unwrap_or(0.0).max(0.0),
+            distance_range: d.distance_range,
         }
     }
 }

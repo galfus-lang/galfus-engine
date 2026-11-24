@@ -1,17 +1,20 @@
-use crate::batch::{BatchBuilder2D, PreparedItem2D};
+use crate::batch::BatchBuilder2D;
 use crate::gpu::GpuResources2D;
 use crate::pipeline::{PipelineKey2D, PipelineManager2D};
 use crate::shadow::ShadowManager2D;
 use crate::types::{
-    BatchKey2D, Camera2D, Item2DInstanceRaw, Light2D, Material2D, Material2DUniform, Model2DUI,
-    ParticleEmitter2D, ParticleEmitterState2D, Shape2D, Sprite2D, Transform2D,
+    Camera2D, Light2D, Material2D, Material2DUniform, Model2DUI, ParticleEmitter2D,
+    ParticleEmitterState2D, Shape2D, Sprite2D, Transform2D,
 };
 use bytemuck::cast_slice;
 use galfus_realm_core::{
     Realm, RealmInvocationContext, RealmKind, RealmPrepareContext, RealmResult,
 };
-use glam::{Vec2, Vec4};
+use glam::Vec2;
 use std::collections::{BTreeMap, HashMap};
+
+pub(crate) type TextureViewIdentity2D = (usize, u32, u32);
+pub(crate) type MaterialTextureSlots2D = [(Option<u32>, Option<TextureViewIdentity2D>); 8];
 
 /// Runtime 2D rendering context managing GPU buffers, pipelines, materials, and batch execution.
 pub struct Realm2DContext {
@@ -40,7 +43,9 @@ pub struct Realm2DContext {
     pub(crate) total_time: f32,
     pub(crate) material_bind_groups: HashMap<u32, wgpu::BindGroup>,
     pub(crate) material_uniform_buffers: HashMap<u32, wgpu::Buffer>,
-    pub(crate) material_texture_slots: HashMap<u32, [Option<u32>; 8]>,
+    pub(crate) material_texture_slots: HashMap<u32, MaterialTextureSlots2D>,
+    pub(crate) material_effect_ids: HashMap<u32, u64>,
+    pub(crate) spatial_grid: crate::spatial_grid::SpatialGrid2D,
 }
 
 impl Realm2DContext {
@@ -70,6 +75,8 @@ impl Realm2DContext {
             material_bind_groups: HashMap::new(),
             material_uniform_buffers: HashMap::new(),
             material_texture_slots: HashMap::new(),
+            material_effect_ids: HashMap::new(),
+            spatial_grid: crate::spatial_grid::SpatialGrid2D::new(16.0),
         }
     }
 
@@ -143,14 +150,23 @@ impl Realm for Realm2DContext {
         self.material_bind_groups.clear();
         self.material_uniform_buffers.clear();
         self.material_texture_slots.clear();
+        self.spatial_grid.clear();
+        self.material_effect_ids.clear();
+        if let Some(ref mut pm) = self.pipeline_manager {
+            pm.prune_custom_effects(&std::collections::HashSet::new());
+        }
+        self.batch_builder.clear();
         self.shadow_data = crate::context_shadows::ShadowFrameData::default();
-        self.shadow_manager.mark_dirty();
+        self.shadow_manager.clear_scratch();
         self.dirty = true;
         Ok(())
     }
 
     fn destroy(&mut self) -> RealmResult<()> {
         self.clear()?;
+        self.physics = None;
+        self.ui_manager.destroy_gpu();
+        self.ui_fonts = crate::ui_fonts::UiFontLibrary::empty();
         self.pipeline_manager = None;
         self.gpu_res = None;
         Ok(())
@@ -190,7 +206,21 @@ impl Realm for Realm2DContext {
             queue.write_buffer(buf, 0, bytemuck::bytes_of(&uniform));
 
             let resolved_slots = mat.resolved_texture_slots();
-            let slots_changed = self.material_texture_slots.get(&mat_id) != Some(&resolved_slots);
+            let resolved_identities = resolved_slots.map(|slot| {
+                let view_id = slot.and_then(|tex_id| {
+                    (ctx.textures)(tex_id).map(|v| {
+                        let size = v.texture().size();
+                        (
+                            v as *const wgpu::TextureView as usize,
+                            size.width,
+                            size.height,
+                        )
+                    })
+                });
+                (slot, view_id)
+            });
+            let slots_changed =
+                self.material_texture_slots.get(&mat_id) != Some(&resolved_identities);
             if slots_changed || !self.material_bind_groups.contains_key(&mat_id) {
                 let bg = crate::gpu::create_material_bind_group_2d(
                     device,
@@ -204,7 +234,8 @@ impl Realm for Realm2DContext {
                     ctx.textures,
                 );
                 self.material_bind_groups.insert(mat_id, bg);
-                self.material_texture_slots.insert(mat_id, resolved_slots);
+                self.material_texture_slots
+                    .insert(mat_id, resolved_identities);
             }
         }
 
@@ -233,130 +264,8 @@ impl Realm for Realm2DContext {
         }
 
         self.prepare_shadows(device, queue);
-
-        // Build item batches
-        self.batch_builder.clear();
-        for (&id, (sprite, transform)) in &self.sprites {
-            let [min_z, max_z] = sprite.height_range.unwrap_or([-10000.0, 10000.0]);
-            let instance = Item2DInstanceRaw::new(
-                sprite.compute_model_matrix(transform),
-                Vec4::ONE,
-                sprite.uv_rect,
-                Vec4::new(
-                    if sprite.receive_shadow { 1.0 } else { 0.0 },
-                    if sprite.cast_shadow { 1.0 } else { 0.0 },
-                    min_z,
-                    max_z,
-                ),
-                sprite.layer_mask,
-            );
-
-            let draw_order = sprite.draw_order.unwrap_or(transform.draw_order);
-            self.batch_builder.push(PreparedItem2D {
-                order: (id, 0, 0),
-                key: BatchKey2D {
-                    z_layer: transform.z_layer,
-                    draw_order,
-                    surface_type: self
-                        .materials
-                        .get(&sprite.material_id.unwrap_or(0))
-                        .map_or(1, Material2D::surface_type_id),
-                    material_id: sprite.material_id.unwrap_or(0),
-                    geometry_id: 0,
-                    layer_mask: sprite.layer_mask,
-                },
-                instance,
-                occluder_only: sprite.occluder_only,
-            });
-        }
-
-        for (&id, (shape, transform)) in &self.shapes {
-            let [min_z, max_z] = shape.height_range.unwrap_or([-10000.0, 10000.0]);
-            let instance = Item2DInstanceRaw::new(
-                shape.compute_model_matrix(transform),
-                Vec4::ONE,
-                Vec4::new(0.0, 0.0, 1.0, 1.0),
-                Vec4::new(
-                    if shape.receive_shadow { 1.0 } else { 0.0 },
-                    if shape.cast_shadow { 1.0 } else { 0.0 },
-                    min_z,
-                    max_z,
-                ),
-                shape.layer_mask,
-            );
-
-            let draw_order = shape.draw_order.unwrap_or(transform.draw_order);
-            self.batch_builder.push(PreparedItem2D {
-                order: (id, 1, 0),
-                key: BatchKey2D {
-                    z_layer: transform.z_layer,
-                    draw_order,
-                    surface_type: self
-                        .materials
-                        .get(&shape.material_id.unwrap_or(0))
-                        .map_or(1, Material2D::surface_type_id),
-                    material_id: shape.material_id.unwrap_or(0),
-                    geometry_id: 0,
-                    layer_mask: shape.layer_mask,
-                },
-                instance,
-                occluder_only: shape.occluder_only,
-            });
-        }
-
-        for (&id, (cfg, transform, state)) in &self.emitters {
-            let material_id = cfg.material_id.unwrap_or(0);
-            let surface_type = self
-                .materials
-                .get(&material_id)
-                .map(|m| m.surface_type_id())
-                .unwrap_or(1);
-
-            for p in &state.particles {
-                let life_pct = (p.age / p.lifetime).clamp(0.0, 1.0);
-                let current_size = p.start_size + (p.end_size - p.start_size) * life_pct;
-                let current_color = p.start_color.lerp(p.end_color, life_pct);
-
-                let model_matrix = crate::types::compute_particle_matrix(
-                    p.position,
-                    p.rotation,
-                    current_size,
-                    transform.z_layer,
-                );
-
-                let instance = Item2DInstanceRaw::new(
-                    model_matrix,
-                    current_color,
-                    cfg.uv_rect,
-                    Vec4::new(
-                        if cfg.receive_shadow { 1.0 } else { 0.0 },
-                        if cfg.cast_shadow { 1.0 } else { 0.0 },
-                        -10000.0,
-                        10000.0,
-                    ),
-                    cfg.layer_mask,
-                );
-
-                self.batch_builder.push(PreparedItem2D {
-                    order: (id, 2, 0),
-                    key: BatchKey2D {
-                        z_layer: transform.z_layer,
-                        draw_order: transform.draw_order,
-                        surface_type,
-                        material_id,
-                        geometry_id: 0,
-                        layer_mask: cfg.layer_mask,
-                    },
-                    instance,
-                    occluder_only: false,
-                });
-            }
-        }
-
-        self.ui_manager
-            .push_batches(&self.uis, &mut self.batch_builder);
-
-        self.batch_builder.build();
+        self.spatial_grid.rebuild(&self.sprites, &self.shapes);
+        self.build_all_batches();
         self.dirty = false;
         Ok(())
     }
@@ -367,12 +276,12 @@ impl Realm for Realm2DContext {
         let device = ctx.device;
         let queue = ctx.queue;
 
-        // Resolve camera strictly by requested slot, or default slot 0 if none specified (no arbitrary fallback)
+        // Resolve camera strictly by requested slot first, falling back to logical ID only if no slot matches.
         let selected_camera = if let Some(slot) = ctx.camera_slot {
             self.cameras
-                .iter()
-                .find(|(id, (c, _))| c.active && (c.camera_slot == slot || **id == slot))
-                .map(|(_, pair)| pair)
+                .values()
+                .find(|(c, _)| c.active && c.camera_slot == slot)
+                .or_else(|| self.cameras.get(&slot).filter(|(c, _)| c.active))
         } else {
             self.cameras
                 .values()
@@ -382,19 +291,35 @@ impl Realm for Realm2DContext {
         let Some((camera, camera_transform)) = selected_camera else {
             return Ok(());
         };
+        let camera = camera.clone();
+        let camera_transform = *camera_transform;
 
         let width = ctx.viewport.z.max(1);
         let height = ctx.viewport.w.max(1);
         let viewport_size = Vec2::new(width as f32, height as f32);
 
-        let camera_uniform = camera.build_uniform(
-            camera_transform,
+        let (cull_cam, cull_tf) = if let Some(cull_slot) = camera.cull_camera_slot
+            && let Some((c, t)) = self
+                .cameras
+                .values()
+                .find(|(c, _)| c.active && c.camera_slot == cull_slot)
+        {
+            (c.clone(), *t)
+        } else {
+            (camera.clone(), camera_transform)
+        };
+
+        self.build_batches_for_camera(&cull_cam, &cull_tf, viewport_size);
+
+        let mut camera_uniform = camera.build_uniform(
+            &camera_transform,
             viewport_size,
             self.shadow_manager.config.ambient,
             self.shadow_manager.config.angular_resolution as f32,
             self.shadow_manager.config.shadow_contact_offset,
             self.total_time,
         );
+        camera_uniform.shadow_params.y = self.shadow_data.light_uniforms.len().min(64) as f32;
 
         let instances = self.batch_builder.instances();
         let ranges = self.batch_builder.ranges();
@@ -403,15 +328,19 @@ impl Realm for Realm2DContext {
         }
 
         let gpu = self.gpu_res.as_mut().unwrap();
+        let _ = gpu.ensure_depth_texture(device, width, height);
         queue.write_buffer(&gpu.camera_buffer, 0, bytemuck::bytes_of(&camera_uniform));
 
         // Upload instance buffer
         let required_bytes = std::mem::size_of_val(instances) as u64;
         if gpu.instance_buffer.size() < required_bytes {
+            let grown = (gpu.instance_buffer.size() * 2)
+                .max(required_bytes)
+                .max(1024);
             gpu.instance_buffer = crate::gpu::create_gpu_buffer(
                 device,
                 "galfus_2d_instance_buf_resized",
-                required_bytes.max(1024),
+                grown,
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             );
         }
@@ -422,6 +351,7 @@ impl Realm for Realm2DContext {
         let instance_buf = &gpu.instance_buffer;
         let global_bg = &gpu.global_bind_group;
         let fallback_mat_bg = &gpu.fallback_material_bind_group;
+        let depth_view = &gpu.depth_texture.as_ref().unwrap().1;
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("galfus_2d_invocation_encoder"),
@@ -439,7 +369,14 @@ impl Realm for Realm2DContext {
                     },
                     depth_slice: None,
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
@@ -473,7 +410,11 @@ impl Realm for Realm2DContext {
 
                 let mat = self.materials.get(&range.key.material_id);
                 let snippet = mat.and_then(|m| m.shader_effect.as_deref());
-                let effect_id = crate::pipeline::PipelineManager2D::compute_effect_id(snippet);
+                let effect_id = self
+                    .material_effect_ids
+                    .get(&range.key.material_id)
+                    .copied()
+                    .unwrap_or(0);
                 let key = PipelineKey2D {
                     effect_id,
                     surface_type: range.key.surface_type,
@@ -525,9 +466,10 @@ impl Realm for Realm2DContext {
         }
         let (ortho_scale, cam_pos, cam_rot) = if let Some(slot) = camera_slot {
             self.cameras
-                .iter()
-                .find(|(id, (c, _))| c.active && (c.camera_slot == slot || **id == slot))
-                .map(|(_, (c, tf))| (c.ortho_scale, tf.position, tf.rotation))?
+                .values()
+                .find(|(c, _)| c.active && c.camera_slot == slot)
+                .or_else(|| self.cameras.get(&slot).filter(|(c, _)| c.active))
+                .map(|(c, tf)| (c.ortho_scale, tf.position, tf.rotation))?
         } else {
             self.cameras
                 .values()

@@ -457,7 +457,13 @@ fn sample_shadow_layer(
     return (c00 + c20 + c02 + c22 + (c10 + c01 + c21 + c12) * 2.0 + c11 * 4.0) * 0.0625;
 }
 
-fn shade_surface(in: VertexOutput, front_facing: bool) -> vec4<f32> {
+struct SurfaceEval {
+    s_out: SurfaceOutput,
+    view_dir: vec3<f32>,
+    tex_ao: f32,
+};
+
+fn evaluate_surface(in: VertexOutput, front_facing: bool) -> SurfaceEval {
     let tex_albedo = sample_material_texture(0u, in.uv0, in.uv1);
     let tex_mr = sample_material_texture(2u, in.uv0, in.uv1);
     let tex_ao = sample_material_texture(3u, in.uv0, in.uv1);
@@ -499,14 +505,20 @@ fn shade_surface(in: VertexOutput, front_facing: bool) -> vec4<f32> {
     s_in.instance_pbr = in.instance_pbr;
     s_in.instance_custom = in.instance_custom;
 
-    let s_out = surface_effect(s_in);
+    var eval: SurfaceEval;
+    eval.s_out = surface_effect(s_in);
+    eval.view_dir = s_in.view_dir;
+    eval.tex_ao = tex_ao.r;
+    return eval;
+}
+
+fn shade_evaluated_surface(in: VertexOutput, eval: SurfaceEval) -> vec4<f32> {
+    let s_out = eval.s_out;
     let surface_type = material.flags.x & 7u;
-    if (surface_type == 2u && s_out.albedo.a < material.pbr_params.w) {
-        discard;
-    }
+    let tex_ao = vec4<f32>(eval.tex_ao, eval.tex_ao, eval.tex_ao, 1.0);
 
     let N = normalize(s_out.normal);
-    let V = s_in.view_dir;
+    let V = eval.view_dir;
 
     var albedo = s_out.albedo;
     var emissive_accum = s_out.emissive;
@@ -740,13 +752,26 @@ fn shade_surface(in: VertexOutput, front_facing: bool) -> vec4<f32> {
 }
 
 @fragment
+fn fs_opaque(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
+    let eval = evaluate_surface(in, front_facing);
+    return shade_evaluated_surface(in, eval);
+}
+
+@fragment
 fn fs_main(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
-    return shade_surface(in, front_facing);
+    let eval = evaluate_surface(in, front_facing);
+    let s_out = eval.s_out;
+    let surface_type = material.flags.x & 7u;
+    if (surface_type == 2u && s_out.albedo.a < material.pbr_params.w) {
+        discard;
+    }
+    return shade_evaluated_surface(in, eval);
 }
 
 @fragment
 fn fs_opaque_transparent(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
-    let color = shade_surface(in, front_facing);
+    let eval = evaluate_surface(in, front_facing);
+    let color = shade_evaluated_surface(in, eval);
     if color.a < 1.0 {
         discard;
     }
@@ -755,7 +780,8 @@ fn fs_opaque_transparent(in: VertexOutput, @builtin(front_facing) front_facing: 
 
 @fragment
 fn fs_transparent(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
-    let color = shade_surface(in, front_facing);
+    let eval = evaluate_surface(in, front_facing);
+    let color = shade_evaluated_surface(in, eval);
     if color.a >= 1.0 {
         discard;
     }

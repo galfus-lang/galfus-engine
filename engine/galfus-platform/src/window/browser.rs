@@ -14,6 +14,21 @@ use crate::window::types::{
 };
 
 #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+const MAX_BROWSER_EVENTS: usize = 4096;
+
+#[cfg(all(target_arch = "wasm32", feature = "browser"))]
+pub(super) fn push_browser_event(
+    queue: &RefCell<Vec<crate::event::PlatformEvent>>,
+    event: crate::event::PlatformEvent,
+) {
+    let mut events = queue.borrow_mut();
+    if events.len() >= MAX_BROWSER_EVENTS {
+        events.drain(0..256);
+    }
+    events.push(event);
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "browser"))]
 #[derive(Debug)]
 struct BrowserResizeState {
     size: UVec2,
@@ -448,14 +463,15 @@ impl BrowserWindow {
 
                 state.size = size;
                 state.scale_factor = scale_factor;
-                events
-                    .borrow_mut()
-                    .push(crate::event::PlatformEvent::Window(WindowEvent::Resized {
+                push_browser_event(
+                    &events,
+                    crate::event::PlatformEvent::Window(WindowEvent::Resized {
                         window_id,
                         width,
                         height,
                         scale_factor,
-                    }));
+                    }),
+                );
             },
         );
         let observer =

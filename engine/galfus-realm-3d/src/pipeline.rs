@@ -9,6 +9,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum SurfacePipelineState {
     Opaque,
+    Masked,
     OpaqueTransparent,
     AlphaBlend,
     AlphaBlendAfterOpaque,
@@ -20,20 +21,18 @@ impl SurfacePipelineState {
         match surface_type {
             SurfaceType3D::Transparent | SurfaceType3D::Refractive => Self::AlphaBlend,
             SurfaceType3D::Additive => Self::Additive,
-            SurfaceType3D::Opaque
-            | SurfaceType3D::Masked
-            | SurfaceType3D::Mirror
-            | SurfaceType3D::Portal => Self::Opaque,
+            SurfaceType3D::Masked => Self::Masked,
+            SurfaceType3D::Opaque | SurfaceType3D::Mirror | SurfaceType3D::Portal => Self::Opaque,
         }
     }
 
     const fn depth_write_enabled(self) -> bool {
-        matches!(self, Self::Opaque | Self::OpaqueTransparent)
+        matches!(self, Self::Opaque | Self::Masked | Self::OpaqueTransparent)
     }
 
     fn blend_state(self) -> Option<wgpu::BlendState> {
         match self {
-            Self::Opaque | Self::OpaqueTransparent => None,
+            Self::Opaque | Self::Masked | Self::OpaqueTransparent => None,
             Self::AlphaBlend | Self::AlphaBlendAfterOpaque => {
                 Some(wgpu::BlendState::ALPHA_BLENDING)
             }
@@ -411,6 +410,7 @@ impl Pipeline3D {
         for topology in PrimitiveTopology3D::ALL {
             for surface_state in [
                 SurfacePipelineState::Opaque,
+                SurfacePipelineState::Masked,
                 SurfacePipelineState::OpaqueTransparent,
                 SurfacePipelineState::AlphaBlend,
                 SurfacePipelineState::AlphaBlendAfterOpaque,
@@ -538,6 +538,15 @@ impl Pipeline3D {
             .unwrap_or(fallback)
     }
 
+    /// Prunes cached custom pipelines whose snippet content hash is not in `active_hashes`.
+    pub(crate) fn prune_custom_pipelines(
+        &mut self,
+        active_hashes: &std::collections::HashSet<u64>,
+    ) {
+        self.custom_pipelines
+            .retain(|(hash, _, _, _, _), _| active_hashes.contains(hash));
+    }
+
     fn get_standard_pipeline(
         &self,
         topology: PrimitiveTopology3D,
@@ -552,49 +561,5 @@ impl Pipeline3D {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn surface_types_select_the_expected_raster_state() {
-        assert_eq!(
-            SurfacePipelineState::from_surface_type(SurfaceType3D::Opaque),
-            SurfacePipelineState::Opaque
-        );
-        assert_eq!(
-            SurfacePipelineState::from_surface_type(SurfaceType3D::Masked),
-            SurfacePipelineState::Opaque
-        );
-        assert_eq!(
-            SurfacePipelineState::from_surface_type(SurfaceType3D::Transparent),
-            SurfacePipelineState::AlphaBlend
-        );
-        assert_eq!(
-            SurfacePipelineState::from_surface_type(SurfaceType3D::Additive),
-            SurfacePipelineState::Additive
-        );
-        assert!(SurfacePipelineState::Opaque.depth_write_enabled());
-        assert!(!SurfacePipelineState::AlphaBlend.depth_write_enabled());
-        assert!(!SurfacePipelineState::Additive.depth_write_enabled());
-    }
-
-    #[test]
-    fn material_sides_select_the_expected_culling() {
-        assert_eq!(
-            cull_mode(PrimitiveTopology3D::Triangles, MaterialSide3D::Front),
-            Some(wgpu::Face::Back)
-        );
-        assert_eq!(
-            cull_mode(PrimitiveTopology3D::Triangles, MaterialSide3D::Back),
-            Some(wgpu::Face::Front)
-        );
-        assert_eq!(
-            cull_mode(PrimitiveTopology3D::Triangles, MaterialSide3D::Double),
-            None
-        );
-        assert_eq!(
-            cull_mode(PrimitiveTopology3D::Lines, MaterialSide3D::Back),
-            None
-        );
-    }
-}
+#[path = "pipeline_tests.rs"]
+mod tests;

@@ -211,7 +211,7 @@ impl BrowserPointer {
                             }
                         }
                     };
-                    queue.borrow_mut().push(PlatformEvent::Pointer(mapped));
+                    super::browser::push_browser_event(&queue, PlatformEvent::Pointer(mapped));
                 },
             );
             canvas
@@ -247,15 +247,16 @@ impl BrowserPointer {
                     } else {
                         ScrollDelta::Lines(Vec2::new(dx, dy))
                     };
-                    queue
-                        .borrow_mut()
-                        .push(PlatformEvent::Pointer(PointerEvent::Scroll {
+                    super::browser::push_browser_event(
+                        &queue,
+                        PlatformEvent::Pointer(PointerEvent::Scroll {
                             window_id,
                             pointer_id: 0,
                             pointer_type: PointerType::Mouse,
                             position,
                             delta,
-                        }));
+                        }),
+                    );
                 },
             );
             canvas
@@ -291,9 +292,14 @@ impl BrowserPointer {
                     {
                         event.prevent_default();
                     }
-                    queue.borrow_mut().push(PlatformEvent::Keyboard(
-                        super::browser_keyboard::map_key(window_id, &event, name == "keydown"),
-                    ));
+                    super::browser::push_browser_event(
+                        &queue,
+                        PlatformEvent::Keyboard(super::browser_keyboard::map_key(
+                            window_id,
+                            &event,
+                            name == "keydown",
+                        )),
+                    );
                 },
             );
             canvas
@@ -313,12 +319,13 @@ impl BrowserPointer {
             let focus_cb = Closure::<dyn FnMut(web_sys::FocusEvent)>::new(move |_| {
                 sync_navigator_clipboard(&clipboard_ref);
                 if !focused_ref.replace(true) {
-                    queue
-                        .borrow_mut()
-                        .push(PlatformEvent::Window(WindowEvent::FocusChanged {
+                    super::browser::push_browser_event(
+                        &queue,
+                        PlatformEvent::Window(WindowEvent::FocusChanged {
                             window_id,
                             focused: true,
-                        }));
+                        }),
+                    );
                 }
             });
             canvas
@@ -347,12 +354,13 @@ impl BrowserPointer {
                                     .is_some_and(|id| id.parse::<u32>().ok() == Some(window_id))
                         });
                     if !stay_in_window && focused_ref.replace(false) {
-                        queue
-                            .borrow_mut()
-                            .push(PlatformEvent::Window(WindowEvent::FocusChanged {
+                        super::browser::push_browser_event(
+                            &queue,
+                            PlatformEvent::Window(WindowEvent::FocusChanged {
                                 window_id,
                                 focused: false,
-                            }));
+                            }),
+                        );
                     }
                 });
             canvas

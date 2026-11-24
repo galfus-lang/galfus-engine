@@ -36,7 +36,7 @@ pub struct RefractionPipeline3D {
     sampler: wgpu::Sampler,
     bind_group: wgpu::BindGroup,
     size: (u32, u32),
-    format: wgpu::TextureFormat,
+    pub(crate) format: wgpu::TextureFormat,
 }
 
 impl RefractionPipeline3D {

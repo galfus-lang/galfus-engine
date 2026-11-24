@@ -1,9 +1,73 @@
 //! Shadow depth-pass execution and per-light frustum culling.
 
-use galfus_realm_3d_resources::material::{Material3D, MaterialSide3D};
-use glam::Mat4;
+use galfus_core::{CullingMode, distance_sq_in_range};
+use galfus_realm_3d_resources::material::{Material3D, MaterialSide3D, SurfaceType3D};
+use glam::{Mat4, Vec3};
 
 use super::{MAX_SHADOW_LIGHTS, ShadowMap3D, ShadowPipeline3D, ShadowSurfaceMode};
+use crate::collector::CollectedDrawItem;
+
+/// Executes an unbiased Reverse-Z depth pre-pass for collected opaque and masked occluders.
+/// Returns `true` if the pass ran and cleared/populated `depth_view`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_depth_prepass<'a>(
+    encoder: &mut wgpu::CommandEncoder,
+    queue: &wgpu::Queue,
+    shadow_pipe: &ShadowPipeline3D,
+    shadow_map: &ShadowMap3D,
+    depth_view: &wgpu::TextureView,
+    camera_view_proj: &Mat4,
+    time: f32,
+    opaque: &[CollectedDrawItem<'a>],
+    masked: &[CollectedDrawItem<'a>],
+) -> bool {
+    let has_occluders = opaque.iter().chain(masked.iter()).any(|i| i.is_occluder);
+    if !has_occluders {
+        return false;
+    }
+
+    shadow_map.update_prepass_vp(queue, camera_view_proj, time);
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Realm3D Depth Pre-Pass"),
+        color_attachments: &[],
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: depth_view,
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Clear(0.0),
+                store: wgpu::StoreOp::Store,
+            }),
+            stencil_ops: None,
+        }),
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    });
+    pass.set_bind_group(0, &shadow_map.prepass_vp_bind_group, &[]);
+
+    for item in opaque.iter().chain(masked.iter()) {
+        if !item.is_occluder {
+            continue;
+        }
+        let surface_mode = if item.surface_type == SurfaceType3D::Masked {
+            ShadowSurfaceMode::AlphaMask
+        } else {
+            ShadowSurfaceMode::Solid
+        };
+        let instanced = item.instance_buffer.is_some();
+        pass.set_pipeline(shadow_pipe.prepass_pipeline(
+            item.topology,
+            item.side,
+            instanced,
+            surface_mode,
+        ));
+        pass.set_bind_group(1, item.material_bg, &[]);
+        pass.set_bind_group(2, item.model_bg, &[]);
+        pass.set_vertex_buffer(0, item.vertex_buffer.slice(..));
+        pass.set_index_buffer(item.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        pass.draw_indexed(0..item.index_count, 0, 0..item.instance_count);
+    }
+    true
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render_depth_layer_target(
@@ -13,6 +77,7 @@ pub(crate) fn render_depth_layer_target(
     vp_bg: &wgpu::BindGroup,
     layer_mask: u32,
     view_proj: &Mat4,
+    main_camera_pos: Option<Vec3>,
     models: &std::collections::BTreeMap<u32, crate::types::GpuModelEntry>,
     instanced_models: &std::collections::BTreeMap<u32, crate::types::GpuInstancedModelEntry>,
     materials: &std::collections::BTreeMap<
@@ -56,9 +121,21 @@ pub(crate) fn render_depth_layer_target(
         let Some((geom, Some(mesh))) = geometries.get(&model.geometry_id) else {
             continue;
         };
-        let world_aabb = local_aabb.transform(&model_trans.matrix());
-        if !frustum.intersects_aabb(world_aabb.min, world_aabb.max) {
-            continue;
+        if model.culling_mode != CullingMode::AlwaysRender {
+            if let Some(cam_pos) = main_camera_pos {
+                let world_center = model_trans.matrix().transform_point3(geom.aabb.center());
+                if !distance_sq_in_range(
+                    (world_center - cam_pos).length_squared(),
+                    model.distance_range,
+                ) {
+                    continue;
+                }
+            }
+            let world_aabb = local_aabb.transform(&model_trans.matrix());
+            let pad = Vec3::splat(model.cull_margin.max(0.0));
+            if !frustum.intersects_aabb(world_aabb.min - pad, world_aabb.max + pad) {
+                continue;
+            }
         }
         let (side, surface_mode, material_bg) = match materials.get(&model.material_id) {
             Some((material, _, material_bg)) => {
@@ -105,6 +182,23 @@ pub(crate) fn render_depth_layer_target(
         let Some((geom, Some(mesh))) = geometries.get(&inst_model.geometry_id) else {
             continue;
         };
+        if inst_model.culling_mode != CullingMode::AlwaysRender {
+            let (batch_min, batch_max) =
+                crate::collector::compute_instanced_batch_aabb(&geom.aabb, instances);
+            if let Some(cam_pos) = main_camera_pos {
+                let batch_center = (batch_min + batch_max) * 0.5;
+                if !distance_sq_in_range(
+                    (batch_center - cam_pos).length_squared(),
+                    inst_model.distance_range,
+                ) {
+                    continue;
+                }
+            }
+            let pad = Vec3::splat(inst_model.cull_margin.max(0.0));
+            if !frustum.intersects_aabb(batch_min - pad, batch_max + pad) {
+                continue;
+            }
+        }
         let (side, surface_mode, material_bg) = match materials.get(&inst_model.material_id) {
             Some((material, _, material_bg)) => {
                 let Some(surface_mode) =
@@ -142,6 +236,7 @@ fn render_single_shadow_layer(
     layer_idx: u32,
     light_layer_mask: u32,
     shadow_view_proj: &Mat4,
+    main_camera_pos: Option<Vec3>,
     time: f32,
     models: &std::collections::BTreeMap<u32, crate::types::GpuModelEntry>,
     instanced_models: &std::collections::BTreeMap<u32, crate::types::GpuInstancedModelEntry>,
@@ -165,6 +260,7 @@ fn render_single_shadow_layer(
         &shadow_map.vp_bind_groups[layer_idx as usize],
         light_layer_mask,
         shadow_view_proj,
+        main_camera_pos,
         models,
         instanced_models,
         materials,
@@ -199,6 +295,7 @@ pub fn render_shadow_depth_pass(
             Option<crate::types::GpuMeshBuffers>,
         ),
     >,
+    main_camera_pos: Option<Vec3>,
     time: f32,
 ) {
     let mut layer_idx = 0u32;
@@ -233,6 +330,7 @@ pub fn render_shadow_depth_pass(
                     layer_idx + face_i as u32,
                     light.layer_mask,
                     &vp,
+                    main_camera_pos,
                     time,
                     models,
                     instanced_models,
@@ -254,6 +352,7 @@ pub fn render_shadow_depth_pass(
                 layer_idx,
                 light.layer_mask,
                 &light_uniform.shadow_view_proj,
+                main_camera_pos,
                 time,
                 models,
                 instanced_models,

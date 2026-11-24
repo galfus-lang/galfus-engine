@@ -14,6 +14,7 @@ export interface UploadedGltfResources {
   createdGeometryIds: number[];
   createdMaterialIds: number[];
   createdTextureIds: number[];
+  defaultMaterialId?: number;
 }
 
 /**
@@ -131,253 +132,286 @@ export async function uploadGltfResources(
   }
 
   // 1. Upload Textures
-  if (gltf.textures) {
-    for (let tIdx = 0; tIdx < gltf.textures.length; tIdx++) {
-      const tex = gltf.textures[tIdx]!;
-      const sourceIdx = tex.source ?? tex.extensions?.KHR_texture_basisu?.source;
-      if (sourceIdx !== undefined) {
-        const imageBytes = await getImageBytes(gltf, buffers, sourceIdx, externalResolver);
-        if (imageBytes && imageBytes.byteLength > 0) {
-          if (resolveMaterialAlphaMode) textureBytes.set(tIdx, imageBytes);
-          const isSrgb = srgbTextureIndices.has(tIdx);
-          const textureId = realm.resources.loadTexture(imageBytes, {
-            srgb: isSrgb,
-            label: tex.name ?? `glTF_Texture_${tIdx}`
-          });
-          textureMap.set(tIdx, textureId);
-          createdTextureIds.push(textureId);
+  let defaultMaterialId: number | undefined;
+  try {
+    if (gltf.textures) {
+      for (let tIdx = 0; tIdx < gltf.textures.length; tIdx++) {
+        const tex = gltf.textures[tIdx]!;
+        const sourceIdx = tex.source ?? tex.extensions?.KHR_texture_basisu?.source;
+        if (sourceIdx !== undefined) {
+          const imageBytes = await getImageBytes(gltf, buffers, sourceIdx, externalResolver);
+          if (imageBytes && imageBytes.byteLength > 0) {
+            if (resolveMaterialAlphaMode) textureBytes.set(tIdx, imageBytes);
+            const isSrgb = srgbTextureIndices.has(tIdx);
+            const textureId = realm.resources.loadTexture(imageBytes, {
+              srgb: isSrgb,
+              label: tex.name ?? `glTF_Texture_${tIdx}`
+            });
+            textureMap.set(tIdx, textureId);
+            createdTextureIds.push(textureId);
+          }
         }
       }
     }
-  }
 
-  // 2. Upload Materials
-  if (gltf.materials) {
-    for (let mIdx = 0; mIdx < gltf.materials.length; mIdx++) {
-      const mat = gltf.materials[mIdx]!;
-      const pbr = mat.pbrMetallicRoughness;
-      const specGloss = mat.extensions?.KHR_materials_pbrSpecularGlossiness;
+    // 2. Upload Materials
+    if (gltf.materials) {
+      for (let mIdx = 0; mIdx < gltf.materials.length; mIdx++) {
+        const mat = gltf.materials[mIdx]!;
+        const pbr = mat.pbrMetallicRoughness;
+        const specGloss = mat.extensions?.KHR_materials_pbrSpecularGlossiness;
 
-      const linearColor = pbr?.baseColorFactor ?? specGloss?.diffuseFactor ?? [1, 1, 1, 1];
-      const linearToSrgb = (value: number): number =>
-        value <= 0.0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - 0.055;
-      const baseColor: [number, number, number, number] = [
-        linearToSrgb(linearColor[0]),
-        linearToSrgb(linearColor[1]),
-        linearToSrgb(linearColor[2]),
-        linearColor[3]
-      ];
-      const metallic = pbr?.metallicFactor ?? (specGloss ? 0 : 1);
-      const roughness =
-        pbr?.roughnessFactor ?? (specGloss ? 1.0 - (specGloss.glossinessFactor ?? 1.0) : 1.0);
-      const baseColorTextureId =
-        pbr?.baseColorTexture !== undefined
-          ? textureMap.get(pbr.baseColorTexture.index)
-          : specGloss?.diffuseTexture !== undefined
-            ? textureMap.get(specGloss.diffuseTexture.index)
+        const linearColor = pbr?.baseColorFactor ?? specGloss?.diffuseFactor ?? [1, 1, 1, 1];
+        const linearToSrgb = (value: number): number =>
+          value <= 0.0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - 0.055;
+        const baseColor: [number, number, number, number] = [
+          linearToSrgb(linearColor[0]),
+          linearToSrgb(linearColor[1]),
+          linearToSrgb(linearColor[2]),
+          linearColor[3]
+        ];
+        const metallic = pbr?.metallicFactor ?? (specGloss ? 0 : 1);
+        const roughness =
+          pbr?.roughnessFactor ?? (specGloss ? 1.0 - (specGloss.glossinessFactor ?? 1.0) : 1.0);
+        const baseColorTextureId =
+          pbr?.baseColorTexture !== undefined
+            ? textureMap.get(pbr.baseColorTexture.index)
+            : specGloss?.diffuseTexture !== undefined
+              ? textureMap.get(specGloss.diffuseTexture.index)
+              : undefined;
+        const normalTextureId =
+          mat.normalTexture !== undefined ? textureMap.get(mat.normalTexture.index) : undefined;
+        const metallicRoughnessTextureId =
+          pbr?.metallicRoughnessTexture !== undefined
+            ? textureMap.get(pbr.metallicRoughnessTexture.index)
             : undefined;
-      const normalTextureId =
-        mat.normalTexture !== undefined ? textureMap.get(mat.normalTexture.index) : undefined;
-      const metallicRoughnessTextureId =
-        pbr?.metallicRoughnessTexture !== undefined
-          ? textureMap.get(pbr.metallicRoughnessTexture.index)
-          : undefined;
-      const emissiveTextureId =
-        mat.emissiveTexture !== undefined ? textureMap.get(mat.emissiveTexture.index) : undefined;
-      const occlusionTextureId =
-        mat.occlusionTexture !== undefined ? textureMap.get(mat.occlusionTexture.index) : undefined;
+        const emissiveTextureId =
+          mat.emissiveTexture !== undefined ? textureMap.get(mat.emissiveTexture.index) : undefined;
+        const occlusionTextureId =
+          mat.occlusionTexture !== undefined
+            ? textureMap.get(mat.occlusionTexture.index)
+            : undefined;
 
-      // The Galfus 3D shader computes emissive as (material.emissive_color.rgb + tex_emissive.rgb).
-      // When an emissive texture is present, avoid adding constant white factor which would blow out the surface.
-      const emissiveColor: [number, number, number, number] =
-        mat.emissiveFactor && emissiveTextureId === undefined
-          ? [mat.emissiveFactor[0], mat.emissiveFactor[1], mat.emissiveFactor[2], 1]
-          : [0, 0, 0, 1];
+        // The Galfus 3D shader computes emissive as (material.emissive_color.rgb + tex_emissive.rgb).
+        // When an emissive texture is present, avoid adding constant white factor which would blow out the surface.
+        const emissiveColor: [number, number, number, number] =
+          mat.emissiveFactor && emissiveTextureId === undefined
+            ? [mat.emissiveFactor[0], mat.emissiveFactor[1], mat.emissiveFactor[2], 1]
+            : [0, 0, 0, 1];
 
-      const baseTextureIndex = pbr?.baseColorTexture?.index ?? specGloss?.diffuseTexture?.index;
-      const alphaMode =
-        resolveMaterialAlphaMode?.(
-          mat,
-          mIdx,
-          baseTextureIndex === undefined ? undefined : textureBytes.get(baseTextureIndex)
-        ) ?? mat.alphaMode;
-      const surfaceType =
-        alphaMode === 'BLEND' ? 'transparent' : alphaMode === 'MASK' ? 'masked' : 'opaque';
+        const baseTextureIndex = pbr?.baseColorTexture?.index ?? specGloss?.diffuseTexture?.index;
+        const alphaMode =
+          resolveMaterialAlphaMode?.(
+            mat,
+            mIdx,
+            baseTextureIndex === undefined ? undefined : textureBytes.get(baseTextureIndex)
+          ) ?? mat.alphaMode;
+        const surfaceType =
+          alphaMode === 'BLEND' ? 'transparent' : alphaMode === 'MASK' ? 'masked' : 'opaque';
 
-      const alphaCutoff = mat.alphaCutoff;
-      const ior = mat.extensions?.KHR_materials_ior?.ior ?? 1.5;
-      const reflectance = ior === 0 ? 2.5 : (2.5 * (ior - 1)) / (ior + 1);
+        const alphaCutoff = mat.alphaCutoff;
+        const ior = mat.extensions?.KHR_materials_ior?.ior ?? 1.5;
+        const reflectance = ior === 0 ? 2.5 : (2.5 * (ior - 1)) / (ior + 1);
 
-      const { materialId } = realm.createMaterial({
-        baseColor,
-        metallic,
-        roughness,
-        refractionIndex: ior,
-        reflectance,
-        emissiveColor,
-        albedoTextureId: baseColorTextureId,
-        normalTextureId,
-        normalScale: mat.normalTexture?.scale,
-        metallicRoughnessTextureId,
-        emissiveTextureId,
-        occlusionTextureId,
-        occlusionStrength: mat.occlusionTexture?.strength,
-        textureUvSets: [
-          pbr?.baseColorTexture ?? specGloss?.diffuseTexture,
-          mat.normalTexture,
-          pbr?.metallicRoughnessTexture,
-          mat.occlusionTexture,
-          mat.emissiveTexture
-        ].map((info) => (info?.texCoord === 1 ? 'uv1' : 'uv0')),
-        side: mat.doubleSided ? 'double' : 'front',
-        surfaceType,
-        alphaCutoff
-      });
+        const { materialId } = realm.createMaterial({
+          baseColor,
+          metallic,
+          roughness,
+          refractionIndex: ior,
+          reflectance,
+          emissiveColor,
+          albedoTextureId: baseColorTextureId,
+          normalTextureId,
+          normalScale: mat.normalTexture?.scale,
+          metallicRoughnessTextureId,
+          emissiveTextureId,
+          occlusionTextureId,
+          occlusionStrength: mat.occlusionTexture?.strength,
+          textureUvSets: [
+            pbr?.baseColorTexture ?? specGloss?.diffuseTexture,
+            mat.normalTexture,
+            pbr?.metallicRoughnessTexture,
+            mat.occlusionTexture,
+            mat.emissiveTexture
+          ].map((info) => (info?.texCoord === 1 ? 'uv1' : 'uv0')),
+          side: mat.doubleSided ? 'double' : 'front',
+          surfaceType,
+          alphaCutoff
+        });
 
-      materialMap.set(mIdx, materialId);
-      createdMaterialIds.push(materialId);
+        materialMap.set(mIdx, materialId);
+        createdMaterialIds.push(materialId);
+      }
     }
-  }
 
-  // 3. Upload Geometries
-  if (gltf.meshes) {
-    for (let meshIdx = 0; meshIdx < gltf.meshes.length; meshIdx++) {
-      const mesh = gltf.meshes[meshIdx]!;
+    // 3. Upload Geometries
+    if (gltf.meshes) {
+      for (let meshIdx = 0; meshIdx < gltf.meshes.length; meshIdx++) {
+        const mesh = gltf.meshes[meshIdx]!;
 
-      for (let primIdx = 0; primIdx < mesh.primitives.length; primIdx++) {
-        const prim: GlTFPrimitive = mesh.primitives[primIdx]!;
-        let positions: Float32Array;
-        let normals: Float32Array | undefined;
-        let uvs: Float32Array | undefined;
-        let uv1: Float32Array | undefined;
-        let tangents: Float32Array | undefined;
-        let colors: Float32Array | undefined;
-        let joints0: Uint32Array | Uint16Array | undefined;
-        let weights0: Float32Array | undefined;
-        let joints1: Uint32Array | Uint16Array | undefined;
-        let weights1: Float32Array | undefined;
-        let indices: Uint32Array | Uint16Array | undefined;
+        for (let primIdx = 0; primIdx < mesh.primitives.length; primIdx++) {
+          const prim: GlTFPrimitive = mesh.primitives[primIdx]!;
+          let positions: Float32Array;
+          let normals: Float32Array | undefined;
+          let uvs: Float32Array | undefined;
+          let uv1: Float32Array | undefined;
+          let tangents: Float32Array | undefined;
+          let colors: Float32Array | undefined;
+          let joints0: Uint32Array | Uint16Array | undefined;
+          let weights0: Float32Array | undefined;
+          let joints1: Uint32Array | Uint16Array | undefined;
+          let weights1: Float32Array | undefined;
+          let indices: Uint32Array | Uint16Array | undefined;
 
-        // Check for Draco mesh compression extension
-        if (prim.extensions?.KHR_draco_mesh_compression && decoders.draco) {
-          const dracoExt = prim.extensions.KHR_draco_mesh_compression;
-          const bv = gltf.bufferViews?.[dracoExt.bufferView];
-          if (bv) {
-            const buffer = buffers[bv.buffer];
-            if (buffer) {
-              const start = bv.byteOffset ?? 0;
-              const dracoBytes = buffer.subarray(start, start + bv.byteLength);
-              const decoded = await decoders.draco.decode(dracoBytes, dracoExt.attributes);
-              positions = decoded.position ?? new Float32Array(0);
-              normals = decoded.normal;
-              uvs = decoded.uv;
-              uv1 = decoded.uv1;
-              tangents = decoded.tangent;
-              colors = decoded.color;
-              joints0 = decoded.joints;
-              weights0 = decoded.weights;
-              indices = decoded.indices;
+          // Check for Draco mesh compression extension
+          if (prim.extensions?.KHR_draco_mesh_compression && decoders.draco) {
+            const dracoExt = prim.extensions.KHR_draco_mesh_compression;
+            const bv = gltf.bufferViews?.[dracoExt.bufferView];
+            if (bv) {
+              const buffer = buffers[bv.buffer];
+              if (buffer) {
+                const start = bv.byteOffset ?? 0;
+                const dracoBytes = buffer.subarray(start, start + bv.byteLength);
+                const decoded = await decoders.draco.decode(dracoBytes, dracoExt.attributes);
+                positions = decoded.position ?? new Float32Array(0);
+                normals = decoded.normal;
+                uvs = decoded.uv;
+                uv1 = decoded.uv1;
+                tangents = decoded.tangent;
+                colors = decoded.color;
+                joints0 = decoded.joints;
+                weights0 = decoded.weights;
+                indices = decoded.indices;
+              } else {
+                positions = new Float32Array(0);
+              }
             } else {
               positions = new Float32Array(0);
             }
           } else {
-            positions = new Float32Array(0);
-          }
-        } else {
-          // Standard uncompressed accessors
-          const posAcc = prim.attributes['POSITION'];
-          if (posAcc === undefined) continue;
-          positions = readAccessor(gltf, buffers, posAcc) as Float32Array;
+            // Standard uncompressed accessors
+            const posAcc = prim.attributes['POSITION'];
+            if (posAcc === undefined) continue;
+            positions = readAccessor(gltf, buffers, posAcc) as Float32Array;
 
-          if (prim.attributes['NORMAL'] !== undefined) {
-            normals = readAccessor(gltf, buffers, prim.attributes['NORMAL']) as Float32Array;
-          }
-          if (prim.attributes['TEXCOORD_0'] !== undefined) {
-            uvs = readAccessor(gltf, buffers, prim.attributes['TEXCOORD_0']) as Float32Array;
-          }
-          if (prim.attributes['TEXCOORD_1'] !== undefined) {
-            uv1 = readAccessor(gltf, buffers, prim.attributes['TEXCOORD_1']) as Float32Array;
-          }
-          if (prim.attributes['TANGENT'] !== undefined) {
-            tangents = readAccessor(gltf, buffers, prim.attributes['TANGENT']) as Float32Array;
-          }
-          if (prim.attributes['COLOR_0'] !== undefined) {
-            colors = readAccessor(gltf, buffers, prim.attributes['COLOR_0']) as Float32Array;
-            if (gltf.accessors?.[prim.attributes['COLOR_0']]?.type === 'VEC3') {
-              const rgba = new Float32Array((colors.length / 3) * 4);
-              for (let i = 0; i < colors.length / 3; i++) {
-                rgba.set(colors.subarray(i * 3, i * 3 + 3), i * 4);
-                rgba[i * 4 + 3] = 1;
+            if (prim.attributes['NORMAL'] !== undefined) {
+              normals = readAccessor(gltf, buffers, prim.attributes['NORMAL']) as Float32Array;
+            }
+            if (prim.attributes['TEXCOORD_0'] !== undefined) {
+              uvs = readAccessor(gltf, buffers, prim.attributes['TEXCOORD_0']) as Float32Array;
+            }
+            if (prim.attributes['TEXCOORD_1'] !== undefined) {
+              uv1 = readAccessor(gltf, buffers, prim.attributes['TEXCOORD_1']) as Float32Array;
+            }
+            if (prim.attributes['TANGENT'] !== undefined) {
+              tangents = readAccessor(gltf, buffers, prim.attributes['TANGENT']) as Float32Array;
+            }
+            if (prim.attributes['COLOR_0'] !== undefined) {
+              colors = readAccessor(gltf, buffers, prim.attributes['COLOR_0']) as Float32Array;
+              if (gltf.accessors?.[prim.attributes['COLOR_0']]?.type === 'VEC3') {
+                const rgba = new Float32Array((colors.length / 3) * 4);
+                for (let i = 0; i < colors.length / 3; i++) {
+                  rgba.set(colors.subarray(i * 3, i * 3 + 3), i * 4);
+                  rgba[i * 4 + 3] = 1;
+                }
+                colors = rgba;
               }
-              colors = rgba;
+            }
+            if (prim.attributes['JOINTS_0'] !== undefined) {
+              joints0 = readAccessor(gltf, buffers, prim.attributes['JOINTS_0']) as
+                Uint32Array | Uint16Array;
+            }
+            if (prim.attributes['WEIGHTS_0'] !== undefined) {
+              weights0 = readAccessor(gltf, buffers, prim.attributes['WEIGHTS_0']) as Float32Array;
+            }
+            if (prim.attributes['JOINTS_1'] !== undefined) {
+              joints1 = readAccessor(gltf, buffers, prim.attributes['JOINTS_1']) as
+                Uint32Array | Uint16Array;
+            }
+            if (prim.attributes['WEIGHTS_1'] !== undefined) {
+              weights1 = readAccessor(gltf, buffers, prim.attributes['WEIGHTS_1']) as Float32Array;
+            }
+            if (prim.indices !== undefined) {
+              indices = readAccessor(gltf, buffers, prim.indices) as Uint32Array | Uint16Array;
             }
           }
-          if (prim.attributes['JOINTS_0'] !== undefined) {
-            joints0 = readAccessor(gltf, buffers, prim.attributes['JOINTS_0']) as
-              Uint32Array | Uint16Array;
+
+          if (prim.mode === 2 || prim.mode === 6) {
+            const src = indices ?? Uint32Array.from({ length: positions.length / 3 }, (_, i) => i);
+            if (prim.mode === 2) indices = Uint32Array.from([...src, src[0]!]);
+            else {
+              const triangles: number[] = [];
+              for (let i = 1; i + 1 < src.length; i++)
+                triangles.push(src[0]!, src[i]!, src[i + 1]!);
+              indices = new Uint32Array(triangles);
+            }
           }
-          if (prim.attributes['WEIGHTS_0'] !== undefined) {
-            weights0 = readAccessor(gltf, buffers, prim.attributes['WEIGHTS_0']) as Float32Array;
+          const { geometryId } = realm.createGeometry({
+            positions,
+            normals,
+            uvs,
+            uv1,
+            tangents,
+            colors,
+            joints0,
+            weights0,
+            joints1,
+            weights1,
+            indices,
+            topology: mapGltfPrimitiveTopology(prim.mode)
+          });
+
+          if (prim.targets?.length) {
+            const targets = prim.targets.map((target) => ({
+              positions:
+                target['POSITION'] === undefined
+                  ? undefined
+                  : (readAccessor(gltf, buffers, target['POSITION']) as Float32Array),
+              normals:
+                target['NORMAL'] === undefined
+                  ? undefined
+                  : (readAccessor(gltf, buffers, target['NORMAL']) as Float32Array),
+              tangents:
+                target['TANGENT'] === undefined
+                  ? undefined
+                  : (readAccessor(gltf, buffers, target['TANGENT']) as Float32Array)
+            }));
+            realm.setGeometryMorphTargets(geometryId, targets, positions.length / 3);
           }
-          if (prim.attributes['JOINTS_1'] !== undefined) {
-            joints1 = readAccessor(gltf, buffers, prim.attributes['JOINTS_1']) as
-              Uint32Array | Uint16Array;
-          }
-          if (prim.attributes['WEIGHTS_1'] !== undefined) {
-            weights1 = readAccessor(gltf, buffers, prim.attributes['WEIGHTS_1']) as Float32Array;
-          }
-          if (prim.indices !== undefined) {
-            indices = readAccessor(gltf, buffers, prim.indices) as Uint32Array | Uint16Array;
+
+          const key = `${meshIdx}_${primIdx}`;
+          geometryMap.set(key, geometryId);
+          createdGeometryIds.push(geometryId);
+          if (prim.material === undefined && defaultMaterialId === undefined) {
+            defaultMaterialId = realm.createMaterial({ baseColor: [1, 1, 1, 1] }).materialId;
+            createdMaterialIds.push(defaultMaterialId);
           }
         }
-
-        if (prim.mode === 2 || prim.mode === 6) {
-          const src = indices ?? Uint32Array.from({ length: positions.length / 3 }, (_, i) => i);
-          if (prim.mode === 2) indices = Uint32Array.from([...src, src[0]!]);
-          else {
-            const triangles: number[] = [];
-            for (let i = 1; i + 1 < src.length; i++) triangles.push(src[0]!, src[i]!, src[i + 1]!);
-            indices = new Uint32Array(triangles);
-          }
-        }
-        const { geometryId } = realm.createGeometry({
-          positions,
-          normals,
-          uvs,
-          uv1,
-          tangents,
-          colors,
-          joints0,
-          weights0,
-          joints1,
-          weights1,
-          indices,
-          topology: mapGltfPrimitiveTopology(prim.mode)
-        });
-
-        if (prim.targets?.length) {
-          const targets = prim.targets.map((target) => ({
-            positions:
-              target['POSITION'] === undefined
-                ? undefined
-                : (readAccessor(gltf, buffers, target['POSITION']) as Float32Array),
-            normals:
-              target['NORMAL'] === undefined
-                ? undefined
-                : (readAccessor(gltf, buffers, target['NORMAL']) as Float32Array),
-            tangents:
-              target['TANGENT'] === undefined
-                ? undefined
-                : (readAccessor(gltf, buffers, target['TANGENT']) as Float32Array)
-          }));
-          realm.setGeometryMorphTargets(geometryId, targets, positions.length / 3);
-        }
-
-        const key = `${meshIdx}_${primIdx}`;
-        geometryMap.set(key, geometryId);
-        createdGeometryIds.push(geometryId);
       }
     }
+  } catch (err) {
+    for (const geoId of createdGeometryIds) {
+      try {
+        realm.destroyGeometry(geoId);
+      } catch {
+        // Ignore rollback errors
+      }
+    }
+    for (const matId of createdMaterialIds) {
+      try {
+        realm.destroyMaterial(matId);
+      } catch {
+        // Ignore rollback errors
+      }
+    }
+    for (const texId of createdTextureIds) {
+      try {
+        realm.resources.disposeTexture(texId as any);
+      } catch {
+        // Ignore rollback errors
+      }
+    }
+    throw err;
   }
 
   return {
@@ -386,6 +420,7 @@ export async function uploadGltfResources(
     textureMap,
     createdGeometryIds,
     createdMaterialIds,
-    createdTextureIds
+    createdTextureIds,
+    defaultMaterialId
   };
 }

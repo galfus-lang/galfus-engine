@@ -551,6 +551,8 @@ export class ComponentRoot {
     this.components.clear();
     this.nodes.clear();
     this.commands = [];
+    this.committed = undefined;
+    this.presented = undefined;
     if (this._isLiveUi()) this.realm.destroyUi(this.handle);
     try {
       for (const callback of [...this.stateListeners]) callback('disposed');

@@ -36,10 +36,12 @@ export class WasmAudio {
   private readonly voices = new Map<number, Voice>();
   private readonly pendingVoiceIds = new Set<number>();
   private nextVoiceId = 1;
+  private unlockHandler?: () => void;
 
   constructor() {
     if (typeof window !== 'undefined') {
       const unlock = () => void this.enable();
+      this.unlockHandler = unlock;
       window.addEventListener('pointerdown', unlock, { once: true, passive: true });
       window.addEventListener('keydown', unlock, { once: true });
       window.addEventListener('touchstart', unlock, { once: true, passive: true });
@@ -115,8 +117,19 @@ export class WasmAudio {
     voice.offset +=
       (this.context.currentTime - (voice.startedAt ?? this.context.currentTime)) * voice.speed;
     voice.paused = true;
-    voice.source.stop();
+    const source = voice.source;
     voice.source = undefined;
+    source.onended = null;
+    try {
+      source.stop();
+    } catch {
+      // Ignore InvalidStateError if already stopped.
+    }
+    try {
+      source.disconnect();
+    } catch {
+      // Ignore already-disconnected node errors.
+    }
   }
 
   resume(voiceId: number): void {
@@ -129,8 +142,31 @@ export class WasmAudio {
   stop(voiceId: number): void {
     const voice = this.voices.get(voiceId);
     if (!voice) return;
-    voice.source?.stop();
-    voice.gain.disconnect();
+    const source = voice.source;
+    voice.source = undefined;
+    if (source) {
+      source.onended = null;
+      try {
+        source.stop();
+      } catch {
+        // Ignore InvalidStateError if already stopped.
+      }
+      try {
+        source.disconnect();
+      } catch {
+        // Ignore already-disconnected node errors.
+      }
+    }
+    try {
+      voice.gain.disconnect();
+    } catch {
+      // Ignore already-disconnected node errors.
+    }
+    try {
+      voice.panner?.disconnect();
+    } catch {
+      // Ignore already-disconnected node errors.
+    }
     this.pendingVoiceIds.delete(voiceId);
     this.voices.delete(voiceId);
   }
@@ -150,6 +186,26 @@ export class WasmAudio {
     for (const [voiceId, voice] of this.voices) if (voice.soundId === soundId) this.stop(voiceId);
   }
 
+  /** Releases all active voices, decoded sound buffers, unlock listeners, and the AudioContext. */
+  dispose(): void {
+    for (const voiceId of Array.from(this.voices.keys())) {
+      this.stop(voiceId);
+    }
+    this.pendingVoiceIds.clear();
+    this.sounds.clear();
+    if (typeof window !== 'undefined' && this.unlockHandler) {
+      window.removeEventListener('pointerdown', this.unlockHandler);
+      window.removeEventListener('keydown', this.unlockHandler);
+      window.removeEventListener('touchstart', this.unlockHandler);
+      this.unlockHandler = undefined;
+    }
+    const ctx = this.context;
+    this.context = undefined;
+    if (ctx && ctx.state !== 'closed') {
+      void ctx.close().catch(() => {});
+    }
+  }
+
   private getContext(): AudioContext {
     if (!this.context) this.context = new AudioContext();
     return this.context;
@@ -162,8 +218,18 @@ export class WasmAudio {
       return;
     }
     const sound = this.sounds.get(voice.soundId);
-    if (!sound) return console.warn(`[Galfus Audio] Sound ${voice.soundId} is not loaded.`);
-    const buffer = await sound;
+    if (!sound) {
+      console.warn(`[Galfus Audio] Sound ${voice.soundId} is not loaded.`);
+      this.stop(voiceId);
+      return;
+    }
+    let buffer: AudioBuffer;
+    try {
+      buffer = await sound;
+    } catch {
+      this.stop(voiceId);
+      return;
+    }
     if (voice.paused || !this.voices.has(voiceId)) return;
 
     const source = context.createBufferSource();

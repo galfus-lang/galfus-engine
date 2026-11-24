@@ -376,6 +376,7 @@ impl ProjectorGpuResources3D {
                 &self.vp_bind_groups[idx],
                 job.occlusion_mask,
                 &job.view_proj,
+                None,
                 models,
                 instanced_models,
                 materials,

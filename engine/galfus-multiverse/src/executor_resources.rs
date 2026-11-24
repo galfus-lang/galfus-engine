@@ -142,7 +142,7 @@ pub(crate) fn prune_resources_for_schedule(
         .target_blocks
         .iter()
         .flat_map(|block| &block.invocations)
-        .any(|step| step.filters.len() > 1);
+        .any(|step| invocation_needs_ping_pong(step, default_aa));
 
     prune_temporal_resources(
         target_history_textures,
@@ -161,6 +161,32 @@ pub(crate) fn prune_resources_for_schedule(
         gpu.destroy_texture(pp_tex)?;
     }
     Ok(soft_cut_sources)
+}
+
+fn invocation_needs_ping_pong(step: &ResolvedInvocationStep, default_aa: AntiAliasingMode) -> bool {
+    let effective_aa = step.anti_aliasing.unwrap_or(default_aa);
+    let mut filter_count = step
+        .filters
+        .iter()
+        .filter(|f| !matches!(f, InvocationFilter::Smaa | InvocationFilter::Taa))
+        .count();
+    if (effective_aa == AntiAliasingMode::Fxaa && !step.filters.contains(&InvocationFilter::Fxaa))
+        || ((effective_aa == AntiAliasingMode::Ssaa2x || effective_aa == AntiAliasingMode::Ssaa4x)
+            && !step.filters.contains(&InvocationFilter::SsaaDownsample))
+    {
+        filter_count += 1;
+    }
+    let is_smaa = effective_aa == AntiAliasingMode::Smaa
+        || step
+            .filters
+            .iter()
+            .any(|f| matches!(f, InvocationFilter::Smaa));
+    let is_taa = effective_aa == AntiAliasingMode::Taa
+        || step
+            .filters
+            .iter()
+            .any(|f| matches!(f, InvocationFilter::Taa));
+    filter_count > 1 || (filter_count == 1 && (is_smaa || is_taa))
 }
 
 fn invocation_uses_taa(step: &ResolvedInvocationStep, default_aa: AntiAliasingMode) -> bool {
@@ -274,20 +300,28 @@ pub(crate) fn ensure_postprocess_resources(
                 .textures
                 .create_texture(&device, &edge_desc)
                 .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
-            let e_v = gpu
-                .textures
-                .get_texture(e_h)
-                .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
-                .default_view();
-            let w_h = gpu
-                .textures
-                .create_texture(&device, &weight_desc)
-                .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
-            let w_v = gpu
-                .textures
-                .get_texture(w_h)
-                .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
-                .default_view();
+            let e_v = match gpu.textures.get_texture(e_h) {
+                Ok(tex) => tex.default_view(),
+                Err(e) => {
+                    let _ = gpu.destroy_texture(e_h);
+                    return Err(MultiverseError::InvalidConfig(e.to_string()));
+                }
+            };
+            let w_h = match gpu.textures.create_texture(&device, &weight_desc) {
+                Ok(h) => h,
+                Err(e) => {
+                    let _ = gpu.destroy_texture(e_h);
+                    return Err(MultiverseError::InvalidConfig(e.to_string()));
+                }
+            };
+            let w_v = match gpu.textures.get_texture(w_h) {
+                Ok(tex) => tex.default_view(),
+                Err(e) => {
+                    let _ = gpu.destroy_texture(e_h);
+                    let _ = gpu.destroy_texture(w_h);
+                    return Err(MultiverseError::InvalidConfig(e.to_string()));
+                }
+            };
             *smaa_intermediates = Some((e_h, e_v, w_h, w_v, smaa_size));
         }
     }
@@ -331,20 +365,28 @@ pub(crate) fn ensure_postprocess_resources(
                 .textures
                 .create_texture(&device, &desc_a)
                 .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
-            let v_a = gpu
-                .textures
-                .get_texture(t_a)
-                .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
-                .default_view();
-            let t_b = gpu
-                .textures
-                .create_texture(&device, &desc_b)
-                .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?;
-            let v_b = gpu
-                .textures
-                .get_texture(t_b)
-                .map_err(|e| MultiverseError::InvalidConfig(e.to_string()))?
-                .default_view();
+            let v_a = match gpu.textures.get_texture(t_a) {
+                Ok(tex) => tex.default_view(),
+                Err(e) => {
+                    let _ = gpu.destroy_texture(t_a);
+                    return Err(MultiverseError::InvalidConfig(e.to_string()));
+                }
+            };
+            let t_b = match gpu.textures.create_texture(&device, &desc_b) {
+                Ok(h) => h,
+                Err(e) => {
+                    let _ = gpu.destroy_texture(t_a);
+                    return Err(MultiverseError::InvalidConfig(e.to_string()));
+                }
+            };
+            let v_b = match gpu.textures.get_texture(t_b) {
+                Ok(tex) => tex.default_view(),
+                Err(e) => {
+                    let _ = gpu.destroy_texture(t_a);
+                    let _ = gpu.destroy_texture(t_b);
+                    return Err(MultiverseError::InvalidConfig(e.to_string()));
+                }
+            };
             taa_history.insert(
                 invocation_id,
                 TaaHistoryEntry {

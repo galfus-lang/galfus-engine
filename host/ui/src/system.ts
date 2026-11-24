@@ -283,6 +283,7 @@ export class UiSystem {
     this._roots.clear();
     for (const input of [...this._textInputs.values()]) run(() => input.dispose());
     this._textInputs.clear();
+    this._tickListeners.clear();
     run(() => this._focus.dispose());
     if (this._defaultIcons) {
       const textureId = this._defaultIcons.sheet.textureId as TextureId;

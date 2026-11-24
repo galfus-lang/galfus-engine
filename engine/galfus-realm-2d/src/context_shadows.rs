@@ -9,7 +9,7 @@ use crate::types::ShadowSample2DRaw;
 #[derive(Default)]
 pub(crate) struct ShadowFrameData {
     occluders: Vec<Occluder2D>,
-    light_uniforms: Vec<Light2DUniform>,
+    pub(crate) light_uniforms: Vec<Light2DUniform>,
     samples: Vec<ShadowSample2DRaw>,
 }
 
