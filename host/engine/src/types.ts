@@ -31,17 +31,19 @@ export class IdAllocator<T extends number = number> {
 
   allocate(context = 'LogicalId'): T {
     while (this._used.has(this._nextId)) {
+      this._used.delete(this._nextId);
       this._nextId++;
     }
     const id = this._nextId++;
     assertValidLogicalId(id, context);
-    this._used.add(id);
     return id as T;
   }
 
   markUsed(id: number, context = 'LogicalId'): void {
     assertValidLogicalId(id, context);
-    this._used.add(id);
+    if (id >= this._nextId) {
+      this._used.add(id);
+    }
   }
 
   reset(startId = 1): void {

@@ -13,6 +13,9 @@ use galfus_realm_core::{
 use glam::{Vec2, Vec4};
 use std::collections::{BTreeMap, HashMap};
 
+pub(crate) type TextureViewIdentity2D = (usize, u32, u32);
+pub(crate) type MaterialTextureSlots2D = [(Option<u32>, Option<TextureViewIdentity2D>); 8];
+
 /// Runtime 2D rendering context managing GPU buffers, pipelines, materials, and batch execution.
 pub struct Realm2DContext {
     pub id: u32,
@@ -40,7 +43,8 @@ pub struct Realm2DContext {
     pub(crate) total_time: f32,
     pub(crate) material_bind_groups: HashMap<u32, wgpu::BindGroup>,
     pub(crate) material_uniform_buffers: HashMap<u32, wgpu::Buffer>,
-    pub(crate) material_texture_slots: HashMap<u32, [Option<u32>; 8]>,
+    pub(crate) material_texture_slots: HashMap<u32, MaterialTextureSlots2D>,
+    pub(crate) material_effect_ids: HashMap<u32, u64>,
 }
 
 impl Realm2DContext {
@@ -70,6 +74,7 @@ impl Realm2DContext {
             material_bind_groups: HashMap::new(),
             material_uniform_buffers: HashMap::new(),
             material_texture_slots: HashMap::new(),
+            material_effect_ids: HashMap::new(),
         }
     }
 
@@ -143,14 +148,22 @@ impl Realm for Realm2DContext {
         self.material_bind_groups.clear();
         self.material_uniform_buffers.clear();
         self.material_texture_slots.clear();
+        self.material_effect_ids.clear();
+        if let Some(ref mut pm) = self.pipeline_manager {
+            pm.prune_custom_effects(&std::collections::HashSet::new());
+        }
+        self.batch_builder.clear();
         self.shadow_data = crate::context_shadows::ShadowFrameData::default();
-        self.shadow_manager.mark_dirty();
+        self.shadow_manager.clear_scratch();
         self.dirty = true;
         Ok(())
     }
 
     fn destroy(&mut self) -> RealmResult<()> {
         self.clear()?;
+        self.physics = None;
+        self.ui_manager.destroy_gpu();
+        self.ui_fonts = crate::ui_fonts::UiFontLibrary::empty();
         self.pipeline_manager = None;
         self.gpu_res = None;
         Ok(())
@@ -190,7 +203,21 @@ impl Realm for Realm2DContext {
             queue.write_buffer(buf, 0, bytemuck::bytes_of(&uniform));
 
             let resolved_slots = mat.resolved_texture_slots();
-            let slots_changed = self.material_texture_slots.get(&mat_id) != Some(&resolved_slots);
+            let resolved_identities = resolved_slots.map(|slot| {
+                let view_id = slot.and_then(|tex_id| {
+                    (ctx.textures)(tex_id).map(|v| {
+                        let size = v.texture().size();
+                        (
+                            v as *const wgpu::TextureView as usize,
+                            size.width,
+                            size.height,
+                        )
+                    })
+                });
+                (slot, view_id)
+            });
+            let slots_changed =
+                self.material_texture_slots.get(&mat_id) != Some(&resolved_identities);
             if slots_changed || !self.material_bind_groups.contains_key(&mat_id) {
                 let bg = crate::gpu::create_material_bind_group_2d(
                     device,
@@ -204,7 +231,8 @@ impl Realm for Realm2DContext {
                     ctx.textures,
                 );
                 self.material_bind_groups.insert(mat_id, bg);
-                self.material_texture_slots.insert(mat_id, resolved_slots);
+                self.material_texture_slots
+                    .insert(mat_id, resolved_identities);
             }
         }
 
@@ -387,7 +415,7 @@ impl Realm for Realm2DContext {
         let height = ctx.viewport.w.max(1);
         let viewport_size = Vec2::new(width as f32, height as f32);
 
-        let camera_uniform = camera.build_uniform(
+        let mut camera_uniform = camera.build_uniform(
             camera_transform,
             viewport_size,
             self.shadow_manager.config.ambient,
@@ -395,6 +423,7 @@ impl Realm for Realm2DContext {
             self.shadow_manager.config.shadow_contact_offset,
             self.total_time,
         );
+        camera_uniform.shadow_params.y = self.shadow_data.light_uniforms.len().min(64) as f32;
 
         let instances = self.batch_builder.instances();
         let ranges = self.batch_builder.ranges();
@@ -408,10 +437,13 @@ impl Realm for Realm2DContext {
         // Upload instance buffer
         let required_bytes = std::mem::size_of_val(instances) as u64;
         if gpu.instance_buffer.size() < required_bytes {
+            let grown = (gpu.instance_buffer.size() * 2)
+                .max(required_bytes)
+                .max(1024);
             gpu.instance_buffer = crate::gpu::create_gpu_buffer(
                 device,
                 "galfus_2d_instance_buf_resized",
-                required_bytes.max(1024),
+                grown,
                 wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             );
         }
@@ -473,7 +505,11 @@ impl Realm for Realm2DContext {
 
                 let mat = self.materials.get(&range.key.material_id);
                 let snippet = mat.and_then(|m| m.shader_effect.as_deref());
-                let effect_id = crate::pipeline::PipelineManager2D::compute_effect_id(snippet);
+                let effect_id = self
+                    .material_effect_ids
+                    .get(&range.key.material_id)
+                    .copied()
+                    .unwrap_or(0);
                 let key = PipelineKey2D {
                     effect_id,
                     surface_type: range.key.surface_type,

@@ -177,11 +177,23 @@ struct PointerState {
     last_position: [f32; 2],
 }
 
+const MAX_INTERACTION_EVENTS: usize = 2048;
+
 /// Tracks pointer state after a realm resolves its hit target.
 #[derive(Default)]
 pub struct InteractionSystem {
     pointers: HashMap<(u32, u64), PointerState>,
-    events: Vec<InteractionEvent>,
+    events: std::collections::VecDeque<InteractionEvent>,
+}
+
+fn push_bounded_event(
+    events: &mut std::collections::VecDeque<InteractionEvent>,
+    event: InteractionEvent,
+) {
+    if events.len() >= MAX_INTERACTION_EVENTS {
+        events.pop_front();
+    }
+    events.push_back(event);
 }
 
 impl InteractionSystem {
@@ -189,7 +201,7 @@ impl InteractionSystem {
         Self::default()
     }
     pub fn poll_events(&mut self) -> Vec<InteractionEvent> {
-        std::mem::take(&mut self.events)
+        self.events.drain(..).collect()
     }
     pub fn diagnostic_counts(&self) -> (usize, usize, usize) {
         let p = self.pointers.len();
@@ -209,28 +221,37 @@ impl InteractionSystem {
             cancelled.sort_by_key(|(button, _)| *button);
             for (button, target) in cancelled {
                 state.pressed_targets.remove(&button);
-                self.events.push(simple_event(
-                    InteractionType::Cancel,
-                    window_id,
-                    pointer_id,
-                    target,
-                    Some(button),
-                    state.last_position,
-                ));
+                push_bounded_event(
+                    &mut self.events,
+                    simple_event(
+                        InteractionType::Cancel,
+                        window_id,
+                        pointer_id,
+                        target,
+                        Some(button),
+                        state.last_position,
+                    ),
+                );
             }
             if state
                 .current_hover
                 .is_some_and(|target| !valid(window_id, target))
             {
                 let target = state.current_hover.take().unwrap();
-                self.events.push(simple_event(
-                    InteractionType::Leave,
-                    window_id,
-                    pointer_id,
-                    target,
-                    None,
-                    state.last_position,
-                ));
+                push_bounded_event(
+                    &mut self.events,
+                    simple_event(
+                        InteractionType::Leave,
+                        window_id,
+                        pointer_id,
+                        target,
+                        None,
+                        state.last_position,
+                    ),
+                );
+            }
+            if state.current_hover.is_none() && state.pressed_targets.is_empty() {
+                self.pointers.remove(&(window_id, pointer_id));
             }
         }
     }
@@ -249,24 +270,30 @@ impl InteractionSystem {
             let mut pressed: Vec<_> = state.pressed_targets.into_iter().collect();
             pressed.sort_by_key(|(button, _)| *button);
             for (button, target) in pressed {
-                self.events.push(simple_event(
-                    InteractionType::Cancel,
-                    window_id,
-                    pointer_id,
-                    target,
-                    Some(button),
-                    state.last_position,
-                ));
+                push_bounded_event(
+                    &mut self.events,
+                    simple_event(
+                        InteractionType::Cancel,
+                        window_id,
+                        pointer_id,
+                        target,
+                        Some(button),
+                        state.last_position,
+                    ),
+                );
             }
             if let Some(target) = state.current_hover {
-                self.events.push(simple_event(
-                    InteractionType::Leave,
-                    window_id,
-                    pointer_id,
-                    target,
-                    None,
-                    state.last_position,
-                ));
+                push_bounded_event(
+                    &mut self.events,
+                    simple_event(
+                        InteractionType::Leave,
+                        window_id,
+                        pointer_id,
+                        target,
+                        None,
+                        state.last_position,
+                    ),
+                );
             }
         }
     }
@@ -293,16 +320,19 @@ impl InteractionSystem {
                 );
 
                 if let Some(h) = &hit {
-                    self.events.push(hit_event(
-                        InteractionType::Move,
-                        *window_id,
-                        *pointer_id,
-                        *position,
-                        h,
-                        None,
-                        *delta,
-                        None,
-                    ));
+                    push_bounded_event(
+                        &mut self.events,
+                        hit_event(
+                            InteractionType::Move,
+                            *window_id,
+                            *pointer_id,
+                            *position,
+                            h,
+                            None,
+                            *delta,
+                            None,
+                        ),
+                    );
                 }
                 for (&button, target) in &state.pressed_targets {
                     let matching_hit = hit.as_ref().filter(|h| {
@@ -312,23 +342,29 @@ impl InteractionSystem {
                             && h.presentation_target_id == target.presentation_target_id
                             && h.element_id == target.element_id
                     });
-                    self.events.push(InteractionEvent {
-                        interaction_type: InteractionType::PressMove,
-                        window_id: *window_id,
-                        pointer_id: *pointer_id,
-                        window_position: *position,
-                        realm_id: target.realm_id,
-                        model_id: target.model_id,
-                        collider_id: target.collider_id,
-                        presentation_target_id: target.presentation_target_id,
-                        button: Some(button),
-                        local_pos: matching_hit.map_or(*position, |h| h.local_pos),
-                        uv: matching_hit.map_or([0.5, 0.5], |h| h.uv),
-                        geometry: matching_hit.map(|h| h.geometry),
-                        delta: *delta,
-                        scroll_delta: None,
-                        element_id: target.element_id,
-                    });
+                    push_bounded_event(
+                        &mut self.events,
+                        InteractionEvent {
+                            interaction_type: InteractionType::PressMove,
+                            window_id: *window_id,
+                            pointer_id: *pointer_id,
+                            window_position: *position,
+                            realm_id: target.realm_id,
+                            model_id: target.model_id,
+                            collider_id: target.collider_id,
+                            presentation_target_id: target.presentation_target_id,
+                            button: Some(button),
+                            local_pos: matching_hit.map_or(*position, |h| h.local_pos),
+                            uv: matching_hit.map_or([0.5, 0.5], |h| h.uv),
+                            geometry: matching_hit.map(|h| h.geometry),
+                            delta: *delta,
+                            scroll_delta: None,
+                            element_id: target.element_id,
+                        },
+                    );
+                }
+                if state.current_hover.is_none() && state.pressed_targets.is_empty() {
+                    self.pointers.remove(&(*window_id, *pointer_id));
                 }
             }
 
@@ -355,16 +391,19 @@ impl InteractionSystem {
                         );
                         if let (Some(h), Some(target)) = (hit, next_target) {
                             state.pressed_targets.insert(*button, target);
-                            self.events.push(hit_event(
-                                InteractionType::Down,
-                                *window_id,
-                                *pointer_id,
-                                *position,
-                                &h,
-                                Some(*button),
-                                [0.0, 0.0],
-                                None,
-                            ));
+                            push_bounded_event(
+                                &mut self.events,
+                                hit_event(
+                                    InteractionType::Down,
+                                    *window_id,
+                                    *pointer_id,
+                                    *position,
+                                    &h,
+                                    Some(*button),
+                                    [0.0, 0.0],
+                                    None,
+                                ),
+                            );
                         }
                     }
                     InteractionButtonState::Released => {
@@ -377,35 +416,41 @@ impl InteractionSystem {
                                     && h.presentation_target_id == target.presentation_target_id
                                     && h.element_id == target.element_id
                             });
-                            self.events.push(InteractionEvent {
-                                interaction_type: InteractionType::PressUp,
-                                window_id: *window_id,
-                                pointer_id: *pointer_id,
-                                window_position: *position,
-                                realm_id: target.realm_id,
-                                model_id: target.model_id,
-                                collider_id: target.collider_id,
-                                presentation_target_id: target.presentation_target_id,
-                                button: Some(*button),
-                                local_pos: matching_hit.map_or(*position, |h| h.local_pos),
-                                uv: matching_hit.map_or([0.5, 0.5], |h| h.uv),
-                                geometry: matching_hit.map(|h| h.geometry),
-                                delta: [0.0, 0.0],
-                                scroll_delta: None,
-                                element_id: target.element_id,
-                            });
+                            push_bounded_event(
+                                &mut self.events,
+                                InteractionEvent {
+                                    interaction_type: InteractionType::PressUp,
+                                    window_id: *window_id,
+                                    pointer_id: *pointer_id,
+                                    window_position: *position,
+                                    realm_id: target.realm_id,
+                                    model_id: target.model_id,
+                                    collider_id: target.collider_id,
+                                    presentation_target_id: target.presentation_target_id,
+                                    button: Some(*button),
+                                    local_pos: matching_hit.map_or(*position, |h| h.local_pos),
+                                    uv: matching_hit.map_or([0.5, 0.5], |h| h.uv),
+                                    geometry: matching_hit.map(|h| h.geometry),
+                                    delta: [0.0, 0.0],
+                                    scroll_delta: None,
+                                    element_id: target.element_id,
+                                },
+                            );
                         }
                         if let Some(h) = hit {
-                            self.events.push(hit_event(
-                                InteractionType::Up,
-                                *window_id,
-                                *pointer_id,
-                                *position,
-                                &h,
-                                Some(*button),
-                                [0.0, 0.0],
-                                None,
-                            ));
+                            push_bounded_event(
+                                &mut self.events,
+                                hit_event(
+                                    InteractionType::Up,
+                                    *window_id,
+                                    *pointer_id,
+                                    *position,
+                                    &h,
+                                    Some(*button),
+                                    [0.0, 0.0],
+                                    None,
+                                ),
+                            );
                             if let Some(pressed_target) = pressed
                                 && pressed_target
                                     == (InteractionTarget {
@@ -416,19 +461,25 @@ impl InteractionSystem {
                                         element_id: h.element_id,
                                     })
                             {
-                                self.events.push(hit_event(
-                                    InteractionType::Click,
-                                    *window_id,
-                                    *pointer_id,
-                                    *position,
-                                    &h,
-                                    Some(*button),
-                                    [0.0, 0.0],
-                                    None,
-                                ));
+                                push_bounded_event(
+                                    &mut self.events,
+                                    hit_event(
+                                        InteractionType::Click,
+                                        *window_id,
+                                        *pointer_id,
+                                        *position,
+                                        &h,
+                                        Some(*button),
+                                        [0.0, 0.0],
+                                        None,
+                                    ),
+                                );
                             }
                         }
                     }
+                }
+                if state.current_hover.is_none() && state.pressed_targets.is_empty() {
+                    self.pointers.remove(&(*window_id, *pointer_id));
                 }
             }
 
@@ -439,16 +490,19 @@ impl InteractionSystem {
                 delta,
             } => {
                 if let Some(h) = hit {
-                    self.events.push(hit_event(
-                        InteractionType::Scroll,
-                        *window_id,
-                        *pointer_id,
-                        *position,
-                        &h,
-                        None,
-                        [0.0, 0.0],
-                        Some(*delta),
-                    ));
+                    push_bounded_event(
+                        &mut self.events,
+                        hit_event(
+                            InteractionType::Scroll,
+                            *window_id,
+                            *pointer_id,
+                            *position,
+                            &h,
+                            None,
+                            [0.0, 0.0],
+                            Some(*delta),
+                        ),
+                    );
                 }
             }
 
@@ -464,24 +518,30 @@ impl InteractionSystem {
                     let mut pressed: Vec<_> = state.pressed_targets.into_iter().collect();
                     pressed.sort_by_key(|(button, _)| *button);
                     for (button, target) in pressed {
-                        self.events.push(simple_event(
-                            InteractionType::Cancel,
-                            *window_id,
-                            *pointer_id,
-                            target,
-                            Some(button),
-                            state.last_position,
-                        ));
+                        push_bounded_event(
+                            &mut self.events,
+                            simple_event(
+                                InteractionType::Cancel,
+                                *window_id,
+                                *pointer_id,
+                                target,
+                                Some(button),
+                                state.last_position,
+                            ),
+                        );
                     }
                     if let Some(target) = state.current_hover {
-                        self.events.push(simple_event(
-                            InteractionType::Leave,
-                            *window_id,
-                            *pointer_id,
-                            target,
-                            None,
-                            state.last_position,
-                        ));
+                        push_bounded_event(
+                            &mut self.events,
+                            simple_event(
+                                InteractionType::Leave,
+                                *window_id,
+                                *pointer_id,
+                                target,
+                                None,
+                                state.last_position,
+                            ),
+                        );
                     }
                 }
             }
@@ -490,7 +550,7 @@ impl InteractionSystem {
 }
 
 fn update_hover(
-    events: &mut Vec<InteractionEvent>,
+    events: &mut std::collections::VecDeque<InteractionEvent>,
     state: &mut PointerState,
     window_id: u32,
     pointer_id: u64,
@@ -516,19 +576,22 @@ fn update_hover(
                 position,
             );
             ev.delta = delta;
-            events.push(ev);
+            push_bounded_event(events, ev);
         }
         if let Some(h) = hit {
-            events.push(hit_event(
-                InteractionType::Hover,
-                window_id,
-                pointer_id,
-                position,
-                h,
-                None,
-                delta,
-                None,
-            ));
+            push_bounded_event(
+                events,
+                hit_event(
+                    InteractionType::Hover,
+                    window_id,
+                    pointer_id,
+                    position,
+                    h,
+                    None,
+                    delta,
+                    None,
+                ),
+            );
         }
         state.current_hover = next_target;
     }

@@ -126,12 +126,21 @@ export function applyPanelAnimProperty(panel: Panel, prop: string, val: any): vo
   }
 }
 
+const activePanelAnimations = new WeakMap<Panel, Map<string, ReturnType<typeof setInterval>>>();
+
 export function animatePanel(
   panel: Panel,
   property: string,
   targetValue: any,
   options: PanelAnimationOptions = {}
 ): Panel {
+  const existingMap = activePanelAnimations.get(panel);
+  const existing = existingMap?.get(property);
+  if (existing !== undefined) {
+    clearInterval(existing);
+    existingMap!.delete(property);
+  }
+
   const duration = options.duration ?? 200;
   const easing = options.easing ?? 'easeOut';
   if (duration <= 0) {
@@ -142,17 +151,30 @@ export function animatePanel(
 
   const startVal = getPanelAnimProperty(panel, property);
   const startTime = Date.now();
+  let map = existingMap;
+  if (!map) {
+    map = new Map();
+    activePanelAnimations.set(panel, map);
+  }
   const interval = setInterval(() => {
     const elapsed = Date.now() - startTime;
     const progress = Math.min(1, elapsed / duration);
     const t = ease(progress, easing);
     const current = interpolateAnimProperty(property, startVal, targetValue, t);
-    applyPanelAnimProperty(panel, property, current);
+    try {
+      applyPanelAnimProperty(panel, property, current);
+    } catch {
+      clearInterval(interval);
+      if (map!.get(property) === interval) map!.delete(property);
+      return;
+    }
     if (progress >= 1) {
       clearInterval(interval);
+      if (map!.get(property) === interval) map!.delete(property);
       options.onComplete?.();
     }
   }, 16);
+  map.set(property, interval);
 
   return panel;
 }

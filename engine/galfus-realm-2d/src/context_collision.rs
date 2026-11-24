@@ -122,6 +122,10 @@ impl Realm2DContext {
         self.model_transforms.remove(&model_id).ok_or_else(|| {
             galfus_realm_core::RealmError::ResourceNotFound(self.id, format!("Model2D {model_id}"))
         })?;
+        self.hierarchy.remove_entity(model_id);
+        if let Some(ref mut physics) = self.physics {
+            physics.remove_rigid_body(model_id);
+        }
         self.destroy_colliders_by_model_2d(model_id);
         Ok(())
     }

@@ -230,6 +230,15 @@ impl MultiverseContext {
         Ok(())
     }
 
+    /// Unregisters a custom WGSL post-processing shader and evicts its pipelines.
+    pub fn unregister_shader(&mut self, shader_id: u32) -> MultiverseResult<bool> {
+        validate_host_logical_id(shader_id)?;
+        Ok(self
+            .post_processor
+            .as_mut()
+            .is_some_and(|post| post.unregister_custom_shader(shader_id)))
+    }
+
     /// Returns a reference to the initialized GPU manager, if any.
     pub fn gpu_manager(&self) -> Option<&GpuManager> {
         self.gpu_manager.as_ref()

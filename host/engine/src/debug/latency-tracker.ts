@@ -83,6 +83,10 @@ export class DebugLatencyTracker {
       target.type === 'ui'
         ? String(target.elementId)
         : `entity-${(target as { entityId: number }).entityId}`;
+    if (this.hoverRecords.size >= 256 && !this.hoverRecords.has(key)) {
+      const oldest = this.hoverRecords.keys().next().value;
+      if (oldest !== undefined) this.hoverRecords.delete(oldest);
+    }
     this.hoverRecords.set(key, {
       frameId,
       time: now,

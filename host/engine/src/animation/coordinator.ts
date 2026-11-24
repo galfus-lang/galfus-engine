@@ -40,6 +40,17 @@ export class AnimationCoordinator {
   private readonly _eventListeners = new Set<AnimationEventListener>();
   private readonly _ecsBindings = new Map<TransitionId, EcsAnimBinding>();
   private readonly _entityPropertyBindings = new Map<string, TransitionId>();
+  private readonly _worldIds = new WeakMap<EcsWorld, number>();
+  private _nextWorldId = 1;
+
+  private _entityPropKey(world: EcsWorld, entityId: EntityId, property: EcsAnimProperty): string {
+    let worldId = this._worldIds.get(world);
+    if (worldId === undefined) {
+      worldId = this._nextWorldId++;
+      this._worldIds.set(world, worldId);
+    }
+    return `${worldId}:${entityId}:${property}`;
+  }
 
   private readonly _nativeTargets = new NativeTargetTracker();
 
@@ -194,14 +205,14 @@ export class AnimationCoordinator {
   ): void {
     const binding: EcsAnimBinding = { transitionId, world, entityId, property };
     this._ecsBindings.set(transitionId, binding);
-    const key = `${entityId}:${property}`;
+    const key = this._entityPropKey(world, entityId, property);
     this._entityPropertyBindings.set(key, transitionId);
   }
 
   unbindEcsTarget(transitionId: TransitionId): void {
     const binding = this._ecsBindings.get(transitionId);
     if (binding) {
-      const key = `${binding.entityId}:${binding.property}`;
+      const key = this._entityPropKey(binding.world, binding.entityId, binding.property);
       if (this._entityPropertyBindings.get(key) === transitionId) {
         this._entityPropertyBindings.delete(key);
       }
@@ -418,7 +429,7 @@ export class AnimationCoordinator {
     }
 
     // Cancel existing transition on the same entity and property (deterministic single transition per property)
-    const key = `${entityId}:${property}`;
+    const key = this._entityPropKey(world, entityId, property);
     const existingTransitionId = this._entityPropertyBindings.get(key);
     if (existingTransitionId !== undefined) {
       this.destroyTransition(existingTransitionId);
@@ -543,6 +554,12 @@ export class AnimationCoordinator {
       for (const event of events) {
         for (const listener of this._eventListeners) {
           listener(event);
+        }
+        if (event.eventType === 'completed') {
+          const tid = event.transitionId as TransitionId;
+          if (this._ecsBindings.has(tid)) {
+            this.destroyTransition(tid);
+          }
         }
       }
     }

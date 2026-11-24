@@ -104,7 +104,7 @@ impl MultiverseContext {
 
     fn reset_after_realm_shutdown(&mut self) -> MultiverseResult<()> {
         self.interaction_frames.clear();
-        let _ = self.interaction.poll_events();
+        self.interaction = crate::interaction::MultiverseInteractionSystem::new();
         let mut target_ids: Vec<u32> = self.targets.keys().copied().collect();
         target_ids.sort_unstable();
         for target_id in target_ids {

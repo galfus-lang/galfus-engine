@@ -81,6 +81,7 @@ function toCorePointerEvent(event: PointerEvent): object | null {
 /** Native pointer dispatch against the Multiverse interaction subsystem. */
 export class InteractiveSystem {
   private readonly surfaces = new Map<string, () => void>();
+  private readonly surfaceChecks = new Map<string, () => boolean>();
   private readonly records = new Map<InteractiveListener, TargetRecord>();
   private readonly modelRecords = new Map<string, Set<TargetRecord>>();
   private readonly realms = new Map<number, RealmState>();
@@ -159,11 +160,21 @@ export class InteractiveSystem {
       if (!connected) return;
       connected = false;
       this.surfaces.delete(key);
+      this.surfaceChecks.delete(key);
       this.multiverse.disconnectPresentationSurface(surface);
       if (this.multiverse.getRealm(options.realmId) === realm && !realm.isDisposed)
         engine.multiverseDisconnectInteractionSurface(options.realmId, options.colliderId);
     };
     this.surfaces.set(key, disconnect);
+    this.surfaceChecks.set(
+      key,
+      () =>
+        !realm.isDisposed &&
+        this.multiverse.getRealm(options.realmId) === realm &&
+        realm.world.isAlive(options.entityId) &&
+        realm.world.getComponent(options.entityId, collider.type) === collider &&
+        hasCollider(collider, options.colliderId)
+    );
     return disconnect;
   }
 
@@ -323,6 +334,11 @@ export class InteractiveSystem {
   }
 
   afterDispatch(): void {
+    if (this.surfaceChecks.size) {
+      for (const [key, isAlive] of [...this.surfaceChecks]) {
+        if (!isAlive()) this.surfaces.get(key)?.();
+      }
+    }
     if (this.records.size) {
       let removed: TargetRecord[] | undefined;
       for (const record of this.records.values()) {
@@ -577,5 +593,7 @@ export class InteractiveSystem {
     this.realms.clear();
     this.modelRecords.clear();
     for (const observer of [...this.observers]) observer.onDispose?.();
+    this.observers.clear();
+    this.dispatchFilters.clear();
   }
 }

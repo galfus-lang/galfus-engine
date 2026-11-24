@@ -351,6 +351,7 @@ export class FocusManager {
 
   remove(target: Focusable): void {
     if (!this.targets.delete(target)) return;
+    if (this.lastPointerFocused === target) this.lastPointerFocused = undefined;
     this.blurTarget(target);
   }
 
@@ -427,6 +428,7 @@ export class FocusManager {
 
   dispose(): void {
     for (const target of this.targets) target.dispose();
+    this.lastPointerFocused = undefined;
     this.focused.clear();
     this.composing.clear();
     this.unfocused.clear();

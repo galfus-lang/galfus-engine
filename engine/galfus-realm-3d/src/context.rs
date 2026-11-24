@@ -179,6 +179,10 @@ impl Realm3DContext {
         self.bones_dirty = true;
         self.gizmos.clear();
         self.portal_pipelines.clear();
+        self.refraction_pipeline = None;
+        if let Some(ref mut pipeline) = self.pipeline {
+            pipeline.prune_custom_pipelines(&std::collections::HashSet::new());
+        }
         self.dirty = true;
     }
 

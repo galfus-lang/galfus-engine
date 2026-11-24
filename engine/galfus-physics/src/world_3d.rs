@@ -274,9 +274,10 @@ impl PhysicsWorld3D {
         if let Some(handle) = self.entity_to_body.remove(&entity_id) {
             self.body_to_entity.remove(&handle);
             self.body_descs.remove(&entity_id);
-            if let Some(colliders) = self.entity_to_colliders.remove(&entity_id) {
+            let removed_colliders = self.entity_to_colliders.remove(&entity_id);
+            if let Some(ref colliders) = removed_colliders {
                 for ch in colliders {
-                    self.collider_to_entity.remove(&ch);
+                    self.collider_to_entity.remove(ch);
                 }
             }
             self.entity_joints.retain(|_, joint| {
@@ -293,6 +294,19 @@ impl PhysicsWorld3D {
                 &mut self.soft_body_set,
                 true,
             );
+            if let Some(colliders) = removed_colliders {
+                for ch in colliders {
+                    if self.collider_set.contains(ch) {
+                        self.collider_set.remove(
+                            ch,
+                            &mut self.island_manager,
+                            &mut self.rigid_body_set,
+                            &mut self.soft_body_set,
+                            true,
+                        );
+                    }
+                }
+            }
             true
         } else {
             false

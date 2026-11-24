@@ -73,31 +73,42 @@ impl BrowserIme {
                         return;
                     }
                     let text = event.data().unwrap_or_default();
-                    let mut queue = queue.borrow_mut();
                     if name == "compositionstart" {
                         composing_ref.set(true);
                     } else if name == "compositionupdate" {
-                        queue.push(PlatformEvent::Keyboard(KeyboardEvent::ImePreedit {
-                            window_id,
-                            text,
-                            selection: None,
-                        }));
-                    } else {
-                        composing_ref.set(false);
-                        queue.push(PlatformEvent::Keyboard(KeyboardEvent::ImePreedit {
-                            window_id,
-                            text: String::new(),
-                            selection: None,
-                        }));
-                        if !text.is_empty() {
-                            queue.push(PlatformEvent::Keyboard(KeyboardEvent::ImeCommit {
-                                window_id,
-                                text: text.clone(),
-                            }));
-                            queue.push(PlatformEvent::Keyboard(KeyboardEvent::TextInput {
+                        super::browser::push_browser_event(
+                            &queue,
+                            PlatformEvent::Keyboard(KeyboardEvent::ImePreedit {
                                 window_id,
                                 text,
-                            }));
+                                selection: None,
+                            }),
+                        );
+                    } else {
+                        composing_ref.set(false);
+                        super::browser::push_browser_event(
+                            &queue,
+                            PlatformEvent::Keyboard(KeyboardEvent::ImePreedit {
+                                window_id,
+                                text: String::new(),
+                                selection: None,
+                            }),
+                        );
+                        if !text.is_empty() {
+                            super::browser::push_browser_event(
+                                &queue,
+                                PlatformEvent::Keyboard(KeyboardEvent::ImeCommit {
+                                    window_id,
+                                    text: text.clone(),
+                                }),
+                            );
+                            super::browser::push_browser_event(
+                                &queue,
+                                PlatformEvent::Keyboard(KeyboardEvent::TextInput {
+                                    window_id,
+                                    text,
+                                }),
+                            );
                         }
                         input_ref.set_value("");
                     }
@@ -125,9 +136,14 @@ impl BrowserIme {
                     {
                         event.prevent_default();
                     }
-                    queue.borrow_mut().push(PlatformEvent::Keyboard(
-                        super::browser_keyboard::map_key(window_id, &event, name == "keydown"),
-                    ));
+                    super::browser::push_browser_event(
+                        &queue,
+                        PlatformEvent::Keyboard(super::browser_keyboard::map_key(
+                            window_id,
+                            &event,
+                            name == "keydown",
+                        )),
+                    );
                 },
             );
             input
@@ -144,12 +160,13 @@ impl BrowserIme {
             let focus_cb = Closure::<dyn FnMut(web_sys::FocusEvent)>::new(move |_| {
                 super::browser_pointer::sync_navigator_clipboard(&clipboard_ref);
                 if !focused_ref.replace(true) {
-                    queue
-                        .borrow_mut()
-                        .push(PlatformEvent::Window(WindowEvent::FocusChanged {
+                    super::browser::push_browser_event(
+                        &queue,
+                        PlatformEvent::Window(WindowEvent::FocusChanged {
                             window_id,
                             focused: true,
-                        }));
+                        }),
+                    );
                 }
             });
             input
@@ -166,9 +183,10 @@ impl BrowserIme {
                 Closure::<dyn FnMut(web_sys::FocusEvent)>::new(move |ev: web_sys::FocusEvent| {
                     if active.replace(false) {
                         composing_ref.set(false);
-                        queue.borrow_mut().push(PlatformEvent::Keyboard(
-                            KeyboardEvent::ImeDisabled { window_id },
-                        ));
+                        super::browser::push_browser_event(
+                            &queue,
+                            PlatformEvent::Keyboard(KeyboardEvent::ImeDisabled { window_id }),
+                        );
                     }
                     let stay_in_window = ev
                         .related_target()
@@ -181,12 +199,13 @@ impl BrowserIme {
                                     .is_some_and(|id| id.parse::<u32>().ok() == Some(window_id))
                         });
                     if !stay_in_window && focused_ref.replace(false) {
-                        queue
-                            .borrow_mut()
-                            .push(PlatformEvent::Window(WindowEvent::FocusChanged {
+                        super::browser::push_browser_event(
+                            &queue,
+                            PlatformEvent::Window(WindowEvent::FocusChanged {
                                 window_id,
                                 focused: false,
-                            }));
+                            }),
+                        );
                     }
                 });
             input
@@ -207,9 +226,13 @@ impl BrowserIme {
                     {
                         *clipboard_ref.borrow_mut() = text.clone();
                         if active.get() && !text.is_empty() {
-                            queue.borrow_mut().push(PlatformEvent::Keyboard(
-                                KeyboardEvent::TextInput { window_id, text },
-                            ));
+                            super::browser::push_browser_event(
+                                &queue,
+                                PlatformEvent::Keyboard(KeyboardEvent::TextInput {
+                                    window_id,
+                                    text,
+                                }),
+                            );
                         }
                     }
                     ev.prevent_default();
@@ -226,49 +249,50 @@ impl BrowserIme {
         let composing_ref = Rc::clone(&composing);
         let queue = Rc::clone(&events);
         let active = Rc::clone(&enabled);
-        let callback =
-            Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
-                let Some(input_event) = event.dyn_ref::<web_sys::InputEvent>() else {
-                    return;
-                };
-                if !active.get() {
-                    return;
-                }
-                if composing_ref.get() || input_event.is_composing() {
-                    // Browser selection offsets are UTF-16. They describe the preedit only
-                    // when the textarea contains exactly the current composition text.
-                    if let Some(text) = input_event.data()
-                        && input_ref.value() == text
-                        && let (Ok(Some(start)), Ok(Some(end))) =
-                            (input_ref.selection_start(), input_ref.selection_end())
-                        && start <= end
-                        && end as usize <= text.encode_utf16().count()
-                    {
-                        queue.borrow_mut().push(PlatformEvent::Keyboard(
-                            KeyboardEvent::ImePreedit {
-                                window_id,
-                                text,
-                                selection: Some([start, end]),
-                            },
-                        ));
-                    }
-                    return;
-                }
-                let kind = input_event.input_type();
-                if kind.starts_with("insert")
-                    && kind != "insertCompositionText"
-                    && kind != "insertFromComposition"
-                    && kind != "insertFromDrop"
+        let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |event: web_sys::Event| {
+            let Some(input_event) = event.dyn_ref::<web_sys::InputEvent>() else {
+                return;
+            };
+            if !active.get() {
+                return;
+            }
+            if composing_ref.get() || input_event.is_composing() {
+                // Browser selection offsets are UTF-16. They describe the preedit only
+                // when the textarea contains exactly the current composition text.
+                if let Some(text) = input_event.data()
+                    && input_ref.value() == text
+                    && let (Ok(Some(start)), Ok(Some(end))) =
+                        (input_ref.selection_start(), input_ref.selection_end())
+                    && start <= end
+                    && end as usize <= text.encode_utf16().count()
                 {
-                    let text = input_event.data().unwrap_or_else(|| input_ref.value());
-                    if !text.is_empty() {
-                        queue.borrow_mut().push(PlatformEvent::Keyboard(
-                            KeyboardEvent::TextInput { window_id, text },
-                        ));
-                    }
+                    super::browser::push_browser_event(
+                        &queue,
+                        PlatformEvent::Keyboard(KeyboardEvent::ImePreedit {
+                            window_id,
+                            text,
+                            selection: Some([start, end]),
+                        }),
+                    );
                 }
-                input_ref.set_value("");
-            });
+                return;
+            }
+            let kind = input_event.input_type();
+            if kind.starts_with("insert")
+                && kind != "insertCompositionText"
+                && kind != "insertFromComposition"
+                && kind != "insertFromDrop"
+            {
+                let text = input_event.data().unwrap_or_else(|| input_ref.value());
+                if !text.is_empty() {
+                    super::browser::push_browser_event(
+                        &queue,
+                        PlatformEvent::Keyboard(KeyboardEvent::TextInput { window_id, text }),
+                    );
+                }
+            }
+            input_ref.set_value("");
+        });
         input
             .add_event_listener_with_callback("input", callback.as_ref().unchecked_ref())
             .map_err(error)?;
@@ -291,11 +315,12 @@ impl BrowserIme {
         if !self.enabled.get() {
             self.input.focus().map_err(error)?;
             self.enabled.set(true);
-            self.events
-                .borrow_mut()
-                .push(PlatformEvent::Keyboard(KeyboardEvent::ImeEnabled {
+            super::browser::push_browser_event(
+                &self.events,
+                PlatformEvent::Keyboard(KeyboardEvent::ImeEnabled {
                     window_id: self.window_id,
-                }));
+                }),
+            );
         }
         Ok(())
     }
@@ -305,11 +330,12 @@ impl BrowserIme {
             self.composing.set(false);
             self.input.blur().map_err(error)?;
             self.input.set_value("");
-            self.events
-                .borrow_mut()
-                .push(PlatformEvent::Keyboard(KeyboardEvent::ImeDisabled {
+            super::browser::push_browser_event(
+                &self.events,
+                PlatformEvent::Keyboard(KeyboardEvent::ImeDisabled {
                     window_id: self.window_id,
-                }));
+                }),
+            );
         }
         Ok(())
     }

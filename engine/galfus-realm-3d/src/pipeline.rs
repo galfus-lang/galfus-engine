@@ -538,6 +538,15 @@ impl Pipeline3D {
             .unwrap_or(fallback)
     }
 
+    /// Prunes cached custom pipelines whose snippet content hash is not in `active_hashes`.
+    pub(crate) fn prune_custom_pipelines(
+        &mut self,
+        active_hashes: &std::collections::HashSet<u64>,
+    ) {
+        self.custom_pipelines
+            .retain(|(hash, _, _, _, _), _| active_hashes.contains(hash));
+    }
+
     fn get_standard_pipeline(
         &self,
         topology: PrimitiveTopology3D,

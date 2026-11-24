@@ -396,6 +396,13 @@ impl Realm3DContext {
 
         // 2. Capture opaque frame for optical refraction if refractive models exist
         if has_refr {
+            let needs_recreate = self
+                .refraction_pipeline
+                .as_ref()
+                .is_some_and(|r| r.format != ctx.target_format);
+            if needs_recreate {
+                self.refraction_pipeline = None;
+            }
             let refr = self.refraction_pipeline.get_or_insert_with(|| {
                 crate::refraction::RefractionPipeline3D::new(
                     device,
@@ -406,6 +413,12 @@ impl Realm3DContext {
             });
             refr.resize(device, ctx.target_format, width, height);
             refr.capture_opaque(device, &mut encoder, ctx.target_view);
+        } else if self.refraction_pipeline.is_some()
+            && !self.materials.values().any(|m| {
+                m.0.surface_type == galfus_realm_3d_resources::material::SurfaceType3D::Refractive
+            })
+        {
+            self.refraction_pipeline = None;
         }
 
         // 3. Translucent, Refractive, Mirror, and Foreground Particle pass

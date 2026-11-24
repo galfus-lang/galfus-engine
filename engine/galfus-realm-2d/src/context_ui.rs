@@ -64,6 +64,7 @@ pub struct UiManager2D {
     pub(crate) textured_materials: HashMap<(u32, u32), TexturedMaterialEntry>,
     texture_sizes: HashMap<u32, [f32; 2]>,
     next_mat_id: u32,
+    recycled_mat_ids: Vec<u32>,
     text_geometries: HashMap<u32, (u64, Handle<GpuVectorGeometry>)>,
     geometry_inputs: HashMap<u32, (Model2DUI, Arc<fontdb::Database>, String)>,
     node_geometries: HashMap<(u32, u32), nodes::NodeGeometry>,
@@ -97,6 +98,7 @@ impl Default for UiManager2D {
             textured_materials: HashMap::new(),
             texture_sizes: HashMap::new(),
             next_mat_id: UI_RESERVED_MATERIAL_BASE,
+            recycled_mat_ids: Vec::new(),
             text_geometries: HashMap::new(),
             geometry_inputs: HashMap::new(),
             node_geometries: HashMap::new(),
@@ -126,6 +128,12 @@ impl UiManager2D {
         self.geometry_inputs.clear();
         self.clear_node_geometries(None);
         self.next_mat_id = UI_RESERVED_MATERIAL_BASE;
+        self.recycled_mat_ids.clear();
+    }
+
+    pub fn destroy_gpu(&mut self) {
+        self.clear();
+        self.material_uniform_bufs = [None, None, None, None];
     }
 
     pub fn on_ui_removed(&mut self, ui_id: u32) {
@@ -201,10 +209,12 @@ impl UiManager2D {
         }
 
         // Evict textured materials no longer referenced by active UIs
+        let recycled = &mut self.recycled_mat_ids;
         self.textured_materials.retain(|key, entry| {
             let keep = active_keys.contains(key);
             if !keep {
                 material_bind_groups.remove(&entry.mat_id);
+                recycled.push(entry.mat_id);
             }
             keep
         });
@@ -470,8 +480,13 @@ impl UiManager2D {
             buf
         });
 
-        let mat_id = self.next_mat_id;
-        self.next_mat_id = self.next_mat_id.saturating_add(1);
+        let mat_id = if let Some(recycled_id) = self.recycled_mat_ids.pop() {
+            recycled_id
+        } else {
+            let id = self.next_mat_id;
+            self.next_mat_id = self.next_mat_id.saturating_add(1);
+            id
+        };
         let mut slots = [None; 8];
         slots[0] = Some(tex_id);
         let bg = crate::gpu::create_material_bind_group_2d(

@@ -91,9 +91,31 @@ impl Realm3DContext {
     /// Registers or updates a `Material3D`.
     pub fn create_material(&mut self, id: u32, material: Material3D) -> RealmResult<()> {
         validate_id(id)?;
-        self.materials.insert(id, (material, None, None));
+        let prev = self.materials.insert(id, (material, None, None));
+        if prev.is_some_and(|p| p.0.shader_effect.is_some()) {
+            self.prune_unused_custom_pipelines();
+        }
         self.dirty = true;
         Ok(())
+    }
+
+    fn prune_unused_custom_pipelines(&mut self) {
+        if let Some(ref mut pipeline) = self.pipeline {
+            let active_hashes: std::collections::HashSet<u64> = self
+                .materials
+                .values()
+                .filter_map(|m| m.0.shader_effect.as_deref())
+                .filter_map(|snippet| {
+                    crate::surface_effect::compose_surface_shader(
+                        crate::shader::REALM_3D_SHADER_TEMPLATE,
+                        Some(snippet),
+                    )
+                    .ok()
+                    .map(|c| c.content_id.as_u64())
+                })
+                .collect();
+            pipeline.prune_custom_pipelines(&active_hashes);
+        }
     }
 
     /// Registers or updates a `Geometry3D`.
@@ -408,20 +430,26 @@ impl Realm3DContext {
     pub fn destroy_camera(&mut self, id: u32) -> RealmResult<()> {
         self.cameras
             .remove(&id)
-            .map(|_| {
-                self.dirty = true;
-            })
-            .ok_or_else(|| not_found(self.id, "Camera", id))
+            .ok_or_else(|| not_found(self.id, "Camera", id))?;
+        self.model_transforms.remove(&id);
+        self.hierarchy.remove_entity(id);
+        self.ik_constraints
+            .retain(|_, constraint| !constraint.references_entity(id));
+        self.dirty = true;
+        Ok(())
     }
 
     /// Destroys an existing `Material3D`.
     pub fn destroy_material(&mut self, id: u32) -> RealmResult<()> {
-        self.materials
+        let removed = self
+            .materials
             .remove(&id)
-            .map(|_| {
-                self.dirty = true;
-            })
-            .ok_or_else(|| not_found(self.id, "Material", id))
+            .ok_or_else(|| not_found(self.id, "Material", id))?;
+        if removed.0.shader_effect.is_some() {
+            self.prune_unused_custom_pipelines();
+        }
+        self.dirty = true;
+        Ok(())
     }
 
     /// Destroys an existing `Geometry3D`.
@@ -442,6 +470,7 @@ impl Realm3DContext {
             .ok_or_else(|| not_found(self.id, "Model", id))?;
         self.model_transforms.remove(&id);
         self.hierarchy.remove_entity(id);
+        self.portals.retain(|_, portal| portal.model_id != id);
         self.skins.retain(|_, skin| skin.model_id != id);
         self.ik_constraints
             .retain(|_, constraint| !constraint.references_entity(id));
@@ -461,6 +490,7 @@ impl Realm3DContext {
             .ok_or_else(|| not_found(self.id, "InstancedModel", id))?;
         self.model_transforms.remove(&id);
         self.hierarchy.remove_entity(id);
+        self.portals.retain(|_, portal| portal.model_id != id);
         self.skins.retain(|_, skin| skin.model_id != id);
         self.ik_constraints
             .retain(|_, constraint| !constraint.references_entity(id));
@@ -476,11 +506,14 @@ impl Realm3DContext {
     pub fn destroy_light(&mut self, id: u32) -> RealmResult<()> {
         self.lights
             .remove(&id)
-            .map(|_| {
-                self.lights_dirty = true;
-                self.dirty = true;
-            })
-            .ok_or_else(|| not_found(self.id, "Light", id))
+            .ok_or_else(|| not_found(self.id, "Light", id))?;
+        self.model_transforms.remove(&id);
+        self.hierarchy.remove_entity(id);
+        self.ik_constraints
+            .retain(|_, constraint| !constraint.references_entity(id));
+        self.lights_dirty = true;
+        self.dirty = true;
+        Ok(())
     }
 
     /// Registers or updates a `Light3D` with its `Transform3D`.

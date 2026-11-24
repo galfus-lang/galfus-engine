@@ -68,4 +68,35 @@ fn tracks_independent_colliders_and_cancels_removed_targets() {
         system.poll_events()[0].interaction_type,
         InteractionType::Leave
     );
+    assert_eq!(system.diagnostic_counts().0, 0);
+}
+
+#[test]
+fn prunes_idle_pointers_and_caps_event_queue() {
+    let mut system = InteractionSystem::new();
+    for pointer_id in 1..=3000u64 {
+        system.handle_event(
+            &InteractionPointerEvent::Move {
+                window_id: 1,
+                pointer_id,
+                position: [1.0, 2.0],
+                delta: [0.0, 0.0],
+            },
+            None,
+        );
+    }
+    assert_eq!(system.diagnostic_counts().0, 0);
+
+    for i in 0..2500u64 {
+        system.handle_event(
+            &InteractionPointerEvent::Move {
+                window_id: 1,
+                pointer_id: 1,
+                position: [i as f32, 0.0],
+                delta: [1.0, 0.0],
+            },
+            Some(hit(1)),
+        );
+    }
+    assert!(system.diagnostic_counts().1 <= 2048);
 }

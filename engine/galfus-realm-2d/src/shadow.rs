@@ -369,6 +369,12 @@ impl ShadowManager2D {
         self.is_dirty = true;
     }
 
+    pub fn clear_scratch(&mut self) {
+        self.raster_scratch.cones.clear();
+        self.raster_scratch.candidates.clear();
+        self.is_dirty = true;
+    }
+
     pub fn append_samples_for_light(
         &mut self,
         light: &Light2D,

@@ -133,3 +133,41 @@ fn step_result_preserves_large_logical_ids() {
     let result = serde_json::to_value(world.step(1.0 / 60.0)).unwrap();
     assert_eq!(result["poses"][0][0].as_u64(), Some(id.into()));
 }
+
+#[test]
+fn remove_rigid_body_cleans_up_parentless_colliders_2d_and_3d() {
+    let mut world2d = PhysicsWorld2D::default();
+    let collider2d = Collider2D {
+        id: 500,
+        model_id: 42,
+        shape: ColliderShape2D::Circle { radius: 1.0 },
+        offset: [0.0, 0.0],
+        local_matrix: None,
+        active: true,
+        sensor: false,
+        layer: 1,
+        mask: 1,
+    };
+    // Insert collider BEFORE rigid body (parentless)
+    world2d.sync_collider(42, &collider2d, None, [1.0, 1.0]);
+    world2d.add_rigid_body(42, &Pose2D::default(), &RigidBodyDesc2D::default());
+    assert!(world2d.remove_rigid_body(42));
+    assert_eq!(world2d.diagnostic_stats().colliders, 0);
+
+    let mut world3d = PhysicsWorld3D::default();
+    let collider3d = Collider3D {
+        id: 501,
+        model_id: 43,
+        shape: ColliderShape3D::Sphere { radius: 1.0 },
+        offset: [0.0, 0.0, 0.0],
+        local_matrix: None,
+        active: true,
+        sensor: false,
+        layer: 1,
+        mask: 1,
+    };
+    world3d.sync_collider(43, &collider3d, None, [1.0, 1.0, 1.0]);
+    world3d.add_rigid_body(43, &Pose3D::default(), &RigidBodyDesc3D::default());
+    assert!(world3d.remove_rigid_body(43));
+    assert_eq!(world3d.diagnostic_stats().colliders, 0);
+}
