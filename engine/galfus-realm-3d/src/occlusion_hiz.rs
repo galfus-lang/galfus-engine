@@ -46,6 +46,8 @@ pub struct HiZOcclusionPipeline3D {
     hiz_texture: Option<wgpu::Texture>,
     hiz_full_view: Option<wgpu::TextureView>,
     hiz_mip_views: Vec<wgpu::TextureView>,
+    downsample_bgs: Vec<wgpu::BindGroup>,
+    cull_bg: Option<wgpu::BindGroup>,
     hiz_size: UVec2,
     mip_count: u32,
 
@@ -209,6 +211,8 @@ impl HiZOcclusionPipeline3D {
             hiz_texture: None,
             hiz_full_view: None,
             hiz_mip_views: Vec::new(),
+            downsample_bgs: Vec::new(),
+            cull_bg: None,
             hiz_size: UVec2::ZERO,
             mip_count: 0,
             params_buffer,
@@ -258,7 +262,7 @@ impl HiZOcclusionPipeline3D {
             view_formats: &[],
         });
         let full_view = tex.create_view(&wgpu::TextureViewDescriptor::default());
-        let mip_views = (0..mip_count)
+        let mip_views: Vec<wgpu::TextureView> = (0..mip_count)
             .map(|level| {
                 tex.create_view(&wgpu::TextureViewDescriptor {
                     base_mip_level: level,
@@ -267,9 +271,29 @@ impl HiZOcclusionPipeline3D {
                 })
             })
             .collect();
+        let downsample_bgs = (1..mip_count as usize)
+            .map(|level| {
+                device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("Hi-Z Downsample BG"),
+                    layout: &self.downsample_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&mip_views[level - 1]),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(&mip_views[level]),
+                        },
+                    ],
+                })
+            })
+            .collect();
         self.hiz_texture = Some(tex);
         self.hiz_full_view = Some(full_view);
         self.hiz_mip_views = mip_views;
+        self.downsample_bgs = downsample_bgs;
+        self.cull_bg = None;
         self.hiz_size = size;
         self.mip_count = mip_count;
     }
@@ -312,31 +336,15 @@ impl HiZOcclusionPipeline3D {
 
         let mut mip_w = self.hiz_size.x;
         let mut mip_h = self.hiz_size.y;
-        for level in 1..self.mip_count as usize {
+        for bg in &self.downsample_bgs {
             mip_w = (mip_w / 2).max(1);
             mip_h = (mip_h / 2).max(1);
-            let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Hi-Z Downsample BG"),
-                layout: &self.downsample_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(
-                            &self.hiz_mip_views[level - 1],
-                        ),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&self.hiz_mip_views[level]),
-                    },
-                ],
-            });
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("Hi-Z Downsample"),
                 timestamp_writes: None,
             });
             pass.set_pipeline(&self.downsample_pipeline);
-            pass.set_bind_group(0, &bg, &[]);
+            pass.set_bind_group(0, bg, &[]);
             pass.dispatch_workgroups(mip_w.div_ceil(8), mip_h.div_ceil(8), 1);
         }
 
@@ -384,6 +392,7 @@ impl HiZOcclusionPipeline3D {
             let (ib, argb) = Self::create_item_buffers(device, self.capacity);
             self.items_buffer = ib;
             self.indirect_buffer = argb;
+            self.cull_bg = None;
         }
 
         let params = HiZCullParams {
@@ -399,27 +408,29 @@ impl HiZOcclusionPipeline3D {
             bytemuck::cast_slice(&self.staging_items),
         );
 
-        let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Hi-Z Cull BG"),
-            layout: &self.cull_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.params_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: self.items_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(full_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: self.indirect_buffer.as_entire_binding(),
-                },
-            ],
+        let bg = self.cull_bg.get_or_insert_with(|| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Hi-Z Cull BG"),
+                layout: &self.cull_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.params_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.items_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(full_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.indirect_buffer.as_entire_binding(),
+                    },
+                ],
+            })
         });
 
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -427,7 +438,7 @@ impl HiZOcclusionPipeline3D {
             timestamp_writes: None,
         });
         pass.set_pipeline(&self.cull_pipeline);
-        pass.set_bind_group(0, &bg, &[]);
+        pass.set_bind_group(0, &*bg, &[]);
         pass.dispatch_workgroups((count as u32).div_ceil(64), 1, 1);
 
         Some(&self.indirect_buffer)
@@ -467,9 +478,18 @@ impl HiZOcclusionPipeline3D {
         hiz_vp.and_then(|vp| self.cull_items(device, queue, encoder, vp, items))
     }
 
-    /// Invalidates cached Hi-Z state (e.g. on realm clear).
+    /// Releases cached Hi-Z pyramid textures and staging capacity (e.g. on realm clear).
     pub fn invalidate(&mut self) {
         self.valid_camera_slot = None;
+        self.cull_bg = None;
+        self.downsample_bgs.clear();
+        self.hiz_mip_views.clear();
+        self.hiz_full_view = None;
+        self.hiz_texture = None;
+        self.hiz_size = UVec2::ZERO;
+        self.mip_count = 0;
+        self.staging_items.clear();
+        self.staging_items.shrink_to(256);
     }
 }
 

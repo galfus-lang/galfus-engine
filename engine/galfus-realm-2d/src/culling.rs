@@ -286,23 +286,22 @@ impl Realm2DContext {
         let bounds = CameraViewportBounds2D::from_camera(camera, camera_transform, viewport_size);
         self.batch_builder.clear();
 
-        let (candidate_sprites, candidate_shapes): (Vec<u32>, Vec<u32>) =
-            if self.spatial_grid.is_populated() {
-                let mut sp = Vec::new();
-                let mut sh = Vec::new();
-                self.spatial_grid
-                    .query(bounds.min, bounds.max, &mut sp, &mut sh);
-                (sp, sh)
-            } else {
-                (
-                    self.sprites.keys().copied().collect(),
-                    self.shapes.keys().copied().collect(),
-                )
-            };
+        if self.spatial_grid.is_populated() {
+            self.spatial_grid.query_into_scratch(bounds.min, bounds.max);
+        } else {
+            self.spatial_grid.scratch_sprites.clear();
+            self.spatial_grid
+                .scratch_sprites
+                .extend(self.sprites.keys().copied());
+            self.spatial_grid.scratch_shapes.clear();
+            self.spatial_grid
+                .scratch_shapes
+                .extend(self.shapes.keys().copied());
+        }
 
         // Pass 1: collect unrotated, fully opaque visible rectangles as CPU 2D occluders.
-        let mut occluders = Vec::new();
-        for &id in &candidate_sprites {
+        self.spatial_grid.scratch_occluders.clear();
+        for &id in &self.spatial_grid.scratch_sprites {
             let Some((sprite, transform)) = self.sprites.get(&id) else {
                 continue;
             };
@@ -316,16 +315,19 @@ impl Realm2DContext {
             if is_solid_opaque {
                 let (min, max) = sprite_world_aabb(sprite, transform);
                 let draw_order = sprite.draw_order.unwrap_or(transform.draw_order);
-                occluders.push(crate::occlusion_2d::OpaqueOccluder2D {
-                    min,
-                    max,
-                    z_layer: transform.z_layer,
-                    draw_order,
-                });
+                self.spatial_grid
+                    .scratch_occluders
+                    .push(crate::occlusion_2d::OpaqueOccluder2D {
+                        min,
+                        max,
+                        z_layer: transform.z_layer,
+                        draw_order,
+                    });
             }
         }
 
-        for &id in &candidate_sprites {
+        let occluders = &self.spatial_grid.scratch_occluders;
+        for &id in &self.spatial_grid.scratch_sprites {
             let Some((sprite, transform)) = self.sprites.get(&id) else {
                 continue;
             };
@@ -340,7 +342,7 @@ impl Realm2DContext {
                     max,
                     transform.z_layer,
                     draw_order,
-                    &occluders,
+                    occluders,
                 ) {
                     continue;
                 }
@@ -376,7 +378,7 @@ impl Realm2DContext {
             });
         }
 
-        for &id in &candidate_shapes {
+        for &id in &self.spatial_grid.scratch_shapes {
             let Some((shape, transform)) = self.shapes.get(&id) else {
                 continue;
             };
@@ -392,7 +394,7 @@ impl Realm2DContext {
                     max,
                     transform.z_layer,
                     draw_order,
-                    &occluders,
+                    occluders,
                 )
             {
                 continue;
