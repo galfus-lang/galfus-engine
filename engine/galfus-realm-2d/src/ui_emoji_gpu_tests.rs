@@ -11,9 +11,6 @@ fn default_color_emoji_reaches_the_render_target() {
     let _gpu_guard = crate::GPU_TEST_LOCK
         .lock()
         .unwrap_or_else(|e| e.into_inner());
-    let _gpu_guard = crate::GPU_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
     let instance = wgpu::Instance::default();
     let Ok(adapter) =
         pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
