@@ -345,23 +345,23 @@ impl Realm3DContext {
         }
 
         // 0. Unbiased Reverse-Z Depth Pre-Pass for opaque/masked occluders (guarantees Early-Z)
-        let depth_prepass_ran =
-            if let (Some(shadow_pipe), Some(shadow_map)) = (&self.shadow_pipeline, &self.shadow_map)
-            {
-                crate::shadow::render_depth_prepass(
-                    &mut encoder,
-                    queue,
-                    shadow_pipe,
-                    shadow_map,
-                    depth_view,
-                    &camera_uniform.view_projection,
-                    self.total_time,
-                    &collector.opaque,
-                    &collector.masked,
-                )
-            } else {
-                false
-            };
+        let depth_prepass_ran = if let (Some(shadow_pipe), Some(shadow_map)) =
+            (&self.shadow_pipeline, &self.shadow_map)
+        {
+            crate::shadow::render_depth_prepass(
+                &mut encoder,
+                queue,
+                shadow_pipe,
+                shadow_map,
+                depth_view,
+                &camera_uniform.view_projection,
+                self.total_time,
+                &collector.opaque,
+                &collector.masked,
+            )
+        } else {
+            false
+        };
 
         // 1. Opaque & Masked forward geometry pass
         {

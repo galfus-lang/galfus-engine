@@ -206,7 +206,10 @@ export async function runDemo2d3(options: HostDemoOptions = {}): Promise<void> {
       if (isKey(e, 'Space')) paused = !paused;
       if (isKey(e, 'KeyC')) {
         debugCullLock = !debugCullLock;
-        const camComp = realm2d.world.getComponent<Camera2DComponent>(debugCam.entityId, 'Camera2D');
+        const camComp = realm2d.world.getComponent<Camera2DComponent>(
+          debugCam.entityId,
+          'Camera2D'
+        );
         if (camComp) {
           camComp.desc.cullCameraSlot = debugCullLock ? 0 : undefined;
           camComp.isDirty = true;

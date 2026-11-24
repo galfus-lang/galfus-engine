@@ -567,8 +567,8 @@ impl ShadowMap3D {
 
 #[path = "shadow_render.rs"]
 mod shadow_render;
-pub(crate) use shadow_render::{render_depth_layer_target, render_depth_prepass};
 pub use shadow_render::render_shadow_depth_pass;
+pub(crate) use shadow_render::{render_depth_layer_target, render_depth_prepass};
 #[cfg(test)]
 mod tests {
     use super::*;
