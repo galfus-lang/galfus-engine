@@ -411,6 +411,48 @@ impl PortalPipeline3D {
     }
 }
 
+/// Projects a portal's world AABB into NDC screen space and returns `true` only if it
+/// covers at least 1×1 pixel inside the viewport (skipping offscreen or degenerate portal passes).
+pub fn is_portal_visible_on_screen(
+    view_proj: &glam::Mat4,
+    aabb_min: Vec3,
+    aabb_max: Vec3,
+    viewport_width: u32,
+    viewport_height: u32,
+) -> bool {
+    let mut min_x = f32::INFINITY;
+    let mut max_x = f32::NEG_INFINITY;
+    let mut min_y = f32::INFINITY;
+    let mut max_y = f32::NEG_INFINITY;
+    let mut any_in_front = false;
+
+    for i in 0..8u32 {
+        let corner = Vec3::new(
+            if (i & 1) != 0 { aabb_max.x } else { aabb_min.x },
+            if (i & 2) != 0 { aabb_max.y } else { aabb_min.y },
+            if (i & 4) != 0 { aabb_max.z } else { aabb_min.z },
+        );
+        let clip = *view_proj * corner.extend(1.0);
+        if clip.w <= 1e-4 {
+            // Portal straddles near plane — conservatively visible.
+            return true;
+        }
+        any_in_front = true;
+        let ndc = clip.truncate() / clip.w;
+        min_x = min_x.min(ndc.x);
+        max_x = max_x.max(ndc.x);
+        min_y = min_y.min(ndc.y);
+        max_y = max_y.max(ndc.y);
+    }
+
+    if !any_in_front || max_x < -1.0 || min_x > 1.0 || max_y < -1.0 || min_y > 1.0 {
+        return false;
+    }
+    let clamped_w = (max_x.min(1.0) - min_x.max(-1.0)) * 0.5 * viewport_width as f32;
+    let clamped_h = (max_y.min(1.0) - min_y.max(-1.0)) * 0.5 * viewport_height as f32;
+    clamped_w >= 1.0 && clamped_h >= 1.0
+}
+
 /// Determines if a mirror or optical portal surface should be drawn based on optional Portal3D descriptor.
 #[inline]
 pub fn is_mirror_or_portal_active(
@@ -427,5 +469,33 @@ pub fn is_mirror_or_portal_active(
             portal_config.is_none_or(|portal| portal.active)
         }
         _ => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use galfus_realm_3d_resources::camera::Camera3D;
+
+    #[test]
+    fn portal_screen_space_culls_offscreen_and_keeps_visible() {
+        let cam = Camera3D::perspective(60.0, 0.1, 100.0, 0);
+        let tf = Transform3D::from_position(Vec3::new(0.0, 0.0, 10.0));
+        let vp = cam.build_uniform(&tf, 16.0 / 9.0).view_projection;
+
+        assert!(is_portal_visible_on_screen(
+            &vp,
+            Vec3::new(-1.0, -1.0, 0.0),
+            Vec3::new(1.0, 1.0, 0.2),
+            1280,
+            720
+        ));
+        assert!(!is_portal_visible_on_screen(
+            &vp,
+            Vec3::new(50.0, 0.0, 0.0),
+            Vec3::new(52.0, 2.0, 0.2),
+            1280,
+            720
+        ));
     }
 }

@@ -60,6 +60,10 @@ export async function runDemo2d3(options: HostDemoOptions = {}): Promise<void> {
       surfaceType: 'opaque',
       baseColor: [0.95, 0.98, 1.0, 1.0] // White wireframe border of Main Camera viewport
     });
+    const matOccluder = realm2d.createMaterial({
+      surfaceType: 'opaque',
+      baseColor: [0.22, 0.26, 0.34, 1.0] // Solid opaque 2D occluder panel (culls sprites behind it)
+    });
 
     // 9x9 grid of 2D LOD sprites driven by dynamic effective distance hypot(dx, dy, orthoScale)
     for (let gx = -4; gx <= 4; gx++) {
@@ -132,6 +136,17 @@ export async function runDemo2d3(options: HostDemoOptions = {}): Promise<void> {
         { position: pos, zLayer: 3 }
       );
     }
+
+    // Solid opaque occluder panel at zLayer 5 (culls zLayer 1 sprites completely behind it)
+    realm2d.createSprite(
+      {
+        dimensions: [7.5, 7.5],
+        materialId: matOccluder,
+        castShadow: false,
+        receiveShadow: false
+      },
+      { position: [0, 0], zLayer: 5 }
+    );
 
     // 4 thin white bars visualizing the Main Camera's viewport rectangle in the Debug view
     const borderTop = realm2d.createSprite(

@@ -201,14 +201,14 @@ export async function runDemo3d14(options: HostDemoOptions = {}): Promise<void> 
       { position: [0, 0, 0] }
     );
 
-    // Central occluder wall demonstrating Depth Pre-Pass Early-Z
+    // Central occluder wall demonstrating Depth Pre-Pass + GPU Hi-Z Occlusion Culling
     realm3d.createModel(
       {
         geometryId: geoWall.geometryId,
         materialId: matWall.materialId,
         isOccluder: true
       },
-      { position: [0, 2.2, 0], scale: [10, 4.4, 0.8] }
+      { position: [0, 3.0, 0], scale: [12, 6.0, 1.0] }
     );
 
     // 7x7 grid of 3-band LOD objects: [0,14) sphere, [14,26) cube, [26,40) pyramid, >=40 culled

@@ -45,6 +45,7 @@ pub struct Realm2DContext {
     pub(crate) material_uniform_buffers: HashMap<u32, wgpu::Buffer>,
     pub(crate) material_texture_slots: HashMap<u32, MaterialTextureSlots2D>,
     pub(crate) material_effect_ids: HashMap<u32, u64>,
+    pub(crate) spatial_grid: crate::spatial_grid::SpatialGrid2D,
 }
 
 impl Realm2DContext {
@@ -75,6 +76,7 @@ impl Realm2DContext {
             material_uniform_buffers: HashMap::new(),
             material_texture_slots: HashMap::new(),
             material_effect_ids: HashMap::new(),
+            spatial_grid: crate::spatial_grid::SpatialGrid2D::new(16.0),
         }
     }
 
@@ -148,6 +150,7 @@ impl Realm for Realm2DContext {
         self.material_bind_groups.clear();
         self.material_uniform_buffers.clear();
         self.material_texture_slots.clear();
+        self.spatial_grid.clear();
         self.material_effect_ids.clear();
         if let Some(ref mut pm) = self.pipeline_manager {
             pm.prune_custom_effects(&std::collections::HashSet::new());
@@ -261,6 +264,7 @@ impl Realm for Realm2DContext {
         }
 
         self.prepare_shadows(device, queue);
+        self.spatial_grid.rebuild(&self.sprites, &self.shapes);
         self.build_all_batches();
         self.dirty = false;
         Ok(())

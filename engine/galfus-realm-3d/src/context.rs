@@ -62,6 +62,7 @@ pub struct Realm3DContext {
     pub(crate) skybox_pipeline: Option<crate::skybox::SkyboxPipeline3D>,
     pub(crate) post_pipelines: crate::postprocess::PostProcessPipelines,
     pub(crate) light_cull_pipeline: Option<crate::light_cull::LightCullingPipeline3D>,
+    pub(crate) hiz_occlusion: Option<crate::occlusion_hiz::HiZOcclusionPipeline3D>,
     pub(crate) gizmos: crate::gizmo::GizmoSystem3D,
     pub emitters: BTreeMap<u32, (ParticleEmitter3D, Transform3D, ParticleEmitterState3D)>,
     pub portals: BTreeMap<u32, galfus_realm_3d_resources::portal::Portal3D>,
@@ -124,6 +125,7 @@ impl Realm3DContext {
             skybox_pipeline: None,
             post_pipelines: crate::postprocess::PostProcessPipelines::new(),
             light_cull_pipeline: None,
+            hiz_occlusion: None,
             gizmos: crate::gizmo::GizmoSystem3D::new(),
             emitters: BTreeMap::new(),
             portals: BTreeMap::new(),
@@ -180,6 +182,9 @@ impl Realm3DContext {
         self.gizmos.clear();
         self.portal_pipelines.clear();
         self.refraction_pipeline = None;
+        if let Some(ref mut hiz) = self.hiz_occlusion {
+            hiz.invalidate();
+        }
         if let Some(ref mut pipeline) = self.pipeline {
             pipeline.prune_custom_pipelines(&std::collections::HashSet::new());
         }
@@ -195,6 +200,7 @@ impl Realm3DContext {
         self.skybox_pipeline = None;
         self.post_pipelines = crate::postprocess::PostProcessPipelines::new();
         self.light_cull_pipeline = None;
+        self.hiz_occlusion = None;
         self.particle_renderer = None;
         self.refraction_pipeline = None;
         self.portal_pipelines.clear();

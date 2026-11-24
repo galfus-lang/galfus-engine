@@ -62,6 +62,7 @@ impl Realm2DContext {
             material_uniform_buffers: std::collections::HashMap::new(),
             material_texture_slots: std::collections::HashMap::new(),
             material_effect_ids: std::collections::HashMap::new(),
+            spatial_grid: crate::spatial_grid::SpatialGrid2D::new(16.0),
         }
     }
 

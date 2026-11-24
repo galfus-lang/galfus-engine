@@ -5,7 +5,7 @@ use galfus_realm_core::error::RealmResult;
 use galfus_realm_core::types::RealmInvocationContext;
 use glam::UVec2;
 
-use crate::collector::{DrawCollector, render_draw_items};
+use crate::collector::{DrawCollector, render_draw_items, render_draw_items_indirect};
 use crate::context::Realm3DContext;
 
 impl Realm3DContext {
@@ -218,6 +218,12 @@ impl Realm3DContext {
                     &self.portals,
                     mirror_item.model_id,
                     mirror_item.surface_type,
+                ) || !crate::portal::is_portal_visible_on_screen(
+                    &camera_uniform.view_projection,
+                    mirror_item.world_aabb_min,
+                    mirror_item.world_aabb_max,
+                    width,
+                    height,
                 ) {
                     continue;
                 }
@@ -363,6 +369,27 @@ impl Realm3DContext {
             false
         };
 
+        // 0b. GPU Reverse-Z Hi-Z Pyramid & Indirect Occlusion Culling (reuses cullCameraSlot's Hi-Z when debugging)
+        let indirect_buf = if device.limits().max_compute_workgroups_per_dimension > 0 {
+            self.hiz_occlusion
+                .get_or_insert_with(|| crate::occlusion_hiz::HiZOcclusionPipeline3D::new(device))
+                .execute_for_camera(
+                    device,
+                    queue,
+                    &mut encoder,
+                    depth_view,
+                    width,
+                    height,
+                    camera.camera_slot,
+                    camera.cull_camera_slot,
+                    depth_prepass_ran,
+                    camera_uniform.view_projection,
+                    collector.opaque.iter().chain(collector.masked.iter()),
+                )
+        } else {
+            None
+        };
+
         // 1. Opaque & Masked forward geometry pass
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -396,11 +423,12 @@ impl Realm3DContext {
 
             pass.set_bind_group(0, &scene_buffers.bind_group, &[]);
             let opaque_draws = collector.opaque.iter().chain(collector.masked.iter());
-            render_draw_items(
+            render_draw_items_indirect(
                 &mut pass,
                 pipeline,
                 opaque_draws,
                 &pipeline.dummy_refraction_bg,
+                indirect_buf,
             );
 
             crate::collector::render_transparent_opaque(
@@ -513,8 +541,7 @@ impl Realm3DContext {
                 let refr_bg = self
                     .refraction_pipeline
                     .as_ref()
-                    .map(|r| r.bind_group())
-                    .unwrap_or(&pipeline.dummy_refraction_bg);
+                    .map_or(&pipeline.dummy_refraction_bg, |r| r.bind_group());
                 render_draw_items(&mut pass, pipeline, collector.refractive.iter(), refr_bg);
             }
             if has_trans {
@@ -526,12 +553,8 @@ impl Realm3DContext {
                 );
             }
             if has_additive {
-                render_draw_items(
-                    &mut pass,
-                    pipeline,
-                    collector.additive.iter(),
-                    &pipeline.dummy_refraction_bg,
-                );
+                let dummy = &pipeline.dummy_refraction_bg;
+                render_draw_items(&mut pass, pipeline, collector.additive.iter(), dummy);
             }
 
             if has_front_particles && let Some(particle_renderer) = &self.particle_renderer {

@@ -19,6 +19,7 @@ mod context_shapecast;
 pub mod context_skinning;
 pub mod gizmo;
 pub mod light_cull;
+pub mod occlusion_hiz;
 pub mod outline;
 pub mod particle;
 pub mod pipeline;

@@ -74,6 +74,46 @@ fn corners_aabb(corners: &[Vec2]) -> (Vec2, Vec2) {
     (min, max)
 }
 
+#[inline]
+pub(crate) fn sprite_world_aabb(sprite: &Sprite2D, transform: &Transform2D) -> (Vec2, Vec2) {
+    let corners = sprite.compute_world_corners(transform);
+    corners_aabb(&corners)
+}
+
+pub(crate) fn shape_world_aabb(shape: &Shape2D, transform: &Transform2D) -> Option<(Vec2, Vec2)> {
+    match &shape.kind {
+        ShapeKind2D::Rectangle { size } => {
+            let hx = size.x * 0.5;
+            let hy = size.y * 0.5;
+            let corners = [
+                transform.transform_point(Vec2::new(-hx, -hy)),
+                transform.transform_point(Vec2::new(hx, -hy)),
+                transform.transform_point(Vec2::new(hx, hy)),
+                transform.transform_point(Vec2::new(-hx, hy)),
+            ];
+            Some(corners_aabb(&corners))
+        }
+        ShapeKind2D::Circle { radius, .. } => {
+            let r = radius.abs() * transform.scale.x.abs().max(transform.scale.y.abs());
+            let ext = Vec2::splat(r);
+            Some((transform.position - ext, transform.position + ext))
+        }
+        ShapeKind2D::Polygon { vertices } => {
+            if vertices.is_empty() {
+                return None;
+            }
+            let mut min = Vec2::splat(f32::INFINITY);
+            let mut max = Vec2::splat(f32::NEG_INFINITY);
+            for &v in vertices {
+                let wp = transform.transform_point(v);
+                min = min.min(wp);
+                max = max.max(wp);
+            }
+            Some((min, max))
+        }
+    }
+}
+
 pub(crate) fn is_sprite_visible_2d(
     sprite: &Sprite2D,
     transform: &Transform2D,
@@ -91,8 +131,7 @@ pub(crate) fn is_sprite_visible_2d(
     ) {
         return false;
     }
-    let corners = sprite.compute_world_corners(transform);
-    let (min, max) = corners_aabb(&corners);
+    let (min, max) = sprite_world_aabb(sprite, transform);
     bounds.intersects_aabb(min, max, sprite.cull_margin)
 }
 
@@ -113,36 +152,8 @@ pub(crate) fn is_shape_visible_2d(
     ) {
         return false;
     }
-    let (min, max) = match &shape.kind {
-        ShapeKind2D::Rectangle { size } => {
-            let hx = size.x * 0.5;
-            let hy = size.y * 0.5;
-            let corners = [
-                transform.transform_point(Vec2::new(-hx, -hy)),
-                transform.transform_point(Vec2::new(hx, -hy)),
-                transform.transform_point(Vec2::new(hx, hy)),
-                transform.transform_point(Vec2::new(-hx, hy)),
-            ];
-            corners_aabb(&corners)
-        }
-        ShapeKind2D::Circle { radius, .. } => {
-            let r = radius.abs() * transform.scale.x.abs().max(transform.scale.y.abs());
-            let ext = Vec2::splat(r);
-            (transform.position - ext, transform.position + ext)
-        }
-        ShapeKind2D::Polygon { vertices } => {
-            if vertices.is_empty() {
-                return false;
-            }
-            let mut min = Vec2::splat(f32::INFINITY);
-            let mut max = Vec2::splat(f32::NEG_INFINITY);
-            for &v in vertices {
-                let wp = transform.transform_point(v);
-                min = min.min(wp);
-                max = max.max(wp);
-            }
-            (min, max)
-        }
+    let Some((min, max)) = shape_world_aabb(shape, transform) else {
+        return false;
     };
     bounds.intersects_aabb(min, max, shape.cull_margin)
 }
@@ -264,8 +275,8 @@ impl Realm2DContext {
         self.batch_builder.build();
     }
 
-    /// Collects visible 2D batches for a specific camera invocation with viewport AABB culling,
-    /// dynamic zoom-aware distance culling, and Reverse-Z Early-Z ordering.
+    /// Collects visible 2D batches for a specific camera invocation with spatial-grid broad-phase,
+    /// viewport AABB culling, zoom-aware distance culling, CPU opaque occlusion culling, and Reverse-Z Early-Z ordering.
     pub(crate) fn build_batches_for_camera(
         &mut self,
         camera: &Camera2D,
@@ -275,9 +286,64 @@ impl Realm2DContext {
         let bounds = CameraViewportBounds2D::from_camera(camera, camera_transform, viewport_size);
         self.batch_builder.clear();
 
-        for (&id, (sprite, transform)) in &self.sprites {
+        let (candidate_sprites, candidate_shapes): (Vec<u32>, Vec<u32>) =
+            if self.spatial_grid.is_populated() {
+                let mut sp = Vec::new();
+                let mut sh = Vec::new();
+                self.spatial_grid
+                    .query(bounds.min, bounds.max, &mut sp, &mut sh);
+                (sp, sh)
+            } else {
+                (
+                    self.sprites.keys().copied().collect(),
+                    self.shapes.keys().copied().collect(),
+                )
+            };
+
+        // Pass 1: collect unrotated, fully opaque visible rectangles as CPU 2D occluders.
+        let mut occluders = Vec::new();
+        for &id in &candidate_sprites {
+            let Some((sprite, transform)) = self.sprites.get(&id) else {
+                continue;
+            };
+            if transform.rotation.abs() > 1e-4 || !is_sprite_visible_2d(sprite, transform, &bounds)
+            {
+                continue;
+            }
+            let mat = sprite.material_id.and_then(|mid| self.materials.get(&mid));
+            let is_solid_opaque =
+                mat.is_some_and(|m| m.surface_type_id() == 0 && m.base_color.w >= 0.999);
+            if is_solid_opaque {
+                let (min, max) = sprite_world_aabb(sprite, transform);
+                let draw_order = sprite.draw_order.unwrap_or(transform.draw_order);
+                occluders.push(crate::occlusion_2d::OpaqueOccluder2D {
+                    min,
+                    max,
+                    z_layer: transform.z_layer,
+                    draw_order,
+                });
+            }
+        }
+
+        for &id in &candidate_sprites {
+            let Some((sprite, transform)) = self.sprites.get(&id) else {
+                continue;
+            };
             if !is_sprite_visible_2d(sprite, transform, &bounds) {
                 continue;
+            }
+            let draw_order = sprite.draw_order.unwrap_or(transform.draw_order);
+            if !occluders.is_empty() && sprite.culling_mode == CullingMode::Auto {
+                let (min, max) = sprite_world_aabb(sprite, transform);
+                if crate::occlusion_2d::is_occluded_by_opaque_2d(
+                    min,
+                    max,
+                    transform.z_layer,
+                    draw_order,
+                    &occluders,
+                ) {
+                    continue;
+                }
             }
             let [min_z, max_z] = sprite.height_range.unwrap_or([-10000.0, 10000.0]);
             let instance = Item2DInstanceRaw::new(
@@ -292,7 +358,6 @@ impl Realm2DContext {
                 ),
                 sprite.layer_mask,
             );
-            let draw_order = sprite.draw_order.unwrap_or(transform.draw_order);
             self.batch_builder.push(PreparedItem2D {
                 order: (id, 0, 0),
                 key: BatchKey2D {
@@ -311,8 +376,25 @@ impl Realm2DContext {
             });
         }
 
-        for (&id, (shape, transform)) in &self.shapes {
+        for &id in &candidate_shapes {
+            let Some((shape, transform)) = self.shapes.get(&id) else {
+                continue;
+            };
             if !is_shape_visible_2d(shape, transform, &bounds) {
+                continue;
+            }
+            let draw_order = shape.draw_order.unwrap_or(transform.draw_order);
+            if !occluders.is_empty()
+                && shape.culling_mode == CullingMode::Auto
+                && let Some((min, max)) = shape_world_aabb(shape, transform)
+                && crate::occlusion_2d::is_occluded_by_opaque_2d(
+                    min,
+                    max,
+                    transform.z_layer,
+                    draw_order,
+                    &occluders,
+                )
+            {
                 continue;
             }
             let [min_z, max_z] = shape.height_range.unwrap_or([-10000.0, 10000.0]);
@@ -328,7 +410,6 @@ impl Realm2DContext {
                 ),
                 shape.layer_mask,
             );
-            let draw_order = shape.draw_order.unwrap_or(transform.draw_order);
             self.batch_builder.push(PreparedItem2D {
                 order: (id, 1, 0),
                 key: BatchKey2D {

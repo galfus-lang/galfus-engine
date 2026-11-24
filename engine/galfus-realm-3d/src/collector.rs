@@ -20,6 +20,10 @@ pub struct CollectedDrawItem<'a> {
     pub surface_type: SurfaceType3D,
     pub side: MaterialSide3D,
     pub is_occluder: bool,
+    pub culling_mode: CullingMode,
+    pub cull_margin: f32,
+    pub world_aabb_min: Vec3,
+    pub world_aabb_max: Vec3,
     pub model_bg: &'a wgpu::BindGroup,
     pub material_bg: &'a wgpu::BindGroup,
     pub vertex_buffer: &'a wgpu::Buffer,
@@ -81,6 +85,8 @@ impl<'a> DrawCollector<'a> {
                 .transform_point3(geom.aabb.center());
             let depth = (world_center - camera_pos).length_squared();
 
+            let world_aabb = local_aabb.transform(&model_transform.matrix());
+
             if model.culling_mode != CullingMode::AlwaysRender {
                 // Distance / LOD band culling [start, end)
                 if !distance_sq_in_range(depth, model.distance_range) {
@@ -89,7 +95,6 @@ impl<'a> DrawCollector<'a> {
                 }
                 // Frustum Culling with optional world-space margin
                 if let Some(f) = frustum {
-                    let world_aabb = local_aabb.transform(&model_transform.matrix());
                     let pad = Vec3::splat(model.cull_margin.max(0.0));
                     if !f.intersects_aabb(world_aabb.min - pad, world_aabb.max + pad) {
                         collector.culled_count += 1;
@@ -119,6 +124,10 @@ impl<'a> DrawCollector<'a> {
                 surface_type,
                 side,
                 is_occluder: model.is_occluder,
+                culling_mode: model.culling_mode,
+                cull_margin: model.cull_margin,
+                world_aabb_min: world_aabb.min,
+                world_aabb_max: world_aabb.max,
                 model_bg,
                 material_bg,
                 vertex_buffer: &mesh.vertices,
@@ -201,6 +210,10 @@ impl<'a> DrawCollector<'a> {
                 surface_type,
                 side,
                 is_occluder: inst_model.is_occluder,
+                culling_mode: inst_model.culling_mode,
+                cull_margin: inst_model.cull_margin,
+                world_aabb_min: batch_min,
+                world_aabb_max: batch_max,
                 model_bg,
                 material_bg,
                 vertex_buffer: &mesh.vertices,
@@ -298,7 +311,18 @@ pub fn render_draw_items<'a>(
     items: impl IntoIterator<Item = &'a CollectedDrawItem<'a>>,
     refraction_bg: &'a wgpu::BindGroup,
 ) {
-    render_draw_items_with_state(pass, pipeline, items, refraction_bg, None);
+    render_draw_items_with_state(pass, pipeline, items, refraction_bg, None, None);
+}
+
+/// Renders collected draw items using GPU-culled `DrawIndexedIndirectArgs` when available.
+pub(crate) fn render_draw_items_indirect<'a>(
+    pass: &mut wgpu::RenderPass<'a>,
+    pipeline: &'a crate::pipeline::Pipeline3D,
+    items: impl IntoIterator<Item = &'a CollectedDrawItem<'a>>,
+    refraction_bg: &'a wgpu::BindGroup,
+    indirect_buffer: Option<&'a wgpu::Buffer>,
+) {
+    render_draw_items_with_state(pass, pipeline, items, refraction_bg, None, indirect_buffer);
 }
 
 pub(crate) fn render_transparent_opaque<'a>(
@@ -313,6 +337,7 @@ pub(crate) fn render_transparent_opaque<'a>(
         items,
         refraction_bg,
         Some(SurfacePipelineState::OpaqueTransparent),
+        None,
     );
 }
 
@@ -328,6 +353,7 @@ pub(crate) fn render_transparent_partial<'a>(
         items,
         refraction_bg,
         Some(SurfacePipelineState::AlphaBlendAfterOpaque),
+        None,
     );
 }
 
@@ -337,13 +363,14 @@ fn render_draw_items_with_state<'a>(
     items: impl IntoIterator<Item = &'a CollectedDrawItem<'a>>,
     refraction_bg: &'a wgpu::BindGroup,
     override_state: Option<SurfacePipelineState>,
+    indirect_buffer: Option<&'a wgpu::Buffer>,
 ) {
     pass.set_bind_group(3, refraction_bg, &[]);
     let mut curr_pipe = None;
     let mut curr_mat = None;
     let mut curr_geom = None;
 
-    for item in items {
+    for (item_idx, item) in items.into_iter().enumerate() {
         let is_instanced = item.instance_buffer.is_some() && item.instance_count > 0;
         let surface_state = override_state
             .unwrap_or_else(|| SurfacePipelineState::from_surface_type(item.surface_type));
@@ -374,7 +401,10 @@ fn render_draw_items_with_state<'a>(
             curr_geom = Some(item.geometry_id);
         }
         pass.set_bind_group(2, item.model_bg, &[]);
-        if item.instance_buffer.is_some() {
+        if let Some(ind_buf) = indirect_buffer {
+            let offset = (item_idx as u64) * crate::occlusion_hiz::INDIRECT_ARGS_STRIDE;
+            pass.draw_indexed_indirect(ind_buf, offset);
+        } else if item.instance_buffer.is_some() {
             pass.draw_indexed(0..item.index_count, 0, 0..item.instance_count);
         } else {
             pass.draw_indexed(0..item.index_count, 0, 0..1);
