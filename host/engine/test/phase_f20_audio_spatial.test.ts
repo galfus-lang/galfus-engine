@@ -96,7 +96,7 @@ describe('Phase F20 — Spatial Audio, Listeners, Caching and Teardown', () => {
       position: [50, 0, 0] as [number, number, number],
       rotation: [0, 0, 0, 1] as [number, number, number, number]
     };
-    const voiceB = audio.playSoundSpatial(soundId, {
+    audio.playSoundSpatial(soundId, {
       emitter: { position: [60, 0, 0] },
       listener: explicitListener,
       config: { volume: 0.8 }

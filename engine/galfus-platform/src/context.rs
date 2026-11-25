@@ -194,11 +194,10 @@ impl PlatformContext {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let el = self.event_loop.as_ref().ok_or_else(|| {
+            let el = self.event_loop.as_mut().ok_or_else(|| {
                 PlatformError::WindowCreationFailed("Event loop unavailable".into())
             })?;
 
-            #[allow(deprecated)]
             let mut attrs = WinitWindow::default_attributes()
                 .with_title(&config.title)
                 .with_inner_size(PhysicalSize::new(
@@ -213,10 +212,7 @@ impl PlatformContext {
                 attrs = attrs.with_position(PhysicalPosition::new(pos.x, pos.y));
             }
 
-            #[allow(deprecated)]
-            let winit_window = el
-                .create_window(attrs)
-                .map_err(|e| PlatformError::WindowCreationFailed(e.to_string()))?;
+            let winit_window = context_events::create_winit_window(el, attrs)?;
 
             let winit_id = winit_window.id();
             let native_win = NativeWindow::new(&config, Arc::new(winit_window));

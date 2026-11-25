@@ -12,8 +12,6 @@ function createPanoramicSkyboxTexture(width = 1024, height = 512): Uint8Array {
   for (let y = 0; y < height; y++) {
     // Latitude: 0 = zenith (top), 0.5 = horizon, 1 = nadir (bottom)
     const v = y / (height - 1);
-    const elev = (0.5 - v) * Math.PI; // -pi/2 to +pi/2
-    const sinElev = Math.sin(elev);
 
     for (let x = 0; x < width; x++) {
       // Longitude: 0 to 2*PI around azimuth

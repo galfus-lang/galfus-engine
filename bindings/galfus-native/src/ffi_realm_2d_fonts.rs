@@ -1,5 +1,3 @@
-#![allow(clippy::missing_safety_doc)]
-
 //! C ABI for realm-local font groups and families.
 
 use crate::ffi::{from_c_str, set_last_error};
@@ -46,6 +44,8 @@ fn unpack_faces(data: &[u8]) -> Result<Vec<&[u8]>, String> {
 }
 
 /// Registers an atomic group; data contains a little-endian count, lengths and font bytes.
+/// # Safety
+/// `name` must be a valid C string and `data` must be valid for `data_len` bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_register_font_group(
     realm_id: u32,
@@ -88,6 +88,8 @@ struct FamilyDescriptor {
 }
 
 /// Creates or replaces a family from a UTF-8 JSON descriptor.
+/// # Safety
+/// `family_json` must be a valid null-terminated UTF-8 C string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_font_family(
     realm_id: u32,
@@ -146,6 +148,8 @@ unsafe fn remove_font(realm_id: u32, name: *const c_char, family: bool) -> c_int
 }
 
 /// Removes a family that is not referenced by any UI node.
+/// # Safety
+/// `name` must be a valid null-terminated UTF-8 C string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_remove_font_family(
     realm_id: u32,
@@ -155,6 +159,8 @@ pub unsafe extern "C" fn galfus_realm_2d_remove_font_family(
 }
 
 /// Removes a group that is not referenced by any font family.
+/// # Safety
+/// `name` must be a valid null-terminated UTF-8 C string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_remove_font_group(
     realm_id: u32,

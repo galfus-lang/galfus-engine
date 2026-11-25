@@ -48,7 +48,7 @@ export abstract class UiTextField extends UiControl {
   private geometryError_: unknown;
   private lastCandidate?: string;
   protected constructor(
-    private readonly ui: UiSystem,
+    ui: UiSystem,
     parent: UiPanelComponent,
     protected readonly options: UiTextFieldOptions,
     readonly multiline: boolean

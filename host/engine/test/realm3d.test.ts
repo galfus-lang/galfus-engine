@@ -129,13 +129,13 @@ describe('@galfus/engine > Realm3D', () => {
     realm.createCustomGeometry(0, vertexBytes, indices, 1);
 
     // 2. Test particle emitter & portal & instanced model
-    const emitterEntity = realm.createParticleEmitter({
+    realm.createParticleEmitter({
       maxParticles: 100,
       spawnRate: 10
     });
     realm.particleEmitterBurst(1, 25);
 
-    const portalEntity = realm.createPortal({
+    realm.createPortal({
       modelId: 1,
       active: true
     });

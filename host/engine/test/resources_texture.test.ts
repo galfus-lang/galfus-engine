@@ -15,7 +15,7 @@ describe('@galfus/engine > ResourceManager & Texture Auto-loading', () => {
     const recordedCalls: Array<{ id: number; desc: GpuTextureDesc; dataLength: number }> = [];
 
     const mockEngine = {
-      resourceCreateTexture: (id: number, desc: GpuTextureDesc, data: Uint8Array, len: number) => {
+      resourceCreateTexture: (id: number, desc: GpuTextureDesc, _data: Uint8Array, len: number) => {
         recordedCalls.push({ id, desc, dataLength: len });
       },
       resourceDisposeTexture: () => {}

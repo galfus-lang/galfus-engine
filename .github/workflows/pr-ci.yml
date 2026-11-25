@@ -113,17 +113,16 @@ jobs:
       - name: Prepare formatting tools
         run: bun prepare
 
-      - name: Check formatting
-        run: bun run format:check
-
-      - name: Check TypeScript
-        run: bun --check
-
-      - name: Check Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Validate formatting, file lengths, TypeScript, and Clippy (native + WASM)
+        run: bun run validate
 
       - name: Run Rust tests
         run: cargo test --workspace
+
+      - name: Run Host tests (including native physics)
+        env:
+          GALFUS_TEST_NATIVE_PHYSICS: '1'
+        run: bun scripts/host-sync.ts --skip-wasm && bun run test:host
 
       - name: Install wasm-bindgen CLI
         shell: bash

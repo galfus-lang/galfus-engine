@@ -420,7 +420,7 @@ describe('UI Panels, SplitGroup, and ScrollPanel', () => {
       });
 
       // Child sprite panel in front
-      const childSprite = container.addSpritePanel({
+      container.addSpritePanel({
         id: 'child-sprite',
         x: 20,
         y: 20,

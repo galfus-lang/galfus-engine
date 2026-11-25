@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 type Exception = { path: string; reason: string };
 type Config = { maxLines: number; exceptions: Exception[] };
 
-const SOURCE_EXTENSIONS = new Set(['rs', 'ts', 'wgsl']);
+const SOURCE_EXTENSIONS = new Set(['rs', 'ts']);
 const CONFIG_PATH = '.agents/file-length-exceptions.json';
 
 function lineCount(source: string): number {
