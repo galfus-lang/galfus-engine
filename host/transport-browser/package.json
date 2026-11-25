@@ -6,13 +6,13 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/galfus-lang/galfus-engine.git",
+    "url": "https://github.com/galfus-multiverse/galfus-engine.git",
     "directory": "host/transport-browser"
   },
   "bugs": {
-    "url": "https://github.com/galfus-lang/galfus-engine/issues"
+    "url": "https://github.com/galfus-multiverse/galfus-engine/issues"
   },
-  "homepage": "https://github.com/galfus-lang/galfus-engine#readme",
+  "homepage": "https://github.com/galfus-multiverse/galfus-engine#readme",
   "keywords": [
     "galfus",
     "game-engine",

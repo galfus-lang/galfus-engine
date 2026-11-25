@@ -28,7 +28,7 @@ export interface ApiSearchOptions {
 }
 
 const DEFAULT_REMOTE_URL =
-  'https://raw.githubusercontent.com/galfus-lang/galfus-engine/main/docs/api-search-index.json';
+  'https://raw.githubusercontent.com/galfus-multiverse/galfus-engine/main/docs/api-search-index.json';
 
 const STOP_WORDS = new Set([
   'a',
