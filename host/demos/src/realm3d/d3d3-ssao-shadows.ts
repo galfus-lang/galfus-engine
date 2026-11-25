@@ -1,7 +1,7 @@
 /**
  * Realm 3D Demo 3D-3: Omnidirectional Point Light Shadows (6 Cube Faces) & SSAO
  */
-import { isKey, type Light3DComponent, type Model3DComponent, quat } from '@galfus/engine';
+import { isKey, type Light3DComponent, type Model3DComponent } from '@galfus/engine';
 import type { PathCommand } from '@galfus/transport-types';
 import { runDemoLoop } from '../common/loop';
 import { createDemoSession, type HostDemoOptions } from '../common/options';
@@ -231,7 +231,6 @@ export async function runDemo3d3(options: HostDemoOptions = {}): Promise<void> {
     });
 
     const camModel = realm3d.world.getComponent<Model3DComponent>(camera.entityId, 'Model3D')!;
-    const _q = quat.create();
 
     runtime.on('tick', ({ timeMs, dt }) => {
       if (autoOrbit) camAngle += dt * 0.3;

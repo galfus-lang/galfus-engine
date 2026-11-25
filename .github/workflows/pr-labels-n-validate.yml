@@ -30,4 +30,4 @@ permissions:
 
 jobs:
   shared-validate:
-    uses: galfus-lang/.github/.github/workflows/pr-labels-n-validate.yml@main
+    uses: galfus-multiverse/.github/.github/workflows/pr-labels-n-validate.yml@main

@@ -28,7 +28,6 @@ export class SplitGroup implements UiNode {
   private readonly _boundSashes = new Set<number>();
   private readonly _handleSize: number;
   private readonly _sashColor: string;
-  private readonly _sashHoverColor: string;
 
   constructor(options: SplitGroupOptions = {}) {
     this.id = options.id ?? nextUiId('split');
@@ -46,7 +45,6 @@ export class SplitGroup implements UiNode {
     };
     this._handleSize = Math.max(4, options.handleSize ?? 6);
     this._sashColor = options.sashColor ?? '#1b314b';
-    this._sashHoverColor = options.sashHoverColor ?? '#38bdf8';
   }
 
   get rect(): UiRect {

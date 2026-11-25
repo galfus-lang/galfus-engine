@@ -1,5 +1,3 @@
-#![allow(clippy::missing_safety_doc)]
-
 use std::ffi::c_char;
 
 use galfus_realm_2d::Realm2DContext;
@@ -36,6 +34,8 @@ pub extern "C" fn galfus_realm_2d_destroy(realm_id: u32) -> i32 {
 }
 
 /// Registers or updates a 2D Camera in the 2D Realm.
+/// # Safety
+/// `camera_json` and `transform_json` (if non-null) must be valid null-terminated UTF-8 C strings.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_create_camera(
     realm_id: u32,
@@ -83,6 +83,8 @@ pub unsafe extern "C" fn galfus_realm_2d_create_camera(
 }
 
 /// Updates the transform of an existing Camera in the 2D Realm.
+/// # Safety
+/// `transform` must be a valid, non-null pointer to a `GalfusTransform2D`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_camera_transform(
     realm_id: u32,
@@ -111,6 +113,8 @@ pub unsafe extern "C" fn galfus_realm_2d_set_camera_transform(
 }
 
 /// Registers or updates a Material in the 2D Realm.
+/// # Safety
+/// `material_json` must be a valid null-terminated UTF-8 C string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_create_material(
     realm_id: u32,
@@ -150,6 +154,8 @@ pub unsafe extern "C" fn galfus_realm_2d_create_material(
 }
 
 /// Registers or updates a Sprite in the 2D Realm.
+/// # Safety
+/// `sprite_json` and `transform_json` (if non-null) must be valid null-terminated UTF-8 C strings.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_create_sprite(
     realm_id: u32,
@@ -223,6 +229,8 @@ pub extern "C" fn galfus_realm_2d_set_sprite_uv_rect(
 }
 
 /// Updates the transform of an existing Sprite in the 2D Realm.
+/// # Safety
+/// `transform` must be a valid, non-null pointer to a `GalfusTransform2D`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_sprite_transform(
     realm_id: u32,
@@ -251,6 +259,8 @@ pub unsafe extern "C" fn galfus_realm_2d_set_sprite_transform(
 }
 
 /// Registers or updates a Vector Shape in the 2D Realm.
+/// # Safety
+/// `shape_json` and `transform_json` (if non-null) must be valid null-terminated UTF-8 C strings.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_create_shape(
     realm_id: u32,
@@ -298,6 +308,8 @@ pub unsafe extern "C" fn galfus_realm_2d_create_shape(
 }
 
 /// Updates the transform of an existing Shape in the 2D Realm.
+/// # Safety
+/// `transform` must be a valid, non-null pointer to a `GalfusTransform2D`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_shape_transform(
     realm_id: u32,
@@ -326,6 +338,8 @@ pub unsafe extern "C" fn galfus_realm_2d_set_shape_transform(
 }
 
 /// Registers or updates a 2D Light in the 2D Realm.
+/// # Safety
+/// `light_json` and `transform_json` (if non-null) must be valid null-terminated UTF-8 C strings.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_create_light(
     realm_id: u32,
@@ -371,6 +385,8 @@ pub unsafe extern "C" fn galfus_realm_2d_create_light(
 }
 
 /// Updates the transform of an existing Light in the 2D Realm.
+/// # Safety
+/// `transform` must be a valid, non-null pointer to a `GalfusTransform2D`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_light_transform(
     realm_id: u32,

@@ -543,21 +543,23 @@ export class Realm3DSyncSystem {
    */
   dispose(engine: GalfusEngine | null): void {
     if (engine) {
-      for (const id of this._syncedModels) engine.realm3dDestroyModel(this.realmId, id);
-      for (const id of this._syncedLights) engine.realm3dDestroyLight(this.realmId, id);
-      for (const id of this._syncedCameras) engine.realm3dDestroyCamera(this.realmId, id);
-      for (const id of this._syncedMaterials) engine.realm3dDestroyMaterial(this.realmId, id);
-      for (const id of this._syncedGeometries) engine.realm3dDestroyGeometry(this.realmId, id);
-      for (const id of this._syncedEmitters) engine.realm3dDestroyParticleEmitter(this.realmId, id);
+      // Destroy dependent resources (portals, projectors, colliders) before models,
+      // because destroying a model cascades portal removal in the native core.
       for (const id of this._syncedPortals) engine.realm3dDestroyPortal(this.realmId, id);
       for (const id of this._syncedProjectors) engine.realm3dDestroyProjector(this.realmId, id);
-      for (const id of this._syncedInstancedModels)
-        engine.realm3dDestroyInstancedModel(this.realmId, id);
       for (const id of this._syncedColliders.keys()) {
         try {
           engine.realm3dDestroyCollider(this.realmId, id);
         } catch {}
       }
+      for (const id of this._syncedModels) engine.realm3dDestroyModel(this.realmId, id);
+      for (const id of this._syncedInstancedModels)
+        engine.realm3dDestroyInstancedModel(this.realmId, id);
+      for (const id of this._syncedLights) engine.realm3dDestroyLight(this.realmId, id);
+      for (const id of this._syncedCameras) engine.realm3dDestroyCamera(this.realmId, id);
+      for (const id of this._syncedEmitters) engine.realm3dDestroyParticleEmitter(this.realmId, id);
+      for (const id of this._syncedMaterials) engine.realm3dDestroyMaterial(this.realmId, id);
+      for (const id of this._syncedGeometries) engine.realm3dDestroyGeometry(this.realmId, id);
     }
     this._syncedModels.clear();
     this._syncedLights.clear();

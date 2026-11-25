@@ -357,6 +357,7 @@ mod ffi_realm_3d_desc_environment;
 pub use ffi_realm_3d_desc_environment::*;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EmissionShape3DDesc {
     #[serde(rename = "type")]
     pub kind: String,

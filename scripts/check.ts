@@ -18,7 +18,7 @@ const COMMANDS: Command[] = [
   },
   {
     label: 'cargo clippy',
-    args: ['cargo', 'clippy', '--workspace', '--all-targets']
+    args: ['cargo', 'clippy', '--workspace', '--all-targets', '--', '-D', 'warnings']
   },
   {
     label: 'cargo clippy (browser WASM)',

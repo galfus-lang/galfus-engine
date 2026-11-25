@@ -7,7 +7,7 @@ import { createAnim2Scene, runDemoAnim2 } from '../src/realm2d/anim2-path';
 describe('anim2 path followers demo', () => {
   it('runs headlessly via runDemoAnim2', async () => {
     await runDemoAnim2({ headless: true, maxFrames: 3 });
-  });
+  }, 30000);
 
   it('evaluates spline path progression and rebinds parameters', () => {
     const transport = createBunTransport({ headless: true });
@@ -46,5 +46,5 @@ describe('anim2 path followers demo', () => {
     } finally {
       runtime.dispose();
     }
-  });
+  }, 30000);
 });

@@ -71,6 +71,12 @@ export class NodeApiStrategy implements CodegenStrategy {
 
     lines.push(
       '',
+      '  /** Reads the resolved physical size [width, height] of a Multiverse Target. */',
+      '  multiverseGetTargetSize(targetId: number): [number, number] {',
+      '    const [width, height] = this._addon.multiverseGetTargetSizeRaw(targetId);',
+      '    return [width, height];',
+      '  }',
+      '',
       '  /** Reads the inner physical size [width, height] of a Platform window. */',
       '  windowGetSize(windowId: number): [number, number] {',
       '    return this._addon.windowGetSize(windowId);',
@@ -79,6 +85,12 @@ export class NodeApiStrategy implements CodegenStrategy {
       '  /** Reads the inner physical size [width, height] of a Platform window (alias for windowGetSize). */',
       '  platformGetWindowSize(windowId: number): [number, number] {',
       '    return this.windowGetSize(windowId);',
+      '  }',
+      '',
+      '  /** Reads the world-space bounding box { min: [x,y,z], max: [x,y,z] } of a 3D model. */',
+      '  realm3dGetModelAabb(realmId: number, modelId: number): { min: [number, number, number]; max: [number, number, number] } {',
+      '    const result = this._addon.realm3dGetModelAabbRaw(realmId, modelId);',
+      '    return { min: [result[0], result[1], result[2]], max: [result[3], result[4], result[5]] };',
       '  }'
     );
 

@@ -404,7 +404,6 @@ export class Panel implements UiNode {
     return () => void this._resizeListeners.delete(callback);
   }
 
-  private _boundHost: UiHost | undefined;
   private _boundListener: InteractiveListener | undefined;
 
   attachHost(host: UiHost | undefined): void {
@@ -420,7 +419,6 @@ export class Panel implements UiNode {
 
   protected ensureHostListener(host: UiHost): void {
     if (this._boundListener) return;
-    this._boundHost = host;
     const listener = host.listen(this.id);
     this._boundListener = listener;
 

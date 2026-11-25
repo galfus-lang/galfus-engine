@@ -122,7 +122,7 @@ describe('Native UI Model (Model2DUI) & Fluent Panel APIs', () => {
     });
 
     // 1. Background image
-    const bg = root.addSpritePanel({
+    root.addSpritePanel({
       textureId: 7,
       fit: 'stretch',
       sampler: 'linear'
@@ -157,7 +157,7 @@ describe('Native UI Model (Model2DUI) & Fluent Panel APIs', () => {
       color: '#38bdf8',
       inline: true
     });
-    const paragraph = root.addText({
+    root.addText({
       text: 'This is a long description text that spans multiple lines cleanly',
       fontSize: 12,
       multiline: true,

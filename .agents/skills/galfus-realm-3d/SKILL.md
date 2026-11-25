@@ -2,8 +2,9 @@
 name: galfus-realm-3d
 description: >-
   Use this skill to build 3D scenes in Galfus Engine, including 3D cameras, PBR materials,
-  directional/point/spot lighting with shadows, geometric primitives, layer masks,
-  core-owned IK & skinning, Forward PBR decals/occluded projectors, and UV-space tattoo baking.
+  Parallax Occlusion Mapping (POM), directional/point/spot lighting with shadows, geometric
+  primitives, culling/LOD/Hi-Z occlusion, layer masks, core-owned IK & skinning, Forward PBR
+  decals/occluded projectors, and UV-space tattoo baking.
 ---
 
 # Galfus Engine 3D Realm (Realm3D)
@@ -62,10 +63,15 @@ const goldMat = realm3d.createMaterial({
   roughness: 0.15
 }).materialId;
 
-// Textured material (via Texture ID)
+// Textured material with Parallax Occlusion Mapping (POM)
 const texturedMat = realm3d.createMaterial({
-  baseColorTextureId: textureId,
+  albedoTextureId: textureId,
   normalTextureId: normalMapId,
+  heightTextureId: heightMapId, // Grayscale heightmap (1.0 = top, 0.0 = deepest recess)
+  parallaxScale: 0.025, // UV depth scale (0.0 disables POM)
+  parallaxMinLayers: 8,
+  parallaxMaxLayers: 24,
+  parallaxFadeDistance: 40.0,
   metallic: 0.2,
   roughness: 0.5
 }).materialId;
@@ -109,8 +115,8 @@ realm3d.createLight(
     color: [1.0, 1.0, 1.0],
     intensity: 4.0,
     range: 25.0,
-    innerConeAngle: Math.PI / 8,
-    outerConeAngle: Math.PI / 6,
+    spotInnerAngleRad: Math.PI / 8,
+    spotOuterAngleRad: Math.PI / 6,
     castShadow: true
   },
   {
@@ -131,8 +137,8 @@ const cube = realm3d.createCube(1.0, blueMat, {
   scale: [1, 2, 1] // Scaled box
 });
 
-// Sphere
-const sphere = realm3d.createSphere(0.75, 32, goldMat, {
+// Sphere (radius, rings, sectors, materialId, transform)
+const sphere = realm3d.createSphere(0.75, 16, 32, goldMat, {
   position: [3, 0.75, 0]
 });
 
@@ -279,6 +285,10 @@ realm3d.bakeUvDecal(
   { position: stampPos, rotation: utils3D.quatFromLookAt(stampPos, hitPoint), scale: [1, 1, 1] }
 );
 ```
+
+## 11. Culling, Distance LOD & GPU Hi-Z Occlusion
+
+Models and instanced models support `cullingMode` (`'auto' | 'frustumOnly' | 'alwaysRender'`), `cullMargin`, half-open `distanceRange: [start, end)` (Euclidean distance, consistent across main and shadow passes), and `isOccluder` (marks opaque geometry that populates the GPU Reverse-Z Hi-Z depth pyramid). Cameras accept `cullCameraSlot` to render another camera's culled result.
 
 ## Best Practices
 

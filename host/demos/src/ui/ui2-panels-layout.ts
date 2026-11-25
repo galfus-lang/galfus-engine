@@ -24,10 +24,8 @@ import {
   type Panel,
   type ScrollPanel,
   type SplitGroup,
-  type SpritePanel,
   type UiRoot,
-  type UiSystem,
-  type UiText
+  type UiSystem
 } from '@galfus/ui';
 import { runDemoLoop } from '../common/loop';
 import { type HostDemoOptions, resolveDemoOptions } from '../common/options';

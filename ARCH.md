@@ -257,7 +257,7 @@ The high-level TypeScript engine layer builds on top of `@galfus/transport-*` wi
    - Static scenes generate **zero** ABI calls per frame.
    - Camera and emitter lifecycle is tracked with tombstones ensuring clean native teardown upon entity destruction.
 5. **Dynamic Multiverse Presentation**:
-   - Viewports belong to Invocations (not Targets) and support dynamic mutations via `invocation.update({ viewport })` preserving underlying realm and target bindings.
+   - Viewports belong to Invocations (not Targets) and support dynamic mutations via `runtime.multiverse.updateInvocation(invocationId, { viewport })` preserving underlying realm and target bindings.
 6. **Scoped Lifecycle Management**:
    - `realm.reset()`: Purges ECS entities and realm-owned assets while preserving the realm handle and reinstalling internal systems.
    - `realm.dispose()`: Terminal teardown of the realm, unregistering associated multiverse invocations.

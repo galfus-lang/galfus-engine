@@ -10,14 +10,15 @@ pub fn diagnostics_configure(env: Env, config_val: JsUnknown) -> Result<()> {
 }
 
 #[napi]
-pub fn diagnostics_set_tags(tags_mask: u32) -> Result<()> {
-    galfus_core::diagnostics::set_enabled_tags_mask(u64::from(tags_mask));
+pub fn diagnostics_set_tags(tags_mask: i64) -> Result<()> {
+    galfus_core::diagnostics::set_enabled_tags_mask(tags_mask as u64);
     Ok(())
 }
 
 #[napi]
-pub fn diagnostics_snapshot(env: Env, tags_mask: Option<u32>) -> Result<JsUnknown> {
-    let snapshot = crate::state::collect_diagnostics_snapshot(u64::from(tags_mask.unwrap_or(0)));
+pub fn diagnostics_snapshot(env: Env, tags_mask: Option<i64>) -> Result<JsUnknown> {
+    let mask = tags_mask.map(|v| v as u64).unwrap_or(0);
+    let snapshot = crate::state::collect_diagnostics_snapshot(mask);
     env.to_js_value(&snapshot)
 }
 

@@ -120,6 +120,10 @@ export class BunTransport implements GalfusTransport {
           this._callback?.(timing);
         } catch (err) {
           console.error('[BunTransport] Unhandled error during frame execution:', err);
+          if (err instanceof Error && err.message.includes('PlatformContext is not initialized')) {
+            this.stopLoop();
+            break;
+          }
         }
 
         if (!this._isRunning || this._loopGeneration !== currentGen || this._isDisposed) break;

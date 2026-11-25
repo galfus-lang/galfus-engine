@@ -2,7 +2,8 @@
 name: galfus-realm-2d
 description: >-
   Use this skill to build 2D scenes in Galfus Engine, including 2D orthographic cameras,
-  sprites, 2D dynamic lighting, materials, sprite sheets, layer masks, and 2D entity transforms.
+  sprites, chunked Tilemap2D with greedy colliders/shadows, 2D dynamic lighting, materials,
+  sprite sheets, culling/LOD, layer masks, and 2D entity transforms.
 ---
 
 # Galfus Engine 2D Realm (Realm2D)
@@ -39,17 +40,21 @@ const camera = realm2d.createCamera(
 Materials define tint colors and diffuse textures for sprites:
 
 ```typescript
-// Solid color material
+// Solid color material (returns numeric materialId directly)
 const greenMat = realm2d.createMaterial({
   baseColor: [0.2, 0.8, 0.4, 1.0]
-}).materialId;
+});
 
 // Textured material
-const textureId = runtime.resources.createTextureFromRgba(width, height, pixelData);
+const textureId = runtime.resources.createTexture(pixelData, {
+  width,
+  height,
+  format: 'rgba8UnormSrgb'
+});
 const texturedMat = realm2d.createMaterial({
   baseColor: [1.0, 1.0, 1.0, 1.0],
   textureId
-}).materialId;
+});
 ```
 
 ## 4. Creating Sprites
@@ -96,17 +101,20 @@ For pixel art, tilemaps, or animated character frames, use `SpriteSheet` to calc
 
 ```typescript
 const sheet = new SpriteSheet({
-  textureWidth: 256,
-  textureHeight: 256,
-  frameWidth: 32,
-  frameHeight: 32
+  textureId,
+  textureSize: [256, 256],
+  grid: {
+    columns: 8,
+    rows: 8,
+    frameSize: [32, 32]
+  }
 });
 
-const spriteModel = realm2d.world.getComponent<Model2DComponent>(playerSprite.entityId, 'Model2D');
+// playerSprite is an EntityId directly
+const spriteModel = realm2d.world.getComponent<Model2DComponent>(playerSprite, 'Model2D');
 
 // Switch to frame 4 (0-indexed)
-const uv = sheet.getFrameUv(4);
-spriteModel?.setUvOffset(uv.u, uv.v, uv.width, uv.height);
+sheet.applyToSprite(realm2d, playerSprite, 4);
 ```
 
 ## 7. Transforming 2D Entities in the Tick Loop
@@ -140,6 +148,50 @@ realm2d.createCamera(
 realm2d.createSprite({ dimensions: [2, 2], materialId: greenMat, layerMask: LAYER_WORLD });
 realm2d.createLight({ color: [1, 0.9, 0.7], intensity: 2, range: 10, layerMask: LAYER_WORLD });
 ```
+
+## 9. Chunked Tilemap2D (`createTilemap`)
+
+For large 2D tile worlds (`128×128+` tiles), use `realm2d.createTilemap(...)` with `32×32` dirty-cached chunks, per-chunk viewport/LOD culling, and optional greedy-merged Rapier 2D colliders & polar shadow occluders:
+
+```typescript
+import { packTileCells, TILE_FLAG } from '@galfus/engine';
+
+const tilemap = realm2d.createTilemap(
+  {
+    width: 128,
+    height: 128,
+    tileSize: [1.0, 1.0],
+    chunkSize: 32,
+    atlasColumns: 4,
+    atlasRows: 2,
+    atlasSizePx: [256, 128], // Half-texel UV inset prevents atlas seams
+    materialId: atlasMat,
+    castShadow: true,
+    receiveShadow: true,
+    generateColliders: true
+  },
+  { position: [0, 0] }
+);
+
+// Bulk region upload (packed 4-byte TileCell2D wire format)
+tilemap.setTiles(
+  0,
+  0,
+  2,
+  1,
+  packTileCells([
+    { tileId: 1, flags: 0 },
+    { tileId: 3, flags: TILE_FLAG.SOLID | TILE_FLAG.BLOCKS_LIGHT }
+  ])
+);
+
+// O(1) single-tile edit (rebuilds only the touched chunk)
+tilemap.setTile(10, 12, 3, TILE_FLAG.SOLID | TILE_FLAG.BLOCKS_LIGHT);
+```
+
+## 10. Culling, Zoom-Aware LOD & Debug Observer
+
+Sprites, shapes, and tilemaps support `cullingMode` (`'auto' | 'frustumOnly' | 'alwaysRender'`), `cullMargin`, and half-open `distanceRange: [start, end)` evaluated against `hypot(dx, dy, orthoScale)`. Cameras also accept `cullCameraSlot` to inspect another camera's culled view.
 
 ## Best Practices
 

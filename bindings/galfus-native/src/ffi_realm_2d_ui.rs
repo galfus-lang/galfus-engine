@@ -1,5 +1,3 @@
-#![allow(clippy::missing_safety_doc)]
-
 //! C-ABI exports for 2D UI models (`Model2DUI`).
 
 use std::ffi::{c_char, c_int};
@@ -140,6 +138,8 @@ fn get_text_geometry_json(realm_id: u32, ui_id: u32, element_id: u32, mode: u8) 
 }
 
 /// Creates or updates a 2D UI model with initial quads, texts, and transform.
+/// # Safety
+/// `ui_json` and `transform_json` (if non-null) must be valid null-terminated UTF-8 C strings.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_create_ui(
     realm_id: u32,
@@ -187,6 +187,8 @@ pub unsafe extern "C" fn galfus_realm_2d_create_ui(
 }
 
 /// Updates the visual content (quads and text batches) of an existing 2D UI model.
+/// # Safety
+/// `ui_json` must be a valid null-terminated UTF-8 C string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_ui_content(
     realm_id: u32,
@@ -225,6 +227,8 @@ pub unsafe extern "C" fn galfus_realm_2d_set_ui_content(
 }
 
 /// Applies an atomic batch of core-owned UI tree mutations.
+/// # Safety
+/// `commands_json` must be a valid null-terminated UTF-8 C string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_apply_ui_commands(
     realm_id: u32,
@@ -258,6 +262,8 @@ pub unsafe extern "C" fn galfus_realm_2d_apply_ui_commands(
 }
 
 /// Updates the spatial transform of an existing 2D UI model.
+/// # Safety
+/// `transform` must be a valid, non-null pointer to a `GalfusTransform2D`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_ui_transform(
     realm_id: u32,
@@ -288,6 +294,8 @@ pub unsafe extern "C" fn galfus_realm_2d_set_ui_transform(
 }
 
 /// Reads the transform of an existing 2D UI model.
+/// # Safety
+/// `out_transform` must be a valid, writable pointer to a `GalfusTransform2D`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_get_ui_transform(
     realm_id: u32,
@@ -340,6 +348,8 @@ pub extern "C" fn galfus_realm_2d_destroy_ui(realm_id: u32, ui_id: u32) -> c_int
 /// Registers raw TTF/OTF font binary data from memory (zero filesystem access).
 ///
 /// Returns the detected font family name on success, or null on failure.
+/// # Safety
+/// `data` must be valid for `data_len` readable bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_load_font_data(
     realm_id: u32,

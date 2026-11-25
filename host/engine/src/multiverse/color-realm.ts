@@ -10,7 +10,6 @@ export class ColorRealm implements RealmConnector {
   readonly realmKind: RealmKind = 'color';
   readonly realmId: RealmId;
   color: [number, number, number, number];
-  private _engine: GalfusEngine | null = null;
 
   constructor(realmId: RealmId | number, color: [number, number, number, number] = [0, 0, 0, 1]) {
     this.realmId = realmId as RealmId;
@@ -19,7 +18,6 @@ export class ColorRealm implements RealmConnector {
   }
 
   bindEngine(engine: GalfusEngine): void {
-    this._engine = engine;
     engine.multiverseRegisterColorRealm(
       this.realmId,
       this.color[0],
@@ -31,7 +29,5 @@ export class ColorRealm implements RealmConnector {
 
   sync(): void {}
 
-  dispose(): void {
-    this._engine = null;
-  }
+  dispose(): void {}
 }

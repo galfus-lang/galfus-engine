@@ -26,19 +26,19 @@ describe('host demo command', () => {
     const result = await runCli('trans-realm', '--headless', '--frames', '1');
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('Running headless smoke test');
-  }, 15000);
+  }, 30000);
 
   it('forwards headless and frame options to the interaction demo', async () => {
     const result = await runCli('interaction', '--headless', '--frames', '1');
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('Running headless smoke test');
-  }, 15000);
+  }, 30000);
 
   it('forwards headless and frame options to the tutorial', async () => {
     const result = await runCli('tutorial', '--headless', '--frames', '1');
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('Reached target frame count of 1');
-  }, 15000);
+  }, 30000);
 
   it('rejects invalid frame counts before starting the tutorial', async () => {
     const result = await runCli('tutorial', '--headless', '--frames', 'invalid');

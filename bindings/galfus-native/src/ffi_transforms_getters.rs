@@ -1,5 +1,4 @@
 //! Fixed-layout transform and state query functions for Galfus Engine.
-#![allow(clippy::missing_safety_doc)]
 
 use galfus_realm_2d::Realm2DContext;
 use galfus_realm_3d::Realm3DContext;
@@ -14,6 +13,8 @@ use crate::state::{with_context, with_multiverse, with_multiverse_mut};
 /// Sets or clears a camera look-at state from a fixed C-layout value.
 ///
 /// `look_at` is copied during this call. Set `enabled` to zero to clear the look-at state.
+/// # Safety
+/// `look_at` must be a valid, non-null pointer to a `GalfusCameraLookAt3D`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_3d_set_camera_look_at(
     realm_id: u32,
@@ -50,6 +51,8 @@ pub unsafe extern "C" fn galfus_realm_3d_set_camera_look_at(
 }
 
 /// Reads a camera look-at state into a host-owned fixed C-layout value.
+/// # Safety
+/// `out_look_at` must be a valid, writable pointer to a `GalfusCameraLookAt3D`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_3d_get_camera_look_at(
     realm_id: u32,
@@ -100,6 +103,8 @@ pub unsafe extern "C" fn galfus_realm_3d_get_camera_look_at(
 }
 
 /// Reads the transform of a 3D model into a caller-owned fixed-layout value.
+/// # Safety
+/// `out_transform` must be a valid, writable pointer to a `GalfusTransform3D`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_3d_get_model_transform(
     realm_id: u32,
@@ -130,6 +135,8 @@ pub unsafe extern "C" fn galfus_realm_3d_get_model_transform(
 }
 
 /// Reads the transform of a 3D camera into a caller-owned fixed-layout value.
+/// # Safety
+/// `out_transform` must be a valid, writable pointer to a `GalfusTransform3D`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_3d_get_camera_transform(
     realm_id: u32,
@@ -160,6 +167,8 @@ pub unsafe extern "C" fn galfus_realm_3d_get_camera_transform(
 }
 
 /// Reads the world-space bounding box (min, max) of a 3D model into two 3-float out buffers.
+/// # Safety
+/// `out_min` and `out_max` must each point to 3 writable `f32` elements.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_3d_get_model_aabb(
     realm_id: u32,
@@ -195,6 +204,8 @@ pub unsafe extern "C" fn galfus_realm_3d_get_model_aabb(
 }
 
 /// Reads the transform of a 2D sprite into a caller-owned fixed-layout value.
+/// # Safety
+/// `out_transform` must be a valid, writable pointer to a `GalfusTransform2D`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_get_sprite_transform(
     realm_id: u32,
@@ -225,6 +236,8 @@ pub unsafe extern "C" fn galfus_realm_2d_get_sprite_transform(
 }
 
 /// Reads the transform of a 2D camera into a caller-owned fixed-layout value.
+/// # Safety
+/// `out_transform` must be a valid, writable pointer to a `GalfusTransform2D`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_get_camera_transform(
     realm_id: u32,
@@ -255,6 +268,8 @@ pub unsafe extern "C" fn galfus_realm_2d_get_camera_transform(
 }
 
 /// Reads the resolved size (width, height) of a Multiverse Target.
+/// # Safety
+/// `out_width` and `out_height` must be valid, writable pointers to `u32`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_multiverse_get_target_size(
     target_id: u32,
@@ -284,6 +299,8 @@ pub unsafe extern "C" fn galfus_multiverse_get_target_size(
 }
 
 /// Reads the current inner size (width, height) of a Platform window.
+/// # Safety
+/// `out_width` and `out_height` must be valid, writable pointers to `u32`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_platform_get_window_size(
     window_id: u32,

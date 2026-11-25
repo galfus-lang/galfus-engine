@@ -335,6 +335,16 @@ pub fn multiverse_handle_pointer_event(event_json: String) -> Result<()> {
 }
 
 #[napi]
+pub fn multiverse_publish_interaction_frame(window_id: u32) -> Result<()> {
+    with_multiverse_mut(|mv| {
+        let _ = mv.resolve();
+        mv.publish_interaction_frame(&[window_id]);
+        Ok(())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
 pub fn multiverse_poll_interaction_events() -> Result<String> {
     let events = with_multiverse_mut(|mv| Ok(mv.poll_interaction_events()))
         .map_err(|e| Error::new(Status::GenericFailure, e))?;

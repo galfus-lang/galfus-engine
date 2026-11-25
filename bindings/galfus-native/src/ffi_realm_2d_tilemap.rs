@@ -1,5 +1,3 @@
-#![allow(clippy::missing_safety_doc)]
-
 use std::ffi::c_char;
 
 use galfus_realm_2d::Realm2DContext;
@@ -10,6 +8,8 @@ use crate::ffi_realm_2d_desc::parse_transform_2d;
 use crate::state::with_multiverse_mut;
 
 /// Creates or replaces a chunked `Tilemap2D` in the 2D Realm.
+/// # Safety
+/// `desc_json` and `transform_json` (if non-null) must be valid null-terminated UTF-8 C strings.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_create_tilemap(
     realm_id: u32,
@@ -81,6 +81,8 @@ pub extern "C" fn galfus_realm_2d_set_tilemap_tile(
 }
 
 /// Bulk-updates a rectangular region of cells in an existing `Tilemap2D` from packed 4-byte `TileCell2D` bytes.
+/// # Safety
+/// `data` must be valid for `data_len` readable bytes when `data_len > 0`.
 #[allow(clippy::too_many_arguments)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn galfus_realm_2d_set_tilemap_tiles(

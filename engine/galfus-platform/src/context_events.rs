@@ -329,3 +329,53 @@ impl<'a> ApplicationHandler for EventCollector<'a> {
         }
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn create_winit_window(
+    el: &mut winit::event_loop::EventLoop<()>,
+    attrs: winit::window::WindowAttributes,
+) -> crate::error::PlatformResult<winit::window::Window> {
+    use winit::platform::pump_events::EventLoopExtPumpEvents;
+    let mut creator = WindowCreator {
+        attrs: Some(attrs),
+        result: None,
+    };
+    let _status = el.pump_app_events(Some(std::time::Duration::ZERO), &mut creator);
+    creator
+        .result
+        .ok_or_else(|| {
+            crate::error::PlatformError::WindowCreationFailed(
+                "Event loop did not yield active window context".into(),
+            )
+        })?
+        .map_err(|e| crate::error::PlatformError::WindowCreationFailed(e.to_string()))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct WindowCreator {
+    pub attrs: Option<winit::window::WindowAttributes>,
+    pub result: Option<Result<winit::window::Window, winit::error::OsError>>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl ApplicationHandler for WindowCreator {
+    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        if let Some(a) = self.attrs.take() {
+            self.result = Some(event_loop.create_window(a));
+        }
+    }
+
+    fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        if let Some(a) = self.attrs.take() {
+            self.result = Some(event_loop.create_window(a));
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        _event_loop: &winit::event_loop::ActiveEventLoop,
+        _window_id: WinitWindowId,
+        _event: winit::event::WindowEvent,
+    ) {
+    }
+}

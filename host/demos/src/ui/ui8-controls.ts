@@ -13,8 +13,6 @@ import {
   type UiSystem,
   UiTextArea
 } from '@galfus/ui';
-
-const exact = (value: number) => ({ type: 'exact' as const, value });
 const full = { type: 'percent' as const, value: 100 };
 type ObjectName = 'Cube' | 'Sphere' | 'Blue cube';
 
