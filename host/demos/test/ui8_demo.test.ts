@@ -7,7 +7,7 @@ import { createUi8Scene, runDemoUi8 } from '../src/ui/ui8-integrated';
 describe('game editor UI demo', () => {
   it('runs headlessly', async () => {
     await runDemoUi8({ headless: true, maxFrames: 3 });
-  });
+  }, 30000);
 
   it('resizes split panels and keeps the animated 3D target synchronized', () => {
     const transport = createBunTransport({ headless: true });

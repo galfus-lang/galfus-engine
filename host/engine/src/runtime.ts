@@ -346,6 +346,7 @@ export class MultiverseRuntime {
    */
   dispose(): void {
     if (this._state === 'disposed') return;
+    let firstError: unknown;
     try {
       this.stop();
       this._state = 'disposing';
@@ -359,13 +360,25 @@ export class MultiverseRuntime {
       this.audio.dispose();
       this.resources.dispose();
       this.multiverse.dispose();
-      this.platform.dispose();
-      this.#transport.dispose();
-      this._state = 'disposed';
     } catch (err) {
-      this._state = 'failed';
-      throw err;
+      firstError = err;
+    } finally {
+      try {
+        this.platform.dispose();
+      } catch (err) {
+        firstError ??= err;
+      }
+      try {
+        this.#transport.dispose();
+      } catch (err) {
+        firstError ??= err;
+      }
     }
+    if (firstError !== undefined) {
+      this._state = 'failed';
+      throw firstError;
+    }
+    this._state = 'disposed';
   }
 
   // ---------------------------------------------------------------------------
