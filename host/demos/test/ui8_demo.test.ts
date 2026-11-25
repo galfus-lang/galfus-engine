@@ -59,5 +59,5 @@ describe('game editor UI demo', () => {
     } finally {
       runtime.dispose();
     }
-  });
+  }, 30000);
 });

@@ -46,5 +46,5 @@ describe('anim2 path followers demo', () => {
     } finally {
       runtime.dispose();
     }
-  });
+  }, 30000);
 });

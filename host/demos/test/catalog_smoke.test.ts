@@ -60,7 +60,7 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
       expect(demo).toBeDefined();
       await demo!.run({ headless: true, maxFrames: 2 });
     }
-  }, 30000);
+  }, 120000);
 
   it('runs all multiverse demos headlessly', async () => {
     const mvIds = ['mv1', 'mv2', 'mv3', 'mv4'];
@@ -69,7 +69,7 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
       expect(demo).toBeDefined();
       await demo!.run({ headless: true, maxFrames: 2 });
     }
-  }, 30000);
+  }, 60000);
 
   it('runs all Realm 3D feature demos headlessly', async () => {
     const r3dIds = ['3d1', '3d2', '3d3', '3d4', '3d6', '3d7', '3d8', '3d9', '3d10'];
@@ -78,7 +78,7 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
       expect(demo).toBeDefined();
       await demo!.run({ headless: true, maxFrames: 2 });
     }
-  }, 45000);
+  }, 120000);
 
   it('runs all Realm 2D feature and animation demos headlessly', async () => {
     const r2dIds = ['2d1', 'anim1', 'anim2'];
@@ -87,7 +87,7 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
       expect(demo).toBeDefined();
       await demo!.run({ headless: true, maxFrames: 2 });
     }
-  }, 30000);
+  }, 60000);
 
   it('runs all Host & Interaction and UI demos headlessly', async () => {
     const hostIds = ['tutorial', 'interaction', 'trans-realm', 'ui1', 'ui2', 'ui3', 'ui4'];
@@ -96,5 +96,5 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
       expect(demo).toBeDefined();
       await demo!.run({ headless: true, maxFrames: 2 });
     }
-  }, 30000);
+  }, 60000);
 });

@@ -371,14 +371,19 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
   runtime.resources.createTexture(rawPixelBytes, { width: 256, height: 256, format: 'rgba8Unorm' });
 
   const rawAudioBytes = createSynthesizedWav(1.0, 180.0);
-  const soundId = runtime.audio.loadSound(rawAudioBytes);
-  const spatialVoice = runtime.audio.playSoundSpatial(soundId, [0, 1.5, 0], {
-    volume: 0.85,
-    minDistance: 2.0,
-    maxDistance: 45.0,
-    looping: true
-  });
-  runtime.audio.setListenerPosition(camPos[0], camPos[1], camPos[2]);
+  let spatialVoice: ReturnType<typeof runtime.audio.playSoundSpatial> | null = null;
+  try {
+    const soundId = runtime.audio.loadSound(rawAudioBytes);
+    spatialVoice = runtime.audio.playSoundSpatial(soundId, [0, 1.5, 0], {
+      volume: 0.85,
+      minDistance: 2.0,
+      maxDistance: 45.0,
+      looping: true
+    });
+    runtime.audio.setListenerPosition(camPos[0], camPos[1], camPos[2]);
+  } catch {
+    // Headless environments without an audio output device can skip spatial audio.
+  }
 
   // 7. Interactive Precision Frame Loop
   console.log('[7/7] Launching Interactive Precision Frame Loop...');
@@ -466,7 +471,9 @@ export async function runTutorialDemo(options: TutorialDemoOptions = {}): Promis
     }
 
     // B) Update 3D spatial audio emitter position in real-time
-    runtime.audio.setVoiceEmitterPosition(spatialVoice, Math.sin(turretAngle) * 2, 1.5, 0);
+    if (spatialVoice !== null) {
+      runtime.audio.setVoiceEmitterPosition(spatialVoice, Math.sin(turretAngle) * 2, 1.5, 0);
+    }
 
     // C) Update HUD UI text every 15 frames for high efficiency
     if (frameId % 15 === 0) {

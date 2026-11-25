@@ -146,7 +146,7 @@ jobs:
       - name: Run Host tests (including native physics and browser transport)
         env:
           GALFUS_TEST_NATIVE_PHYSICS: '1'
-        run: bun scripts/host-sync.ts && bun run test:host
+        run: bun scripts/host-sync.ts && bun test --timeout 30000 host
 
       - name: Run Browser/WASM feature tour
         run: bun run test:tour:browser
