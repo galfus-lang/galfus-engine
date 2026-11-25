@@ -30,7 +30,7 @@ This example creates a window, initializes a 3D realm with a shaded cube, sets u
 
 ```typescript
 import { createBunTransport } from '@galfus/transport-bun';
-import { createRuntime } from '@galfus/engine';
+import { createRuntime, type Model3DComponent } from '@galfus/engine';
 
 // 1. Initialize transport and runtime
 const transport = createBunTransport({ targetFps: 60, headless: false });
@@ -38,7 +38,7 @@ const runtime = createRuntime(transport);
 const windowId = runtime.platform.window.create({ title: 'Galfus 3D Engine', size: [1280, 720] });
 
 // 2. Create 3D Realm and resources
-const realm3d = runtime.createRealm3D(1);
+const realm3d = runtime.createRealm3D();
 const { geometryId } = realm3d.createGeometry({ kind: 'cube', size: 1.0 });
 const { materialId } = realm3d.createMaterial({
   baseColor: [0.9, 0.4, 0.15, 1.0],
@@ -47,11 +47,11 @@ const { materialId } = realm3d.createMaterial({
 });
 
 // 3. Create Model entity
-const cubeEntity = realm3d.createModel({ geometryId, materialId }, { position: [0, 0, 0] });
+const cube = realm3d.createModel({ geometryId, materialId }, { position: [0, 0, 0] });
 
-// 4. Set up Camera and Light
+// 4. Set up Camera (fovY is in degrees) and Light
 const camera = realm3d.createCamera(
-  { fovY: Math.PI / 4, near: 0.1, far: 1000 },
+  { fovY: 45, near: 0.1, far: 1000, cameraSlot: 0 },
   { position: [0, 3, 6] }
 );
 realm3d.setCameraLookAt(camera, { target: [0, 0, 0], up: [0, 1, 0] });
@@ -69,15 +69,16 @@ const targetId = runtime.multiverse.createTarget({
 runtime.multiverse.createInvocation({
   realmId: realm3d.realmId,
   targetId,
+  cameraSlot: 0,
   viewport: { width: { vw: 100 }, height: { vh: 100 } }
 });
 
 // 6. Update entity transforms and run loop
+let angle = 0;
 runtime.on('tick', ({ dt }) => {
-  const comp = realm3d.world.getComponent(cubeEntity, 'Model3D');
-  if (comp) {
-    comp.transform.rotation[1] += dt * 0.8;
-  }
+  angle += dt * 0.8;
+  const comp = realm3d.world.getComponent<Model3DComponent>(cube.entityId, 'Model3D');
+  comp?.setRotation(0, Math.sin(angle * 0.5), 0, Math.cos(angle * 0.5));
 });
 
 runtime.start();
@@ -93,7 +94,12 @@ const transport = createBunTransport({ targetFps: 60, headless: false });
 const runtime = createRuntime(transport);
 const windowId = runtime.platform.window.create({ title: 'Galfus 2D Scene', size: [800, 600] });
 
-const realm2d = runtime.createRealm2D(1);
+const realm2d = runtime.createRealm2D();
+realm2d.createCamera(
+  { orthoScale: 15, near: -100, far: 100, cameraSlot: 0, active: true },
+  { position: [0, 0] }
+);
+
 const matFloor = realm2d.createMaterial({
   surfaceType: 'opaque',
   baseColor: [0.15, 0.18, 0.25, 1.0]
@@ -108,7 +114,7 @@ realm2d.createSprite(
   { dimensions: [20, 15], materialId: matFloor },
   { position: [0, 0], zLayer: -1 }
 );
-const player = realm2d.createShape(
+realm2d.createShape(
   { kind: 'circle', radius: 0.8, segments: 32, materialId: matPlayer },
   { position: [0, 0], zLayer: 0 }
 );
@@ -117,6 +123,7 @@ const targetId = runtime.multiverse.createTarget({ kind: { type: 'window', windo
 runtime.multiverse.createInvocation({
   realmId: realm2d.realmId,
   targetId,
+  cameraSlot: 0,
   viewport: { width: { vw: 100 }, height: { vh: 100 } }
 });
 
@@ -209,7 +216,7 @@ The engine provides two loop hooks:
 4. **Dynamic Multiverse Invocations**:
    - Targets represent render surfaces (windows or offscreen textures).
    - Invocations compose Realms onto Targets via responsive viewports.
-   - Mutate viewports seamlessly without rebinding via `invocation.update({ viewport: ... })`.
+   - Mutate viewports seamlessly without rebinding via `runtime.multiverse.updateInvocation(invocationId, { viewport: ... })`.
 
 5. **Deterministic Lifecycle**:
    - `realm.reset()`: Resets the ECS world, entities, and realm-owned assets, keeping the realm registered.

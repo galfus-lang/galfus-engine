@@ -26,8 +26,8 @@ An application owns its lifecycle and decides when to process events, update its
   - **3D Surface Effects**: `fn surface_effect(in: SurfaceInput) -> SurfaceOutput` (PBR material customization)
   - **2D Surface Effects**: `fn surface_effect(in: SurfaceInput2D) -> SurfaceOutput2D` (2D sprite shaders)
 - **Built-in Realms:**
-  - **Realm 3D**: Forward+ PBR, Reverse-Z depth, directional/point/spot lights, shadows, SSAO, particles, portals/mirrors, skeleton animation, and world AABB queries.
-  - **Realm 2D**: Instanced batched sprites, vector shapes, normal mapping, 2D penumbra shadow cones, and 2D particle systems.
+  - **Realm 3D**: Forward+ PBR, Reverse-Z depth pre-pass & Early-Z, GPU Reverse-Z Hi-Z occlusion culling, declarative distance LOD, Parallax Occlusion Mapping (POM), directional/point/spot lights, shadows, SSAO, bloom, morph targets, core-owned IK & skeletal skinning, Forward PBR decals/occluded projectors, UV-space decal baking, particles, portals/mirrors, and world AABB queries.
+  - **Realm 2D**: Instanced batched sprites, chunked `Tilemap2D` with greedy-merged Rapier 2D colliders & shadow occluders, Reverse-Z `Depth32Float` Early-Z, `SpatialGrid2D` viewport/LOD/occlusion culling, vector shapes, normal mapping, 2D polar soft shadows, core-backed UI, and 2D particle systems.
 - **Realm Lifecycle Contract:** Full support for `realmClear(realmId)` (entity flush without unregistering) and `realmDestroy(realmId)` (full GPU resource reclamation and Multiverse unregistration).
 - **Flat Platform Events:** Polled events are exposed as flat discriminated unions tagged with `{ kind: "window" | "pointer" | "keyboard" | "gamepad", type: ... }`, eliminating host callback deadlocks.
 
@@ -128,8 +128,8 @@ cargo build -p galfus-native
 # Run the complete workspace test suite
 cargo test --workspace
 
-# Workspace checks (Bun syntax check, Cargo check, and Clippy)
-bun run check
+# Full workspace validation (formatting, file-length policy, TypeScript, Cargo check, native & WASM Clippy)
+bun run validate
 
 # Comprehensive C-ABI / Bun FFI test suite
 bun run test:ffi
@@ -141,14 +141,17 @@ bun run test:ffi
 # Launch interactive demo launcher
 bun demo
 
-# Or run directly via host package script
-bun host:demo
+# Run a specific demo by ID (e.g. 3d15 POM or 2d4 Tilemap2D)
+bun demo 3d15
+bun demo 2d4
 ```
 
 ---
 
 ## Documentation
 
+- [docs/host-tutorial.md](docs/host-tutorial.md) — High-level TypeScript host architecture & tutorial (`@galfus/engine`).
+- [host/engine/README.md](host/engine/README.md) — `@galfus/engine` quick starts and API guide.
 - [ARCH.md](ARCH.md) — Comprehensive architectural specification and proof of implementation.
 - [docs/shader-effects/README.md](docs/shader-effects/README.md) — Shader Effects architecture and contracts.
 - [docs/shader-effects/screen-effects.md](docs/shader-effects/screen-effects.md) — Screen post-processing tutorial.

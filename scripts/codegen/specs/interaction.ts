@@ -219,6 +219,19 @@ export const interactionFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_multiverse_publish_interaction_frame',
+    methodName: 'multiversePublishInteractionFrame',
+    doc: 'Publishes a presented frame snapshot for the given window so interaction picking can resolve hits.',
+    params: [
+      {
+        name: 'windowId',
+        type: 'u32',
+        doc: 'Logical ID of the presented window'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_multiverse_poll_interaction_events',
     methodName: 'multiversePollInteractionEvents',
     doc: 'Drains all pending interaction events emitted toward logical models.',

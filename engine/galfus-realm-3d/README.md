@@ -12,11 +12,15 @@ Full-featured 3D graphics realm implementing the `galfus-realm-core` contract, f
 
 ## Capabilities & Powers
 
-- **Physically Based Rendering (PBR) Engine**:
-  - Full implementation of the Cook-Torrance specular microfacet model (GGX distribution, Smith geometry shadowing, and Schlick Fresnel).
+- **Physically Based Rendering (PBR) Forward+ Pipeline**:
+  - Metallic-roughness forward shading with Blinn-Phong specular highlights, dielectric F0 / metallic reflectance blending, normal mapping (with automatic primitive tangents), and **Steep Parallax Occlusion Mapping (POM)** (`height_texture_id` + `parallax_scale`, uniform-safe `textureSampleGrad`, and distance fade).
   - Evaluates directional, point, and spot lights with smooth distance attenuation and shadow evaluation.
-- **GPU Skeletal Mesh Skinning**:
-  - Evaluates bone matrix palettes in vertex shaders, animating skinned characters with up to 128 joints.
+- **Culling, LOD & GPU Reverse-Z Hi-Z Occlusion**:
+  - Unbiased Reverse-Z Depth Pre-Pass (`fs_opaque` discard-free), 6-plane frustum culling with `cullMargin`, half-open `distanceRange` LOD bands, GPU `R32Float` Hi-Z pyramid + compute `DrawIndexedIndirect` occlusion culling, and `cullCameraSlot` debug observer support.
+- **Core-Owned IK, Morph Targets & GPU Skeletal Skinning**:
+  - Evaluates morph targets and 8-joint skeletal skinning palettes in vertex shaders, paired with native `twoBone`, `fabrik`, and `lookAt` IK solvers.
+- **Forward PBR Decals, Occluded Projectors & UV-Space Baking**:
+  - Evaluates orthographic decals and perspective depth-occluded texture projectors before lighting, plus one-shot GPU UV-space decal baking (`bakeUvDecal`) for tattoos and permanent surface stamps.
 - **Omnidirectional Point Light Shadows**:
   - Generates 6-face cube shadow depth maps with hardware depth testing and Percentage-Closer Filtering (PCF).
 - **Screen-Space Ambient Occlusion (SSAO)**:
@@ -28,7 +32,7 @@ Full-featured 3D graphics realm implementing the `galfus-realm-core` contract, f
 - **Interactive Transform Gizmos**:
   - Axis-colored translation arrows, rotation rings, and scale handles rendered with custom depth bias for host manipulation.
 - **Custom WGSL 3D Surface Effects**:
-  - Injects user-defined procedural vertex and fragment modifications (`fn surface_effect(in: SurfaceInput3D) -> SurfaceOutput3D`).
+  - Injects user-defined procedural fragment modifications (`fn surface_effect(in: SurfaceInput) -> SurfaceOutput`).
 - **Decoupled Spatial Nodes (`Model3D`) & Renderables (`Mesh3D`)**:
   - Spatial nodes maintain world transforms independently of visual meshes, enabling pure anchor nodes and bone hierarchies without dummy geometry.
   - Assets (geometries and materials) are retained independently, surviving mesh or model destruction.

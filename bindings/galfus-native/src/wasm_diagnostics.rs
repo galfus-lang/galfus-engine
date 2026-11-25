@@ -10,15 +10,16 @@ pub fn diagnostics_configure(config_val: JsUnknown) -> Result<()> {
 }
 
 #[wasm_bindgen(js_name = "diagnosticsSetTags")]
-pub fn diagnostics_set_tags(tags_mask: u32) -> Result<()> {
-    galfus_core::diagnostics::set_enabled_tags_mask(u64::from(tags_mask));
+pub fn diagnostics_set_tags(tags_mask: f64) -> Result<()> {
+    galfus_core::diagnostics::set_enabled_tags_mask(tags_mask as u64);
     Ok(())
 }
 
 #[wasm_bindgen(js_name = "diagnosticsSnapshot")]
-pub fn diagnostics_snapshot(tags_mask: Option<u32>) -> Result<JsUnknown> {
+pub fn diagnostics_snapshot(tags_mask: Option<f64>) -> Result<JsUnknown> {
     let env = Env;
-    let snapshot = crate::state::collect_diagnostics_snapshot(u64::from(tags_mask.unwrap_or(0)));
+    let mask = tags_mask.map(|v| v as u64).unwrap_or(0);
+    let snapshot = crate::state::collect_diagnostics_snapshot(mask);
     env.to_js_value(&snapshot)
 }
 

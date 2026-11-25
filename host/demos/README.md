@@ -42,5 +42,5 @@ press Escape to close the top layer or exit when no layer is open. `ui5` exercis
 2. **User Interface (`ui1` .. `ui8`)**
 3. **Physics & Anchors (`anchor1`, `phys3d1` .. `phys3d4`, `phys2d1` .. `phys2d4`)**
 4. **Multiverse (`mv1`, `mv2`, `mv3`, `mv4`)**
-5. **Realm 3D (`3d1` .. `3d11`)**
-6. **Realm 2D & Animation (`2d1`, `2d2`, `anim1`, `anim2`)**
+5. **Realm 3D (`3d1` .. `3d15`)**
+6. **Realm 2D & Animation (`2d1` .. `2d4`, `anim1`, `anim2`)**

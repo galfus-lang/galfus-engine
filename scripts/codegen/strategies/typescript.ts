@@ -247,14 +247,18 @@ export class TypeScriptStrategy implements CodegenStrategy {
     }
 
     lines.push('  /** Reads the resolved physical size [width, height] of a Multiverse Target. */');
-    lines.push('  multiverseGetTargetSize?(targetId: number): [number, number];');
+    lines.push('  multiverseGetTargetSize(targetId: number): [number, number];');
     lines.push('  /** Reads the inner physical size [width, height] of a Platform window. */');
-    lines.push('  platformGetWindowSize?(windowId: number): [number, number];');
+    lines.push('  platformGetWindowSize(windowId: number): [number, number];');
+    lines.push(
+      '  /** Reads the inner physical size [width, height] of a Platform window (alias for platformGetWindowSize). */'
+    );
+    lines.push('  windowGetSize(windowId: number): [number, number];');
     lines.push(
       '  /** Reads the world-space bounding box { min: [x,y,z], max: [x,y,z] } of a 3D model. */'
     );
     lines.push(
-      '  realm3dGetModelAabb?(realmId: number, modelId: number): { min: [number, number, number]; max: [number, number, number] };'
+      '  realm3dGetModelAabb(realmId: number, modelId: number): { min: [number, number, number]; max: [number, number, number] };'
     );
 
     lines.push('}', '');
