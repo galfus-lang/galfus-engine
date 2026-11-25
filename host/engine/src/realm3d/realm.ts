@@ -331,7 +331,6 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
 
   destroyMaterial(materialId: number): void {
     this._materials.delete(materialId);
-    this._engine?.realm3dDestroyMaterial(this.realmId, materialId);
   }
 
   createGeometry(data: GeometryData | Primitive3DKind): { geometryId: number } {
@@ -344,7 +343,6 @@ export class Realm3D implements RealmConnector, Realm3DResourceProvider {
 
   destroyGeometry(geometryId: number): void {
     this._geometries.delete(geometryId);
-    this._engine?.realm3dDestroyGeometry(this.realmId, geometryId);
   }
 
   // Fluent Entity Spawning Helpers

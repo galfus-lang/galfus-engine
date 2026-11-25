@@ -11,6 +11,7 @@ pub mod particle;
 pub mod shadow;
 pub mod shape;
 pub mod sprite;
+pub mod tilemap;
 pub mod transform;
 pub mod ui;
 
@@ -23,5 +24,9 @@ pub use particle::{
 pub use shadow::{Occluder2D, OccluderEdge2D, OccluderSilhouette2D, Shadow2DConfig};
 pub use shape::{Shape2D, ShapeKind2D};
 pub use sprite::Sprite2D;
+pub use tilemap::{
+    MAX_TILEMAP_TILES, TILE_FLAG_BLOCKS_LIGHT, TILE_FLAG_FLIP_X, TILE_FLAG_FLIP_Y,
+    TILE_FLAG_ROT_90, TILE_FLAG_SOLID, TileCell2D, Tilemap2D,
+};
 pub use transform::Transform2D;
 pub use ui::{Model2DUI, UiQuad2D, UiText2D};

@@ -94,6 +94,10 @@ impl Realm2DContext {
                 });
             }
         }
+
+        let mut tilemap_occluders = Vec::new();
+        self.append_tilemap_shadow_occluders(&mut tilemap_occluders);
+        self.shadow_data.occluders.extend(tilemap_occluders);
     }
 }
 

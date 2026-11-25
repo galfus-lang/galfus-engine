@@ -9,6 +9,7 @@ export * from './sprite-animation';
 export * from './sprite-sheet';
 export * from './sync';
 export * from './text-geometry';
+export * from './tilemap';
 export * from './utils/index';
 export * as utils2D from './utils/index';
 

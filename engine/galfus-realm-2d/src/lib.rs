@@ -13,6 +13,7 @@ mod context_diagnostics;
 pub mod context_hierarchy;
 pub mod context_physics;
 mod context_shadows;
+mod context_tilemap;
 pub mod context_ui;
 mod context_ui_resources;
 mod culling;
@@ -23,6 +24,8 @@ pub mod shader;
 pub mod shadow;
 mod spatial_grid;
 pub mod surface_effect;
+pub mod tilemap;
+mod tilemap_meshing;
 pub mod types;
 mod ui_borders;
 mod ui_clip;
@@ -68,6 +71,8 @@ mod ui_tests;
 
 #[cfg(test)]
 mod sprite_uv_tests;
+#[cfg(test)]
+mod tilemap_tests;
 #[cfg(test)]
 mod ui_emoji_gpu_tests;
 

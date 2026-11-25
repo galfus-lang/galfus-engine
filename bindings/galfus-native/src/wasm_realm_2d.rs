@@ -299,3 +299,74 @@ pub fn realm_2d_destroy_ui(realm_id: u32, ui_id: u32) -> Result<()> {
         realm_id, ui_id,
     ))
 }
+
+#[wasm_bindgen(js_name = "realm2dCreateTilemap")]
+pub fn realm_2d_create_tilemap(
+    realm_id: u32,
+    tilemap_id: u32,
+    desc_val: JsUnknown,
+    transform_val: Option<JsUnknown>,
+) -> Result<()> {
+    let env = Env;
+    let c_desc = js_to_c_string(&env, Some(desc_val))?
+        .ok_or_else(|| Error::from_reason(Status::InvalidArg, "desc cannot be null"))?;
+    let c_tf = js_to_c_string(&env, transform_val)?;
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_tilemap::galfus_realm_2d_create_tilemap(
+            realm_id,
+            tilemap_id,
+            c_desc.as_ptr(),
+            c_tf.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        )
+    })
+}
+
+#[wasm_bindgen(js_name = "realm2dSetTilemapTile")]
+pub fn realm_2d_set_tilemap_tile(
+    realm_id: u32,
+    tilemap_id: u32,
+    x: u32,
+    y: u32,
+    tile_id: u32,
+    flags: u32,
+) -> Result<()> {
+    check_ffi_res(
+        crate::ffi_realm_2d_tilemap::galfus_realm_2d_set_tilemap_tile(
+            realm_id, tilemap_id, x, y, tile_id, flags,
+        ),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[wasm_bindgen(js_name = "realm2dSetTilemapTiles")]
+pub fn realm_2d_set_tilemap_tiles(
+    realm_id: u32,
+    tilemap_id: u32,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    data: Uint8Array,
+    _data_len: Option<f64>,
+) -> Result<()> {
+    let bytes: &[u8] = data.as_ref();
+    check_ffi_res(unsafe {
+        crate::ffi_realm_2d_tilemap::galfus_realm_2d_set_tilemap_tiles(
+            realm_id,
+            tilemap_id,
+            x,
+            y,
+            width,
+            height,
+            bytes.as_ptr(),
+            bytes.len() as u64,
+        )
+    })
+}
+
+#[wasm_bindgen(js_name = "realm2dDestroyTilemap")]
+pub fn realm_2d_destroy_tilemap(realm_id: u32, tilemap_id: u32) -> Result<()> {
+    check_ffi_res(
+        crate::ffi_realm_2d_tilemap::galfus_realm_2d_destroy_tilemap(realm_id, tilemap_id),
+    )
+}

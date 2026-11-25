@@ -47,6 +47,7 @@ struct MaterialUniform {
     pbr_params: vec4<f32>,
     flags: vec4<u32>,
     refraction_params: vec4<f32>,
+    parallax_params: vec4<f32>,
     custom_v0: vec4<f32>,
     custom_v1: vec4<f32>,
     custom_v2: vec4<f32>,
@@ -93,6 +94,21 @@ fn sample_texture_with_sampler(tex: texture_2d<f32>, uv: vec2<f32>, sampler_idx:
         case 2u: { return textureSample(tex, sampler_nearest_repeat, uv); }
         case 3u: { return textureSample(tex, sampler_nearest_clamp, uv); }
         default: { return textureSample(tex, sampler_linear_repeat, uv); }
+    }
+}
+
+fn sample_texture_grad_with_sampler(
+    tex: texture_2d<f32>,
+    uv: vec2<f32>,
+    ddx: vec2<f32>,
+    ddy: vec2<f32>,
+    sampler_idx: u32,
+) -> vec4<f32> {
+    switch (sampler_idx) {
+        case 1u: { return textureSampleGrad(tex, sampler_linear_clamp, uv, ddx, ddy); }
+        case 2u: { return textureSampleGrad(tex, sampler_nearest_repeat, uv, ddx, ddy); }
+        case 3u: { return textureSampleGrad(tex, sampler_nearest_clamp, uv, ddx, ddy); }
+        default: { return textureSampleGrad(tex, sampler_linear_repeat, uv, ddx, ddy); }
     }
 }
 
@@ -461,34 +477,155 @@ struct SurfaceEval {
     s_out: SurfaceOutput,
     view_dir: vec3<f32>,
     tex_ao: f32,
+    parallax_clipped: bool,
 };
 
+fn build_tangent_basis(
+    world_pos: vec3<f32>,
+    world_normal: vec3<f32>,
+    world_tangent: vec4<f32>,
+    uv: vec2<f32>,
+) -> mat3x3<f32> {
+    if (dot(world_tangent.xyz, world_tangent.xyz) > 1e-6) {
+        let ortho_t = world_tangent.xyz - world_normal * dot(world_normal, world_tangent.xyz);
+        if (dot(ortho_t, ortho_t) > 1e-6) {
+            let tangent = normalize(ortho_t);
+            let handedness = select(1.0, world_tangent.w, abs(world_tangent.w) > 0.5);
+            let bitangent = normalize(cross(world_normal, tangent)) * handedness;
+            return mat3x3<f32>(tangent, bitangent, world_normal);
+        }
+    }
+    let dp1 = dpdx(world_pos);
+    let dp2 = dpdy(world_pos);
+    let duv1 = dpdx(uv);
+    let duv2 = dpdy(uv);
+    let det = duv1.x * duv2.y - duv1.y * duv2.x;
+    if (abs(det) > 1e-8) {
+        let inv_det = 1.0 / det;
+        let raw_t = (dp1 * duv2.y - dp2 * duv1.y) * inv_det;
+        let raw_b = (dp2 * duv1.x - dp1 * duv2.x) * inv_det;
+        let ortho_t = raw_t - world_normal * dot(world_normal, raw_t);
+        if (dot(ortho_t, ortho_t) > 1e-8) {
+            let tangent = normalize(ortho_t);
+            let bitangent_ref = cross(world_normal, tangent);
+            let handedness = select(-1.0, 1.0, dot(bitangent_ref, raw_b) >= 0.0);
+            return mat3x3<f32>(tangent, normalize(bitangent_ref) * handedness, world_normal);
+        }
+    }
+    let up = select(vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), abs(world_normal.y) > 0.99);
+    let fallback_t = normalize(cross(up, world_normal));
+    let fallback_b = cross(world_normal, fallback_t);
+    return mat3x3<f32>(fallback_t, fallback_b, world_normal);
+}
+
+fn compute_parallax_uv(base_uv: vec2<f32>, view_dir_ts: vec3<f32>, dist: f32) -> vec2<f32> {
+    let ddx = dpdx(base_uv);
+    let ddy = dpdy(base_uv);
+    let base_scale = material.parallax_params.x;
+    let fade_dist = material.parallax_params.w;
+    var effective_scale = base_scale;
+    if (fade_dist > 0.0) {
+        effective_scale = base_scale * (1.0 - smoothstep(fade_dist * 0.6, fade_dist, dist));
+    }
+    if (effective_scale <= 1e-5) {
+        return base_uv;
+    }
+
+    let min_layers = max(material.parallax_params.y, 1.0);
+    let max_layers = max(material.parallax_params.z, min_layers);
+    let ndotv = abs(view_dir_ts.z);
+    let num_layers = round(mix(max_layers, min_layers, clamp(ndotv, 0.0, 1.0)));
+    let layer_depth = 1.0 / max(num_layers, 1.0);
+    let sampler_idx = material_sampler_index(5u);
+
+    let p = (view_dir_ts.xy / max(ndotv, 0.15)) * effective_scale;
+    let delta_uv = p / max(num_layers, 1.0);
+
+    var current_uv = base_uv;
+    var current_layer_depth = 0.0;
+    var current_depth_map = 1.0 - sample_texture_grad_with_sampler(mat_tex_5, current_uv, ddx, ddy, sampler_idx).r;
+
+    let max_steps = u32(num_layers);
+    for (var step = 0u; step < max_steps; step = step + 1u) {
+        if (current_layer_depth >= current_depth_map) {
+            break;
+        }
+        current_uv = current_uv - delta_uv;
+        current_depth_map = 1.0 - sample_texture_grad_with_sampler(mat_tex_5, current_uv, ddx, ddy, sampler_idx).r;
+        current_layer_depth = current_layer_depth + layer_depth;
+    }
+
+    let prev_uv = current_uv + delta_uv;
+    let after_depth = current_depth_map - current_layer_depth;
+    let before_depth = (1.0 - sample_texture_grad_with_sampler(mat_tex_5, prev_uv, ddx, ddy, sampler_idx).r) - (current_layer_depth - layer_depth);
+    let denom = after_depth - before_depth;
+    let weight = select(0.0, clamp(after_depth / denom, 0.0, 1.0), abs(denom) > 1e-6);
+    return prev_uv * weight + current_uv * (1.0 - weight);
+}
+
 fn evaluate_surface(in: VertexOutput, front_facing: bool) -> SurfaceEval {
-    let tex_albedo = sample_material_texture(0u, in.uv0, in.uv1);
-    let tex_mr = sample_material_texture(2u, in.uv0, in.uv1);
-    let tex_ao = sample_material_texture(3u, in.uv0, in.uv1);
-    let tex_emissive = sample_material_texture(4u, in.uv0, in.uv1);
+    let face_direction = select(-1.0, 1.0, front_facing);
+    var world_normal = normalize(in.world_normal) * face_direction;
+    let to_camera = camera.position.xyz - in.world_pos;
+    let cam_dist = length(to_camera);
+    let view_dir = select(vec3<f32>(0.0, 0.0, 1.0), to_camera / cam_dist, cam_dist > 1e-6);
+
+    let has_normal_map = (material.flags.x & (1u << 5u)) != 0u;
+    let has_parallax = (material.flags.x & (1u << 10u)) != 0u;
+
+    var uv0 = in.uv0;
+    var uv1 = in.uv1;
+    var parallax_clipped = false;
+    var tbn = mat3x3<f32>(
+        vec3<f32>(1.0, 0.0, 0.0),
+        vec3<f32>(0.0, 1.0, 0.0),
+        world_normal,
+    );
+    if (has_normal_map || has_parallax) {
+        let basis_uv = select(in.uv0, material_texture_uv(5u, in.uv0, in.uv1), has_parallax);
+        tbn = build_tangent_basis(in.world_pos, world_normal, in.world_tangent, basis_uv);
+    }
+
+    if (has_parallax) {
+        let height_uv = material_texture_uv(5u, in.uv0, in.uv1);
+        let view_dir_ts = normalize(vec3<f32>(
+            dot(view_dir, tbn[0]),
+            dot(view_dir, tbn[1]),
+            dot(view_dir, tbn[2]),
+        ));
+        let displaced_height_uv = compute_parallax_uv(height_uv, view_dir_ts, cam_dist);
+        let uv_offset = displaced_height_uv - height_uv;
+        uv0 = in.uv0 + uv_offset;
+        uv1 = in.uv1 + uv_offset;
+        if ((material.flags.x & (1u << 11u)) != 0u) {
+            parallax_clipped = displaced_height_uv.x < 0.0
+                || displaced_height_uv.x > 1.0
+                || displaced_height_uv.y < 0.0
+                || displaced_height_uv.y > 1.0;
+        }
+    }
+
+    let tex_albedo = sample_material_texture(0u, uv0, uv1);
+    let tex_mr = sample_material_texture(2u, uv0, uv1);
+    let tex_ao = sample_material_texture(3u, uv0, uv1);
+    let tex_emissive = sample_material_texture(4u, uv0, uv1);
 
     var s_in: SurfaceInput;
     s_in.world_pos = in.world_pos;
-    let face_direction = select(-1.0, 1.0, front_facing);
-    var world_normal = normalize(in.world_normal) * face_direction;
-    if ((material.flags.x & (1u << 5u)) != 0u) {
-        let sampled_normal = sample_material_texture(1u, in.uv0, in.uv1).xyz * 2.0 - vec3<f32>(1.0);
-        let tangent = normalize(in.world_tangent.xyz - world_normal * dot(world_normal, in.world_tangent.xyz));
-        let bitangent = normalize(cross(world_normal, tangent)) * in.world_tangent.w;
+    if (has_normal_map) {
+        let sampled_normal = sample_material_texture(1u, uv0, uv1).xyz * 2.0 - vec3<f32>(1.0);
         let tangent_normal = vec3<f32>(
             sampled_normal.x * material.refraction_params.z,
             sampled_normal.y * material.refraction_params.z,
             sampled_normal.z,
         );
-        world_normal = normalize(mat3x3<f32>(tangent, bitangent, world_normal) * tangent_normal);
+        world_normal = normalize(tbn * tangent_normal);
     }
 
     s_in.world_normal = world_normal;
-    s_in.view_dir = normalize(camera.position.xyz - in.world_pos);
-    s_in.uv = in.uv0;
-    s_in.uv1 = in.uv1;
+    s_in.view_dir = view_dir;
+    s_in.uv = uv0;
+    s_in.uv1 = uv1;
     s_in.vertex_color = in.vertex_color;
     s_in.albedo = material.base_color * tex_albedo * in.vertex_color * in.instance_color;
     s_in.emissive = material.emissive_color.rgb + tex_emissive.rgb + in.instance_emissive.rgb * in.instance_emissive.w;
@@ -509,6 +646,7 @@ fn evaluate_surface(in: VertexOutput, front_facing: bool) -> SurfaceEval {
     eval.s_out = surface_effect(s_in);
     eval.view_dir = s_in.view_dir;
     eval.tex_ao = tex_ao.r;
+    eval.parallax_clipped = parallax_clipped;
     return eval;
 }
 
@@ -762,7 +900,7 @@ fn fs_main(in: VertexOutput, @builtin(front_facing) front_facing: bool) -> @loca
     let eval = evaluate_surface(in, front_facing);
     let s_out = eval.s_out;
     let surface_type = material.flags.x & 7u;
-    if (surface_type == 2u && s_out.albedo.a < material.pbr_params.w) {
+    if ((surface_type == 2u && s_out.albedo.a < material.pbr_params.w) || eval.parallax_clipped) {
         discard;
     }
     return shade_evaluated_surface(in, eval);
