@@ -54,62 +54,120 @@ function formatCatalogTable(categoryFilter?: string): string {
   return lines.join('\n');
 }
 
-async function runInteractiveBrowser(initialCategory?: string): Promise<DemoDescriptor | null> {
+const BACK_OPTION = '__back__';
+const EXIT_OPTION = '__exit__';
+const FUZZY_OPTION = '__fuzzy__';
+
+async function runDemoInSubprocess(demo: DemoDescriptor, opts: CliOptions): Promise<number> {
+  const args = [process.execPath, import.meta.path, demo.id];
+  if (opts.headless) args.push('--headless');
+  if (opts.frames !== undefined) args.push('--frames', opts.frames);
+  if (opts.font !== undefined) args.push('--font', opts.font);
+
+  const onSigInt = () => {
+    // Let the child demo process handle Ctrl+C without killing the interactive menu.
+  };
+  process.on('SIGINT', onSigInt);
+
+  try {
+    const proc = Bun.spawn(args, {
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+      env: { ...process.env, GALFUS_DEMO_CHILD: '1' }
+    });
+    return await proc.exited;
+  } finally {
+    process.off('SIGINT', onSigInt);
+  }
+}
+
+async function runInteractiveLoop(opts: CliOptions): Promise<void> {
   intro('Galfus Engine - Interactive Demo Catalog');
 
-  let selectedCategory = initialCategory;
-  if (!selectedCategory) {
-    const modeChoice = await select({
-      message: `How would you like to browse the ${DEMO_CATALOG.length} Galfus Engine demos?`,
+  let selectedCategory: string | undefined = opts.category;
+  let browseMode: 'menu' | 'list' = selectedCategory ? 'list' : 'menu';
+
+  while (true) {
+    if (browseMode === 'menu') {
+      const modeChoice = await select({
+        message: `How would you like to browse the ${DEMO_CATALOG.length} Galfus Engine demos?`,
+        options: [
+          {
+            value: FUZZY_OPTION,
+            label: 'Fuzzy Search All Demos',
+            hint: 'Type keywords, IDs, or tags (e.g. particles, physics, ui, portal)'
+          },
+          ...DEMO_CATEGORIES.map((cat) => ({
+            value: cat,
+            label: cat,
+            hint: `${DEMO_CATALOG.filter((d) => d.category === cat).length} demos`
+          })),
+          {
+            value: EXIT_OPTION,
+            label: 'Exit',
+            hint: 'Close the demo catalog'
+          }
+        ]
+      });
+
+      if (isCancel(modeChoice) || modeChoice === EXIT_OPTION) {
+        outro('Demo catalog closed.');
+        return;
+      }
+
+      selectedCategory = modeChoice === FUZZY_OPTION ? undefined : String(modeChoice);
+      browseMode = 'list';
+    }
+
+    const candidatePool = filterDemosByCategory(selectedCategory);
+    if (candidatePool.length === 0) {
+      log.warn(`No demos matched category "${selectedCategory}".`);
+      selectedCategory = undefined;
+      browseMode = 'menu';
+      continue;
+    }
+
+    const chosenId = await autocomplete({
+      message: selectedCategory
+        ? `Select a demo in [${selectedCategory}] (type to filter):`
+        : 'Search demo by ID, title, or tag (type to fuzzy-filter):',
       options: [
         {
-          value: '__fuzzy__',
-          label: 'Fuzzy Search All Demos',
-          hint: 'Type keywords, IDs, or tags (e.g. particles, physics, ui, portal)'
+          value: BACK_OPTION,
+          label: '← Back to categories',
+          hint: 'Return to category selection'
         },
-        ...DEMO_CATEGORIES.map((cat) => ({
-          value: cat,
-          label: cat,
-          hint: `${DEMO_CATALOG.filter((d) => d.category === cat).length} demos`
+        ...candidatePool.map((d) => ({
+          value: d.id,
+          label: `[${d.id}] ${d.title}`,
+          hint: `${d.category} — ${d.tags.join(', ')}`
         }))
-      ]
+      ],
+      placeholder: 'Type e.g. 3d5, phys3d, particles, shadows, tutorial...',
+      maxItems: 10
     });
 
-    if (isCancel(modeChoice)) {
-      cancel('Demo selection cancelled.');
-      return null;
+    if (isCancel(chosenId) || chosenId === BACK_OPTION) {
+      selectedCategory = undefined;
+      browseMode = 'menu';
+      continue;
     }
 
-    if (modeChoice !== '__fuzzy__') {
-      selectedCategory = modeChoice as string;
+    const targetDemo = findDemo(String(chosenId));
+    if (!targetDemo) {
+      log.warn(`Demo "${String(chosenId)}" not found.`);
+      continue;
+    }
+
+    log.step(`Launching [${targetDemo.id}] ${targetDemo.title}...`);
+    const exitCode = await runDemoInSubprocess(targetDemo, opts);
+    if (exitCode === 0 || exitCode === 130) {
+      log.info(`Closed [${targetDemo.id}] ${targetDemo.title} — returning to catalog.`);
+    } else {
+      log.error(`Demo [${targetDemo.id}] exited with code ${exitCode} — returning to catalog.`);
     }
   }
-
-  const candidatePool = filterDemosByCategory(selectedCategory);
-  if (candidatePool.length === 0) {
-    cancel(`No demos matched category "${selectedCategory}".`);
-    return null;
-  }
-
-  const chosenId = await autocomplete({
-    message: selectedCategory
-      ? `Select a demo in [${selectedCategory}] (type to filter):`
-      : 'Search demo by ID, title, or tag (type to fuzzy-filter):',
-    options: candidatePool.map((d) => ({
-      value: d.id,
-      label: `[${d.id}] ${d.title}`,
-      hint: `${d.category} — ${d.tags.join(', ')}`
-    })),
-    placeholder: 'Type e.g. 3d5, phys3d, particles, shadows, tutorial...',
-    maxItems: 10
-  });
-
-  if (isCancel(chosenId)) {
-    cancel('Demo selection cancelled.');
-    return null;
-  }
-
-  return findDemo(String(chosenId)) ?? null;
 }
 
 export async function runCli(argv = process.argv): Promise<void> {
@@ -182,8 +240,8 @@ export async function runCli(argv = process.argv): Promise<void> {
       targetDemo = findDemo(String(fallbackChoice));
     }
   } else if (process.stdin.isTTY && !opts.headless) {
-    targetDemo = await runInteractiveBrowser(opts.category);
-    if (!targetDemo) return;
+    await runInteractiveLoop(opts);
+    return;
   } else {
     console.log(formatCatalogTable(opts.category));
     return;
@@ -193,7 +251,10 @@ export async function runCli(argv = process.argv): Promise<void> {
     process.exit(1);
   }
 
-  if (process.stdin.isTTY && !opts.headless) {
+  const isInteractiveSingle =
+    process.stdin.isTTY && !opts.headless && process.env.GALFUS_DEMO_CHILD !== '1';
+
+  if (isInteractiveSingle) {
     log.step(`Launching [${targetDemo.id}] ${targetDemo.title}...`);
   }
 
@@ -204,7 +265,7 @@ export async function runCli(argv = process.argv): Promise<void> {
     title: `Galfus Demo [${targetDemo.id}]: ${targetDemo.title}`
   });
 
-  if (process.stdin.isTTY && !opts.headless) {
+  if (isInteractiveSingle) {
     outro(`Completed [${targetDemo.id}] ${targetDemo.title}`);
   }
 }
