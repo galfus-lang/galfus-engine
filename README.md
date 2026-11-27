@@ -162,3 +162,13 @@ bun demo 2d4
 - [docs/shader-effects/README.md](docs/shader-effects/README.md) — Shader Effects architecture and contracts.
 - [docs/shader-effects/screen-effects.md](docs/shader-effects/screen-effects.md) — Screen post-processing tutorial.
 - [docs/shader-effects/surface-effects.md](docs/shader-effects/surface-effects.md) — 3D PBR Surface Effects tutorial.
+
+---
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, coding guidelines, and the Pull Request workflow.
+
+## License
+
+Galfus Engine is licensed under the [Apache License 2.0](LICENSE).
