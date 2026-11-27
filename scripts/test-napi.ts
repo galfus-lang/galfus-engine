@@ -59,6 +59,20 @@ try {
 }
 
 try {
+  galfus.windowSetCursorPosition(999, 100, 200);
+  throw new Error('windowSetCursorPosition should throw for non-existent window');
+} catch (err: unknown) {
+  console.log(`✔ Expected windowSetCursorPosition error caught: ${(err as Error).message}`);
+}
+
+try {
+  galfus.windowSetCursorVisible(999, false);
+  throw new Error('windowSetCursorVisible should throw for non-existent window');
+} catch (err: unknown) {
+  console.log(`✔ Expected windowSetCursorVisible error caught: ${(err as Error).message}`);
+}
+
+try {
   galfus.windowSetCursorIcon(999, 2);
   throw new Error('windowSetCursorIcon should throw for non-existent window');
 } catch (err: unknown) {
@@ -80,12 +94,17 @@ try {
 }
 
 // 4. Pump events as direct JavaScript Array
-console.log('==> Testing platformPumpEvents()...');
+console.log('==> Testing platformPumpEvents() and engineDrainErrors()...');
 const events = galfus.platformPumpEvents();
 if (!Array.isArray(events)) {
   throw new Error('Expected platformPumpEvents() to return an Array');
 }
 console.log(`✔ Pump events returned native Array with length: ${events.length}`);
+const engineErrors = galfus.engineDrainErrors();
+if (!Array.isArray(engineErrors)) {
+  throw new Error('Expected engineDrainErrors() to return an Array');
+}
+console.log(`✔ Engine errors drained via Node-API: ${engineErrors.length}`);
 
 // 5. Multiverse Targets
 console.log('==> Testing Node-API Multiverse Targets...');

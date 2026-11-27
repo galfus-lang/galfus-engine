@@ -50,6 +50,7 @@ pub fn shutdown_context() -> Result<(), String> {
     let ctx_dropped = CONTEXT.with(|cell| cell.borrow_mut().take().is_some());
     crate::ffi_event_batch::clear_pending_events();
     crate::ffi::clear_last_error();
+    galfus_core::clear_engine_errors();
     if let Some(err) = mv_err {
         return Err(err);
     }

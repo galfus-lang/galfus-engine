@@ -57,6 +57,7 @@ export class IdAllocator<T extends number = number> {
  */
 import type {
   AnimationEvent,
+  EngineErrorEvent,
   FrameTiming,
   GamepadEvent,
   KeyboardEvent,
@@ -81,6 +82,7 @@ export interface RuntimeEventMap {
   gamepad: GamepadEvent;
   animation: AnimationEvent;
   platform: PlatformEvent;
+  error: EngineErrorEvent;
 }
 
 export type RuntimeEventType = keyof RuntimeEventMap;

@@ -41,7 +41,7 @@ use crate::window::NativeWindow;
 use crate::window::Window;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::window::event::WindowEvent;
-use crate::window::types::WindowConfig;
+use crate::window::types::{CursorGrabMode, WindowConfig};
 #[cfg(not(target_arch = "wasm32"))]
 use glam::Vec2;
 
@@ -60,6 +60,10 @@ pub struct PlatformContext {
     winit_to_logical: HashMap<WinitWindowId, u32>,
     #[cfg(not(target_arch = "wasm32"))]
     pointer_positions: HashMap<(u32, u64), Vec2>,
+    #[cfg(not(target_arch = "wasm32"))]
+    focused_window: Option<u32>,
+    #[cfg(not(target_arch = "wasm32"))]
+    cursor_grab_modes: HashMap<u32, CursorGrabMode>,
     #[cfg(not(target_arch = "wasm32"))]
     modifiers: HashMap<u32, ModifiersState>,
     #[cfg(not(target_arch = "wasm32"))]
@@ -110,6 +114,10 @@ impl PlatformContext {
             #[cfg(not(target_arch = "wasm32"))]
             pointer_positions: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
+            focused_window: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            cursor_grab_modes: HashMap::new(),
+            #[cfg(not(target_arch = "wasm32"))]
             modifiers: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             composing: std::collections::HashSet::new(),
@@ -144,6 +152,10 @@ impl PlatformContext {
             winit_to_logical: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             pointer_positions: HashMap::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            focused_window: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            cursor_grab_modes: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
             modifiers: HashMap::new(),
             #[cfg(not(target_arch = "wasm32"))]
@@ -216,6 +228,9 @@ impl PlatformContext {
 
             let winit_id = winit_window.id();
             let native_win = NativeWindow::new(&config, Arc::new(winit_window));
+            if native_win.is_focused() {
+                self.focused_window = Some(id);
+            }
 
             self.winit_to_logical.insert(winit_id, id);
             self.windows.insert(id, native_win);
@@ -260,6 +275,10 @@ impl PlatformContext {
         if let Some(win) = self.windows.remove(&id) {
             self.winit_to_logical.remove(&win.raw_window().id());
             self.pointer_positions.retain(|(w, _), _| *w != id);
+            self.cursor_grab_modes.remove(&id);
+            if self.focused_window == Some(id) {
+                self.focused_window = None;
+            }
             self.modifiers.remove(&id);
             self.composing.remove(&id);
             Ok(())
@@ -287,6 +306,52 @@ impl PlatformContext {
     /// Returns the number of active windows registered in this context.
     pub fn window_count(&self) -> usize {
         self.windows.len()
+    }
+
+    /// Configures cursor grab mode for a window while keeping context event routing synchronized.
+    pub fn set_window_cursor_grab(&mut self, id: u32, mode: CursorGrabMode) -> PlatformResult<()> {
+        self.ensure_main_thread()?;
+        let win = self
+            .windows
+            .get_mut(&id)
+            .ok_or(PlatformError::WindowNotFound(id))?;
+        win.set_cursor_grab(mode)?;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.cursor_grab_modes.insert(id, mode);
+            if win.is_focused() {
+                self.focused_window = Some(id);
+            }
+        }
+        Ok(())
+    }
+
+    /// Sets the cursor position within a window and synchronizes tracked pointer coordinates
+    /// to avoid a spurious delta jump on the subsequent OS move event.
+    pub fn set_window_cursor_position(&mut self, id: u32, x: i32, y: i32) -> PlatformResult<()> {
+        self.ensure_main_thread()?;
+        let win = self
+            .windows
+            .get_mut(&id)
+            .ok_or(PlatformError::WindowNotFound(id))?;
+        win.set_cursor_position(x, y)?;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.pointer_positions
+                .insert((id, 0), Vec2::new(x as f32, y as f32));
+        }
+        Ok(())
+    }
+
+    /// Shows or hides the cursor over a window.
+    pub fn set_window_cursor_visible(&mut self, id: u32, visible: bool) -> PlatformResult<()> {
+        self.ensure_main_thread()?;
+        let win = self
+            .windows
+            .get_mut(&id)
+            .ok_or(PlatformError::WindowNotFound(id))?;
+        win.set_cursor_visible(visible);
+        Ok(())
     }
 
     /// Returns the current text stored in the platform clipboard.
@@ -374,79 +439,6 @@ impl PlatformContext {
         }
     }
 
-    /// Loads raw audio data bytes and registers it under a host logical ID.
-    pub fn load_sound_bytes(&mut self, id: u32, bytes: &[u8]) -> PlatformResult<f32> {
-        self.audio.load_sound_bytes(id, bytes)
-    }
-
-    /// Plays a registered sound resource using the given playback configuration.
-    pub fn play_sound(
-        &mut self,
-        sound_id: u32,
-        config: crate::audio::PlaybackConfig,
-    ) -> PlatformResult<u32> {
-        self.audio.play_sound(sound_id, config)
-    }
-
-    /// Plays a sound positioned in 3D/2D relative to an emitter and a listener ear/microphone.
-    pub fn play_sound_spatial(
-        &mut self,
-        sound_id: u32,
-        emitter: crate::audio::SpatialTransform,
-        listener: crate::audio::SpatialTransform,
-        config: crate::audio::SpatialAudioConfig,
-    ) -> PlatformResult<u32> {
-        self.audio
-            .play_sound_spatial(sound_id, emitter, listener, config)
-    }
-
-    /// Updates the spatial positioning of a playing sound voice.
-    pub fn update_sound_spatial(
-        &mut self,
-        voice_id: u32,
-        emitter: crate::audio::SpatialTransform,
-        listener: crate::audio::SpatialTransform,
-        config: crate::audio::SpatialAudioConfig,
-    ) -> PlatformResult<()> {
-        self.audio
-            .update_sound_spatial(voice_id, emitter, listener, config)
-    }
-
-    /// Pauses an active sound playback voice.
-    pub fn pause_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
-        self.audio.pause_sound(voice_id)
-    }
-
-    /// Resumes a paused sound playback voice.
-    pub fn resume_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
-        self.audio.resume_sound(voice_id)
-    }
-
-    /// Stops a playing sound voice.
-    pub fn stop_sound(&mut self, voice_id: u32) -> PlatformResult<()> {
-        self.audio.stop_sound(voice_id)
-    }
-
-    /// Updates the volume of a sound voice.
-    pub fn set_sound_volume(&mut self, voice_id: u32, volume: f32) -> PlatformResult<()> {
-        self.audio.set_sound_volume(voice_id, volume)
-    }
-
-    /// Updates the panning position of a sound voice.
-    pub fn set_sound_panning(&mut self, voice_id: u32, panning: f32) -> PlatformResult<()> {
-        self.audio.set_sound_panning(voice_id, panning)
-    }
-
-    /// Unloads a registered sound resource.
-    pub fn unload_sound(&mut self, sound_id: u32) -> PlatformResult<()> {
-        self.audio.unload_sound(sound_id)
-    }
-
-    /// Releases completed native audio voices and returns the number of recycled voice slots.
-    pub fn reap_finished_audio_voices(&mut self) -> usize {
-        self.audio.reap_finished_voices()
-    }
-
     /// Pumps platform events on demand, collecting and returning normalized events.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn pump_events(&mut self) -> PlatformResult<Vec<PlatformEvent>> {
@@ -457,6 +449,9 @@ impl PlatformContext {
         let mut collector = EventCollector {
             winit_to_logical: &self.winit_to_logical,
             pointer_positions: &mut self.pointer_positions,
+            focused_window: &mut self.focused_window,
+            cursor_grab_modes: &self.cursor_grab_modes,
+            regained_focus: Vec::new(),
             modifiers: &mut self.modifiers,
             composing: &mut self.composing,
             events: Vec::new(),
@@ -467,7 +462,21 @@ impl PlatformContext {
             self.event_loop = Some(el);
         }
 
+        let regained_focus = collector.regained_focus;
         let mut events = collector.events;
+
+        for window_id in regained_focus {
+            if self.focused_window == Some(window_id)
+                && let Some(&mode) = self.cursor_grab_modes.get(&window_id)
+                && mode != CursorGrabMode::None
+                && let Some(win) = self.windows.get(&window_id)
+                && let Err(err) = win.set_cursor_grab(mode)
+            {
+                log::warn!(
+                    "Failed to restore cursor grab {mode:?} for window {window_id} on focus regain: {err}"
+                );
+            }
+        }
 
         if let Some(ref mut gilrs) = self.gilrs {
             while let Some(gilrs_ev) = gilrs.next_event() {
@@ -534,6 +543,9 @@ impl PlatformContext {
     }
 }
 
+#[path = "context_audio.rs"]
+mod context_audio;
+
 #[path = "context_diagnostics.rs"]
 mod context_diagnostics;
 pub use context_diagnostics::PlatformDiagnosticsStats;
@@ -543,49 +555,5 @@ mod context_events;
 #[cfg(not(target_arch = "wasm32"))]
 use context_events::EventCollector;
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::thread;
-
-    #[test]
-    fn test_main_thread_enforcement() {
-        let ctx = PlatformContext::new_headless();
-        assert_eq!(ctx.main_thread_id(), thread::current().id());
-        assert!(ctx.ensure_main_thread().is_ok());
-
-        let worker_thread_id = thread::spawn(|| thread::current().id()).join().unwrap();
-        assert_ne!(ctx.main_thread_id(), worker_thread_id);
-    }
-
-    #[test]
-    fn test_reserved_logical_id_rejection() {
-        let mut ctx = PlatformContext::new_headless();
-        let config = WindowConfig::new(u32::MAX, "Illegal Window");
-        assert!(matches!(
-            ctx.create_window(config),
-            Err(PlatformError::Core(
-                galfus_core::CoreError::ReservedLogicalId { .. }
-            ))
-        ));
-    }
-
-    #[test]
-    fn test_headless_mode_disallows_window_creation() {
-        let mut ctx = PlatformContext::new_headless();
-        let config = WindowConfig::new(1, "Legal Window");
-        assert_eq!(
-            ctx.create_window(config),
-            Err(PlatformError::UnsupportedCapability(
-                "Window creation is not supported in headless mode"
-            ))
-        );
-    }
-
-    #[test]
-    fn test_clipboard_get_and_set_roundtrip() {
-        let mut ctx = PlatformContext::new_headless();
-        assert_eq!(ctx.get_clipboard_text().unwrap(), "");
-        ctx.set_clipboard_text("Galfus UI Clipboard").unwrap();
-        assert_eq!(ctx.get_clipboard_text().unwrap(), "Galfus UI Clipboard");
-    }
-}
+#[path = "context_tests.rs"]
+mod tests;

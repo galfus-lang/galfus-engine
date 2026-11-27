@@ -109,8 +109,26 @@ pub fn window_set_cursor_grab(window_id: u32, mode: u32) -> Result<()> {
     };
 
     with_context_mut(|ctx| {
-        let win = ctx.get_window_mut(window_id).map_err(|e| e.to_string())?;
-        win.set_cursor_grab(grab_mode).map_err(|e| e.to_string())
+        ctx.set_window_cursor_grab(window_id, grab_mode)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::from_reason(Status::GenericFailure, e))
+}
+
+#[wasm_bindgen(js_name = "windowSetCursorPosition")]
+pub fn window_set_cursor_position(window_id: u32, x: i32, y: i32) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.set_window_cursor_position(window_id, x, y)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::from_reason(Status::GenericFailure, e))
+}
+
+#[wasm_bindgen(js_name = "windowSetCursorVisible")]
+pub fn window_set_cursor_visible(window_id: u32, visible: bool) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.set_window_cursor_visible(window_id, visible)
+            .map_err(|e| e.to_string())
     })
     .map_err(|e| Error::from_reason(Status::GenericFailure, e))
 }
@@ -153,6 +171,13 @@ pub fn window_get_size(window_id: u32) -> Result<Vec<u32>> {
         Ok(vec![size.x, size.y])
     })
     .map_err(|e| Error::from_reason(Status::GenericFailure, e))
+}
+
+#[wasm_bindgen(js_name = "engineDrainErrors")]
+pub fn engine_drain_errors() -> Result<JsUnknown> {
+    let env = Env;
+    let errors = galfus_core::drain_engine_errors();
+    env.to_js_value(&errors)
 }
 
 #[wasm_bindgen(js_name = "platformPumpEvents")]

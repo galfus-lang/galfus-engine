@@ -61,6 +61,8 @@ fn test_c_api_lifecycle_and_json_exchange() {
     let title = CString::new("New Title").unwrap();
     assert_eq!(unsafe { galfus_window_set_title(999, title.as_ptr()) }, -1);
     assert_eq!(galfus_window_set_cursor_grab(999, 1), -1);
+    assert_eq!(galfus_window_set_cursor_position(999, 100, 200), -1);
+    assert_eq!(galfus_window_set_cursor_visible(999, false), -1);
     assert_eq!(galfus_window_set_cursor_icon(999, 1), -1);
     assert_eq!(
         unsafe { galfus_window_set_icon(999, std::ptr::null(), 0) },
@@ -88,6 +90,20 @@ fn test_c_api_lifecycle_and_json_exchange() {
     let clip_out_str = unsafe { from_c_str(clip_out_ptr) }.unwrap();
     assert_eq!(clip_out_str, "Clipboard FFI Test");
     unsafe { galfus_string_free(clip_out_ptr) };
+
+    // 4.3 Engine error event drain
+    galfus_core::push_engine_error(
+        galfus_core::EngineErrorCode::GpuOutOfMemory,
+        galfus_core::EngineErrorSource::Gpu,
+        galfus_core::EngineErrorSeverity::Fatal,
+        "Simulated GPU OOM",
+    );
+    let err_events_ptr = galfus_engine_drain_errors();
+    assert!(!err_events_ptr.is_null());
+    let err_events_json = unsafe { from_c_str(err_events_ptr) }.unwrap();
+    assert!(err_events_json.contains("\"code\":\"gpuOutOfMemory\""));
+    assert!(err_events_json.contains("Simulated GPU OOM"));
+    unsafe { galfus_string_free(err_events_ptr) };
 
     // 5. Shutdown
     assert_eq!(galfus_platform_shutdown(), 0);

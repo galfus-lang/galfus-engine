@@ -20,9 +20,14 @@ if (capabilities.isHeadless !== true) {
 }
 
 // 3. Pump Events
-console.log('==> Testing platformPumpEvents()...');
+console.log('==> Testing platformPumpEvents() and engineDrainErrors()...');
 const events = galfus.platformPumpEvents();
 console.log(`✔ Pump events received: ${events.length} events`);
+const engineErrors = galfus.engineDrainErrors();
+if (!Array.isArray(engineErrors)) {
+  throw new Error('Expected engineDrainErrors() to return an Array');
+}
+console.log(`✔ Engine errors drained: ${engineErrors.length} events`);
 
 // 3.1 Window Cursor and Size APIs
 console.log('==> Testing windowSetCursorGrab, windowSetCursorIcon and windowGetSize...');
@@ -31,6 +36,18 @@ try {
   throw new Error('windowSetCursorGrab should throw for non-existent window');
 } catch (err: unknown) {
   console.log(`✔ Expected windowSetCursorGrab error caught: ${(err as Error).message}`);
+}
+try {
+  galfus.windowSetCursorPosition(999, 100, 200);
+  throw new Error('windowSetCursorPosition should throw for non-existent window');
+} catch (err: unknown) {
+  console.log(`✔ Expected windowSetCursorPosition error caught: ${(err as Error).message}`);
+}
+try {
+  galfus.windowSetCursorVisible(999, false);
+  throw new Error('windowSetCursorVisible should throw for non-existent window');
+} catch (err: unknown) {
+  console.log(`✔ Expected windowSetCursorVisible error caught: ${(err as Error).message}`);
 }
 try {
   galfus.windowSetCursorIcon(999, 2);

@@ -361,10 +361,36 @@ impl BrowserWindow {
     pub fn request_user_attention(&self, _attention: Option<UserAttentionType>) {}
 
     /// Cursor visibility on web.
-    pub fn set_cursor_visible(&self, _visible: bool) {}
+    pub fn set_cursor_visible(&self, visible: bool) {
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        if let Some(canvas) = &self.canvas {
+            let style = canvas.unchecked_ref::<web_sys::HtmlElement>().style();
+            let _ = style.set_property("cursor", if visible { "default" } else { "none" });
+        }
+        #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
+        let _ = visible;
+    }
 
     /// Pointer Lock API support.
-    pub fn set_cursor_grab(&self, _mode: CursorGrabMode) -> PlatformResult<()> {
+    pub fn set_cursor_grab(&self, mode: CursorGrabMode) -> PlatformResult<()> {
+        #[cfg(all(target_arch = "wasm32", feature = "browser"))]
+        match mode {
+            CursorGrabMode::Locked => {
+                if let Some(canvas) = &self.canvas {
+                    canvas
+                        .unchecked_ref::<web_sys::Element>()
+                        .request_pointer_lock();
+                }
+            }
+            CursorGrabMode::None => {
+                if let Some(document) = web_sys::window().and_then(|window| window.document()) {
+                    document.exit_pointer_lock();
+                }
+            }
+            CursorGrabMode::Confined => {}
+        }
+        #[cfg(not(all(target_arch = "wasm32", feature = "browser")))]
+        let _ = mode;
         Ok(())
     }
 
@@ -510,6 +536,14 @@ impl BrowserWindow {
 #[cfg(all(target_arch = "wasm32", feature = "browser"))]
 impl Drop for BrowserWindow {
     fn drop(&mut self) {
+        if let Some(canvas) = &self.canvas
+            && let Some(document) = web_sys::window().and_then(|window| window.document())
+            && document
+                .pointer_lock_element()
+                .is_some_and(|el| el == *canvas.unchecked_ref::<web_sys::Element>())
+        {
+            document.exit_pointer_lock();
+        }
         if let Some(resize_observer) = &self.resize_observer {
             resize_observer.observer.disconnect();
         }

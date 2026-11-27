@@ -2,6 +2,7 @@ import { advanceFrame } from './controlled-transport';
 import { describe, expect, it } from 'bun:test';
 import type {
   AnimationEvent,
+  EngineErrorEvent,
   FrameTiming,
   GalfusEngine,
   GalfusTransport,
@@ -218,5 +219,71 @@ describe('@galfus/engine > Unified Event System (.on and off)', () => {
     runtime.clearListeners('tick');
     advanceFrame(runtime, mockTransport, 0.016);
     expect(tickCount).toBe(1);
+  });
+
+  it('dispatches engine error events to error listeners without throwing', () => {
+    const pendingErrors: EngineErrorEvent[] = [
+      {
+        code: 'gpuOutOfMemory',
+        source: 'gpu',
+        severity: 'fatal',
+        message: 'VRAM exhausted',
+        count: 3
+      }
+    ];
+    const mockTransport: GalfusTransport = {
+      engine: {
+        multiverseDispatch: () => {},
+        engineDrainErrors: () => pendingErrors.splice(0)
+      } as unknown as GalfusEngine,
+      isInitialized: true,
+      isDisposed: false,
+      isRunning: false,
+      init: async () => {},
+      startLoop: () => {},
+      stopLoop: () => {},
+      dispose: () => {}
+    };
+
+    const runtime = new MultiverseRuntime(mockTransport);
+    const received: EngineErrorEvent[] = [];
+    runtime.on('error', (ev) => received.push(ev));
+
+    advanceFrame(runtime, mockTransport, 0.016);
+    expect(received.length).toBe(1);
+    expect(received[0]?.code).toBe('gpuOutOfMemory');
+    expect(received[0]?.count).toBe(3);
+  });
+
+  it('stops runtime and throws GalfusError when a fatal error has no error listeners', () => {
+    const pendingErrors: EngineErrorEvent[] = [
+      {
+        code: 'gpuOutOfMemory',
+        source: 'gpu',
+        severity: 'fatal',
+        message: 'Simulated OOM',
+        count: 1
+      }
+    ];
+    let stopCalled = 0;
+    const mockTransport: GalfusTransport = {
+      engine: {
+        multiverseDispatch: () => {},
+        engineDrainErrors: () => pendingErrors.splice(0)
+      } as unknown as GalfusEngine,
+      isInitialized: true,
+      isDisposed: false,
+      isRunning: true,
+      init: async () => {},
+      startLoop: () => {},
+      stopLoop: () => {
+        stopCalled++;
+      },
+      dispose: () => {}
+    };
+
+    const runtime = new MultiverseRuntime(mockTransport);
+    expect(() => advanceFrame(runtime, mockTransport, 0.016)).toThrow(/gpuOutOfMemory/);
+    expect(stopCalled).toBe(1);
   });
 });

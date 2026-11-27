@@ -142,6 +142,47 @@ export const platformFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_window_set_cursor_position',
+    methodName: 'windowSetCursorPosition',
+    doc: 'Sets the mouse cursor position within a window in physical pixels.',
+    params: [
+      {
+        name: 'windowId',
+        type: 'u32',
+        doc: 'Host-controlled logical ID'
+      },
+      {
+        name: 'x',
+        type: 'i32',
+        doc: 'Horizontal cursor position in physical pixels'
+      },
+      {
+        name: 'y',
+        type: 'i32',
+        doc: 'Vertical cursor position in physical pixels'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
+    cName: 'galfus_window_set_cursor_visible',
+    methodName: 'windowSetCursorVisible',
+    doc: 'Shows or hides the mouse cursor over a window.',
+    params: [
+      {
+        name: 'windowId',
+        type: 'u32',
+        doc: 'Host-controlled logical ID'
+      },
+      {
+        name: 'visible',
+        type: 'bool',
+        doc: 'True to show the cursor, false to hide it'
+      }
+    ],
+    returnType: 'i32'
+  },
+  {
     cName: 'galfus_window_set_cursor_icon',
     methodName: 'windowSetCursorIcon',
     doc: 'Updates the visual appearance icon of the cursor.',
@@ -215,6 +256,13 @@ export const platformFunctions: FunctionSpec[] = [
       }
     ],
     returnType: 'i32'
+  },
+  {
+    cName: 'galfus_engine_drain_errors',
+    methodName: 'engineDrainErrors',
+    doc: 'Drains all pending asynchronous engine and GPU error events.',
+    params: [],
+    returnType: { jsonArray: 'EngineErrorEvent' }
   },
   {
     cName: 'galfus_gamepad_get_connected',

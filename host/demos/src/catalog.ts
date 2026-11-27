@@ -1,8 +1,9 @@
-import Fuse from 'fuse.js';
+import { createCatalogSearch } from './catalog_search';
 import type { DemoRunOptions } from './common/options';
 import { runInteractionDemo } from './host/interaction';
 import { runTransRealmDemo } from './host/trans-realm';
 import { runTutorialDemo } from './host/tutorial';
+import { runDemoWin1 } from './host/win1-cursor-window';
 import { runDemoMv1 } from './multiverse/mv1-split';
 import { runDemoMv2 } from './multiverse/mv2-rtt-reuse';
 import { runDemoMv3 } from './multiverse/mv3-cycle';
@@ -104,6 +105,16 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
     description:
       'Projects 3D world-space anchors onto 2D HUD overlays and Picture-in-Picture viewports in real time.',
     run: runTransRealmDemo
+  },
+  {
+    id: 'win1',
+    aliases: ['window-controls', 'cursor-lock', 'cursor'],
+    title: 'Cursor Grab, Position, Visibility & Window Controls Lab',
+    category: 'Host & Interaction',
+    tags: ['host', 'window', 'cursor', 'pointer-lock', 'grab', 'warp', 'focus'],
+    description:
+      'Interactive lab for testing locked/confined cursor grab, raw mouse delta, cursor warp, visibility, icons, and window focus/title controls.',
+    run: runDemoWin1
   },
 
   // 2. UI (6 demos)
@@ -541,55 +552,5 @@ export const DEMO_CATALOG: readonly DemoDescriptor[] = [
   }
 ];
 
-const fuseIndex = new Fuse(DEMO_CATALOG, {
-  keys: [
-    { name: 'id', weight: 3.0 },
-    { name: 'aliases', weight: 2.5 },
-    { name: 'title', weight: 2.0 },
-    { name: 'tags', weight: 1.5 },
-    { name: 'category', weight: 1.0 },
-    { name: 'description', weight: 0.8 }
-  ],
-  threshold: 0.4,
-  ignoreLocation: true,
-  includeScore: true
-});
-
-/**
- * Finds a demo by exact `id` or `alias` (case-insensitive).
- */
-export function findDemo(query: string): DemoDescriptor | undefined {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return undefined;
-  return DEMO_CATALOG.find(
-    (d) =>
-      d.id.toLowerCase() === normalized || d.aliases.some((a) => a.toLowerCase() === normalized)
-  );
-}
-
-/**
- * Filters the catalog by category name (case-insensitive substring or exact match).
- */
-export function filterDemosByCategory(category?: string): readonly DemoDescriptor[] {
-  if (!category || category.toLowerCase() === 'all') return DEMO_CATALOG;
-  const norm = category.trim().toLowerCase();
-  return DEMO_CATALOG.filter((d) => d.category.toLowerCase().includes(norm));
-}
-
-/**
- * Performs a fuzzy search across `id`, `aliases`, `title`, `tags`, `category`, and `description`.
- */
-export function fuzzySearchDemos(query: string, category?: string): readonly DemoDescriptor[] {
-  const pool = filterDemosByCategory(category);
-  const trimmed = query.trim();
-  if (!trimmed) return pool;
-
-  const exact = findDemo(trimmed);
-  const results = fuseIndex.search(trimmed).map((r) => r.item);
-  const filtered = category ? results.filter((d) => pool.includes(d)) : results;
-
-  if (exact && (!category || pool.includes(exact))) {
-    return [exact, ...filtered.filter((d) => d.id !== exact.id)];
-  }
-  return filtered;
-}
+export const { findDemo, filterDemosByCategory, fuzzySearchDemos } =
+  createCatalogSearch(DEMO_CATALOG);

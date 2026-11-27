@@ -4,9 +4,11 @@
 
 import {
   type AnimationTarget,
+  type EngineErrorEvent,
   type FrameTiming,
   GalfusLoopError,
   type GalfusTransport,
+  GalfusTransportError,
   type LoopOptions,
   type PlatformEvent
 } from '@galfus/transport-types';
@@ -491,6 +493,49 @@ export class MultiverseRuntime {
 
     // 10. Step post-render stage: postRender (metrics, cleanups) AFTER dispatch
     this.multiverse.stepRealmsPostRender(context);
+
+    // 11. Drain asynchronous engine / GPU error events
+    this.drainEngineErrors();
+  }
+
+  /**
+   * Drains pending asynchronous engine/GPU error events from the native core.
+   * Dispatches to `'error'` listeners when present; otherwise logs warnings and
+   * throws `GalfusError` (stopping the loop first on fatal errors).
+   */
+  drainEngineErrors(): void {
+    const engine = this.#transport.engine;
+    if (typeof engine?.engineDrainErrors !== 'function') return;
+    const errors = engine.engineDrainErrors();
+    if (!errors || errors.length === 0) return;
+
+    const listeners = this._eventListeners.get('error');
+    if (listeners && listeners.size > 0) {
+      for (const errorEvent of errors) {
+        for (const listener of listeners) {
+          listener(errorEvent);
+        }
+      }
+      return;
+    }
+
+    let unhandled: EngineErrorEvent | undefined;
+    for (const errorEvent of errors) {
+      if (errorEvent.severity === 'warning') {
+        console.warn(`[Galfus:${errorEvent.source}:${errorEvent.code}] ${errorEvent.message}`);
+      } else if (!unhandled || errorEvent.severity === 'fatal') {
+        unhandled = errorEvent;
+      }
+    }
+
+    if (unhandled) {
+      if (unhandled.severity === 'fatal') {
+        this.stop();
+      }
+      throw new GalfusTransportError(
+        `Unhandled engine error [${unhandled.source}:${unhandled.code}] (${unhandled.severity}): ${unhandled.message}`
+      );
+    }
   }
 }
 

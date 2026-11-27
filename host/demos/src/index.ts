@@ -5,6 +5,7 @@ export * from './common/textures';
 export * from './host/interaction';
 export * from './host/trans-realm';
 export * from './host/tutorial';
+export * from './host/win1-cursor-window';
 export * from './multiverse/mv1-split';
 export * from './multiverse/mv2-rtt-reuse';
 export * from './multiverse/mv3-cycle';

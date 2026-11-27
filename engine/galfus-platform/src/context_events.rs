@@ -7,9 +7,80 @@ use super::*;
 pub(super) struct EventCollector<'a> {
     pub(super) winit_to_logical: &'a HashMap<WinitWindowId, u32>,
     pub(super) pointer_positions: &'a mut HashMap<(u32, u64), Vec2>,
+    pub(super) focused_window: &'a mut Option<u32>,
+    pub(super) cursor_grab_modes: &'a HashMap<u32, CursorGrabMode>,
+    pub(super) regained_focus: Vec<u32>,
     pub(super) modifiers: &'a mut HashMap<u32, ModifiersState>,
     pub(super) composing: &'a mut std::collections::HashSet<u32>,
     pub(super) events: Vec<PlatformEvent>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<'a> EventCollector<'a> {
+    pub(super) fn handle_focus_changed(&mut self, logical_id: u32, focused: bool) {
+        if focused {
+            *self.focused_window = Some(logical_id);
+            self.regained_focus.push(logical_id);
+        } else {
+            if *self.focused_window == Some(logical_id) {
+                *self.focused_window = None;
+            }
+            self.composing.remove(&logical_id);
+        }
+        self.events
+            .push(PlatformEvent::Window(WindowEvent::FocusChanged {
+                window_id: logical_id,
+                focused,
+            }));
+    }
+
+    pub(super) fn handle_cursor_moved(&mut self, logical_id: u32, x: f64, y: f64) {
+        let pos = Vec2::new(x as f32, y as f32);
+        let prev_pos = self.pointer_positions.insert((logical_id, 0), pos);
+        if *self.focused_window == Some(logical_id)
+            && self.cursor_grab_modes.get(&logical_id).copied() == Some(CursorGrabMode::Locked)
+        {
+            return;
+        }
+        let delta = match prev_pos {
+            Some(prev) => pos - prev,
+            None => Vec2::ZERO,
+        };
+        self.events.push(PlatformEvent::Pointer(PointerEvent::Move {
+            window_id: logical_id,
+            pointer_id: 0,
+            pointer_type: PointerType::Mouse,
+            position: pos,
+            delta,
+            pressure: 0.0,
+        }));
+    }
+
+    pub(super) fn handle_mouse_motion(&mut self, dx: f64, dy: f64) {
+        let Some(logical_id) = *self.focused_window else {
+            return;
+        };
+        if self.cursor_grab_modes.get(&logical_id).copied() != Some(CursorGrabMode::Locked) {
+            return;
+        }
+        let delta = Vec2::new(dx as f32, dy as f32);
+        if delta == Vec2::ZERO {
+            return;
+        }
+        let pos = self
+            .pointer_positions
+            .get(&(logical_id, 0))
+            .copied()
+            .unwrap_or(Vec2::ZERO);
+        self.events.push(PlatformEvent::Pointer(PointerEvent::Move {
+            window_id: logical_id,
+            pointer_id: 0,
+            pointer_type: PointerType::Mouse,
+            position: pos,
+            delta,
+            pressure: 0.0,
+        }));
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -87,6 +158,106 @@ mod ime_tests {
             Some("€")
         );
     }
+
+    #[test]
+    fn locked_mouse_motion_emits_move_and_suppresses_cursor_moved() {
+        let winit_to_logical = HashMap::new();
+        let mut pointer_positions = HashMap::from([((1, 0), Vec2::new(100.0, 200.0))]);
+        let mut focused_window = Some(1);
+        let cursor_grab_modes = HashMap::from([(1, CursorGrabMode::Locked)]);
+        let mut modifiers = HashMap::new();
+        let mut composing = std::collections::HashSet::new();
+
+        let mut collector = EventCollector {
+            winit_to_logical: &winit_to_logical,
+            pointer_positions: &mut pointer_positions,
+            focused_window: &mut focused_window,
+            cursor_grab_modes: &cursor_grab_modes,
+            regained_focus: Vec::new(),
+            modifiers: &mut modifiers,
+            composing: &mut composing,
+            events: Vec::new(),
+        };
+
+        // CursorMoved while locked updates tracked position without emitting duplicate Move.
+        collector.handle_cursor_moved(1, 150.0, 250.0);
+        assert!(collector.events.is_empty());
+
+        // DeviceEvent::MouseMotion emits Move with raw delta and latest position.
+        collector.handle_mouse_motion(12.5, -7.25);
+        assert_eq!(collector.events.len(), 1);
+        assert_eq!(
+            collector.events[0],
+            PlatformEvent::Pointer(PointerEvent::Move {
+                window_id: 1,
+                pointer_id: 0,
+                pointer_type: PointerType::Mouse,
+                position: Vec2::new(150.0, 250.0),
+                delta: Vec2::new(12.5, -7.25),
+                pressure: 0.0,
+            })
+        );
+
+        // Losing focus stops forwarding device mouse motion.
+        collector.handle_focus_changed(1, false);
+        collector.handle_mouse_motion(5.0, 5.0);
+        assert_eq!(collector.events.len(), 2); // only FocusChanged added
+
+        // Regaining focus records window for cursor grab restoration and resumes locked motion.
+        collector.handle_focus_changed(1, true);
+        assert_eq!(collector.regained_focus, vec![1]);
+        collector.handle_mouse_motion(-3.0, 4.0);
+        assert_eq!(collector.events.len(), 4);
+        assert_eq!(
+            collector.events[3],
+            PlatformEvent::Pointer(PointerEvent::Move {
+                window_id: 1,
+                pointer_id: 0,
+                pointer_type: PointerType::Mouse,
+                position: Vec2::new(150.0, 250.0),
+                delta: Vec2::new(-3.0, 4.0),
+                pressure: 0.0,
+            })
+        );
+    }
+
+    #[test]
+    fn unlocked_mouse_ignores_device_motion_and_uses_cursor_moved() {
+        let winit_to_logical = HashMap::new();
+        let mut pointer_positions = HashMap::from([((1, 0), Vec2::new(10.0, 20.0))]);
+        let mut focused_window = Some(1);
+        let cursor_grab_modes = HashMap::from([(1, CursorGrabMode::None)]);
+        let mut modifiers = HashMap::new();
+        let mut composing = std::collections::HashSet::new();
+
+        let mut collector = EventCollector {
+            winit_to_logical: &winit_to_logical,
+            pointer_positions: &mut pointer_positions,
+            focused_window: &mut focused_window,
+            cursor_grab_modes: &cursor_grab_modes,
+            regained_focus: Vec::new(),
+            modifiers: &mut modifiers,
+            composing: &mut composing,
+            events: Vec::new(),
+        };
+
+        collector.handle_mouse_motion(9.0, -4.0);
+        assert!(collector.events.is_empty());
+
+        collector.handle_cursor_moved(1, 25.0, 30.0);
+        assert_eq!(collector.events.len(), 1);
+        assert_eq!(
+            collector.events[0],
+            PlatformEvent::Pointer(PointerEvent::Move {
+                window_id: 1,
+                pointer_id: 0,
+                pointer_type: PointerType::Mouse,
+                position: Vec2::new(25.0, 30.0),
+                delta: Vec2::new(15.0, 10.0),
+                pressure: 0.0,
+            })
+        );
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -124,14 +295,7 @@ impl<'a> ApplicationHandler for EventCollector<'a> {
                         }));
                 }
                 WinitWindowEvent::Focused(focused) => {
-                    if !focused {
-                        self.composing.remove(&logical_id);
-                    }
-                    self.events
-                        .push(PlatformEvent::Window(WindowEvent::FocusChanged {
-                            window_id: logical_id,
-                            focused,
-                        }));
+                    self.handle_focus_changed(logical_id, focused);
                 }
                 WinitWindowEvent::Occluded(occluded) => {
                     self.events
@@ -154,20 +318,7 @@ impl<'a> ApplicationHandler for EventCollector<'a> {
                         }));
                 }
                 WinitWindowEvent::CursorMoved { position, .. } => {
-                    let pos = Vec2::new(position.x as f32, position.y as f32);
-                    let prev_pos = self.pointer_positions.insert((logical_id, 0), pos);
-                    let delta = match prev_pos {
-                        Some(prev) => pos - prev,
-                        None => Vec2::ZERO,
-                    };
-                    self.events.push(PlatformEvent::Pointer(PointerEvent::Move {
-                        window_id: logical_id,
-                        pointer_id: 0,
-                        pointer_type: PointerType::Mouse,
-                        position: pos,
-                        delta,
-                        pressure: 0.0,
-                    }));
+                    self.handle_cursor_moved(logical_id, position.x, position.y);
                 }
                 WinitWindowEvent::CursorEntered { .. } => {
                     let pos = self
@@ -326,6 +477,17 @@ impl<'a> ApplicationHandler for EventCollector<'a> {
                 }
                 _ => {}
             }
+        }
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: winit::event::DeviceEvent,
+    ) {
+        if let winit::event::DeviceEvent::MouseMotion { delta: (dx, dy) } = event {
+            self.handle_mouse_motion(dx, dy);
         }
     }
 }
