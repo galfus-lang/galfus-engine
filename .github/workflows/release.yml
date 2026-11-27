@@ -32,6 +32,14 @@ jobs:
         with:
           bun-version: 1.4.3
 
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install Bun dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
@@ -41,8 +49,16 @@ jobs:
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
 
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> build/cargo-target'
+          shared-key: release-validate
+
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -68,7 +84,6 @@ jobs:
 
   build-native:
     name: Build native ${{ matrix.alias }}
-    needs: validate
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -114,13 +129,28 @@ jobs:
         with:
           bun-version: 1.4.3
 
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install Bun dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
+          components: rustfmt
           targets: ${{ matrix.target }}
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> build/cargo-target'
+          shared-key: release-native-${{ matrix.alias }}
 
       - name: Apply release version
         id: version
@@ -183,7 +213,6 @@ jobs:
 
   build-browser:
     name: Build browser WASM
-    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -194,6 +223,14 @@ jobs:
         with:
           bun-version: 1.4.3
 
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install Bun dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
@@ -201,6 +238,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+
+      - name: Restore Rust WASM cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> build/cargo-target'
+          shared-key: release-browser-wasm
 
       - name: Apply release version
         id: version
@@ -212,12 +255,17 @@ jobs:
       - name: Build browser binding
         run: cargo build --locked --release --package galfus-browser --target wasm32-unknown-unknown
 
-      - name: Install wasm-bindgen CLI
+      - name: Resolve wasm-bindgen version
+        id: wasm-bindgen-ver
         shell: bash
         run: |
-          WASM_BINDGEN_VER=$(bun -e "const lock = await Bun.file('Cargo.lock').text(); const match = lock.match(/name = \"wasm-bindgen\"\\s+version = \"([^\"]+)\"/); console.log(match ? match[1] : '0.2.130');")
-          echo "Installing wasm-bindgen-cli matching compiled schema version: $WASM_BINDGEN_VER"
-          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VER"
+          ver=$(bun -e "const lock = await Bun.file('Cargo.lock').text(); const match = lock.match(/name = \"wasm-bindgen\"\\s+version = \"([^\"]+)\"/); console.log(match ? match[1] : '0.2.130');")
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Install prebuilt wasm-bindgen CLI
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wasm-bindgen-ver.outputs.version }}
 
       - name: Package browser release
         shell: bash
@@ -252,6 +300,7 @@ jobs:
   publish-packages:
     name: Build & Publish Packages
     needs:
+      - validate
       - build-native
       - build-browser
     runs-on: ubuntu-latest
@@ -266,6 +315,14 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.3
+
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Setup Node for NPM Trusted Publishing
         uses: actions/setup-node@v4
@@ -371,6 +428,7 @@ jobs:
   release:
     name: Publish GitHub Release
     needs:
+      - validate
       - build-native
       - build-browser
       - publish-packages
@@ -383,6 +441,14 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.3
+
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Install Bun dependencies
         run: bun install --frozen-lockfile --ignore-scripts

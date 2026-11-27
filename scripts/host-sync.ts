@@ -19,6 +19,8 @@ interface SyncOptions {
   mode: SyncMode;
   skipCargo: boolean;
   skipWasm: boolean;
+  onlyWasm: boolean;
+  skipCleanRebuild: boolean;
 }
 
 function parseArgs(): SyncOptions {
@@ -26,11 +28,15 @@ function parseArgs(): SyncOptions {
   const isRelease = args.includes('--release');
   const skipCargo = args.includes('--skip-cargo');
   const skipWasm = args.includes('--skip-wasm');
+  const onlyWasm = args.includes('--only-wasm');
+  const skipCleanRebuild = args.includes('--no-clean-rebuild');
 
   return {
     mode: isRelease ? 'release' : 'debug',
     skipCargo,
-    skipWasm
+    skipWasm,
+    onlyWasm,
+    skipCleanRebuild
   };
 }
 
@@ -72,7 +78,11 @@ async function syncTypeScriptSdk(): Promise<void> {
   runCommand(['bun', 'run', 'codegen']);
 }
 
-async function buildNativeBinaries(platform: NativePlatform, mode: SyncMode): Promise<void> {
+async function buildNativeBinaries(
+  platform: NativePlatform,
+  mode: SyncMode,
+  skipCleanRebuild: boolean
+): Promise<void> {
   const profileDir = mode === 'release' ? 'release' : 'debug';
   const cargoFlag = mode === 'release' ? ['--release'] : [];
   const nativeExt = platform.startsWith('windows')
@@ -105,7 +115,9 @@ async function buildNativeBinaries(platform: NativePlatform, mode: SyncMode): Pr
   logStep('cargo:napi', `✔ Copied Node-API addon to: ${napiDestFile}`);
 
   // 3. Rebuild clean FFI binary in cargo-target so native debug/release directory remains clean
-  runCommand(['cargo', 'build', '-p', 'galfus-native', ...cargoFlag]);
+  if (!skipCleanRebuild) {
+    runCommand(['cargo', 'build', '-p', 'galfus-native', ...cargoFlag]);
+  }
 }
 
 async function buildBrowserWasm(mode: SyncMode): Promise<void> {
@@ -161,7 +173,11 @@ async function main(): Promise<void> {
   await syncTypeScriptSdk();
 
   if (!options.skipCargo) {
-    await buildNativeBinaries(platform, options.mode);
+    if (!options.onlyWasm) {
+      await buildNativeBinaries(platform, options.mode, options.skipCleanRebuild);
+    } else {
+      logStep('cargo:native', 'Skipping native FFI/NAPI build (--only-wasm).');
+    }
 
     if (!options.skipWasm) {
       await buildBrowserWasm(options.mode);

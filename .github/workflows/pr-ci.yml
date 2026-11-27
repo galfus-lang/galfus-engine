@@ -21,6 +21,7 @@ on:
       - 'host/**'
       - 'scripts/**'
       - 'examples/**'
+      - '.cargo/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'package.json'
@@ -41,6 +42,7 @@ on:
       - 'host/**'
       - 'scripts/**'
       - 'examples/**'
+      - '.cargo/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'package.json'
@@ -56,14 +58,179 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: pr-quality-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Format, lint, test, and codegen
+  changes:
+    name: Detect changed scopes
+    runs-on: ubuntu-latest
+    outputs:
+      examples_runners: ${{ steps.resolve.outputs.examples_runners }}
+      rust_native: ${{ steps.resolve.outputs.rust_native }}
+      host_tests: ${{ steps.resolve.outputs.host_tests }}
+      browser_wasm: ${{ steps.resolve.outputs.browser_wasm }}
+    steps:
+      - name: Detect changed paths (PR)
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            examples_runners:
+              - 'examples/feature-tour/runners/c/**'
+              - 'examples/feature-tour/runners/python/**'
+              - 'examples/feature-tour/runners/csharp/**'
+              - 'examples/feature-tour/runners/lua/**'
+              - '.clang-format'
+              - '.stylua.toml'
+              - 'pyproject.toml'
+              - 'scripts/format.ts'
+              - 'scripts/prepare.ts'
+              - '.github/workflows/pr-ci.yml'
+            rust_native:
+              - 'engine/**'
+              - 'bindings/galfus-native/**'
+              - '.cargo/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'scripts/codegen/**'
+              - 'scripts/codegen.ts'
+              - 'scripts/gen-wasm-bind.ts'
+              - 'scripts/check.ts'
+              - '.github/workflows/pr-ci.yml'
+            host_tests:
+              - 'engine/**'
+              - 'bindings/galfus-native/**'
+              - 'host/demos/**'
+              - 'host/engine/**'
+              - 'host/gltf-loader/**'
+              - 'host/model-loader-types/**'
+              - 'host/transport-bun/**'
+              - 'host/transport-node/**'
+              - 'host/transport-types/**'
+              - 'host/ui/**'
+              - '.cargo/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'package.json'
+              - 'bun.lock'
+              - 'scripts/codegen/**'
+              - 'scripts/codegen.ts'
+              - 'scripts/gen-wasm-bind.ts'
+              - 'scripts/host-sync.ts'
+              - '.github/workflows/pr-ci.yml'
+            browser_wasm:
+              - 'engine/**'
+              - 'bindings/galfus-browser/**'
+              - 'host/transport-browser/**'
+              - 'host/transport-types/**'
+              - 'host/engine/**'
+              - 'host/ui/**'
+              - 'examples/feature-tour/runners/browser/**'
+              - 'scripts/test-browser-tour.ts'
+              - '.cargo/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'package.json'
+              - 'bun.lock'
+              - 'scripts/codegen/**'
+              - 'scripts/codegen.ts'
+              - 'scripts/gen-wasm-bind.ts'
+              - 'scripts/host-sync.ts'
+              - '.github/workflows/pr-ci.yml'
+
+      - name: Resolve final scope flags
+        id: resolve
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "examples_runners=true" >> "$GITHUB_OUTPUT"
+            echo "rust_native=true" >> "$GITHUB_OUTPUT"
+            echo "host_tests=true" >> "$GITHUB_OUTPUT"
+            echo "browser_wasm=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "examples_runners=${{ steps.filter.outputs.examples_runners }}" >> "$GITHUB_OUTPUT"
+            echo "rust_native=${{ steps.filter.outputs.rust_native }}" >> "$GITHUB_OUTPUT"
+            echo "host_tests=${{ steps.filter.outputs.host_tests }}" >> "$GITHUB_OUTPUT"
+            echo "browser_wasm=${{ steps.filter.outputs.browser_wasm }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  lint-format:
+    name: Format, file lengths, and TypeScript
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Setup Rustfmt
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Setup uv
+        if: needs.changes.outputs.examples_runners == 'true'
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Setup .NET
+        if: needs.changes.outputs.examples_runners == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install clang-format
+        if: needs.changes.outputs.examples_runners == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format
+
+      - name: Generate SDKs
+        run: bun run codegen
+
+      - name: Build engine CLI
+        run: bun run build:cli
+
+      - name: Prepare example formatting tools
+        if: needs.changes.outputs.examples_runners == 'true'
+        run: bun prepare
+
+      - name: Check formatting (with examples)
+        if: needs.changes.outputs.examples_runners == 'true'
+        run: bun scripts/format.ts --check
+
+      - name: Check formatting (core)
+        if: needs.changes.outputs.examples_runners != 'true'
+        run: bun scripts/format.ts --check --skip-examples
+
+      - name: Check file lengths and TypeScript
+        run: bun scripts/check.ts --no-rust
+
+  rust-native:
+    name: Rust Clippy & Workspace Tests
+    needs: changes
+    if: needs.changes.outputs.rust_native == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -89,42 +256,132 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-          targets: wasm32-unknown-unknown
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
         with:
-          dotnet-version: 10.0.x
+          workspaces: '. -> build/cargo-target'
+          shared-key: rust-native-ci
 
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-format pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+          sudo apt-get install -y pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
 
       - name: Generate SDKs
         run: bun run codegen
 
-      - name: Build engine CLI
-        run: bun run build:cli
+      - name: Run Clippy (workspace)
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Prepare formatting tools
-        run: bun prepare
-
-      - name: Validate formatting, file lengths, TypeScript, and Clippy (native + WASM)
-        run: bun run validate
-
-      - name: Run Rust tests
+      - name: Run Rust workspace tests
         run: cargo test --workspace
 
-      - name: Install wasm-bindgen CLI
+  host-tests:
+    name: Host Tests (Native FFI & Node-API)
+    needs: changes
+    if: needs.changes.outputs.host_tests == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> build/cargo-target'
+          shared-key: host-native-ci
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+
+      - name: Sync native binaries and build CLI
+        run: |
+          bun scripts/host-sync.ts --skip-wasm --no-clean-rebuild
+          bun run build:cli
+
+      - name: Run Host tests (native)
+        env:
+          GALFUS_TEST_NATIVE_PHYSICS: '1'
+        run: bun test --timeout 30000 host/demos host/engine host/gltf-loader host/transport-bun host/transport-node host/transport-types host/ui
+
+  browser-wasm:
+    name: Browser WASM Clippy, Transport & Tour
+    needs: changes
+    if: needs.changes.outputs.browser_wasm == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install Bun dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Setup Rust toolchain (WASM)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Restore Rust WASM cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> build/cargo-target'
+          shared-key: browser-wasm-ci
+
+      - name: Resolve wasm-bindgen version
+        id: wasm-bindgen-ver
         shell: bash
         run: |
-          WASM_BINDGEN_VER=$(bun -e "const lock = await Bun.file('Cargo.lock').text(); const match = lock.match(/name = \"wasm-bindgen\"\\s+version = \"([^\"]+)\"/); console.log(match ? match[1] : '0.2.130');")
-          echo "Installing wasm-bindgen-cli matching compiled schema version: $WASM_BINDGEN_VER"
-          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VER"
+          ver=$(bun -e "const lock = await Bun.file('Cargo.lock').text(); const match = lock.match(/name = \"wasm-bindgen\"\\s+version = \"([^\"]+)\"/); console.log(match ? match[1] : '0.2.130');")
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Install prebuilt wasm-bindgen CLI
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wasm-bindgen-ver.outputs.version }}
+
+      - name: Sync WASM bindings
+        run: bun scripts/host-sync.ts --only-wasm
+
+      - name: Run Clippy (browser WASM)
+        run: cargo clippy --locked --package galfus-browser --target wasm32-unknown-unknown -- -D warnings
 
       - name: Restore Playwright Chromium cache
         id: playwright-chromium
@@ -143,10 +400,38 @@ jobs:
         if: steps.playwright-chromium.outputs.cache-hit == 'true'
         run: bunx playwright install-deps chromium
 
-      - name: Run Host tests (including native physics and browser transport)
-        env:
-          GALFUS_TEST_NATIVE_PHYSICS: '1'
-        run: bun scripts/host-sync.ts && bun test --timeout 30000 host
+      - name: Run Browser transport tests
+        run: bun test --timeout 30000 host/transport-browser
 
       - name: Run Browser/WASM feature tour
         run: bun run test:tour:browser
+
+  quality-gate:
+    name: PR Quality Gate
+    if: always()
+    needs:
+      - changes
+      - lint-format
+      - rust-native
+      - host-tests
+      - browser-wasm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all required checks passed
+        shell: bash
+        run: |
+          if [ "${{ needs.changes.result }}" != "success" ]; then
+            echo "Change detection job failed."
+            exit 1
+          fi
+          for result in \
+            "${{ needs.lint-format.result }}" \
+            "${{ needs.rust-native.result }}" \
+            "${{ needs.host-tests.result }}" \
+            "${{ needs.browser-wasm.result }}"; do
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "One or more quality jobs did not pass (result: $result)."
+              exit 1
+            fi
+          done
+          echo "All applicable PR Quality checks passed."

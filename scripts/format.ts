@@ -3,9 +3,11 @@ type Command = {
   args: string[];
   requiredBinary?: string;
   resolveArgs?: () => string[] | null;
+  exampleOnly?: boolean;
 };
 
 const isCheck = Bun.argv.includes('--check');
+const skipExamples = Bun.argv.includes('--skip-examples');
 const isCI = Boolean(process.env.CI);
 
 const COMMANDS: Command[] = [
@@ -29,11 +31,13 @@ const COMMANDS: Command[] = [
       ...(isCheck ? ['--dry-run', '--Werror'] : ['-i']),
       'examples/feature-tour/runners/c/main.c'
     ],
-    requiredBinary: 'clang-format'
+    requiredBinary: 'clang-format',
+    exampleOnly: true
   },
   {
     label: 'ruff',
     args: [],
+    exampleOnly: true,
     resolveArgs: () => {
       if (Bun.which('uv')) {
         return [
@@ -60,6 +64,7 @@ const COMMANDS: Command[] = [
   {
     label: 'stylua',
     args: [],
+    exampleOnly: true,
     resolveArgs: () => {
       if (Bun.which('stylua')) {
         return ['stylua', ...(isCheck ? ['--check'] : []), 'examples/feature-tour/runners/lua'];
@@ -80,7 +85,8 @@ const COMMANDS: Command[] = [
       'examples/feature-tour/runners/csharp/FeatureTour.csproj',
       ...(isCheck ? ['--verify-no-changes'] : [])
     ],
-    requiredBinary: 'dotnet'
+    requiredBinary: 'dotnet',
+    exampleOnly: true
   }
 ];
 
@@ -119,7 +125,8 @@ async function runCommand(cmd: Command): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  for (const cmd of COMMANDS) {
+  const activeCommands = skipExamples ? COMMANDS.filter((cmd) => !cmd.exampleOnly) : COMMANDS;
+  for (const cmd of activeCommands) {
     await runCommand(cmd);
   }
   console.log(

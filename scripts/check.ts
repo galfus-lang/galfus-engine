@@ -1,24 +1,26 @@
 type Command = {
   label: string;
   args: string[];
+  category: 'core' | 'rust-native' | 'rust-wasm';
 };
+
+const skipRust = Bun.argv.includes('--no-rust');
 
 const COMMANDS: Command[] = [
   {
     label: 'file-length policy',
-    args: ['bun', 'scripts/check-file-lengths.ts']
+    args: ['bun', 'scripts/check-file-lengths.ts'],
+    category: 'core'
   },
   {
     label: 'bun --check',
-    args: ['bun', '--check']
-  },
-  {
-    label: 'cargo check',
-    args: ['cargo', 'check', '--workspace', '--all-targets']
+    args: ['bun', '--check'],
+    category: 'core'
   },
   {
     label: 'cargo clippy',
-    args: ['cargo', 'clippy', '--workspace', '--all-targets', '--', '-D', 'warnings']
+    args: ['cargo', 'clippy', '--workspace', '--all-targets', '--', '-D', 'warnings'],
+    category: 'rust-native'
   },
   {
     label: 'cargo clippy (browser WASM)',
@@ -33,7 +35,8 @@ const COMMANDS: Command[] = [
       '--',
       '-D',
       'warnings'
-    ]
+    ],
+    category: 'rust-wasm'
   }
 ];
 
@@ -54,7 +57,8 @@ async function runCommand(cmd: Command): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  for (const cmd of COMMANDS) {
+  const activeCommands = skipRust ? COMMANDS.filter((cmd) => cmd.category === 'core') : COMMANDS;
+  for (const cmd of activeCommands) {
     await runCommand(cmd);
   }
   console.log('\x1b[32m✔ Checks passed successfully\x1b[0m');
