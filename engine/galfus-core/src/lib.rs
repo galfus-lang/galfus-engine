@@ -12,6 +12,7 @@ pub mod collision;
 pub mod culling;
 pub mod diagnostics;
 pub mod error;
+pub mod error_events;
 pub mod handle;
 pub mod id;
 pub mod interaction;
@@ -20,6 +21,10 @@ pub mod shader_effects;
 pub use culling::{CullingMode, distance_sq_in_range};
 
 pub use error::{CoreError, CoreResult};
+pub use error_events::{
+    EngineErrorCode, EngineErrorEvent, EngineErrorSeverity, EngineErrorSource,
+    catch_panic_as_error, clear_engine_errors, drain_engine_errors, push_engine_error,
+};
 pub use handle::{GenerationalPool, Handle, PoolStats};
 pub use id::{
     ContentId, LogicalId, RESERVED_LOGICAL_ID_COUNT, RESERVED_RANGE_END, RESERVED_RANGE_START,

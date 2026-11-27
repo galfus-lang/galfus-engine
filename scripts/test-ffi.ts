@@ -20,9 +20,14 @@ if (capabilities.isHeadless !== true) {
 }
 
 // 3. Pump Events
-console.log('==> Testing platformPumpEvents()...');
+console.log('==> Testing platformPumpEvents() and engineDrainErrors()...');
 const events = galfus.platformPumpEvents();
 console.log(`✔ Pump events received: ${events.length} events`);
+const engineErrors = galfus.engineDrainErrors();
+if (!Array.isArray(engineErrors)) {
+  throw new Error('Expected engineDrainErrors() to return an Array');
+}
+console.log(`✔ Engine errors drained: ${engineErrors.length} events`);
 
 // 3.1 Window Cursor and Size APIs
 console.log('==> Testing windowSetCursorGrab, windowSetCursorIcon and windowGetSize...');

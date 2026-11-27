@@ -540,6 +540,19 @@ pub unsafe extern "C" fn galfus_platform_set_clipboard_text(text: *const c_char)
     }
 }
 
+/// Drains all pending asynchronous engine error events as a JSON array string.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_engine_drain_errors() -> *mut c_char {
+    let errors = galfus_core::drain_engine_errors();
+    match serde_json::to_string(&errors) {
+        Ok(json) => to_c_string(&json),
+        Err(e) => {
+            set_last_error(&e.to_string());
+            std::ptr::null_mut()
+        }
+    }
+}
+
 /// Returns a JSON array string describing all currently connected gamepads.
 #[unsafe(no_mangle)]
 pub extern "C" fn galfus_gamepad_get_connected() -> *mut c_char {

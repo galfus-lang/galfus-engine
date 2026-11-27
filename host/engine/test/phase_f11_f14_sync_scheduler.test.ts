@@ -29,6 +29,7 @@ function createMockEngine(calls: string[]): GalfusEngine {
     windowSetCursorIcon: () => {},
     windowSetIcon: () => {},
     platformPumpEvents: () => [],
+    engineDrainErrors: () => [],
     gamepadGetConnected: () => [],
     gamepadSetRumble: () => {},
     audioLoadSound: () => {},

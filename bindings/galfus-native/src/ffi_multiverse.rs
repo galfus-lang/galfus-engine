@@ -433,7 +433,12 @@ pub unsafe extern "C" fn galfus_multiverse_unbind_target_texture(
 /// Dispatches the Multiverse schedule for a frame. Returns 0 on success, -1 on failure.
 #[unsafe(no_mangle)]
 pub extern "C" fn galfus_multiverse_dispatch(frame_id: u64, delta_time: f32) -> i32 {
-    match with_multiverse_mut(|mv| mv.dispatch(frame_id, delta_time).map_err(|e| e.to_string())) {
+    let result = galfus_core::catch_panic_as_error("galfus_multiverse_dispatch", || {
+        with_multiverse_mut(|mv| mv.dispatch(frame_id, delta_time).map_err(|e| e.to_string()))
+    })
+    .and_then(|inner| inner);
+
+    match result {
         Ok(()) => 0,
         Err(e) => {
             set_last_error(&e);

@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use galfus_core::{EngineErrorCode, EngineErrorSeverity, EngineErrorSource, push_engine_error};
+
 use crate::GpuShared;
 use crate::error::{GpuError, GpuResult};
 
@@ -80,6 +84,42 @@ impl GpuContext {
             })
             .await
             .map_err(|e| GpuError::DeviceRequestFailed(e.to_string()))?;
+
+        device.on_uncaptured_error(Arc::new(|err| {
+            let (code, severity, message) = match err {
+                wgpu::Error::OutOfMemory { source } => (
+                    EngineErrorCode::GpuOutOfMemory,
+                    EngineErrorSeverity::Fatal,
+                    format!("GPU out of memory: {source}"),
+                ),
+                wgpu::Error::Validation { description, .. } => (
+                    EngineErrorCode::GpuValidation,
+                    EngineErrorSeverity::Error,
+                    description,
+                ),
+                wgpu::Error::Internal { description, .. } => (
+                    EngineErrorCode::GpuInternal,
+                    EngineErrorSeverity::Error,
+                    description,
+                ),
+            };
+            log::error!("[{code:?}] {message}");
+            push_engine_error(code, EngineErrorSource::Gpu, severity, message);
+        }));
+
+        device.set_device_lost_callback(|reason, message| {
+            if matches!(reason, wgpu::DeviceLostReason::Destroyed) {
+                return;
+            }
+            let detail = format!("GPU device lost ({reason:?}): {message}");
+            log::error!("{detail}");
+            push_engine_error(
+                EngineErrorCode::GpuDeviceLost,
+                EngineErrorSource::Gpu,
+                EngineErrorSeverity::Fatal,
+                detail,
+            );
+        });
 
         Ok(Self {
             instance,

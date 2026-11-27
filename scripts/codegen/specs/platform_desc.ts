@@ -418,6 +418,44 @@ export const platformDescriptors: DescSpec[] = [
     }
   },
   {
+    kind: 'enum',
+    name: 'EngineErrorCode',
+    doc: 'Machine-readable category for asynchronous engine and GPU errors.',
+    values: [
+      'gpuOutOfMemory',
+      'gpuDeviceLost',
+      'gpuValidation',
+      'gpuInternal',
+      'gpuSurfaceError',
+      'resourceOverflow',
+      'internalPanic'
+    ]
+  },
+  {
+    kind: 'enum',
+    name: 'EngineErrorSource',
+    doc: 'Subsystem that originated an engine error event.',
+    values: ['gpu', 'core', 'platform', 'multiverse', 'realm']
+  },
+  {
+    kind: 'enum',
+    name: 'EngineErrorSeverity',
+    doc: 'Severity level of an engine error event.',
+    values: ['warning', 'error', 'fatal']
+  },
+  {
+    kind: 'object',
+    name: 'EngineErrorEvent',
+    doc: 'Structured asynchronous error event emitted by the engine.',
+    fields: {
+      code: { type: { ref: 'EngineErrorCode' } },
+      source: { type: { ref: 'EngineErrorSource' } },
+      severity: { type: { ref: 'EngineErrorSeverity' } },
+      message: { type: 'string' },
+      count: { type: 'number' }
+    }
+  },
+  {
     kind: 'union',
     name: 'PlatformEvent',
     doc: 'Root enum of all events dispatched from the platform layer.',

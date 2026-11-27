@@ -173,6 +173,12 @@ pub fn window_get_size(window_id: u32) -> Result<Vec<u32>> {
 }
 
 #[napi]
+pub fn engine_drain_errors(env: Env) -> Result<JsUnknown> {
+    let errors = galfus_core::drain_engine_errors();
+    env.to_js_value(&errors)
+}
+
+#[napi]
 pub fn platform_pump_events(env: Env) -> Result<JsUnknown> {
     let events = with_context_mut(|ctx| ctx.pump_events().map_err(|e| e.to_string()))
         .map_err(|e| Error::new(Status::GenericFailure, e))?;

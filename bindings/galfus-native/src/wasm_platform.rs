@@ -173,6 +173,13 @@ pub fn window_get_size(window_id: u32) -> Result<Vec<u32>> {
     .map_err(|e| Error::from_reason(Status::GenericFailure, e))
 }
 
+#[wasm_bindgen(js_name = "engineDrainErrors")]
+pub fn engine_drain_errors() -> Result<JsUnknown> {
+    let env = Env;
+    let errors = galfus_core::drain_engine_errors();
+    env.to_js_value(&errors)
+}
+
 #[wasm_bindgen(js_name = "platformPumpEvents")]
 pub fn platform_pump_events() -> Result<JsUnknown> {
     let env = Env;

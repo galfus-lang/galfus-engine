@@ -85,9 +85,30 @@ impl GpuSurface {
             galfus_core::diagnostics::tags::GPU,
             "gpu.surface_acquire",
         );
-        self.surface
-            .get_current_texture()
-            .map_err(|e| GpuError::SurfaceTextureAcquisitionFailed(e.to_string()))
+        self.surface.get_current_texture().map_err(|e| {
+            let (code, severity) = match &e {
+                wgpu::SurfaceError::OutOfMemory => (
+                    galfus_core::EngineErrorCode::GpuOutOfMemory,
+                    galfus_core::EngineErrorSeverity::Fatal,
+                ),
+                wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Timeout => (
+                    galfus_core::EngineErrorCode::GpuSurfaceError,
+                    galfus_core::EngineErrorSeverity::Warning,
+                ),
+                wgpu::SurfaceError::Lost | wgpu::SurfaceError::Other => (
+                    galfus_core::EngineErrorCode::GpuSurfaceError,
+                    galfus_core::EngineErrorSeverity::Error,
+                ),
+            };
+            let msg = format!("Swapchain acquire failed: {e}");
+            galfus_core::push_engine_error(
+                code,
+                galfus_core::EngineErrorSource::Gpu,
+                severity,
+                msg.clone(),
+            );
+            GpuError::SurfaceTextureAcquisitionFailed(msg)
+        })
     }
 
     /// Returns the underlying surface texture format.

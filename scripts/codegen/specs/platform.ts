@@ -258,6 +258,13 @@ export const platformFunctions: FunctionSpec[] = [
     returnType: 'i32'
   },
   {
+    cName: 'galfus_engine_drain_errors',
+    methodName: 'engineDrainErrors',
+    doc: 'Drains all pending asynchronous engine and GPU error events.',
+    params: [],
+    returnType: { jsonArray: 'EngineErrorEvent' }
+  },
+  {
     cName: 'galfus_gamepad_get_connected',
     methodName: 'gamepadGetConnected',
     doc: 'Retrieves all currently connected gamepads and their capabilities.',
