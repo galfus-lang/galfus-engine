@@ -1,3 +1,9 @@
+<div align="center">
+  <img src="https://raw.githubusercontent.com/galfus-multiverse/.github/main/assets/brand-full-colored.svg" alt="Galfus Engine" width="400" />
+</div>
+
+<br />
+
 # Galfus Engine
 
 **A host-agnostic, modular graphics foundation for native and web applications.**
