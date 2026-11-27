@@ -158,6 +158,24 @@ export class WindowManager {
   }
 
   /**
+   * Sets the mouse cursor position within the window in physical pixels.
+   */
+  setCursorPosition(windowId: WindowId, x: number, y: number): void {
+    if (this._engine) {
+      this._engine.windowSetCursorPosition(windowId, x, y);
+    }
+  }
+
+  /**
+   * Shows or hides the mouse cursor over this window.
+   */
+  setCursorVisible(windowId: WindowId, visible: boolean): void {
+    if (this._engine) {
+      this._engine.windowSetCursorVisible(windowId, visible);
+    }
+  }
+
+  /**
    * Updates cursor visual appearance icon ('default' | 'pointer' | 'grab' | 'grabbing' | 'crosshair' | 'text' | 'move' | 'wait').
    */
   setCursorIcon(windowId: WindowId, icon: CursorIconName | number): void {

@@ -8,12 +8,12 @@ import {
 } from '../src/catalog';
 
 describe('@galfus/demos catalog & headless smoke suite', () => {
-  it('registers all 45 demos across 6 categories with unique IDs', () => {
-    expect(DEMO_CATALOG.length).toBe(45);
+  it('registers all 46 demos across 6 categories with unique IDs', () => {
+    expect(DEMO_CATALOG.length).toBe(46);
     expect(DEMO_CATEGORIES.length).toBe(6);
 
     const ids = new Set(DEMO_CATALOG.map((d) => d.id));
-    expect(ids.size).toBe(45);
+    expect(ids.size).toBe(46);
 
     for (const cat of DEMO_CATEGORIES) {
       const entries = filterDemosByCategory(cat);
@@ -31,6 +31,8 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
     expect(findDemo('forces-3d')?.id).toBe('phys3d4');
     expect(findDemo('forces-2d')?.id).toBe('phys2d4');
     expect(findDemo('tutorial')?.id).toBe('tutorial');
+    expect(findDemo('win1')?.id).toBe('win1');
+    expect(findDemo('cursor-lock')?.id).toBe('win1');
 
     const particleMatches = fuzzySearchDemos('particles');
     expect(particleMatches.some((d) => d.id === '3d5')).toBe(true);
@@ -90,7 +92,7 @@ describe('@galfus/demos catalog & headless smoke suite', () => {
   }, 60000);
 
   it('runs all Host & Interaction and UI demos headlessly', async () => {
-    const hostIds = ['tutorial', 'interaction', 'trans-realm', 'ui1', 'ui2', 'ui3', 'ui4'];
+    const hostIds = ['tutorial', 'interaction', 'trans-realm', 'win1', 'ui1', 'ui2', 'ui3', 'ui4'];
     for (const id of hostIds) {
       const demo = findDemo(id);
       expect(demo).toBeDefined();

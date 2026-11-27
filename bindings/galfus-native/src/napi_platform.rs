@@ -108,8 +108,26 @@ pub fn window_set_cursor_grab(window_id: u32, mode: u32) -> Result<()> {
     };
 
     with_context_mut(|ctx| {
-        let win = ctx.get_window_mut(window_id).map_err(|e| e.to_string())?;
-        win.set_cursor_grab(grab_mode).map_err(|e| e.to_string())
+        ctx.set_window_cursor_grab(window_id, grab_mode)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn window_set_cursor_position(window_id: u32, x: i32, y: i32) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.set_window_cursor_position(window_id, x, y)
+            .map_err(|e| e.to_string())
+    })
+    .map_err(|e| Error::new(Status::GenericFailure, e))
+}
+
+#[napi]
+pub fn window_set_cursor_visible(window_id: u32, visible: bool) -> Result<()> {
+    with_context_mut(|ctx| {
+        ctx.set_window_cursor_visible(window_id, visible)
+            .map_err(|e| e.to_string())
     })
     .map_err(|e| Error::new(Status::GenericFailure, e))
 }

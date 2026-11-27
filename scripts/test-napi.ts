@@ -59,6 +59,20 @@ try {
 }
 
 try {
+  galfus.windowSetCursorPosition(999, 100, 200);
+  throw new Error('windowSetCursorPosition should throw for non-existent window');
+} catch (err: unknown) {
+  console.log(`✔ Expected windowSetCursorPosition error caught: ${(err as Error).message}`);
+}
+
+try {
+  galfus.windowSetCursorVisible(999, false);
+  throw new Error('windowSetCursorVisible should throw for non-existent window');
+} catch (err: unknown) {
+  console.log(`✔ Expected windowSetCursorVisible error caught: ${(err as Error).message}`);
+}
+
+try {
   galfus.windowSetCursorIcon(999, 2);
   throw new Error('windowSetCursorIcon should throw for non-existent window');
 } catch (err: unknown) {

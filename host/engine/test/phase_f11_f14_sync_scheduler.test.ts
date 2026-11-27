@@ -24,6 +24,8 @@ function createMockEngine(calls: string[]): GalfusEngine {
     windowClose: () => {},
     windowSetTitle: () => {},
     windowSetCursorGrab: () => {},
+    windowSetCursorPosition: () => {},
+    windowSetCursorVisible: () => {},
     windowSetCursorIcon: () => {},
     windowSetIcon: () => {},
     platformPumpEvents: () => [],

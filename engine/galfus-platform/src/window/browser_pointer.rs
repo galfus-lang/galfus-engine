@@ -131,15 +131,25 @@ impl BrowserPointer {
                     if rect.width() <= 0.0 || rect.height() <= 0.0 {
                         return;
                     }
+                    let scale_x = f64::from(surface.width()) / rect.width();
+                    let scale_y = f64::from(surface.height()) / rect.height();
                     let position = Vec2::new(
-                        ((event.client_x() - rect.left()) * f64::from(surface.width())
-                            / rect.width()) as f32,
-                        ((event.client_y() - rect.top()) * f64::from(surface.height())
-                            / rect.height()) as f32,
+                        ((event.client_x() - rect.left()) * scale_x) as f32,
+                        ((event.client_y() - rect.top()) * scale_y) as f32,
                     );
                     let pressure = event.pressure().clamp(0.0, 1.0);
+                    let is_locked_move = name == "pointermove"
+                        && pointer_type == PointerType::Mouse
+                        && web_sys::window()
+                            .and_then(|window| window.document())
+                            .and_then(|document| document.pointer_lock_element())
+                            .is_some_and(|el| el == *surface.unchecked_ref::<web_sys::Element>());
                     let mut positions = positions.borrow_mut();
-                    let previous = positions.insert(pointer_id, position).unwrap_or(position);
+                    let previous = if is_locked_move {
+                        positions.get(&pointer_id).copied().unwrap_or(position)
+                    } else {
+                        positions.insert(pointer_id, position).unwrap_or(position)
+                    };
                     let mapped = match name {
                         "pointerenter" => PointerEvent::Enter {
                             window_id,
@@ -165,14 +175,24 @@ impl BrowserPointer {
                                 position,
                             }
                         }
-                        "pointermove" => PointerEvent::Move {
-                            window_id,
-                            pointer_id,
-                            pointer_type,
-                            position,
-                            delta: position - previous,
-                            pressure,
-                        },
+                        "pointermove" => {
+                            let delta = if is_locked_move {
+                                Vec2::new(
+                                    (f64::from(event.movement_x()) * scale_x) as f32,
+                                    (f64::from(event.movement_y()) * scale_y) as f32,
+                                )
+                            } else {
+                                position - previous
+                            };
+                            PointerEvent::Move {
+                                window_id,
+                                pointer_id,
+                                pointer_type,
+                                position: if is_locked_move { previous } else { position },
+                                delta,
+                                pressure,
+                            }
+                        }
                         _ => {
                             let button = match event.button() {
                                 0 => PointerButton::Primary,

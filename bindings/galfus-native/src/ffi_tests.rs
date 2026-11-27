@@ -61,6 +61,8 @@ fn test_c_api_lifecycle_and_json_exchange() {
     let title = CString::new("New Title").unwrap();
     assert_eq!(unsafe { galfus_window_set_title(999, title.as_ptr()) }, -1);
     assert_eq!(galfus_window_set_cursor_grab(999, 1), -1);
+    assert_eq!(galfus_window_set_cursor_position(999, 100, 200), -1);
+    assert_eq!(galfus_window_set_cursor_visible(999, false), -1);
     assert_eq!(galfus_window_set_cursor_icon(999, 1), -1);
     assert_eq!(
         unsafe { galfus_window_set_icon(999, std::ptr::null(), 0) },

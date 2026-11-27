@@ -334,8 +334,42 @@ pub extern "C" fn galfus_window_set_cursor_grab(window_id: u32, mode: u32) -> i3
     };
 
     let result = with_context_mut(|ctx| {
-        let win = ctx.get_window_mut(window_id).map_err(|e| e.to_string())?;
-        win.set_cursor_grab(grab_mode).map_err(|e| e.to_string())
+        ctx.set_window_cursor_grab(window_id, grab_mode)
+            .map_err(|e| e.to_string())
+    });
+
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Sets the mouse cursor position within the window in physical coordinates.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_window_set_cursor_position(window_id: u32, x: i32, y: i32) -> i32 {
+    let result = with_context_mut(|ctx| {
+        ctx.set_window_cursor_position(window_id, x, y)
+            .map_err(|e| e.to_string())
+    });
+
+    match result {
+        Ok(()) => 0,
+        Err(e) => {
+            set_last_error(&e);
+            -1
+        }
+    }
+}
+
+/// Shows or hides the mouse cursor over a window.
+#[unsafe(no_mangle)]
+pub extern "C" fn galfus_window_set_cursor_visible(window_id: u32, visible: bool) -> i32 {
+    let result = with_context_mut(|ctx| {
+        ctx.set_window_cursor_visible(window_id, visible)
+            .map_err(|e| e.to_string())
     });
 
     match result {

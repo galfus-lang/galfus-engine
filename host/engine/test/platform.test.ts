@@ -14,6 +14,10 @@ describe('@galfus/engine > PlatformCoordinator & WindowManager', () => {
       windowClose: (id: number) => calls.push(`close:${id}`),
       windowSetTitle: (id: number, title: string) => calls.push(`setTitle:${id}:${title}`),
       windowSetCursorGrab: (id: number, mode: number) => calls.push(`setGrab:${id}:${mode}`),
+      windowSetCursorPosition: (id: number, x: number, y: number) =>
+        calls.push(`setPos:${id}:${x},${y}`),
+      windowSetCursorVisible: (id: number, visible: boolean) =>
+        calls.push(`setVisible:${id}:${visible}`),
       windowSetCursorIcon: (id: number, icon: number) => calls.push(`setIcon:${id}:${icon}`),
       windowSetIcon: (id: number, _data: Uint8Array, len: number) =>
         calls.push(`setWindowIcon:${id}:${len}`),
@@ -64,6 +68,12 @@ describe('@galfus/engine > PlatformCoordinator & WindowManager', () => {
 
     runtime.platform.window.setCursorGrab(win1, 'locked');
     expect(calls).toContain('setGrab:1:2');
+
+    runtime.platform.window.setCursorPosition(win1, 640, 360);
+    expect(calls).toContain('setPos:1:640,360');
+
+    runtime.platform.window.setCursorVisible(win1, false);
+    expect(calls).toContain('setVisible:1:false');
 
     runtime.platform.window.setCursorIcon(win1, 'pointer');
     expect(calls).toContain('setIcon:1:1');
