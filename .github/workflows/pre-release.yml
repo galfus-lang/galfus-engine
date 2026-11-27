@@ -27,6 +27,14 @@ jobs:
         with:
           bun-version: 1.4.3
 
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install Bun dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
@@ -36,8 +44,16 @@ jobs:
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
 
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> build/cargo-target'
+          shared-key: pre-release-validate
+
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -46,6 +62,7 @@ jobs:
 
       - name: Install native build dependencies
         run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft*.list /etc/apt/sources.list.d/microsoft*.sources
           sudo apt-get update
           sudo apt-get install -y clang-format pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
 
@@ -65,14 +82,13 @@ jobs:
         run: cargo test --workspace
 
       - name: Sync native binaries for Host tests
-        run: bun scripts/host-sync.ts --skip-wasm
+        run: bun scripts/host-sync.ts --skip-wasm --no-clean-rebuild
 
       - name: Run Host unit tests
         run: bun test host/engine/test/
 
   build-native:
     name: Verify native build ${{ matrix.alias }}
-    needs: validate
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -113,22 +129,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.3
-
-      - name: Install Bun dependencies
-        run: bun install --frozen-lockfile --ignore-scripts
-
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> build/cargo-target'
+          shared-key: release-native-${{ matrix.alias }}
+
       - name: Install native build dependencies
         if: runner.os == 'Linux'
         run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft*.list /etc/apt/sources.list.d/microsoft*.sources
           sudo apt-get update
           sudo apt-get install -y pkg-config libasound2-dev libdbus-1-dev libudev-dev libwayland-dev libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
 
@@ -152,7 +167,6 @@ jobs:
 
   build-browser:
     name: Verify browser WASM build
-    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -163,23 +177,31 @@ jobs:
         with:
           bun-version: 1.4.3
 
-      - name: Install Bun dependencies
-        run: bun install --frozen-lockfile --ignore-scripts
-
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
 
+      - name: Restore Rust WASM cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> build/cargo-target'
+          shared-key: release-browser-wasm
+
       - name: Build browser binding (release)
         run: cargo build --locked --release --package galfus-browser --target wasm32-unknown-unknown
 
-      - name: Install wasm-bindgen CLI
+      - name: Resolve wasm-bindgen version
+        id: wasm-bindgen-ver
         shell: bash
         run: |
-          WASM_BINDGEN_VER=$(bun -e "const lock = await Bun.file('Cargo.lock').text(); const match = lock.match(/name = \"wasm-bindgen\"\\s+version = \"([^\"]+)\"/); console.log(match ? match[1] : '0.2.130');")
-          echo "Installing wasm-bindgen-cli matching compiled schema version: $WASM_BINDGEN_VER"
-          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VER"
+          ver=$(bun -e "const lock = await Bun.file('Cargo.lock').text(); const match = lock.match(/name = \"wasm-bindgen\"\\s+version = \"([^\"]+)\"/); console.log(match ? match[1] : '0.2.130');")
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Install prebuilt wasm-bindgen CLI
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wasm-bindgen-ver.outputs.version }}
 
       - name: Verify wasm-bindgen web bindings generation
         shell: bash
@@ -197,6 +219,7 @@ jobs:
   verify-packages:
     name: Dry-Run Package Tarballs
     needs:
+      - validate
       - build-native
       - build-browser
     runs-on: ubuntu-latest
@@ -208,6 +231,14 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.3
+
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
       - name: Setup Node
         uses: actions/setup-node@v4

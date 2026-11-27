@@ -1,7 +1,7 @@
 import { appendFile, readdir, readFile, writeFile } from 'fs/promises';
 import { resolve } from 'path';
 
-const CHANNELS = new Set(['stable', 'alpha', 'beta', 'next', 'latest']);
+const CHANNELS = new Set(['stable', 'alpha', 'beta', 'next']);
 const RELEASE_BRANCH_PATTERN = /^(?<channel>[^/]+)\/v(?<version>\d+\.\d+\.\d+)$/;
 const WORKSPACE_VERSION_PATTERN = /(\[workspace\.package\][\s\S]*?^version\s*=\s*")[^"]+("$)/m;
 
@@ -59,12 +59,12 @@ async function resolveReleaseVersion(): Promise<ReleaseVersion> {
 
   const match = RELEASE_BRANCH_PATTERN.exec(ref);
   if (!match?.groups) {
-    fail(`Invalid release branch "${ref}"; expected stable|alpha|beta|next|latest/vX.Y.Z.`);
+    fail(`Invalid release branch "${ref}"; expected stable|alpha|beta|next/vX.Y.Z.`);
   }
 
   const { channel, version } = match.groups;
   if (!channel || !version || !CHANNELS.has(channel)) {
-    fail(`Invalid release branch "${ref}"; expected stable|alpha|beta|next|latest/vX.Y.Z.`);
+    fail(`Invalid release branch "${ref}"; expected stable|alpha|beta|next/vX.Y.Z.`);
   }
 
   const basePackageVersion = channel === 'stable' ? version : `${version}-${channel}`;

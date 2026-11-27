@@ -1,0 +1,44 @@
+name: Cleanup Old Release Branches
+
+on:
+  push:
+    branches:
+      - alpha/v*
+      - beta/v*
+      - stable/v*
+      - next/v*
+  schedule:
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Preview branches to delete without deleting them
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: cleanup-release-branches
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Prune old release branches
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Run release branch cleanup
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: bun scripts/github/cleanup-release-branches.ts
