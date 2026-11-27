@@ -14,24 +14,6 @@ on:
       - alpha/**
       - beta/**
       - next/**
-    paths:
-      - 'engine/**'
-      - 'bindings/**'
-      - 'host/**'
-      - 'scripts/**'
-      - 'examples/**'
-      - '.cargo/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'package.json'
-      - 'bun.lock'
-      - '.clang-format'
-      - '.editorconfig'
-      - '.prettierignore'
-      - '.prettierrc'
-      - '.stylua.toml'
-      - 'pyproject.toml'
-      - '.github/workflows/pr-ci.yml'
   push:
     branches:
       - main
@@ -68,6 +50,7 @@ jobs:
     name: Detect changed scopes
     runs-on: ubuntu-latest
     outputs:
+      lint_format: ${{ steps.resolve.outputs.lint_format }}
       examples_runners: ${{ steps.resolve.outputs.examples_runners }}
       rust_native: ${{ steps.resolve.outputs.rust_native }}
       host_tests: ${{ steps.resolve.outputs.host_tests }}
@@ -79,6 +62,24 @@ jobs:
         uses: dorny/paths-filter@v3
         with:
           filters: |
+            lint_format:
+              - 'engine/**'
+              - 'bindings/**'
+              - 'host/**'
+              - 'scripts/**'
+              - 'examples/**'
+              - '.cargo/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'package.json'
+              - 'bun.lock'
+              - '.clang-format'
+              - '.editorconfig'
+              - '.prettierignore'
+              - '.prettierrc'
+              - '.stylua.toml'
+              - 'pyproject.toml'
+              - '.github/workflows/**'
             examples_runners:
               - 'examples/feature-tour/runners/c/**'
               - 'examples/feature-tour/runners/python/**'
@@ -147,11 +148,13 @@ jobs:
         shell: bash
         run: |
           if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "lint_format=true" >> "$GITHUB_OUTPUT"
             echo "examples_runners=true" >> "$GITHUB_OUTPUT"
             echo "rust_native=true" >> "$GITHUB_OUTPUT"
             echo "host_tests=true" >> "$GITHUB_OUTPUT"
             echo "browser_wasm=true" >> "$GITHUB_OUTPUT"
           else
+            echo "lint_format=${{ steps.filter.outputs.lint_format }}" >> "$GITHUB_OUTPUT"
             echo "examples_runners=${{ steps.filter.outputs.examples_runners }}" >> "$GITHUB_OUTPUT"
             echo "rust_native=${{ steps.filter.outputs.rust_native }}" >> "$GITHUB_OUTPUT"
             echo "host_tests=${{ steps.filter.outputs.host_tests }}" >> "$GITHUB_OUTPUT"
@@ -161,6 +164,7 @@ jobs:
   lint-format:
     name: Format, file lengths, and TypeScript
     needs: changes
+    if: needs.changes.outputs.lint_format == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
