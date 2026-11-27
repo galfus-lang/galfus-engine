@@ -7,7 +7,6 @@ on:
       - alpha/v*
       - beta/v*
       - next/v*
-      - latest/v*
   workflow_dispatch:
 
 permissions:

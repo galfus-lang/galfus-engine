@@ -14,7 +14,6 @@ on:
       - alpha/**
       - beta/**
       - next/**
-      - latest/**
     paths:
       - 'engine/**'
       - 'bindings/**'
